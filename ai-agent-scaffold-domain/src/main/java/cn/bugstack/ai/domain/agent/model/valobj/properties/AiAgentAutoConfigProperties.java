@@ -1,6 +1,6 @@
-package cn.bugstack.ai.domain.model.model.valobj.properties;
+package cn.bugstack.ai.domain.agent.model.valobj.properties;
 
-import cn.bugstack.ai.domain.model.model.valobj.AiAgentConfigTableVO;
+import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

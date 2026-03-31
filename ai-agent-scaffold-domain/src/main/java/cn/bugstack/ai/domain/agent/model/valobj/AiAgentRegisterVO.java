@@ -1,4 +1,4 @@
-package cn.bugstack.ai.domain.model.model.valobj;
+package cn.bugstack.ai.domain.agent.model.valobj;
 
 import lombok.Builder;
 import lombok.Getter;
