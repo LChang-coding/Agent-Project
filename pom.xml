@@ -63,6 +63,73 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>com.google.adk</groupId>
+                <artifactId>google-adk</artifactId>
+                <version>0.4.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.adk</groupId>
+                <artifactId>google-adk-dev</artifactId>
+                <version>0.4.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.adk</groupId>
+                <artifactId>google-adk-spring-ai</artifactId>
+                <version>0.4.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.adk.samples</groupId>
+                <artifactId>google-adk-sample-helloworld</artifactId>
+                <version>0.4.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.adk</groupId>
+                <artifactId>google-adk-contrib-langchain4j</artifactId>
+                <version>0.2.0</version>
+            </dependency>
+
+            <!--            <dependency>-->
+            <!--                <groupId>dev.langchain4j</groupId>-->
+            <!--                <artifactId>langchain4j-core</artifactId>-->
+            <!--                <version>1.4.0</version>-->
+            <!--            </dependency>-->
+
+            <!--            <dependency>-->
+            <!--                <groupId>dev.langchain4j</groupId>-->
+            <!--                <artifactId>langchain4j-open-ai</artifactId>-->
+            <!--                <version>1.4.0</version>-->
+            <!--            </dependency>-->
+
+            <!-- spring ai 1.1.0 https://central.sonatype.com/artifact/org.springframework.ai/spring-ai-bom -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>1.1.0-M3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- langchain4j https://mvnrepository.com/artifact/dev.langchain4j/langchain4j-bom -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>1.4.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- 设计模式框架 -->
+            <dependency>
+                <groupId>cn.bugstack.wrench</groupId>
+                <artifactId>xfg-wrench-starter-design-framework</artifactId>
+                <version>3.0.0</version>
+            </dependency>
+
+            <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
                 <artifactId>mybatis-spring-boot-starter</artifactId>
                 <version>3.0.4</version>

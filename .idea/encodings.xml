@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-api/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-api/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-app/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-app/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-domain/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-domain/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-infrastructure/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-infrastructure/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-trigger/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-trigger/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-types/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/ai-agent-scaffold-types/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+  </component>
+</project>
