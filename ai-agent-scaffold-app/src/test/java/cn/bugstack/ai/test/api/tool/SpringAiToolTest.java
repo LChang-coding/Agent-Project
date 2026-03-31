@@ -15,8 +15,6 @@ import java.time.Duration;
 /**
  * Spring Ai Tool
  *
- * @author xiaofuge bugstack.cn @小傅哥
- * 2025/12/14 09:51
  */
 @Slf4j
 public class SpringAiToolTest {

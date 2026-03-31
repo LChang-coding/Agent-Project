@@ -9,8 +9,6 @@ import org.springframework.ai.openai.api.OpenAiApi;
 /**
  * Spring AI Test
  * 文档：<a href="https://docs.spring.io/spring-ai/reference/1.0/api/advisors.html">spring ai</a>
- * @author xiaofuge bugstack.cn @小傅哥
- * 2025/12/14 09:15
  */
 @Slf4j
 public class SpringAiApiTest {

@@ -1,0 +1,91 @@
+ai:
+  agent:
+    config:
+      tables:
+        testAgent:
+          app-name: testAgent
+          agent:
+            agent-id: 100001
+            agent-name: 测试智能体01
+            agent-desc: 一个测试的智能体
+          module:
+            ai-api:
+              base-url: https://apis.itedus.cn
+              api-key: sk-FNpOcM9t3GJ2EQHi0cEbFa9d7b7d45EaA1C1E73288F7AdA4
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: gpt-4.1
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
+                    sse-endpoint: sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae
+                    request-timeout: 5000
+                - sse:
+                    name: baidu-map
+                    base-uri: https://mcp.map.baidu.com/
+                    sse-endpoint: sse?ak=tV0NsP4Gmj8IL7mhvyjVZ7c6
+                    request-timeout: 5000
+            agents:
+              - name: CodeWriterAgent
+                description: Writes initial Java code based on a specification.
+                instruction: |
+                  You are a Java Code Generator.
+                  Based *only* on the user's request, write Java code that fulfills the requirement.
+                  Output *only* the complete Java code block, enclosed in triple backticks (```java ... ```).
+                output-key: generated_code
+              - name: CodeReviewerAgent
+                description: Reviews code and provides feedback.
+                instruction: |
+                  You are an expert Java Code Reviewer.
+                  Your task is to provide constructive feedback on the provided code.
+  
+                  **Code to Review:**
+                  ```java
+                  {generated_code}
+                  ```
+  
+                  **Review Criteria:**
+                  1.  **Correctness:** Does the code work as intended? Are there logic errors?
+                  2.  **Readability:** Is the code clear and easy to understand? Follows Java style guidelines?
+                  3.  **Efficiency:** Is the code reasonably efficient? Any obvious performance bottlenecks?
+                  4.  **Edge Cases:** Does the code handle potential edge cases or invalid inputs gracefully?
+                  5.  **Best Practices:** Does the code follow common Java best practices?
+  
+                  **Output:**
+                  Provide your feedback as a concise, bulleted list. Focus on the most important points for improvement.
+                  If the code is excellent and requires no changes, simply state: "No major issues found."
+                  Output *only* the review comments or the "No major issues" statement.
+                output-key: review_comments
+              - name: CodeRefactorerAgent
+                description: Refactors code based on review comments.
+                instruction: |
+                  You are a Java Code Refactoring AI.
+                  Your goal is to improve the given Java code based on the provided review comments.
+  
+                  **Original Code:**
+                  ```java
+                  {generated_code}
+                  ```
+  
+                  **Review Comments:**
+                  {review_comments}
+  
+                  **Task:**
+                  Carefully apply the suggestions from the review comments to refactor the original code.
+                  If the review comments state "No major issues found," return the original code unchanged.
+                  Ensure the final code is complete, functional, and includes necessary imports and docstrings.
+  
+                  **Output:**
+                  Output *only* the final, refactored Java code block, enclosed in triple backticks (```java ... ```).
+                  Do not add any other text before or after the code block.
+                output-key: refactored_code
+            agent-workflows:
+              - type: sequential
+                name: CodePipelineAgent
+                description: Executes a sequence of code writing, reviewing, and refactoring.
+                sub-agents:
+                  - CodeWriterAgent
+                  - CodeReviewerAgent
+                  - CodeRefactorerAgent
