@@ -8,6 +8,7 @@ import java.util.Map;
 
 @Data
 @ConfigurationProperties(prefix = "ai.agent.config", ignoreInvalidFields = true)
+//这个注解表示这个类是一个配置属性类，前缀为"ai.agent.config"，并且在绑定属性时忽略无效字段。
 /**
  * Ai Agent自动装配配置属性类
  *
