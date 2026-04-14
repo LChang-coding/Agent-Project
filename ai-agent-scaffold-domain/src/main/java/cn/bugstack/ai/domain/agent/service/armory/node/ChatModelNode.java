@@ -23,6 +23,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.net.URL;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -31,6 +32,9 @@ import java.util.List;
 @Slf4j
 @Service
 public class ChatModelNode extends AbstractArmorySupport {
+
+    @Resource
+    private AgentNode agentNode;
 
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -64,9 +68,9 @@ public class ChatModelNode extends AbstractArmorySupport {
 
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
-        return defaultStrategyHandler;
+        return agentNode;
     }
-    // 根据配置创建MCP同步客户端
+
     private McpSyncClient createMcpSyncClient(AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp) throws Exception {
 
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters sseConfig = toolMcp.getSse();
@@ -78,7 +82,6 @@ public class ChatModelNode extends AbstractArmorySupport {
             String originalBaseUri = sseConfig.getBaseUri();
             String baseUri = originalBaseUri;
             String sseEndpoint = sseConfig.getSseEndpoint();
-            //拿到baseUri的协议、host、端口，拼接成baseUri，并从originalBaseUri中去掉baseUri部分，剩下的就是sseEndpoint
 
             if (StringUtils.isBlank(sseEndpoint)) {
                 URL url = new URL(originalBaseUri);
@@ -102,7 +105,7 @@ public class ChatModelNode extends AbstractArmorySupport {
             HttpClientSseClientTransport sseClientTransport = HttpClientSseClientTransport
                     .builder(baseUri)
                     .sseEndpoint(sseEndpoint)
-                    .build();//创建一个服务器到达事件（SSE）客户端传输对象，指定基本URI和SSE端点
+                    .build();
 
             McpSyncClient mcpSyncClient = McpClient
                     .sync(sseClientTransport)
@@ -128,7 +131,7 @@ public class ChatModelNode extends AbstractArmorySupport {
             McpSchema.InitializeResult initialize = mcpSyncClient.initialize();
 
             log.info("tool stdio mcp initialize {}", initialize);
-            return mcpSyncClient;
+
         }
 
         throw new RuntimeException("tool mcp sse and stdio is null!");
