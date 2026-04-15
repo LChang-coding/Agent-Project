@@ -75,11 +75,11 @@ public class AiAgentAutoConfigTest {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Session session = runner.sessionService()
-                .createSession(appName, "xiaofuge")
+                .createSession(appName, "lcode")
                 .blockingGet();
 
-        Content userMsg = Content.fromParts(Part.fromText("给我一份学习计划"));
-        Flowable<Event> events = runner.runAsync("xiaofuge", session.id(), userMsg);
+        Content userMsg = Content.fromParts(Part.fromText("将lcode转化为大写"));
+        Flowable<Event> events = runner.runAsync("lcode", session.id(), userMsg);
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));

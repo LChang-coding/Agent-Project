@@ -22,6 +22,8 @@ ai:
                     base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
                     sse-endpoint: sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae
                     request-timeout: 500000
+                - local:
+                    name: myToolCallbackProvider
             agents:
               - name: onlyAgent
                 description: java学习项目计划
