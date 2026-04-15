@@ -1,8 +1,8 @@
 package cn.bugstack.ai.domain.agent.service.armory.factory;
 
 import cn.bugstack.ai.domain.agent.model.entity.ArmoryCommandEntity;
+import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
-import cn.bugstack.ai.domain.agent.service.armory.node.AiApiNode;
 import cn.bugstack.ai.domain.agent.service.armory.node.RootNode;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.BaseAgent;
@@ -15,13 +15,16 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 默认的装配工厂
  *
-默认返回流水线开始的根节点 和 动态上下文
+ * @author xiaofuge bugstack.cn @小傅哥
+ * 2025/12/17 08:16
  */
 @Service
 public class DefaultArmoryFactory {
@@ -41,19 +44,23 @@ public class DefaultArmoryFactory {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class DynamicContext {
+
         /**
          * LLM API
          */
         private OpenAiApi openAiApi;
+
         /**
          * LLM ChatModel
          */
         private ChatModel chatModel;
+
         /**
          * 智能体配置组
          */
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
 
+        private List<AiAgentConfigTableVO.Module.AgentWorkflow> agentWorkflows = new ArrayList<>();
 
         private Map<String, Object> dataObjects = new HashMap<>();
 
