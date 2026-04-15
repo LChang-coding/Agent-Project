@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.node.RootNode;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.BaseAgent;
+import com.google.adk.agents.SequentialAgent;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -54,6 +55,11 @@ public class DefaultArmoryFactory {
          * 智能体配置组
          */
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
+
+        /**
+         * 当做最后一个智能体节点
+         */
+        private SequentialAgent sequentialAgent;
 
         private List<AiAgentConfigTableVO.Module.AgentWorkflow> agentWorkflows = new ArrayList<>();
 
