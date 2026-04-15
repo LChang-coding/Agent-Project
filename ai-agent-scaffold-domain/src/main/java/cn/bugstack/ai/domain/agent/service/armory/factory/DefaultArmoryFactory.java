@@ -56,11 +56,6 @@ public class DefaultArmoryFactory {
          */
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
 
-        /**
-         * 当做最后一个智能体节点
-         */
-        private SequentialAgent sequentialAgent;
-
         private List<AiAgentConfigTableVO.Module.AgentWorkflow> agentWorkflows = new ArrayList<>();
 
         private Map<String, Object> dataObjects = new HashMap<>();
@@ -72,6 +67,7 @@ public class DefaultArmoryFactory {
         public <T> T getValue(String key) {
             return (T) dataObjects.get(key);
         }
+
         public List<BaseAgent> queryAgentList(List<String> agentNames) {
             if (agentNames == null || agentNames.isEmpty() || agentGroup == null) {
                 return Collections.emptyList();
@@ -87,7 +83,6 @@ public class DefaultArmoryFactory {
 
             return agents;
         }
-
 
     }
 

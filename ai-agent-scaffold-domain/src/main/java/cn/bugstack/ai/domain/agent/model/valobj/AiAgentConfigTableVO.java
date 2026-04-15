@@ -8,6 +8,8 @@ import java.util.Map;
 /**
  * Ai Agent 智能体配置表值对象
  *
+ * @author xiaofuge bugstack.cn @小傅哥
+ * 2025/11/29 10:54
  */
 @Data
 public class AiAgentConfigTableVO {
@@ -57,6 +59,8 @@ public class AiAgentConfigTableVO {
         private List<Agent> agents;
 
         private List<AgentWorkflow> agentWorkflows;
+
+        private Runner runner;
 
         @Data
         public static class AiApi {
@@ -123,10 +127,15 @@ public class AiAgentConfigTableVO {
              */
             private String type;
             private String name;
-            private List<String> subAgents;//需要执行的agent列表
+            private List<String> subAgents;
             private String description;
             private Integer maxIterations = 3;
 
+        }
+
+        @Data
+        public static class Runner {
+            private String agentName;
         }
     }
 

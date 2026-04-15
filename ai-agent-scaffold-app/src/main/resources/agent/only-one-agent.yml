@@ -1,0 +1,31 @@
+ai:
+  agent:
+    config:
+      tables:
+        testAgent03:
+          app-name: testAgent03
+          agent:
+            agent-id: 100003
+            agent-name: 单一智能体
+            agent-desc: 单一智能体
+          module:
+            ai-api:
+              base-url: https://apis.itedus.cn
+              api-key: sk-FNpOcM9t3GJ2EQHi0cEbFa9d7b7d45EaA1C1E73288F7AdA4
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: gpt-4.1
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
+                    sse-endpoint: sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae
+                    request-timeout: 500000
+            agents:
+              - name: onlyAgent
+                description: java学习项目计划
+                instruction: |
+                  通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+            runner:
+              agent-name: onlyAgent

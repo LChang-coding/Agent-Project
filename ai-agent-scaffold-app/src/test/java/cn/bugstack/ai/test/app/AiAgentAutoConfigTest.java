@@ -48,5 +48,25 @@ public class AiAgentAutoConfigTest {
         log.info("测试结果:{}", JSON.toJSONString(outputs));
 
     }
+    @Test
+    public void test_handlerMessage_03(){
+        AiAgentRegisterVO aiAgentRegisterVO = applicationContext.getBean("100003", AiAgentRegisterVO.class);
+
+        String appName = aiAgentRegisterVO.getAppName();
+        InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+
+        Session session = runner.sessionService()
+                .createSession(appName, "xiaofuge")
+                .blockingGet();
+
+        Content userMsg = Content.fromParts(Part.fromText("给我一份学习计划"));
+        Flowable<Event> events = runner.runAsync("xiaofuge", session.id(), userMsg);
+
+        List<String> outputs = new ArrayList<>();
+        events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+
+        log.info("测试结果:{}", JSON.toJSONString(outputs));
+    }
+
 
 }
