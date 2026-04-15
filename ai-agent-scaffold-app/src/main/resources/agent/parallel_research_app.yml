@@ -1,0 +1,105 @@
+ai:
+  agent:
+    config:
+      tables:
+        testAgent02:
+          app-name: ResearchAndSynthesisPipeline
+          agent:
+            agent-id: 100002
+            agent-name: 测试智能体02
+            agent-desc: 并行研究并汇总的智能体管道
+          module:
+            ai-api:
+              base-url: https://apis.itedus.cn
+              api-key: sk-FNpOcM9t3GJ2EQHi0cEbFa9d7b7d45EaA1C1E73288F7AdA4
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: gpt-4.1
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
+                    sse-endpoint: sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae
+                    request-timeout: 500000
+            agents:
+              - name: RenewableEnergyResearcher
+                description: Researches renewable energy sources.
+                instruction: |
+                  You are an AI Research Assistant specializing in energy.
+                  Research the latest advancements in 'renewable energy sources'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: renewable_energy_result
+              - name: EVResearcher
+                description: Researches electric vehicle technology.
+                instruction: |
+                  You are an AI Research Assistant specializing in transportation.
+                  Research the latest developments in 'electric vehicle technology'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: ev_technology_result
+              - name: CarbonCaptureResearcher
+                description: Researches carbon capture methods.
+                instruction: |
+                  You are an AI Research Assistant specializing in climate solutions.
+                  Research the current state of 'carbon capture methods'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: carbon_capture_result
+              - name: SynthesisAgent
+                description: Combines research findings into a structured report.
+                instruction: |
+                  You are an AI Assistant responsible for combining research findings into a structured report.
+                  Your primary task is to synthesize the following research summaries, clearly attributing findings to their source areas. Structure your response using headings for each topic. Ensure the report is coherent and integrates the key points smoothly.
+                  **Crucially: Your entire response MUST be grounded *exclusively* on the information provided in the 'Input Summaries' below. Do NOT add any external knowledge, facts, or details not present in these specific summaries.**
+                  **Input Summaries:**
+
+                  *   **Renewable Energy:**
+                      {renewable_energy_result}
+
+                  *   **Electric Vehicles:**
+                      {ev_technology_result}
+
+                  *   **Carbon Capture:**
+                      {carbon_capture_result}
+
+                  **Output Format:**
+
+                  ## Summary of Recent Sustainable Technology Advancements
+
+                  ### Renewable Energy Findings
+                  (Based on RenewableEnergyResearcher's findings)
+                  [Synthesize and elaborate *only* on the renewable energy input summary provided above.]
+
+                  ### Electric Vehicle Findings
+                  (Based on EVResearcher's findings)
+                  [Synthesize and elaborate *only* on the EV input summary provided above.]
+
+                  ### Carbon Capture Findings
+                  (Based on CarbonCaptureResearcher's findings)
+                  [Synthesize and elaborate *only* on the carbon capture input summary provided above.]
+
+                  ### Overall Conclusion
+                  [Provide a brief (1-2 sentence) concluding statement that connects *only* the findings presented above.]
+
+                  Output *only* the structured report following this format. Do not include introductory or concluding phrases outside this structure, and strictly adhere to using only the provided input summary content.
+            agent-workflows:
+              - type: parallel
+                name: ParallelWebResearchAgent
+                description: Runs multiple research agents in parallel to gather information.
+                sub-agents:
+                  - RenewableEnergyResearcher
+                  - EVResearcher
+                  - CarbonCaptureResearcher
+              - type: sequential
+                name: ResearchAndSynthesisPipeline
+                description: Coordinates parallel research and synthesizes the results.
+                sub-agents:
+                  - ParallelWebResearchAgent
+                  - SynthesisAgent
+            runner:
+              agent-name: ResearchAndSynthesisPipeline
