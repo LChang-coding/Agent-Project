@@ -123,7 +123,7 @@ public class AiAgentConfigTableVO {
              */
             private String type;
             private String name;
-            private List<String> subAgents;
+            private List<String> subAgents;//需要执行的agent列表
             private String description;
             private Integer maxIterations = 3;
 
