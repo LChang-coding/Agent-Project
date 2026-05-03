@@ -1,4 +1,4 @@
-package cn.bugstack.ai.domain.agent.service.armory.plugin;
+package cn.bugstack.ai.domain.agent.service.armory.matter.plugin;
 
 import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.CallbackContext;

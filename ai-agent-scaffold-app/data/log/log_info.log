@@ -353,3 +353,90 @@ You are an agent. Your internal name is "onlyAgent". The description about you i
 26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
 26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
 26-05-03.14:06:04.546 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["你好！我是“onlyAgent”，我的专长是帮助用户制定Java学习项目计划，尤其针对初学者，结合百度检索到的实战项目和相关资料，给出适合的学习路径、方法与建议。我的能力包括：\n\n1. 根据用户需求检索最新、最实用的Java项目案例和教程资源。\n2. 针对初学者分析和安排合理有效的Java学习计划。\n3. 能结合不同类型的实战项目，推荐阶段性学习目标和进阶方式。\n4. 提供项目实现思路、代码要点、常见疑问解答等辅助建议。\n\n如果你提出任何关于Java学习与实战项目的问题，我都能根据检索内容和知识为你做出专业、具体的学习计划建议。欢迎随时提问！"]
+26-05-03.14:26:37.484 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:26:37.496 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49897 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:26:37.496 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:26:37.829 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:26:37.900 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:26:37.990 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:26:37.993 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:26:38.418 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:26:38.418 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:26:38.477 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.156 seconds (process running for 1.536)
+26-05-03.14:26:38.553 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:26:38.553 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:26:38.614 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:26:39.088 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:26:39.221 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:26:39.417 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:26:39.423 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:26:39.442 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:26:39.442 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:26:39.443 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:26:39.443 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:26:39.444 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:26:39.782 [main            ] INFO  MyTestPlugin           - 用户输入信息:将lcode转化为大写
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: f82ab6dc-1082-434f-9b7b-56acc777d233
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: lcode
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:26:39.782 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: 将lcode转化为大写
+26-05-03.14:26:39.784 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:26:39.784 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
+26-05-03.14:26:39.784 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:26:39.785 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:26:39.786 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:26:39.786 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:26:39.786 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
+26-05-03.14:26:39.797 [main            ] INFO  MyTestPlugin           - ai 模型:openai
+26-05-03.14:26:39.797 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:26:39.797 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:26:39.797 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:26:39.797 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+
+
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:26:43.797 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=3996ms, tokens=201
+26-05-03.14:26:43.798 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:26:43.798 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:26:43.798 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 你所说的 lcode 如果是指字符串 "lcode"，那么将其转化为大写可以这样做：
+
+Java 转化大写示例
+
+```java
+String lcode = "lcode";
+String upperLcode = lcode.toUpperCase();
+System.out.println(upperLcode); // 输出: LCODE
+```
+
+解释：
+
+- toUpperCase()...
+26-05-03.14:26:43.798 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:26:43.798 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:26:43.799 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:26:43.799 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: 32aa76e2-5472-44d4-963f-2b0e2e844c77
+26-05-03.14:26:43.799 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 你所说的 lcode 如果是指字符串 "lcode"，那么将其转化为大写可以这样做：
+
+Java 转化大写示例
+
+```java
+String lcode = "lcode";
+String upperLcode = lcode.toUpperCase();
+System.out.println(upperLcode); // 输出: LCODE
+```
+
+解释：
+
+- toUpperCase()...
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
+26-05-03.14:26:43.801 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:26:43.801 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["你所说的 lcode 如果是指字符串 \"lcode\"，那么将其转化为大写可以这样做：\n\nJava 转化大写示例\n\n```java\nString lcode = \"lcode\";\nString upperLcode = lcode.toUpperCase();\nSystem.out.println(upperLcode); // 输出: LCODE\n```\n\n解释：\n\n- toUpperCase() 是 Java String 类中将字符串转为大写的方法。\n\n学习建议：\n\n你可以尝试把不同的字符串变量利用 toUpperCase() 方法转化为大写，加深理解。\n\n如果你有其他特定的问题，也可以继续提问！"]

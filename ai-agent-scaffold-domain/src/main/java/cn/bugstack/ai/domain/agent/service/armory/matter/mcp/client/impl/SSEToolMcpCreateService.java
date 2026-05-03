@@ -1,7 +1,7 @@
-package cn.bugstack.ai.domain.agent.service.armory.mcp.client.impl;
+package cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.impl;
 
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
-import cn.bugstack.ai.domain.agent.service.armory.mcp.client.TooMcpCreateService;
+import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;

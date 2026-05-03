@@ -1,7 +1,7 @@
-package cn.bugstack.ai.domain.agent.service.armory.mcp.client.impl;
+package cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.impl;
 
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
-import cn.bugstack.ai.domain.agent.service.armory.mcp.client.TooMcpCreateService;
+import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
