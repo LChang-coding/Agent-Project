@@ -31,3 +31,6 @@ ai:
                   通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
             runner:
               agent-name: onlyAgent
+              plugin-name-list:
+                - myTestPlugin
+                - myLogPlugin

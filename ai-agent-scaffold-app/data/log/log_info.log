@@ -1,645 +1,355 @@
-26-04-26.01:47:22.045 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:47:22.078 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 12787 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:47:22.080 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:47:22.412 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:47:22.490 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:47:22.555 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:47:22.559 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:47:22.945 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.01:47:22.947 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.01:47:23.019 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.149 seconds (process running for 1.572)
-26-04-26.01:47:23.099 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.01:47:23.100 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.01:47:23.175 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.01:47:32.867 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.01:47:37.659 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.01:47:42.013 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.01:47:42.018 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.01:47:42.035 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.01:47:42.035 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.01:47:42.036 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.01:48:03.547 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:48:03.567 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 12841 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:48:03.567 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:48:03.910 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:48:03.987 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:48:04.174 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:48:04.180 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:48:04.584 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.01:48:04.585 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.01:48:04.637 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.242 seconds (process running for 1.553)
-26-04-26.01:48:04.697 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.01:48:04.698 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.01:48:04.755 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.01:48:13.803 [HttpClient-3-Worker-1] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.01:48:22.871 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.01:48:27.279 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.01:48:27.284 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.01:48:27.299 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.01:48:27.299 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.01:48:27.301 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.01:48:37.644 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=10010ms, tokens=2193
-26-04-26.01:48:37.648 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转换为大写为：LCODE"]
-26-04-26.01:50:30.215 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:50:30.228 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 12952 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:50:30.229 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:50:30.566 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:50:30.636 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:50:30.700 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:50:30.703 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:50:31.047 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.01:50:31.048 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.01:50:31.099 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.034 seconds (process running for 1.349)
-26-04-26.01:50:31.159 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.01:50:31.159 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.01:50:31.209 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.01:50:40.270 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.01:50:44.567 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.01:50:48.923 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.01:50:48.928 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.01:50:48.943 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.01:50:48.943 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.01:50:48.944 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.01:50:58.636 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=9352ms, tokens=2193
-26-04-26.01:50:58.643 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转换为大写是：LCODE"]
-26-04-26.01:55:38.566 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:55:38.579 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 13624 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:55:38.580 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:55:38.856 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:55:38.898 [main            ] WARN  GenericWebApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-26-04-26.01:55:38.906 [main            ] INFO  ConditionEvaluationReportLogger - 
+26-05-03.13:49:40.419 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.13:49:40.432 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 48767 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.13:49:40.434 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.13:49:40.765 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.13:49:40.829 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.13:49:40.904 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.13:49:40.907 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.13:49:41.237 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.13:49:41.237 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.13:49:41.284 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.015 seconds (process running for 1.385)
+26-05-03.13:49:41.349 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.13:49:41.350 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.13:49:41.404 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.13:49:41.839 [HttpClient-3-Worker-1] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.13:49:41.964 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.13:49:42.157 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.13:49:42.162 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.13:49:42.182 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.13:49:42.182 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.13:49:42.183 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.13:49:46.889 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=4359ms, tokens=2193
+26-05-03.13:49:46.891 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转化为大写是：LCODE"]
+26-05-03.14:04:02.202 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:04:02.216 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49337 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:04:02.216 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:04:02.568 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:04:02.636 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:02.720 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:02.723 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:03.063 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:04:03.064 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:04:03.111 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.068 seconds (process running for 1.44)
+26-05-03.14:04:03.181 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:04:03.182 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:04:03.240 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:04:03.696 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:04:03.820 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:04:04.007 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:04:04.012 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:04:04.031 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:04:04.031 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:04:04.032 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:04:04.032 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:04:04.033 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:04:09.434 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:04:09.450 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49347 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:04:09.453 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:04:09.794 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:04:09.856 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:09.917 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:09.920 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:04:10.239 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:04:10.239 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:04:10.285 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.003 seconds (process running for 1.356)
+26-05-03.14:04:10.359 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:04:10.360 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:04:10.418 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:04:10.726 [HttpClient-3-Worker-3] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:04:10.856 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:04:11.055 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:04:11.060 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:04:11.079 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:04:11.079 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:04:11.080 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:04:11.080 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:04:11.080 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:04:11.394 [main            ] INFO  MyTestPlugin           - 用户输入信息:将lcode转化为大写
+26-05-03.14:04:11.394 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-cce3bf27-f86b-4a14-8d21-c639625a165f
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: 88025c97-effc-4898-9bbb-6dac395f835f
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: lcode
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:04:11.395 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: 将lcode转化为大写
+26-05-03.14:04:11.397 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:04:11.397 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-cce3bf27-f86b-4a14-8d21-c639625a165f
+26-05-03.14:04:11.397 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:04:11.399 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:04:11.399 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:04:11.399 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:04:11.399 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-cce3bf27-f86b-4a14-8d21-c639625a165f
+26-05-03.14:04:11.410 [main            ] INFO  MyTestPlugin           - ai 模型:openai
+26-05-03.14:04:11.411 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:04:11.411 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:04:11.411 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:04:11.411 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
 
-Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
-26-04-26.01:55:38.923 [main            ] ERROR SpringApplication      - Application run failed
-java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:38.929 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@69aa7d76]
-java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@b27b210 testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@1bb5a082, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@33d512c1, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@408d971b, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@36ebc363, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@815b41f, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@6150c3ec, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@4b2bac3f, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@1b27dd90], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	... 26 common frames omitted
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:48.795 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:55:48.808 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 13631 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:55:48.808 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:55:49.075 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:55:49.115 [main            ] WARN  GenericWebApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-26-04-26.01:55:49.124 [main            ] INFO  ConditionEvaluationReportLogger - 
 
-Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
-26-04-26.01:55:49.142 [main            ] ERROR SpringApplication      - Application run failed
-java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:49.148 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@2a235b8e]
-java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@76bf1bb8 testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	... 26 common frames omitted
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:49.152 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@74834afd]
-java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@76bf1bb8 testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:145)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-26-04-26.01:55:49.152 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@d499c13]
-java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@76bf1bb8 testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:145)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-26-04-26.01:55:52.944 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:55:52.956 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 13641 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:55:52.957 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:55:53.226 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:55:53.267 [main            ] WARN  GenericWebApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-26-04-26.01:55:53.275 [main            ] INFO  ConditionEvaluationReportLogger - 
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:04:15.264 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=3849ms, tokens=159
+26-05-03.14:04:15.265 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:04:15.265 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:04:15.265 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 将 lcode 转化为大写，可以使用 Java 中的字符串方法 toUpperCase()。举例如下：
 
-Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
-26-04-26.01:55:53.292 [main            ] ERROR SpringApplication      - Application run failed
-java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:53.317 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@76bf1bb8]
-java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@44114b9f testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-Caused by: java.lang.IllegalStateException: Failed to introspect Class [cn.bugstack.ai.domain.agent.service.armory.mcp.client.factory.DefaultMcpClientFactory] from ClassLoader [jdk.internal.loader.ClassLoaders$AppClassLoader@42110406]
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:756)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:722)
-	at org.springframework.util.ReflectionUtils.doWithFields(ReflectionUtils.java:707)
-	at org.springframework.boot.test.mock.mockito.DefinitionsParser.parse(DefinitionsParser.java:68)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:142)
-	at org.springframework.boot.test.mock.mockito.MockitoPostProcessor.postProcessBeanFactory(MockitoPostProcessor.java:135)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363)
-	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:197)
-	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:791)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:609)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	... 26 common frames omitted
-Caused by: java.lang.NoClassDefFoundError: cn/bugstack/ai/types/exception/AppException
-	at java.base/java.lang.Class.getDeclaredFields0(Native Method)
-	at java.base/java.lang.Class.privateGetDeclaredFields(Class.java:3299)
-	at java.base/java.lang.Class.getDeclaredFields(Class.java:2373)
-	at org.springframework.util.ReflectionUtils.getDeclaredFields(ReflectionUtils.java:751)
-	... 47 common frames omitted
-Caused by: java.lang.ClassNotFoundException: cn.bugstack.ai.types.exception.AppException
-	at java.base/jdk.internal.loader.BuiltinClassLoader.loadClass(BuiltinClassLoader.java:641)
-	at java.base/jdk.internal.loader.ClassLoaders$AppClassLoader.loadClass(ClassLoaders.java:188)
-	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
-	... 51 common frames omitted
-26-04-26.01:55:53.323 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@7b5b5bfe]
-java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@44114b9f testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:145)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-26-04-26.01:55:53.324 [main            ] WARN  TestContextManager     - Caught exception while allowing TestExecutionListener [org.springframework.test.context.web.ServletTestExecutionListener] to prepare test instance [cn.bugstack.ai.test.app.AiAgentAutoConfigTest@75fd65c]
-java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@44114b9f testClass = cn.bugstack.ai.test.app.AiAgentAutoConfigTest, locations = [], classes = [cn.bugstack.ai.Application], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [], propertySourceProperties = ["org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@55182842, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@76505305, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@411f53a0, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@4afcd809, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@54d9d12d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@702657cc, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@1fa121e2, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@44f39403], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:145)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.createTest(SpringJUnit4ClassRunner.java:228)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner$1.runReflectiveCall(SpringJUnit4ClassRunner.java:289)
-	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.methodBlock(SpringJUnit4ClassRunner.java:291)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:247)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.runChild(SpringJUnit4ClassRunner.java:97)
-	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
-	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
-	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
-	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
-	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
-	at org.springframework.test.context.junit4.statements.RunBeforeTestClassCallbacks.evaluate(RunBeforeTestClassCallbacks.java:61)
-	at org.springframework.test.context.junit4.statements.RunAfterTestClassCallbacks.evaluate(RunAfterTestClassCallbacks.java:70)
-	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
-	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
-	at org.springframework.test.context.junit4.SpringJUnit4ClassRunner.run(SpringJUnit4ClassRunner.java:191)
-	at org.eclipse.jdt.internal.junit4.runner.JUnit4TestReference.run(JUnit4TestReference.java:93)
-	at org.eclipse.jdt.internal.junit.runner.TestExecution.run(TestExecution.java:40)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:520)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.runTests(RemoteTestRunner.java:748)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.run(RemoteTestRunner.java:443)
-	at org.eclipse.jdt.internal.junit.runner.RemoteTestRunner.main(RemoteTestRunner.java:211)
-26-04-26.01:58:22.254 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.01:58:22.267 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 14745 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.01:58:22.268 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.01:58:22.558 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.01:58:22.627 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:58:22.697 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:58:22.700 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.01:58:23.034 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.01:58:23.035 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.01:58:23.112 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.002 seconds (process running for 1.321)
-26-04-26.01:58:23.181 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.01:58:23.182 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.01:58:23.239 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.01:58:32.997 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.01:58:37.680 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.01:58:42.038 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.01:58:42.044 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.01:58:42.059 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.01:58:42.059 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.01:58:42.061 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.01:58:51.056 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=8639ms, tokens=2193
-26-04-26.01:58:51.058 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转化为大写是：LCODE"]
-26-04-26.02:05:02.742 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.02:05:02.755 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 15681 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.02:05:02.755 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.02:05:03.041 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.02:05:03.103 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:03.164 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:03.167 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:03.457 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.02:05:03.458 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.02:05:03.510 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 0.9 seconds (process running for 1.211)
-26-04-26.02:05:03.565 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.02:05:03.566 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.02:05:03.612 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.02:05:12.899 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.02:05:17.268 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.02:05:21.757 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.02:05:21.763 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.02:05:21.780 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.02:05:21.780 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.02:05:21.782 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.02:05:32.901 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=10759ms, tokens=2194
-26-04-26.02:05:32.906 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转化为大写是：LCODE。"]
-26-04-26.02:05:55.750 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-04-26.02:05:55.766 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 15704 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-04-26.02:05:55.767 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-04-26.02:05:56.072 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-04-26.02:05:56.136 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:56.197 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:56.201 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-04-26.02:05:56.521 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-04-26.02:05:56.521 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-04-26.02:05:56.573 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 0.966 seconds (process running for 1.284)
-26-04-26.02:05:56.623 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent"}}}]
-26-04-26.02:05:56.624 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-04-26.02:05:56.673 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-04-26.02:06:05.852 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-04-26.02:06:10.192 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-04-26.02:06:14.696 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-04-26.02:06:14.701 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-04-26.02:06:14.715 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-04-26.02:06:14.715 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-04-26.02:06:14.717 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-04-26.02:06:24.016 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=8990ms, tokens=2193
-26-04-26.02:06:24.023 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转换为大写是：LCODE"]
+示例代码：
+
+String lcode = "lcode";
+String upperCaseLcode = lcode.toUpperCase();
+System.out.println(upperCaseLcode);
+
+输出结果：
+
+LCODE
+
+如果你需要手动转换，可以遍历字符串，将每...
+26-05-03.14:04:15.265 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:04:15.265 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:04:15.266 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:04:15.266 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: 065f62f7-f67e-41ed-acab-7468a6416b11
+26-05-03.14:04:15.266 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:04:15.266 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 将 lcode 转化为大写，可以使用 Java 中的字符串方法 toUpperCase()。举例如下：
+
+示例代码：
+
+String lcode = "lcode";
+String upperCaseLcode = lcode.toUpperCase();
+System.out.println(upperCaseLcode);
+
+输出结果：
+
+LCODE
+
+如果你需要手动转换，可以遍历字符串，将每...
+26-05-03.14:04:15.267 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:04:15.267 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:04:15.267 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:04:15.267 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-cce3bf27-f86b-4a14-8d21-c639625a165f
+26-05-03.14:04:15.268 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:04:15.268 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-cce3bf27-f86b-4a14-8d21-c639625a165f
+26-05-03.14:04:15.268 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:04:15.268 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["将 lcode 转化为大写，可以使用 Java 中的字符串方法 toUpperCase()。举例如下：\n\n示例代码：\n\nString lcode = \"lcode\";\nString upperCaseLcode = lcode.toUpperCase();\nSystem.out.println(upperCaseLcode);\n\n输出结果：\n\nLCODE\n\n如果你需要手动转换，可以遍历字符串，将每个字符转为大写，推荐直接用内置方法即可。"]
+26-05-03.14:05:01.427 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:01.442 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49361 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:01.442 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:05:01.784 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:05:01.850 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:01.927 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:01.931 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:02.275 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:05:02.275 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:05:02.321 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.04 seconds (process running for 1.391)
+26-05-03.14:05:02.385 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:05:02.385 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:05:02.443 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:05:03.795 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:05:04.263 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:05:04.460 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:05:04.468 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:05:04.486 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:05:04.486 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:05:04.487 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:05:04.487 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:05:04.488 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:05:17.026 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:17.045 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49369 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:17.046 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:05:17.365 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:05:17.428 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:17.490 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:17.493 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:17.866 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:05:17.867 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:05:17.914 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.034 seconds (process running for 1.396)
+26-05-03.14:05:17.985 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:05:17.985 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:05:18.049 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:05:18.370 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:05:18.491 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:05:18.667 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:05:18.672 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:05:18.687 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:05:18.687 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:05:18.688 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:05:18.688 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:05:18.688 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:05:23.019 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:23.035 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49376 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:23.035 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:05:23.360 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:05:23.423 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:23.489 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:23.492 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:23.838 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:05:23.839 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:05:23.885 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.019 seconds (process running for 1.368)
+26-05-03.14:05:23.946 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:05:23.946 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:05:23.995 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:05:24.414 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:05:24.545 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:05:24.721 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:05:24.726 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:05:24.742 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:05:24.742 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:05:24.743 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:05:24.743 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:05:24.743 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:05:29.701 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:29.719 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49383 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:29.720 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:05:30.037 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:05:30.103 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:30.168 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:30.171 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:30.568 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:05:30.569 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:05:30.633 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.089 seconds (process running for 1.46)
+26-05-03.14:05:30.713 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:05:30.713 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:05:30.769 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:05:31.086 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:05:31.224 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:05:31.411 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:05:31.416 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:05:31.432 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:05:31.432 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:05:31.433 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:05:31.434 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:05:31.434 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:05:38.398 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:38.414 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49395 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:38.414 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:05:38.697 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:05:38.757 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:38.818 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:38.821 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:05:39.167 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:05:39.168 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:05:39.226 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 0.969 seconds (process running for 1.399)
+26-05-03.14:05:39.296 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:05:39.296 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:05:39.344 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:05:39.691 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:05:39.808 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:05:39.996 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:05:40.001 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:05:40.017 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:05:40.017 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:05:40.018 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:05:40.018 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:05:40.018 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:05:40.310 [main            ] INFO  MyTestPlugin           - 用户输入信息:将lcode转化为大写
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-9ee4c415-8715-426d-a66e-e2213fac99f3
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: 1dace459-3197-40ed-829c-1619f03308da
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: lcode
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:05:40.310 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: 将lcode转化为大写
+26-05-03.14:05:40.312 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:05:40.312 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-9ee4c415-8715-426d-a66e-e2213fac99f3
+26-05-03.14:05:40.312 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:05:40.314 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:05:40.314 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:05:40.314 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:05:40.314 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-9ee4c415-8715-426d-a66e-e2213fac99f3
+26-05-03.14:05:40.321 [main            ] INFO  MyTestPlugin           - ai 模型:openai
+26-05-03.14:05:40.321 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:05:40.321 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:05:40.321 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:05:40.322 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+
+
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:05:43.413 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=3088ms, tokens=2192
+26-05-03.14:05:43.414 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:05:43.414 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:05:43.414 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: lcode 转换为大写字母是：LCODE。
+26-05-03.14:05:43.414 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:05:43.414 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:05:43.415 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:05:43.415 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: dbdf631e-c873-433c-a448-bf08274da27f
+26-05-03.14:05:43.415 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:05:43.415 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: lcode 转换为大写字母是：LCODE。
+26-05-03.14:05:43.415 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-9ee4c415-8715-426d-a66e-e2213fac99f3
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-9ee4c415-8715-426d-a66e-e2213fac99f3
+26-05-03.14:05:43.416 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:05:43.417 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["lcode 转换为大写字母是：LCODE。"]
+26-05-03.14:05:59.854 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:05:59.871 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 49414 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:05:59.872 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:06:00.225 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:06:00.292 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:06:00.363 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:06:00.367 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:06:00.722 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:06:00.722 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:06:00.772 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.061 seconds (process running for 1.444)
+26-05-03.14:06:00.840 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:06:00.841 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:06:00.899 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:06:01.227 [HttpClient-3-Worker-1] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:06:01.397 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:06:01.653 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:06:01.658 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:06:01.673 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:06:01.673 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:06:01.674 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:06:01.674 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:06:01.674 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:06:01.968 [main            ] INFO  MyTestPlugin           - 用户输入信息:你具备哪些能力
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: 34fdf2b9-6814-4229-82dd-5d8ff2fbddd5
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: lcode
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:06:01.968 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:06:01.969 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: 你具备哪些能力
+26-05-03.14:06:01.970 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:06:01.970 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
+26-05-03.14:06:01.970 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:06:01.972 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:06:01.972 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:06:01.972 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:06:01.972 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
+26-05-03.14:06:01.980 [main            ] INFO  MyTestPlugin           - ai 模型:openai
+26-05-03.14:06:01.981 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:06:01.981 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:06:01.981 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:06:01.981 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+
+
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:06:04.542 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=2558ms, tokens=1236
+26-05-03.14:06:04.543 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:06:04.543 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:06:04.543 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 你好！我是“onlyAgent”，我的专长是帮助用户制定Java学习项目计划，尤其针对初学者，结合百度检索到的实战项目和相关资料，给出适合的学习路径、方法与建议。我的能力包括：
+
+1. 根据用户需求检索最新、最实用的Java项目案例和教程资源。
+2. 针对初学者分析和安排合理有效的Java学习计划。
+3. 能结合不同类型的实战项目，推荐阶段性学习目标和进阶方式。
+4. 提供项目实现思路、代码要点、...
+26-05-03.14:06:04.543 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:06:04.543 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:06:04.544 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:06:04.544 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: 2c4738b1-68e5-4a25-aedf-fb8fe585fc28
+26-05-03.14:06:04.544 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:06:04.544 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: 你好！我是“onlyAgent”，我的专长是帮助用户制定Java学习项目计划，尤其针对初学者，结合百度检索到的实战项目和相关资料，给出适合的学习路径、方法与建议。我的能力包括：
+
+1. 根据用户需求检索最新、最实用的Java项目案例和教程资源。
+2. 针对初学者分析和安排合理有效的Java学习计划。
+3. 能结合不同类型的实战项目，推荐阶段性学习目标和进阶方式。
+4. 提供项目实现思路、代码要点、...
+26-05-03.14:06:04.544 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-f18a48b0-62de-49e3-bd34-ae66001d4fcc
+26-05-03.14:06:04.545 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:06:04.546 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["你好！我是“onlyAgent”，我的专长是帮助用户制定Java学习项目计划，尤其针对初学者，结合百度检索到的实战项目和相关资料，给出适合的学习路径、方法与建议。我的能力包括：\n\n1. 根据用户需求检索最新、最实用的Java项目案例和教程资源。\n2. 针对初学者分析和安排合理有效的Java学习计划。\n3. 能结合不同类型的实战项目，推荐阶段性学习目标和进阶方式。\n4. 提供项目实现思路、代码要点、常见疑问解答等辅助建议。\n\n如果你提出任何关于Java学习与实战项目的问题，我都能根据检索内容和知识为你做出专业、具体的学习计划建议。欢迎随时提问！"]
