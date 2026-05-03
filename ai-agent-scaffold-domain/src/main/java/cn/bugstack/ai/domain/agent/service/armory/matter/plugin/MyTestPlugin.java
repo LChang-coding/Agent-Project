@@ -38,11 +38,6 @@ public class MyTestPlugin extends BasePlugin {
         return super.beforeAgentCallback(agent, callbackContext);
     }
 
-    @Override
-    public Maybe<LlmResponse> beforeModelCallback(CallbackContext callbackContext, LlmRequest llmRequest) {
-        Optional<String> model = llmRequest.model();
-        log.info("ai 模型:{}", model.orElse(""));
-        return super.beforeModelCallback(callbackContext, llmRequest);
-    }
+
 
 }

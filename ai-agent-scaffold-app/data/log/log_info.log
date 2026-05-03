@@ -440,3 +440,208 @@ System.out.println(upperLcode); // 输出: LCODE
 26-05-03.14:26:43.800 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-0a0ecc6f-cc87-4a38-8f58-b73ebf0578ec
 26-05-03.14:26:43.801 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
 26-05-03.14:26:43.801 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["你所说的 lcode 如果是指字符串 \"lcode\"，那么将其转化为大写可以这样做：\n\nJava 转化大写示例\n\n```java\nString lcode = \"lcode\";\nString upperLcode = lcode.toUpperCase();\nSystem.out.println(upperLcode); // 输出: LCODE\n```\n\n解释：\n\n- toUpperCase() 是 Java String 类中将字符串转为大写的方法。\n\n学习建议：\n\n你可以尝试把不同的字符串变量利用 toUpperCase() 方法转化为大写，加深理解。\n\n如果你有其他特定的问题，也可以继续提问！"]
+26-05-03.14:43:45.651 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:43:45.665 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 50226 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:43:45.666 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:43:46.025 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:43:46.090 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:43:46.174 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:43:46.177 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:43:46.528 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:43:46.528 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:43:46.575 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.081 seconds (process running for 1.468)
+26-05-03.14:43:46.645 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:43:46.646 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:43:46.703 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:43:47.139 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:43:47.263 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:43:47.496 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:43:47.502 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:43:47.522 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:43:47.522 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:43:47.523 [main            ] INFO  PluginManager          - Plugin 'MyTestPlugin' registered.
+26-05-03.14:43:47.523 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-03.14:43:47.523 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:47:43.535 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:47:43.542 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
+	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+26-05-03.14:47:43.551 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 50322 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:47:43.552 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:47:43.921 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:47:43.992 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:47:44.081 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:47:44.084 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:47:44.446 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:47:44.446 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:47:44.503 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.129 seconds (process running for 1.517)
+26-05-03.14:47:44.579 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:47:44.579 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:47:44.638 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:47:44.950 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:47:45.095 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:47:45.277 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:47:45.282 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:47:45.305 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:47:45.305 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:47:45.314 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:50:04.191 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:50:04.197 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
+	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+26-05-03.14:50:04.205 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 50373 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:50:04.205 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:50:04.600 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:50:04.669 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:04.758 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:04.761 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:05.116 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:50:05.117 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:50:05.174 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.146 seconds (process running for 1.641)
+26-05-03.14:50:05.251 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:50:05.251 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:50:05.314 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:50:05.798 [HttpClient-3-Worker-1] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:50:05.926 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:50:06.119 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:50:06.125 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:50:06.157 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:50:06.157 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:50:06.163 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:50:06.493 [main            ] WARN  Content                - There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
+26-05-03.14:50:06.493 [main            ] INFO  MyTestPlugin           - 用户输入信息:请描述这张图片的主要内容，并说明图中物品的可能用途。
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-4a47ae78-e701-4973-b804-5129bbb8dbc3
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: 40271714-f6f6-41f4-876f-c46ed4002ac4
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: xiaofuge
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:50:06.494 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: text: '请描述这张图片的主要内容，并说明图中物品的可能用途。'
+other_part
+26-05-03.14:50:06.497 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:50:06.497 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-4a47ae78-e701-4973-b804-5129bbb8dbc3
+26-05-03.14:50:06.497 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:50:06.498 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:50:06.498 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:50:06.498 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:50:06.498 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-4a47ae78-e701-4973-b804-5129bbb8dbc3
+26-05-03.14:50:06.509 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:50:06.509 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:50:06.509 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:50:06.509 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+
+
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:50:11.178 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=4665ms, tokens=1372
+26-05-03.14:50:11.179 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:50:11.179 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:50:11.179 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这张图片是黑色的，没有任何可见内容，因此无法描述图中物品的主要内容，也无法说明物品的可能用途。如果你有其他图片或具体的问题，欢迎继续提供。'
+26-05-03.14:50:11.179 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:50:11.179 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:50:11.194 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: 79e53c56-e8cd-453a-98c8-23c93802db2a
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这张图片是黑色的，没有任何可见内容，因此无法描述图中物品的主要内容，也无法说明物品的可能用途。如果你有其他图片或具体的问题，欢迎继续提供。'
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:50:11.195 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-4a47ae78-e701-4973-b804-5129bbb8dbc3
+26-05-03.14:50:11.196 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:50:11.196 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-4a47ae78-e701-4973-b804-5129bbb8dbc3
+26-05-03.14:50:11.196 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:50:11.196 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["这张图片是黑色的，没有任何可见内容，因此无法描述图中物品的主要内容，也无法说明物品的可能用途。如果你有其他图片或具体的问题，欢迎继续提供。"]
+26-05-03.14:50:32.563 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-03.14:50:32.570 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
+	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+26-05-03.14:50:32.580 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 50411 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-05-03.14:50:32.580 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
+26-05-03.14:50:32.929 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
+26-05-03.14:50:32.992 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:33.065 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:33.068 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-03.14:50:33.405 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-03.14:50:33.405 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-03.14:50:33.456 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.045 seconds (process running for 1.489)
+26-05-03.14:50:33.522 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
+26-05-03.14:50:33.522 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-03.14:50:33.579 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-03.14:50:33.893 [HttpClient-3-Worker-0] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
+26-05-03.14:50:34.019 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
+26-05-03.14:50:34.215 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
+26-05-03.14:50:34.221 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-03.14:50:34.240 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-03.14:50:34.241 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-03.14:50:34.244 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-03.14:50:34.553 [main            ] WARN  Content                - There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
+26-05-03.14:50:34.553 [main            ] INFO  MyTestPlugin           - 用户输入信息:请描述这张图片的主要内容，并说明图中物品的可能用途。
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-23bdc7da-7931-4981-aacf-bf2e8c78bcd9
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: 1dba79cc-3a14-4bf5-b97d-79714c34e59b
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: xiaofuge
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
+26-05-03.14:50:34.554 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: text: '请描述这张图片的主要内容，并说明图中物品的可能用途。'
+other_part
+26-05-03.14:50:34.556 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
+26-05-03.14:50:34.556 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-23bdc7da-7931-4981-aacf-bf2e8c78bcd9
+26-05-03.14:50:34.556 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
+26-05-03.14:50:34.558 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
+26-05-03.14:50:34.558 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
+26-05-03.14:50:34.558 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:50:34.558 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-23bdc7da-7931-4981-aacf-bf2e8c78bcd9
+26-05-03.14:50:34.568 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
+26-05-03.14:50:34.569 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
+26-05-03.14:50:34.569 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:50:34.569 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
+
+
+You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
+26-05-03.14:50:39.863 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=5290ms, tokens=658
+26-05-03.14:50:39.864 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
+26-05-03.14:50:39.865 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
+26-05-03.14:50:39.865 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这张图片的主要内容是一只卡通风格的小狗。小狗的表情看起来有些疑惑或惊讶，呈现出可爱的形象。它的身体为棕色，鼻子和嘴部区域较为突出，眼睛较大，耳朵竖起，尾巴翘着。
+
+图中物品（小狗）的可能用途包括：
+1. 用于儿童故事书或绘本的插图，吸引孩子的注意力。
+2. 用作宠物相关产品的品牌吉祥物或宣传图标。
+3. 可在应用程序或网站中作为表情包、图标或动画形象，用于表达情绪或装饰界面。
+4. 在教育材料中用...'
+26-05-03.14:50:39.865 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
+26-05-03.14:50:39.865 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
+26-05-03.14:50:39.881 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
+26-05-03.14:50:39.881 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: b958a551-c3c7-44c8-8412-4a1b73d62fca
+26-05-03.14:50:39.881 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
+26-05-03.14:50:39.881 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这张图片的主要内容是一只卡通风格的小狗。小狗的表情看起来有些疑惑或惊讶，呈现出可爱的形象。它的身体为棕色，鼻子和嘴部区域较为突出，眼睛较大，耳朵竖起，尾巴翘着。
+
+图中物品（小狗）的可能用途包括：
+1. 用于儿童故事书或绘本的插图，吸引孩子的注意力。
+2. 用作宠物相关产品的品牌吉祥物或宣传图标。
+3. 可在应用程序或网站中作为表情包、图标或动画形象，用于表达情绪或装饰界面。
+4. 在教育材料中用...'
+26-05-03.14:50:39.882 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
+26-05-03.14:50:39.882 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
+26-05-03.14:50:39.882 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
+26-05-03.14:50:39.882 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-23bdc7da-7931-4981-aacf-bf2e8c78bcd9
+26-05-03.14:50:39.882 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
+26-05-03.14:50:39.883 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-23bdc7da-7931-4981-aacf-bf2e8c78bcd9
+26-05-03.14:50:39.883 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
+26-05-03.14:50:39.883 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["这张图片的主要内容是一只卡通风格的小狗。小狗的表情看起来有些疑惑或惊讶，呈现出可爱的形象。它的身体为棕色，鼻子和嘴部区域较为突出，眼睛较大，耳朵竖起，尾巴翘着。\n\n图中物品（小狗）的可能用途包括：\n1. 用于儿童故事书或绘本的插图，吸引孩子的注意力。\n2. 用作宠物相关产品的品牌吉祥物或宣传图标。\n3. 可在应用程序或网站中作为表情包、图标或动画形象，用于表达情绪或装饰界面。\n4. 在教育材料中用于教学，让学习过程更加生动有趣。\n\n整体来看，这类卡通动物形象主要用于视觉设计和交流，能够增加趣味性并提升用户体验。"]
