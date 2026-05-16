@@ -84,6 +84,12 @@
                 <version>1.1.0</version>
             </dependency>
 
+            <!-- https://github.com/spring-ai-community/spring-ai-agent-utils -->
+            <dependency>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-agent-utils</artifactId>
+                <version>0.4.2</version>
+            </dependency>
             <dependency>
                 <groupId>com.google.adk</groupId>
                 <artifactId>google-adk-contrib-langchain4j</artifactId>

@@ -24,6 +24,11 @@ ai:
                     request-timeout: 500000
                 - local:
                     name: myToolCallbackProvider
+              tool-skills-list:
+                - type: resource
+                  path: agent/skills
+ #               - type: directory
+  #                path: /Users/fuzhengwei/coding/gitcode/KnowledgePlanet/ai-agent-scaffold/ai-agent-scaffold-lite/docs/dev-ops/agent/skills
             agents:
               - name: onlyAgent
                 description: java学习项目计划
