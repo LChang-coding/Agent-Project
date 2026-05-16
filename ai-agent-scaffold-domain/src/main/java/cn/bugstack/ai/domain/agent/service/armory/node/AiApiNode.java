@@ -6,10 +6,14 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 import javax.annotation.Resource;
 
@@ -25,11 +29,31 @@ public class  AiApiNode extends AbstractArmorySupport {
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         AiAgentConfigTableVO.Module.AiApi aiApiConfig = aiAgentConfigTableVO.getModule().getAiApi();
 
+        // DeepSeek 默认启用思考模式，需禁用避免 reasoning_content 错误
+        ObjectMapper objectMapper = new ObjectMapper();
+        RestClient.Builder restClientBuilder = RestClient.builder()
+            .requestInterceptor((request, body, execution) -> {
+                String path = request.getURI().getPath();
+                if (body != null && body.length > 0 && path != null && path.contains("/chat/completions")) {
+                    try {
+                        JsonNode rootNode = objectMapper.readTree(body);
+                        ObjectNode thinking = objectMapper.createObjectNode();
+                        thinking.put("type", "disabled");
+                        ((ObjectNode) rootNode).set("thinking", thinking);
+                        body = objectMapper.writeValueAsBytes(rootNode);
+                    } catch (Exception e) {
+                        log.warn("请求体添加 thinking 参数失败", e);
+                    }
+                }
+                return execution.execute(request, body);
+            });
+
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(aiApiConfig.getBaseUrl())
                 .apiKey(aiApiConfig.getApiKey())
                 .completionsPath(StringUtils.isNotBlank(aiApiConfig.getCompletionsPath()) ? aiApiConfig.getCompletionsPath() : "v1/chat/completions")
                 .embeddingsPath(StringUtils.isNotBlank(aiApiConfig.getEmbeddingsPath()) ? aiApiConfig.getEmbeddingsPath() : "v1/embeddings")
+                .restClientBuilder(restClientBuilder)
                 .build();
 
         dynamicContext.setOpenAiApi(openAiApi);
