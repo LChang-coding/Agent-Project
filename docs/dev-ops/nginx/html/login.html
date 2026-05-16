@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 智能体对话 By Ai Agent Scaffold - lcode</title>
+<style>
+  /* ============================================
+     CSS Reset & Variables
+     ============================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #6c5ce7;
+    --primary-glow: #a29bfe;
+    --accent: #00cec9;
+    --accent-glow: #00fff5;
+    --bg-dark: #0a0a1a;
+    --bg-card: rgba(15, 15, 40, 0.8);
+    --text: #e0e0f0;
+    --text-muted: #8888aa;
+    --danger: #ff6b6b;
+    --success: #2ed573;
+    --border: rgba(108, 92, 231, 0.3);
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --radius: 16px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ============================================
+     Base & Background
+     ============================================ */
+  body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* 动态网格背景 */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.06) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridMove 20s linear infinite;
+    z-index: 0;
+  }
+  @keyframes gridMove {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(60px, 60px); }
+  }
+
+  /* 粒子容器 */
+  .particles {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    animation: floatUp linear infinite;
+    opacity: 0;
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 0.6; }
+    100% { transform: translateY(-10vh) scale(1.5); opacity: 0; }
+  }
+
+  /* 光晕 */
+  .glow-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    z-index: 0;
+    pointer-events: none;
+    animation: orbPulse 8s ease-in-out infinite;
+  }
+  .glow-orb-1 {
+    width: 500px; height: 500px;
+    background: rgba(108, 92, 231, 0.12);
+    top: -15%; left: -10%;
+  }
+  .glow-orb-2 {
+    width: 400px; height: 400px;
+    background: rgba(0, 206, 201, 0.10);
+    bottom: -15%; right: -8%;
+    animation-delay: -4s;
+  }
+  @keyframes orbPulse {
+    0%, 100% { transform: scale(1) translate(0, 0); }
+    33%  { transform: scale(1.2) translate(30px, -20px); }
+    66%  { transform: scale(0.9) translate(-20px, 15px); }
+  }
+
+  /* ============================================
+     Main Container
+     ============================================ */
+  .login-container {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    width: 960px;
+    min-height: 580px;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px var(--glass-border),
+      0 25px 80px rgba(0, 0, 0, 0.5),
+      0 0 120px rgba(108, 92, 231, 0.08);
+    backdrop-filter: blur(10px);
+    animation: containerEntry 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  @keyframes containerEntry {
+    from { opacity: 0; transform: translateY(40px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* ============================================
+     Left Panel - 信息展示
+     ============================================ */
+  .left-panel {
+    flex: 1;
+    background: linear-gradient(135deg,
+      rgba(108, 92, 231, 0.25) 0%,
+      rgba(15, 15, 40, 0.9) 40%,
+      rgba(0, 206, 201, 0.15) 100%);
+    padding: 50px 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 左侧 AI 动态电路线 */
+  .circuit-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .circuit-line {
+    position: absolute;
+    background: linear-gradient(90deg, transparent, rgba(108, 92, 231, 0.3), transparent);
+    height: 1px;
+    animation: circuitScan 3s ease-in-out infinite;
+  }
+  .circuit-line:nth-child(1) { top: 20%; left: 0; right: 0; animation-delay: 0s; }
+  .circuit-line:nth-child(2) { top: 45%; left: 0; right: 0; animation-delay: 0.8s; }
+  .circuit-line:nth-child(3) { top: 70%; left: 0; right: 0; animation-delay: 1.6s; }
+  .circuit-v {
+    position: absolute;
+    background: linear-gradient(180deg, transparent, rgba(0, 206, 201, 0.25), transparent);
+    width: 1px;
+    animation: circuitScanV 3s ease-in-out infinite;
+  }
+  .circuit-v:nth-child(4) { left: 30%; top: 0; bottom: 0; animation-delay: 0.4s; }
+  .circuit-v:nth-child(5) { left: 65%; top: 0; bottom: 0; animation-delay: 1.2s; }
+
+  @keyframes circuitScan {
+    0%   { transform: translateX(-100%); opacity: 0; }
+    50%  { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
+  }
+  @keyframes circuitScanV {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    50%  { opacity: 1; }
+    100% { transform: translateY(100%); opacity: 0; }
+  }
+
+  .left-content { position: relative; z-index: 2; }
+
+  /* AI Logo */
+  .ai-logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .ai-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    box-shadow: 0 8px 32px rgba(108, 92, 231, 0.4);
+    animation: iconGlow 3s ease-in-out infinite;
+  }
+  @keyframes iconGlow {
+    0%, 100% { box-shadow: 0 8px 32px rgba(108, 92, 231, 0.4); }
+    50%      { box-shadow: 0 8px 48px rgba(0, 206, 201, 0.6); }
+  }
+  .ai-logo-text {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary-glow), var(--accent-glow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 1px;
+  }
+
+  .left-title {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    background: linear-gradient(to right, #fff, #c8c8e8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .left-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.8;
+    margin-bottom: 36px;
+  }
+
+  /* AI 效果卡片 */
+  .effect-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .effect-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), var(--accent), transparent);
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .typing-demo {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--accent-glow);
+    line-height: 1.8;
+  }
+  .typing-cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--accent-glow);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* 特性列表 */
+  .feature-list {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #b0b0cc;
+    transition: var(--transition);
+  }
+  .feature-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+    flex-shrink: 0;
+  }
+  .feature-item:nth-child(2) .feature-dot { background: var(--primary); box-shadow: 0 0 12px var(--primary-glow); }
+  .feature-item:nth-child(3) .feature-dot { background: #fdcb6e; box-shadow: 0 0 12px #fdcb6e; }
+
+  /* ============================================
+     Right Panel - 登录表单
+     ============================================ */
+  .right-panel {
+    flex: 0 0 420px;
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    padding: 50px 44px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .right-header { margin-bottom: 36px; }
+  .right-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .right-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* 表单 */
+  .form-group {
+    margin-bottom: 22px;
+    position: relative;
+  }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #a0a0c0;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .input-wrapper {
+    position: relative;
+  }
+  .input-wrapper .icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px;
+    color: var(--text-muted);
+    transition: var(--transition);
+    pointer-events: none;
+  }
+  .form-input {
+    width: 100%;
+    padding: 14px 16px 14px 46px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: var(--transition);
+    font-family: inherit;
+  }
+  .form-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15), 0 0 20px rgba(108, 92, 231, 0.08);
+  }
+  .form-input:focus ~ .icon,
+  .form-input:focus + .icon { color: var(--primary-glow); }
+  .form-input.error {
+    border-color: var(--danger);
+    animation: shake 0.4s ease-in-out;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-6px); }
+    40%      { transform: translateX(6px); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX(4px); }
+  }
+
+  /* 密码可见切换 */
+  .toggle-password {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    transition: var(--transition);
+    z-index: 2;
+  }
+  .toggle-password:hover { color: var(--primary-glow); }
+
+  /* 记住我 & 忘记密码 */
+  .form-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    font-size: 13px;
+  }
+  .remember-me {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #a0a0c0;
+    user-select: none;
+  }
+  .remember-me input[type="checkbox"] { display: none; }
+  .checkmark {
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--glass-border);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+  .remember-me input:checked ~ .checkmark {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+  .remember-me input:checked ~ .checkmark::after {
+    content: '✓';
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .forgot-link {
+    color: var(--primary-glow);
+    text-decoration: none;
+    transition: var(--transition);
+    cursor: pointer;
+  }
+  .forgot-link:hover { color: var(--accent-glow); text-decoration: underline; }
+
+  /* 登录按钮 */
+  .btn-login {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary), #5b4cdb);
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+    letter-spacing: 1px;
+    font-family: inherit;
+  }
+  .btn-login:hover {
+    box-shadow: 0 8px 30px rgba(108, 92, 231, 0.4);
+    transform: translateY(-1px);
+  }
+  .btn-login:active { transform: scale(0.98); }
+  .btn-login.loading {
+    pointer-events: none;
+    color: transparent;
+  }
+  .btn-login.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 22px; height: 22px;
+    margin: -11px 0 0 -11px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 按钮光效 */
+  .btn-login::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    transition: left 0.5s;
+  }
+  .btn-login:hover::before { left: 100%; }
+
+  /* 消息提示 */
+  .message {
+    min-height: 20px;
+    font-size: 12px;
+    margin-top: 12px;
+    text-align: center;
+    transition: var(--transition);
+  }
+  .message.error { color: var(--danger); }
+  .message.success { color: var(--success); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    top: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120px);
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 1000;
+    transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: var(--success); color: #000; }
+  .toast.error { background: var(--danger); color: #fff; }
+
+  /* ============================================
+     Dashboard 登出后跳转
+     ============================================ */
+  .dashboard-hint {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--glass-border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.6;
+  }
+  .dashboard-hint code {
+    background: rgba(108, 92, 231, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--primary-glow);
+  }
+
+  /* ============================================
+     Responsive
+     ============================================ */
+  @media (max-width: 980px) {
+    .login-container { width: 94vw; flex-direction: column; min-height: auto; }
+    .left-panel { padding: 36px 28px; }
+    .left-panel .feature-list { display: none; }
+    .left-panel .left-title { font-size: 22px; }
+    .right-panel { flex: 1; padding: 36px 28px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景效果 -->
+<div class="bg-grid"></div>
+<div class="glow-orb glow-orb-1"></div>
+<div class="glow-orb glow-orb-2"></div>
+<div class="particles" id="particles"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 主体 -->
+<div class="login-container">
+  <!-- ========== 左侧：AI 智能体信息 ========== -->
+  <div class="left-panel">
+    <div class="circuit-lines">
+      <div class="circuit-line"></div>
+      <div class="circuit-line"></div>
+      <div class="circuit-line"></div>
+      <div class="circuit-v"></div>
+      <div class="circuit-v"></div>
+    </div>
+    <div class="left-content">
+      <div class="ai-logo">
+        <div class="ai-icon">&#x2699;</div>
+        <span class="ai-logo-text">Ai Agent Scaffold</span>
+      </div>
+      <h1 class="left-title">AI 智能体对话<br>By lcode</h1>
+      <p class="left-subtitle">
+        多模型协作、自主决策、工具调用——<br>
+        下一代 AI 智能体，随时待命。
+      </p>
+
+      <!-- AI 打字效果 -->
+      <div class="effect-card">
+        <div class="typing-demo">
+          <span id="typing-text"></span><span class="typing-cursor"></span>
+        </div>
+      </div>
+
+      <!-- 特性列表 -->
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="feature-dot"></span> 多模型支持 · GPT / Claude / Gemini
+        </div>
+        <div class="feature-item">
+          <span class="feature-dot"></span> MCP 协议 · 工具热插拔
+        </div>
+        <div class="feature-item">
+          <span class="feature-dot"></span> 流式对话 · 实时推理展示
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 右侧：登录表单 ========== -->
+  <div class="right-panel">
+    <div class="right-header">
+      <h2 class="right-title">欢迎回来</h2>
+      <p class="right-subtitle">登录你的 AI 智能体账户</p>
+    </div>
+
+    <form id="loginForm" autocomplete="off" novalidate>
+      <!-- 账号 -->
+      <div class="form-group">
+        <label class="form-label" for="username">账号</label>
+        <div class="input-wrapper">
+          <input type="text" id="username" class="form-input"
+                 placeholder="请输入账号" autocomplete="off" maxlength="50">
+          <span class="icon">&#x1f464;</span>
+        </div>
+      </div>
+
+      <!-- 密码 -->
+      <div class="form-group">
+        <label class="form-label" for="password">密码</label>
+        <div class="input-wrapper">
+          <input type="password" id="password" class="form-input"
+                 placeholder="请输入密码" autocomplete="off" maxlength="50">
+          <span class="icon">&#x1f512;</span>
+          <button type="button" class="toggle-password" id="togglePwd" title="显示/隐藏密码">
+            &#x1f441;
+          </button>
+        </div>
+      </div>
+
+      <!-- 记住我 & 忘记密码 -->
+      <div class="form-row">
+        <label class="remember-me">
+          <input type="checkbox" id="remember">
+          <span class="checkmark"></span>
+          记住我
+        </label>
+        <a class="forgot-link" onclick="showToast('info', '请联系管理员重置密码')">忘记密码?</a>
+      </div>
+
+      <!-- 登录按钮 -->
+      <button type="submit" class="btn-login" id="btnLogin">登 录</button>
+
+      <!-- 消息 -->
+      <div class="message" id="message"></div>
+    </form>
+
+    <div class="dashboard-hint">
+      演示账号 <code>admin</code> / <code>admin</code><br>登录后跳转至 AI 对话页面
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================
+   背景粒子系统
+   ============================================ */
+(function initParticles() {
+  var container = document.getElementById('particles');
+  var colors = ['rgba(108,92,231,0.6)', 'rgba(0,206,201,0.5)', 'rgba(162,155,254,0.5)',
+                'rgba(253,203,110,0.5)', 'rgba(0,255,245,0.4)', 'rgba(108,92,231,0.3)'];
+  for (var i = 0; i < 45; i++) {
+    var p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left   = Math.random() * 100 + '%';
+    p.style.width  = (Math.random() * 4 + 2) + 'px';
+    p.style.height = p.style.width;
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDuration = (Math.random() * 12 + 8) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    container.appendChild(p);
+  }
+})();
+
+/* ============================================
+   AI 打字效果
+   ============================================ */
+(function typingEffect() {
+  var lines = [
+    '> 正在初始化神经网络安全协议...',
+    '> 连接大语言模型推理引擎... OK',
+    '> 加载 MCP 工具链: 12 个工具已就绪',
+    '> Agent 自检: 视觉/推理/规划 → 就绪',
+    '> 等待用户认证... ████████'
+  ];
+  var el = document.getElementById('typing-text');
+  var lineIdx = 0, charIdx = 0, isDeleting = false;
+  var baseSpeed = 40;
+
+  function tick() {
+    var current = lines[lineIdx];
+    if (!isDeleting) {
+      el.textContent = current.substring(0, charIdx + 1);
+      charIdx++;
+      if (charIdx === current.length) {
+        isDeleting = true;
+        setTimeout(tick, 1800);
+        return;
+      }
+    } else {
+      el.textContent = current.substring(0, charIdx - 1);
+      charIdx--;
+      if (charIdx === 0) {
+        isDeleting = false;
+        lineIdx = (lineIdx + 1) % lines.length;
+        setTimeout(tick, 400);
+        return;
+      }
+    }
+    setTimeout(tick, isDeleting ? 18 : (Math.random() * 30 + baseSpeed));
+  }
+  setTimeout(tick, 1000);
+})();
+
+/* ============================================
+   Cookie 工具
+   ============================================ */
+var Cookie = {
+  set: function(name, value, days) {
+    var expires = '';
+    if (days) {
+      var d = new Date();
+      d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+      expires = '; expires=' + d.toUTCString();
+    }
+    document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+  },
+  get: function(name) {
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+  },
+  remove: function(name) {
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax';
+  }
+};
+
+/* ============================================
+   DOM 引用
+   ============================================ */
+var form     = document.getElementById('loginForm');
+var username = document.getElementById('username');
+var password = document.getElementById('password');
+var remember = document.getElementById('remember');
+var toggleBtn = document.getElementById('togglePwd');
+var btnLogin  = document.getElementById('btnLogin');
+var msgEl     = document.getElementById('message');
+
+/* ============================================
+   初始化: 检查 Cookie 回填 & 自动登录
+   ============================================ */
+(function init() {
+  var savedUser = Cookie.get('ai_agent_user');
+  var savedToken = Cookie.get('ai_agent_token');
+
+  if (savedUser) {
+    username.value = savedUser;
+    remember.checked = true;
+  }
+
+  // 如果已有有效 token，自动跳转
+  if (savedToken && savedUser) {
+    showMessage('success', '检测到登录状态，自动跳转...');
+    setTimeout(function() { redirectToIndex(savedUser); }, 600);
+  }
+})();
+
+/* ============================================
+   密码可见切换
+   ============================================ */
+toggleBtn.addEventListener('click', function() {
+  var isPassword = password.type === 'password';
+  password.type = isPassword ? 'text' : 'password';
+  toggleBtn.innerHTML = isPassword ? '&#x1f440;' : '&#x1f441;';
+});
+
+/* ============================================
+   表单提交
+   ============================================ */
+form.addEventListener('submit', function(e) {
+  e.preventDefault();
+  handleLogin();
+});
+
+/* ============================================
+   登录逻辑
+   ============================================ */
+function handleLogin() {
+  // 清除之前的错误
+  clearErrors();
+  clearMessage();
+
+  var user = username.value.trim();
+  var pass = password.value.trim();
+  var valid = true;
+
+  // 校验
+  if (!user) {
+    setError(username, '请输入账号');
+    valid = false;
+  }
+  if (!pass) {
+    setError(password, '请输入密码');
+    valid = false;
+  }
+  if (!valid) return;
+
+  // 模拟登录验证 (默认: admin / admin)
+  setLoading(true);
+
+  setTimeout(function() {
+    setLoading(false);
+
+    if (user === 'admin' && pass === 'admin') {
+      // 登录成功
+      var token = 'token_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+
+      // 记住密码
+      if (remember.checked) {
+        Cookie.set('ai_agent_user', user, 7);
+        Cookie.set('ai_agent_token', token, 7);
+      } else {
+        Cookie.set('ai_agent_user', user, 0);
+        Cookie.set('ai_agent_token', token, 0);
+      }
+
+      showMessage('success', '登录成功，正在跳转...');
+      showToast('success', '登录成功！欢迎使用 AI 智能体对话');
+
+      setTimeout(function() { redirectToIndex(user); }, 800);
+
+    } else {
+      // 登录失败
+      showMessage('error', '账号或密码错误，请重试');
+      showToast('error', '账号或密码错误');
+      username.classList.add('error');
+      password.classList.add('error');
+      setTimeout(function() {
+        username.classList.remove('error');
+        password.classList.remove('error');
+      }, 500);
+    }
+  }, 800 + Math.random() * 400); // 模拟网络延迟
+}
+
+/* ============================================
+   跳转
+   ============================================ */
+function redirectToIndex(user) {
+  // 尝试跳转到 dashboard，如不存在则展示简易欢迎页
+  window.location.href = 'index.html';
+}
+
+/* ============================================
+   辅助函数
+   ============================================ */
+function setError(input, msg) {
+  input.classList.add('error');
+  input.placeholder = msg;
+  input.value = '';
+  setTimeout(function() { input.classList.remove('error'); }, 500);
+}
+
+function clearErrors() {
+  username.classList.remove('error');
+  password.classList.remove('error');
+  username.placeholder = '请输入账号';
+  password.placeholder = '请输入密码';
+}
+
+function setLoading(loading) {
+  if (loading) {
+    btnLogin.classList.add('loading');
+    btnLogin.disabled = true;
+  } else {
+    btnLogin.classList.remove('loading');
+    btnLogin.disabled = false;
+  }
+}
+
+function showMessage(type, text) {
+  msgEl.className = 'message ' + type;
+  msgEl.textContent = text;
+}
+
+function clearMessage() {
+  msgEl.className = 'message';
+  msgEl.textContent = '';
+}
+
+/* ============================================
+   Toast
+   ============================================ */
+function showToast(type, text) {
+  var toast = document.getElementById('toast');
+  toast.className = 'toast ' + type;
+  toast.textContent = text;
+  // 强制回流后添加 show
+  void toast.offsetWidth;
+  toast.classList.add('show');
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(function() {
+    toast.classList.remove('show');
+  }, 2500);
+}
+
+/* ============================================
+   Enter 键快捷登录
+   ============================================ */
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.activeElement &&
+      (document.activeElement === username || document.activeElement === password)) {
+    e.preventDefault();
+    handleLogin();
+  }
+});
+</script>
+
+</body>
+</html>

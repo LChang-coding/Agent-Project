@@ -10,12 +10,12 @@ ai:
             agent-desc: 单一智能体
           module:
             ai-api:
-              base-url: https://apis.itedus.cn
-              api-key: sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9
+              base-url: ${deepseek.base.url}
+              api-key: ${deepseek.api.key}
               completions-path: v1/chat/completions
               embeddings-path: v1/embeddings
             chat-model:
-              model: gpt-4.1
+              model: deepseek-v4-flash
               tool-mcp-list:
                 - sse:
                     name: baidu-search

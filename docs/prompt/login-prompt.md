@@ -1,0 +1,1 @@
+在 docs/dev-ops/nginx/html 下。开发 login.html 页面，一个ai智能体的登录页面，左侧展示信息，以及ai的效果图，右侧是登录信息。账号，密码，先有一个默认的 admin admin。登录后，保存 cookie 信息。
