@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>cn.bugstack.ai</groupId>
+    <groupId>cn.lcode.ai</groupId>
     <artifactId>ai-agent-scaffold</artifactId>
     <version>1.0</version>
     <packaging>pom</packaging>
@@ -218,6 +218,15 @@
 
     <build>
         <plugins>
+            <!-- maven 脚手架 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-archetype-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <outputDirectory>${project.build.directory}/ai-agent-scaffold-lite-archetype</outputDirectory>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -251,6 +260,7 @@
     </build>
 
     <profiles>
+
         <profile>
             <id>dev</id>
             <activation>
