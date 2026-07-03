@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IModelUsageDao">
+
+    <resultMap id="ModelUsageMap" type="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="message_id" property="messageId"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="agent_name" property="agentName"/>
+        <result column="app_name" property="appName"/>
+        <result column="invocation_id" property="invocationId"/>
+        <result column="provider" property="provider"/>
+        <result column="model_version" property="modelVersion"/>
+        <result column="prompt_tokens" property="promptTokens"/>
+        <result column="candidate_tokens" property="candidateTokens"/>
+        <result column="total_tokens" property="totalTokens"/>
+        <result column="thoughts_tokens" property="thoughtsTokens"/>
+        <result column="tool_use_prompt_tokens" property="toolUsePromptTokens"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="ModelUsageColumns">
+        id, tenant_id, user_id, session_id, message_id, agent_id, agent_name, app_name, invocation_id, provider, model_version, prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens, tool_use_prompt_tokens, trace_id, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO model_usage (tenant_id, user_id, session_id, message_id, agent_id, agent_name, app_name, invocation_id, provider, model_version, prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens, tool_use_prompt_tokens, trace_id, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{agentId}, #{agentName}, #{appName}, #{invocationId}, #{provider}, #{modelVersion}, #{promptTokens}, #{candidateTokens}, #{totalTokens}, #{thoughtsTokens}, #{toolUsePromptTokens}, #{traceId}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO">
+        UPDATE model_usage
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, agent_id = #{agentId}, agent_name = #{agentName}, app_name = #{appName}, invocation_id = #{invocationId}, provider = #{provider}, model_version = #{modelVersion}, prompt_tokens = #{promptTokens}, candidate_tokens = #{candidateTokens}, total_tokens = #{totalTokens}, thoughts_tokens = #{thoughtsTokens}, tool_use_prompt_tokens = #{toolUsePromptTokens}, trace_id = #{traceId}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="ModelUsageMap">
+        SELECT <include refid="ModelUsageColumns"/>
+        FROM model_usage
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="ModelUsageMap">
+        SELECT <include refid="ModelUsageColumns"/>
+        FROM model_usage
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryListByUserId" resultMap="ModelUsageMap">
+        SELECT <include refid="ModelUsageColumns"/>
+        FROM model_usage
+        WHERE user_id = #{userId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryListBySessionId" resultMap="ModelUsageMap">
+        SELECT <include refid="ModelUsageColumns"/>
+        FROM model_usage
+        WHERE session_id = #{sessionId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>

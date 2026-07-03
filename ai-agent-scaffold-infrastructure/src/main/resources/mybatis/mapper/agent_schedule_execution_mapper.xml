@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentScheduleExecutionDao">
+
+    <resultMap id="AgentScheduleExecutionMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleExecutionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="task_id" property="taskId"/>
+        <result column="execution_id" property="executionId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="status" property="status"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="AgentScheduleExecutionColumns">
+        id, tenant_id, user_id, task_id, execution_id, trace_id, start_time, end_time, duration_ms, status, error_message, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleExecutionPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_schedule_execution (tenant_id, user_id, task_id, execution_id, trace_id, start_time, end_time, duration_ms, status, error_message, metadata)
+        VALUES (#{tenantId}, #{userId}, #{taskId}, #{executionId}, #{traceId}, #{startTime}, #{endTime}, #{durationMs}, #{status}, #{errorMessage}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleExecutionPO">
+        UPDATE agent_schedule_execution
+        SET tenant_id = #{tenantId}, user_id = #{userId}, task_id = #{taskId}, execution_id = #{executionId}, trace_id = #{traceId}, start_time = #{startTime}, end_time = #{endTime}, duration_ms = #{durationMs}, status = #{status}, error_message = #{errorMessage}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="AgentScheduleExecutionMap">
+        SELECT <include refid="AgentScheduleExecutionColumns"/>
+        FROM agent_schedule_execution
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByExecutionId" resultMap="AgentScheduleExecutionMap">
+        SELECT <include refid="AgentScheduleExecutionColumns"/>
+        FROM agent_schedule_execution
+        WHERE execution_id = #{executionId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="AgentScheduleExecutionMap">
+        SELECT <include refid="AgentScheduleExecutionColumns"/>
+        FROM agent_schedule_execution
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY start_time DESC, id DESC
+    </select>
+
+    <select id="queryListByUserId" resultMap="AgentScheduleExecutionMap">
+        SELECT <include refid="AgentScheduleExecutionColumns"/>
+        FROM agent_schedule_execution
+        WHERE user_id = #{userId} AND deleted = 0
+        ORDER BY start_time DESC, id DESC
+    </select>
+
+    <select id="queryListByTaskId" resultMap="AgentScheduleExecutionMap">
+        SELECT <include refid="AgentScheduleExecutionColumns"/>
+        FROM agent_schedule_execution
+        WHERE task_id = #{taskId} AND deleted = 0
+        ORDER BY start_time DESC, id DESC
+    </select>
+
+</mapper>

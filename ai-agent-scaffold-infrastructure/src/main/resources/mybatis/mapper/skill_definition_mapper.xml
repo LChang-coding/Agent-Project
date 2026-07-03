@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.ISkillDefinitionDao">
+
+    <resultMap id="SkillDefinitionMap" type="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="visibility" property="visibility"/>
+        <result column="skill_id" property="skillId"/>
+        <result column="skill_name" property="skillName"/>
+        <result column="skill_code" property="skillCode"/>
+        <result column="description" property="description"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_uri" property="sourceUri"/>
+        <result column="version" property="version"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="SkillDefinitionColumns">
+        id, tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO skill_definition (tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{skillId}, #{skillName}, #{skillCode}, #{description}, #{sourceType}, #{sourceUri}, #{version}, #{status}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO">
+        UPDATE skill_definition
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, skill_id = #{skillId}, skill_name = #{skillName}, skill_code = #{skillCode}, description = #{description}, source_type = #{sourceType}, source_uri = #{sourceUri}, version = #{version}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryBySkillId" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE skill_id = #{skillId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryListByOwnerUserId" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE owner_user_id = #{ownerUserId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryListByTenantIdAndVisibility" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>

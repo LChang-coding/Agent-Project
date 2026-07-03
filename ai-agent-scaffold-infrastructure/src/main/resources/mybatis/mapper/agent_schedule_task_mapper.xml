@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentScheduleTaskDao">
+
+    <resultMap id="AgentScheduleTaskMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="config_id" property="configId"/>
+        <result column="task_id" property="taskId"/>
+        <result column="planned_time" property="plannedTime"/>
+        <result column="status" property="status"/>
+        <result column="retry_count" property="retryCount"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="AgentScheduleTaskColumns">
+        id, tenant_id, user_id, config_id, task_id, planned_time, status, retry_count, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_schedule_task (tenant_id, user_id, config_id, task_id, planned_time, status, retry_count, metadata)
+        VALUES (#{tenantId}, #{userId}, #{configId}, #{taskId}, #{plannedTime}, #{status}, #{retryCount}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO">
+        UPDATE agent_schedule_task
+        SET tenant_id = #{tenantId}, user_id = #{userId}, config_id = #{configId}, task_id = #{taskId}, planned_time = #{plannedTime}, status = #{status}, retry_count = #{retryCount}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByTaskId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE task_id = #{taskId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY planned_time ASC, id ASC
+    </select>
+
+    <select id="queryListByUserId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE user_id = #{userId} AND deleted = 0
+        ORDER BY planned_time ASC, id ASC
+    </select>
+
+    <select id="queryListByConfigId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE config_id = #{configId} AND deleted = 0
+        ORDER BY planned_time ASC, id ASC
+    </select>
+
+    <select id="queryListByTaskId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE task_id = #{taskId} AND deleted = 0
+        ORDER BY planned_time ASC, id ASC
+    </select>
+
+</mapper>

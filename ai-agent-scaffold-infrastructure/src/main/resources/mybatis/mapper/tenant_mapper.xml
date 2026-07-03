@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.ITenantDao">
+
+    <select id="queryTenantCount" resultType="int">
+        SELECT COUNT(1)
+        FROM tenant
+        WHERE deleted = 0
+    </select>
+
+    <resultMap id="TenantMap" type="cn.bugstack.ai.infrastructure.dao.po.TenantPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="tenant_name" property="tenantName"/>
+        <result column="tenant_code" property="tenantCode"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="TenantColumns">
+        id, tenant_id, tenant_name, tenant_code, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.TenantPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tenant (tenant_id, tenant_name, tenant_code, status, metadata)
+        VALUES (#{tenantId}, #{tenantName}, #{tenantCode}, #{status}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.TenantPO">
+        UPDATE tenant
+        SET tenant_id = #{tenantId}, tenant_name = #{tenantName}, tenant_code = #{tenantCode}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="TenantMap">
+        SELECT <include refid="TenantColumns"/>
+        FROM tenant
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByTenantId" resultMap="TenantMap">
+        SELECT <include refid="TenantColumns"/>
+        FROM tenant
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="TenantMap">
+        SELECT <include refid="TenantColumns"/>
+        FROM tenant
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>

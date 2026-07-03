@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatMessageDao">
+
+    <resultMap id="ChatMessageMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="message_id" property="messageId"/>
+        <result column="role" property="role"/>
+        <result column="content_type" property="contentType"/>
+        <result column="content" property="content"/>
+        <result column="sequence_no" property="sequenceNo"/>
+        <result column="parent_message_id" property="parentMessageId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="ChatMessageColumns">
+        id, tenant_id, user_id, session_id, message_id, role, content_type, content, sequence_no, parent_message_id, trace_id, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_message (tenant_id, user_id, session_id, message_id, role, content_type, content, sequence_no, parent_message_id, trace_id, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{role}, #{contentType}, #{content}, #{sequenceNo}, #{parentMessageId}, #{traceId}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO">
+        UPDATE chat_message
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, role = #{role}, content_type = #{contentType}, content = #{content}, sequence_no = #{sequenceNo}, parent_message_id = #{parentMessageId}, trace_id = #{traceId}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByMessageId" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE message_id = #{messageId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY sequence_no ASC, id ASC
+    </select>
+
+    <select id="queryListByUserId" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE user_id = #{userId} AND deleted = 0
+        ORDER BY sequence_no ASC, id ASC
+    </select>
+
+    <select id="queryListBySessionId" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE session_id = #{sessionId} AND deleted = 0
+        ORDER BY sequence_no ASC, id ASC
+    </select>
+
+</mapper>

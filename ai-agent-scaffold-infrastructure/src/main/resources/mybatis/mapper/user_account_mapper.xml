@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IUserAccountDao">
+
+    <resultMap id="UserAccountMap" type="cn.bugstack.ai.infrastructure.dao.po.UserAccountPO">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="username" property="username"/>
+        <result column="nickname" property="nickname"/>
+        <result column="email" property="email"/>
+        <result column="phone" property="phone"/>
+        <result column="avatar" property="avatar"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="UserAccountColumns">
+        id, user_id, username, nickname, email, phone, avatar, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.UserAccountPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_account (user_id, username, nickname, email, phone, avatar, status, metadata)
+        VALUES (#{userId}, #{username}, #{nickname}, #{email}, #{phone}, #{avatar}, #{status}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.UserAccountPO">
+        UPDATE user_account
+        SET user_id = #{userId}, username = #{username}, nickname = #{nickname}, email = #{email}, phone = #{phone}, avatar = #{avatar}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="UserAccountMap">
+        SELECT <include refid="UserAccountColumns"/>
+        FROM user_account
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByUserId" resultMap="UserAccountMap">
+        SELECT <include refid="UserAccountColumns"/>
+        FROM user_account
+        WHERE user_id = #{userId} AND deleted = 0
+    </select>
+
+    <select id="queryListByUserId" resultMap="UserAccountMap">
+        SELECT <include refid="UserAccountColumns"/>
+        FROM user_account
+        WHERE user_id = #{userId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>

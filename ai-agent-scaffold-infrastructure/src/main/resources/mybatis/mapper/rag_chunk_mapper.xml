@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagChunkDao">
+
+    <resultMap id="RagChunkMap" type="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="visibility" property="visibility"/>
+        <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="document_id" property="documentId"/>
+        <result column="chunk_id" property="chunkId"/>
+        <result column="chunk_index" property="chunkIndex"/>
+        <result column="content" property="content"/>
+        <result column="token_count" property="tokenCount"/>
+        <result column="embedding_id" property="embeddingId"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="RagChunkColumns">
+        id, tenant_id, owner_user_id, visibility, kb_id, document_id, chunk_id, chunk_index, content, token_count, embedding_id, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_chunk (tenant_id, owner_user_id, visibility, kb_id, document_id, chunk_id, chunk_index, content, token_count, embedding_id, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{knowledgeBaseId}, #{documentId}, #{chunkId}, #{chunkIndex}, #{content}, #{tokenCount}, #{embeddingId}, #{status}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO">
+        UPDATE rag_chunk
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, kb_id = #{knowledgeBaseId}, document_id = #{documentId}, chunk_id = #{chunkId}, chunk_index = #{chunkIndex}, content = #{content}, token_count = #{tokenCount}, embedding_id = #{embeddingId}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryById" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE id = #{id} AND deleted = 0
+    </select>
+
+    <select id="queryByChunkId" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE chunk_id = #{chunkId} AND deleted = 0
+    </select>
+
+    <select id="queryListByTenantId" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND deleted = 0
+        ORDER BY chunk_index ASC, id ASC
+    </select>
+
+    <select id="queryListByOwnerUserId" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE owner_user_id = #{ownerUserId} AND deleted = 0
+        ORDER BY chunk_index ASC, id ASC
+    </select>
+
+    <select id="queryListByKnowledgeBaseId" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE kb_id = #{knowledgeBaseId} AND deleted = 0
+        ORDER BY chunk_index ASC, id ASC
+    </select>
+
+    <select id="queryListByDocumentId" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE document_id = #{documentId} AND deleted = 0
+        ORDER BY chunk_index ASC, id ASC
+    </select>
+
+    <select id="queryListByTenantIdAndVisibility" resultMap="RagChunkMap">
+        SELECT <include refid="RagChunkColumns"/>
+        FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>
