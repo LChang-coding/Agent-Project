@@ -6,6 +6,12 @@ local.file_match "ai_agent_scaffold_logs" {
       env      = "dev",
       source   = "logback",
     },
+    {
+      __path__ = sys.env("OBS_EXTRA_LOG_GLOB"),
+      job      = "ai-agent-scaffold",
+      env      = "dev",
+      source   = "logback",
+    },
   ]
 }
 
