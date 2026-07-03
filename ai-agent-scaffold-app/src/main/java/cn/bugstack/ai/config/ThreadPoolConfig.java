@@ -1,5 +1,6 @@
 package cn.bugstack.ai.config;
 
+import cn.bugstack.ai.types.observability.TraceableThreadPoolExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -38,7 +39,7 @@ public class ThreadPoolConfig {
                 break;
         }
         // 创建线程池
-        return new ThreadPoolExecutor(properties.getCorePoolSize(),
+        return new TraceableThreadPoolExecutor(properties.getCorePoolSize(),
                 properties.getMaxPoolSize(),
                 properties.getKeepAliveTime(),
                 TimeUnit.SECONDS,
