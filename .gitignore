@@ -40,3 +40,9 @@ build/
 
 ### Secrets ###
 **/secrets.properties
+
+### Runtime logs ###
+/data/log/
+/ai-agent-scaffold-app/data/log/
+/ai-agent-scaffold-app/log.path_IS_UNDEFINED/
+/docs/dev-ops/observability/local/data-alloy/

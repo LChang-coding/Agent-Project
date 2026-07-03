@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: ai-agent-scaffold
+    folder: AI Agent Scaffold
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

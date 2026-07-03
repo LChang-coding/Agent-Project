@@ -36,6 +36,7 @@ thread:
 
 # 日志
 logging:
+  path: ${OBS_LOG_DIR:./data/log}
   level:
     root: info
   config: classpath:logback-spring.xml

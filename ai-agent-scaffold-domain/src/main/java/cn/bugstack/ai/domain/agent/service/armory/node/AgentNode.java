@@ -5,9 +5,9 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.ObservabilitySpringAI;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
-import com.google.adk.models.springai.SpringAI;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
@@ -25,6 +25,7 @@ public class AgentNode extends AbstractArmorySupport {
         log.info("Ai Agent 装配操作 - AgentNode");
 
         ChatModel chatModel = dynamicContext.getChatModel();
+        String chatModelName = dynamicContext.getValue("chatModelName");
 
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         List<AiAgentConfigTableVO.Module.Agent> agents = aiAgentConfigTableVO.getModule().getAgents();
@@ -33,7 +34,7 @@ public class AgentNode extends AbstractArmorySupport {
             LlmAgent llmAgent = LlmAgent.builder()
                     .name(agentConfig.getName())
                     .description(agentConfig.getDescription())
-                    .model(new SpringAI(chatModel))
+                    .model(new ObservabilitySpringAI(chatModel, chatModelName))
                     .instruction(agentConfig.getInstruction())
                     .outputKey(agentConfig.getOutputKey())
                     .build();

@@ -1,0 +1,21 @@
+local.file_match "ai_agent_scaffold_logs" {
+  path_targets = [
+    {
+      __path__ = sys.env("OBS_LOG_GLOB"),
+      job      = "ai-agent-scaffold",
+      env      = "dev",
+      source   = "logback",
+    },
+  ]
+}
+
+loki.source.file "ai_agent_scaffold_logs" {
+  targets    = local.file_match.ai_agent_scaffold_logs.targets
+  forward_to = [loki.write.hz.receiver]
+}
+
+loki.write "hz" {
+  endpoint {
+    url = sys.env("LOKI_WRITE_URL")
+  }
+}
