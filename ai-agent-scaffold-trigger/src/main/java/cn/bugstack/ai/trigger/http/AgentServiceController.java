@@ -8,8 +8,10 @@ import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
 import java.util.List;
@@ -138,17 +140,22 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
-    @RequestMapping(value = "chat_stream", method = RequestMethod.POST)
+    @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Override
     public ResponseBodyEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
-        ResponseBodyEmitter emitter = new ResponseBodyEmitter(3 * 60 * 1000L);
+        SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
             log.info("流式对话 agentId:{} userId:{} sessionId:{} message:{}", requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage());
-            chatService.handleMessageStream(requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage())
+            String sessionId = requestDTO.getSessionId();
+            if (sessionId == null || sessionId.isEmpty()) {
+                sessionId = chatService.createSession(requestDTO.getAgentId(), requestDTO.getUserId());
+            }
+
+            chatService.handleMessageStream(requestDTO.getAgentId(), requestDTO.getUserId(), sessionId, requestDTO.getMessage())
                     .subscribe(
                             event -> {
                                 try {
-                                    emitter.send(event.stringifyContent());
+                                    emitter.send(SseEmitter.event().data(event.stringifyContent()));
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
                                     emitter.completeWithError(e);

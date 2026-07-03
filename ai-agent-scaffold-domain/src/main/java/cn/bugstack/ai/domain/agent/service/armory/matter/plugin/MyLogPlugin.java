@@ -2,6 +2,7 @@ package cn.bugstack.ai.domain.agent.service.armory.matter.plugin;
 
 import cn.bugstack.ai.domain.agent.service.armory.matter.model.ModelObservabilityContext;
 import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.TraceContext;
 import com.google.adk.agents.CallbackContext;
 import com.google.adk.models.LlmRequest;
 import com.google.adk.models.LlmResponse;
@@ -31,7 +32,7 @@ public class MyLogPlugin extends LoggingPlugin {
                     String modelVersion = llmResponse.modelVersion().orElse(snapshot == null ? "" : snapshot.modelVersion());
 
                     if (usageMetadata != null) {
-                        AiLog.info(AiLog.model().tokenUsage(
+                        withCallbackTrace(callbackContext, () -> AiLog.info(AiLog.model().tokenUsage(
                                 callbackContext.userId(),
                                 callbackContext.sessionId(),
                                 callbackContext.agentName(),
@@ -44,7 +45,7 @@ public class MyLogPlugin extends LoggingPlugin {
                                 usageMetadata.thoughtsTokenCount().orElse(null),
                                 usageMetadata.toolUsePromptTokenCount().orElse(null),
                                 llmResponse.partial().orElse(null),
-                                llmResponse.turnComplete().orElse(null)));
+                                llmResponse.turnComplete().orElse(null))));
                     }
 
                     ModelObservabilityContext.clear();
@@ -64,15 +65,52 @@ public class MyLogPlugin extends LoggingPlugin {
                     }
 
                     ModelObservabilityContext.Snapshot snapshot = ModelObservabilityContext.get();
-                    AiLog.error(AiLog.model().error(
+                    withCallbackTrace(callbackContext, () -> AiLog.error(AiLog.model().error(
                             callbackContext.userId(),
                             callbackContext.sessionId(),
                             callbackContext.agentName(),
                             callbackContext.invocationContext().appName(),
                             callbackContext.invocationId(),
                             snapshot == null ? "" : snapshot.modelVersion(),
-                            throwable));
+                            throwable)));
                     ModelObservabilityContext.clear();
                 });
+    }
+
+    private void withCallbackTrace(CallbackContext callbackContext, Runnable action) {
+        String previousTraceId = TraceContext.getTraceId();
+        String callbackTraceId = extractTraceId(callbackContext);
+
+        if (callbackTraceId != null && !callbackTraceId.isBlank()) {
+            TraceContext.setTraceId(callbackTraceId);
+        }
+
+        try {
+            action.run();
+        } finally {
+            if (previousTraceId == null || previousTraceId.isBlank()) {
+                TraceContext.clear();
+            } else {
+                TraceContext.setTraceId(previousTraceId);
+            }
+        }
+    }
+
+    private String extractTraceId(CallbackContext callbackContext) {
+        if (callbackContext == null || callbackContext.invocationContext() == null) {
+            return null;
+        }
+
+        Object traceId = null;
+        if (callbackContext.invocationContext().session() != null
+                && callbackContext.invocationContext().session().state() != null) {
+            traceId = callbackContext.invocationContext().session().state().get(TraceContext.TRACE_ID_STATE_KEY);
+        }
+
+        if (traceId == null && callbackContext.invocationContext().callbackContextData() != null) {
+            traceId = callbackContext.invocationContext().callbackContextData().get(TraceContext.TRACE_ID_STATE_KEY);
+        }
+
+        return traceId == null ? null : String.valueOf(traceId);
     }
 }

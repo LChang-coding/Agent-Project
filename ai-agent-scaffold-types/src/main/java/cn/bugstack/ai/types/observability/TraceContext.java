@@ -11,6 +11,7 @@ public final class TraceContext {
     public static final String TRACE_ID_HEADER = "X-Trace-Id";
     public static final String TRACE_ID_MDC_KEY = "traceId";
     public static final String LEGACY_TRACE_ID_MDC_KEY = "trace-id";
+    public static final String TRACE_ID_STATE_KEY = "_observability_trace_id";
 
     private static final ThreadLocal<String> TRACE_ID = new ThreadLocal<>();
 

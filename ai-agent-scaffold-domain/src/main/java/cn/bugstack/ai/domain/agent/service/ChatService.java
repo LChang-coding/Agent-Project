@@ -8,6 +8,8 @@ import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.TraceContext;
+import com.google.adk.agents.RunConfig;
 import com.google.adk.events.Event;
 import com.google.adk.runner.InMemoryRunner;
 import com.google.adk.sessions.Session;
@@ -95,7 +97,7 @@ public class ChatService implements IChatService {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Content userMsg = Content.fromParts(Part.fromText(message));
-        Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg);
+        Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg, RunConfig.builder().build(), traceStateDelta());
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));
@@ -114,7 +116,10 @@ public class ChatService implements IChatService {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Content userMsg = Content.fromParts(Part.fromText(message));
-        return runner.runAsync(userId, sessionId, userMsg);
+        RunConfig runConfig = RunConfig.builder()
+                .streamingMode(RunConfig.StreamingMode.SSE)
+                .build();
+        return runner.runAsync(userId, sessionId, userMsg, runConfig, traceStateDelta());
     }
 
     @Override
@@ -153,12 +158,16 @@ public class ChatService implements IChatService {
         // 获取运行体
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
-        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), chatCommandEntity.getSessionId(), content);
+        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), chatCommandEntity.getSessionId(), content, RunConfig.builder().build(), traceStateDelta());
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));
 
         return outputs;
+    }
+
+    private Map<String, Object> traceStateDelta() {
+        return Map.of(TraceContext.TRACE_ID_STATE_KEY, TraceContext.currentOrNewTraceId());
     }
 
 }
