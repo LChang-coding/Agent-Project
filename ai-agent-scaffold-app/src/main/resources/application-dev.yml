@@ -54,6 +54,7 @@ security:
     issuer: ai-agent-scaffold
     secret: ${JWT_SECRET:dev-only-change-me-ai-agent-scaffold}
     expire-seconds: 7200
+    refresh-expire-seconds: 2592000
 
 ai:
   observability:

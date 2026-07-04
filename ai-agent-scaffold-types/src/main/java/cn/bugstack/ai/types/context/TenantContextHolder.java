@@ -9,9 +9,15 @@ public final class TenantContextHolder {
 
     private static final ThreadLocal<TenantContext> CONTEXT = new ThreadLocal<>();
 
+    /**
+     * 禁止创建工具类实例；无参数；无返回值。
+     */
     private TenantContextHolder() {
     }
 
+    /**
+     * 设置当前身份；参数是租户上下文；无返回值。
+     */
     public static void set(TenantContext context) {
         if (context == null) {
             clear();
@@ -26,25 +32,40 @@ public final class TenantContextHolder {
         }
     }
 
+    /**
+     * 获取当前身份；无参数；返回租户上下文。
+     */
     public static TenantContext get() {
         return CONTEXT.get();
     }
 
+    /**
+     * 获取当前租户ID；无参数；返回 tenantId。
+     */
     public static String getTenantId() {
         TenantContext context = CONTEXT.get();
         return context == null ? null : context.getTenantId();
     }
 
+    /**
+     * 获取当前用户ID；无参数；返回 userId。
+     */
     public static String getUserId() {
         TenantContext context = CONTEXT.get();
         return context == null ? null : context.getUserId();
     }
 
+    /**
+     * 获取当前角色编码；无参数；返回 roleCode。
+     */
     public static String getRoleCode() {
         TenantContext context = CONTEXT.get();
         return context == null ? null : context.getRoleCode();
     }
 
+    /**
+     * 清理当前身份；无参数；无返回值。
+     */
     public static void clear() {
         CONTEXT.remove();
         MDC.remove(TENANT_ID_MDC_KEY);

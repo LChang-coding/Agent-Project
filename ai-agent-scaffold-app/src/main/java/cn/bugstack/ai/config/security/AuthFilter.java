@@ -34,20 +34,30 @@ public class AuthFilter extends OncePerRequestFilter {
     private final JwtTokenService jwtTokenService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 创建认证过滤器；参数是 JWT 服务和 JSON 工具；返回过滤器实例。
+     */
     public AuthFilter(JwtTokenService jwtTokenService, ObjectMapper objectMapper) {
         this.jwtTokenService = jwtTokenService;
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 判断是否跳过过滤；参数是请求；返回是否放行不鉴权。
+     */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
         return uri.equals("/api/v1/auth/register")
                 || uri.equals("/api/v1/auth/login")
+                || uri.equals("/api/v1/auth/refresh")
                 || uri.equals("/error")
                 || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
 
+    /**
+     * 执行鉴权过滤；参数是请求、响应和过滤链；无返回值。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -93,6 +103,9 @@ public class AuthFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * 写入未登录响应；参数是响应对象；无返回值。
+     */
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());

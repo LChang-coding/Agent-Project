@@ -12,4 +12,6 @@ public class JwtProperties {
     private String secret = "dev-only-change-me-ai-agent-scaffold";
 
     private Long expireSeconds = 7200L;
+
+    private Long refreshExpireSeconds = 2592000L;
 }
