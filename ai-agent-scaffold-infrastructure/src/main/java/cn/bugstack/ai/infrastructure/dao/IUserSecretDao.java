@@ -60,4 +60,22 @@ public interface IUserSecretDao {
      * @return 用户密码凭证持久化对象
      */
     UserSecretPO queryPasswordByUserId(@Param("userId") String userId);
+
+    /**
+     * 查询用户指定类型的可用凭证。
+     *
+     * @param userId 用户业务ID
+     * @param secretType 凭证类型
+     * @return 用户凭证持久化对象
+     */
+    UserSecretPO queryActiveByUserIdAndType(@Param("userId") String userId, @Param("secretType") String secretType);
+
+    /**
+     * 禁用用户指定类型的可用凭证。
+     *
+     * @param userId 用户业务ID
+     * @param secretType 凭证类型
+     * @return 影响行数
+     */
+    int disableActiveByUserIdAndType(@Param("userId") String userId, @Param("secretType") String secretType);
 }

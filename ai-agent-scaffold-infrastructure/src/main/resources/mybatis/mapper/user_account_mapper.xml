@@ -32,6 +32,12 @@
         WHERE id = #{id} AND deleted = 0
     </update>
 
+    <update id="updateProfileByUserId" parameterType="cn.bugstack.ai.infrastructure.dao.po.UserAccountPO">
+        UPDATE user_account
+        SET nickname = #{nickname}, email = #{email}, phone = #{phone}, avatar = #{avatar}
+        WHERE user_id = #{userId} AND deleted = 0
+    </update>
+
     <select id="queryById" resultMap="UserAccountMap">
         SELECT <include refid="UserAccountColumns"/>
         FROM user_account

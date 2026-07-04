@@ -30,6 +30,14 @@ public interface IUserAccountDao {
     int updateById(UserAccountPO userAccount);
 
     /**
+     * 按用户业务ID更新允许修改的资料。
+     *
+     * @param userAccount 用户资料持久化对象
+     * @return 影响行数
+     */
+    int updateProfileByUserId(UserAccountPO userAccount);
+
+    /**
      * 按主键查询用户账号记录。
      *
      * @param id 主键ID
