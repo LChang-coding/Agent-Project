@@ -52,4 +52,12 @@ public interface IUserSecretDao {
      * @return 用户凭证持久化对象列表
      */
     List<UserSecretPO> queryListByUserId(@Param("userId") String userId);
+
+    /**
+     * 查询用户可用密码凭证。
+     *
+     * @param userId 用户业务ID
+     * @return 用户密码凭证持久化对象
+     */
+    UserSecretPO queryPasswordByUserId(@Param("userId") String userId);
 }

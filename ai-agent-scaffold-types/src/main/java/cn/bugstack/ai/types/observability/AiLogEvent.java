@@ -14,6 +14,11 @@ public enum AiLogEvent {
     DB_QUERY(AiLogDomain.DB, "db_query"),
     DB_ERROR(AiLogDomain.DB, "db_error"),
 
+    AUTH_REGISTER_SUCCESS(AiLogDomain.AUTH, "auth_register_success"),
+    AUTH_REGISTER_FAILED(AiLogDomain.AUTH, "auth_register_failed"),
+    AUTH_LOGIN_SUCCESS(AiLogDomain.AUTH, "auth_login_success"),
+    AUTH_LOGIN_FAILED(AiLogDomain.AUTH, "auth_login_failed"),
+
     REDIS_COMMAND(AiLogDomain.REDIS, "redis_command"),
     REDIS_ERROR(AiLogDomain.REDIS, "redis_error"),
 

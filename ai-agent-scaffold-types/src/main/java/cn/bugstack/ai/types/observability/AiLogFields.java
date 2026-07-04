@@ -5,7 +5,10 @@ public final class AiLogFields {
     public static final String EVENT = "event";
     public static final String DOMAIN = "domain";
     public static final String LOG_ID = "logId";
+    public static final String TENANT_ID = "tenantId";
     public static final String USER_ID = "userId";
+    public static final String USERNAME = "username";
+    public static final String ROLE_CODE = "roleCode";
     public static final String SESSION_ID = "sessionId";
     public static final String AGENT_ID = "agentId";
     public static final String AGENT_NAME = "agentName";
@@ -19,6 +22,7 @@ public final class AiLogFields {
     public static final String STATUS = "status";
     public static final String SAMPLE = "sample";
     public static final String ERROR_TYPE = "errorType";
+    public static final String ERROR_CODE = "errorCode";
     public static final String ERROR_MESSAGE = "errorMessage";
 
     private AiLogFields() {

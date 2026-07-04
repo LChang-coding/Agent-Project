@@ -50,4 +50,13 @@
         ORDER BY id DESC
     </select>
 
+    <select id="queryActiveListByUserId" resultMap="TenantUserMap">
+        SELECT <include refid="TenantUserColumns"/>
+        FROM tenant_user
+        WHERE user_id = #{userId}
+          AND status = 'active'
+          AND deleted = 0
+        ORDER BY id ASC
+    </select>
+
 </mapper>

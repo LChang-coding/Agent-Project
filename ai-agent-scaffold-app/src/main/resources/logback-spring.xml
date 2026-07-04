@@ -20,7 +20,7 @@
             <level>info</level>
         </filter>
         <encoder>
-            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} %m%n</pattern>
+            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} tenantId=%X{tenantId} userId=%X{userId} %m%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -32,7 +32,7 @@
         <file>${APP_LOG_DIR}/log_info.log</file>
         <!--日志文件输出格式-->
         <encoder>
-            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} %m%n</pattern>
+            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} tenantId=%X{tenantId} userId=%X{userId} %m%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
         <!-- 日志记录器的滚动策略，按日期，按大小记录 -->
@@ -54,7 +54,7 @@
         <file>${APP_LOG_DIR}/log_error.log</file>
         <!--日志文件输出格式-->
         <encoder>
-            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} %m%n</pattern>
+            <pattern>%d{yy-MM-dd.HH:mm:ss.SSS} [%-16t] %-5p %-22c{0}%X{ServiceId} traceId=%X{traceId} tenantId=%X{tenantId} userId=%X{userId} %m%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
         <!-- 日志记录器的滚动策略，按日期，按大小记录 -->

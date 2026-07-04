@@ -6,6 +6,7 @@ public enum AiLogDomain {
     HTTP("http"),
     MODEL("model"),
     DB("db"),
+    AUTH("auth"),
     REDIS("redis"),
     RAG("rag"),
     OSS("oss"),

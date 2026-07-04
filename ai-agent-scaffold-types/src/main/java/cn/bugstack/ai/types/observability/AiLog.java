@@ -11,6 +11,7 @@ public final class AiLog {
     private static final HttpLog HTTP_LOG = new HttpLog();
     private static final ModelLog MODEL_LOG = new ModelLog();
     private static final DbLog DB_LOG = new DbLog();
+    private static final AuthLog AUTH_LOG = new AuthLog();
     private static final RedisLog REDIS_LOG = new RedisLog();
     private static final RagLog RAG_LOG = new RagLog();
     private static final OssLog OSS_LOG = new OssLog();
@@ -41,6 +42,10 @@ public final class AiLog {
 
     public static DbLog db() {
         return DB_LOG;
+    }
+
+    public static AuthLog auth() {
+        return AUTH_LOG;
     }
 
     public static RedisLog redis() {

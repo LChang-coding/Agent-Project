@@ -52,4 +52,12 @@ public interface ITenantUserDao {
      * @return 租户用户关系持久化对象列表
      */
     List<TenantUserPO> queryListByUserId(@Param("userId") String userId);
+
+    /**
+     * 查询用户启用状态的租户关系。
+     *
+     * @param userId 用户业务ID
+     * @return 启用状态的租户用户关系列表
+     */
+    List<TenantUserPO> queryActiveListByUserId(@Param("userId") String userId);
 }

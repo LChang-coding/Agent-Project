@@ -46,6 +46,14 @@ public interface IUserAccountDao {
     UserAccountPO queryByUserId(@Param("userId") String userId);
 
     /**
+     * 按用户名查询用户账号记录。
+     *
+     * @param username 用户名
+     * @return 用户账号持久化对象
+     */
+    UserAccountPO queryByUsername(@Param("username") String username);
+
+    /**
      * 按用户业务ID查询用户账号列表。
      *
      * @param userId 用户业务ID

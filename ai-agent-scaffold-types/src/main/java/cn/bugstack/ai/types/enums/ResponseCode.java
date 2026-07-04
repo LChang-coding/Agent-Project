@@ -16,6 +16,9 @@ public enum ResponseCode {
 
     E0001("E0001", "智能体ID不存在"),
     E0002("E0002", "智能体MCP配置不在可加载范围"),
+    AUTH_REGISTER_FAILED("AUTH_REGISTER_FAILED", "注册失败"),
+    AUTH_LOGIN_FAILED("AUTH_LOGIN_FAILED", "登录失败"),
+    AUTH_UNAUTHORIZED("AUTH_UNAUTHORIZED", "未登录或登录已过期"),
 
     ;
 

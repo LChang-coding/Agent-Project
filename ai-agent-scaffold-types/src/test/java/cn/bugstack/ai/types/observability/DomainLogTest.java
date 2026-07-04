@@ -23,6 +23,8 @@ public class DomainLogTest {
     public void shouldBuildDomainLogsForFutureMiddleware() {
         assertTraceIdAndLogBody("event=db_query domain=db database=mysql operation=select table=agent_session rows=1 costMs=8 success=true",
                 AiLog.db().query("mysql", "select", "agent_session", 1, 8L, true).toLogfmt());
+        assertTraceIdAndLogBody("event=auth_login_success domain=auth tenantId=t1 userId=u1 username=codeliu roleCode=owner success=true",
+                AiLog.auth().loginSuccess("t1", "u1", "codeliu", "owner").toLogfmt());
         assertTraceIdAndLogBody("event=redis_command domain=redis command=GET key=session:s1 hit=true costMs=2 success=true",
                 AiLog.redis().command("GET", "session:s1", true, 2L, true).toLogfmt());
         assertTraceIdAndLogBody("event=http_request domain=http method=POST uri=/api/v1/chat status=200 costMs=18 success=true",
@@ -42,6 +44,17 @@ public class DomainLogTest {
                 .toLogfmt();
 
         assertTraceIdAndLogBody("event=db_error domain=db database=mysql operation=insert table=agent_message costMs=19 success=false errorType=IllegalStateException errorMessage=\"db timeout\"", actual);
+    }
+
+    @Test
+    public void shouldBuildAuthFailureLogWithoutSecrets() {
+        String actual = AiLog.auth()
+                .loginFailed("codeliu", "AUTH_LOGIN_FAILED", "用户名或密码错误")
+                .toLogfmt();
+
+        assertTraceIdAndLogBody("event=auth_login_failed domain=auth username=codeliu errorCode=AUTH_LOGIN_FAILED errorMessage=\"用户名或密码错误\" success=false", actual);
+        Assert.assertFalse(actual.contains("password"));
+        Assert.assertFalse(actual.contains("token"));
     }
 
     @Test

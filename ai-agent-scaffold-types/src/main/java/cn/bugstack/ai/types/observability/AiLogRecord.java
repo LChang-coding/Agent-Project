@@ -1,5 +1,7 @@
 package cn.bugstack.ai.types.observability;
 
+import cn.bugstack.ai.types.context.TenantContextHolder;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -11,6 +13,8 @@ public final class AiLogRecord {
     private AiLogRecord(AiLogEvent event) {
         field(AiLogFields.LOG_ID, UUID.randomUUID().toString());
         field(AiLogFields.TRACE_ID, TraceContext.currentOrNewTraceId());
+        field(AiLogFields.TENANT_ID, TenantContextHolder.getTenantId());
+        field(AiLogFields.USER_ID, TenantContextHolder.getUserId());
         field(AiLogFields.EVENT, event.code());
         field(AiLogFields.DOMAIN, event.domain().code());
     }
