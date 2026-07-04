@@ -1,9 +1,11 @@
-package cn.bugstack.ai.api.dto;
+package cn.bugstack.ai.domain.auth.model.entity;
 
+import lombok.Builder;
 import lombok.Data;
 
 @Data
-public class LoginResponseDTO {
+@Builder
+public class TokenResultEntity {
 
     private String token;
 

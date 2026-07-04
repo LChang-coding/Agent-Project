@@ -3,7 +3,7 @@ package cn.bugstack.ai.api.dto;
 import lombok.Data;
 
 @Data
-public class LoginResponseDTO {
+public class TokenRefreshResponseDTO {
 
     private String token;
 

@@ -9,9 +9,13 @@ public class LoginResultEntity {
 
     private String token;
 
+    private String refreshToken;
+
     private String tokenType;
 
     private Long expiresIn;
+
+    private Long refreshExpiresIn;
 
     private String tenantId;
 
