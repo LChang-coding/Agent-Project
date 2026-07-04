@@ -57,6 +57,19 @@ public class DomainLogTest {
         Assert.assertFalse(actual.contains("token"));
     }
 
+    /**
+     * 校验续期日志；无参数；验证日志里不包含刷新令牌明文。
+     */
+    @Test
+    public void shouldBuildRefreshLogWithoutTokenValue() {
+        String actual = AiLog.auth()
+                .refreshSuccess("t1", "u1", "codeliu", "owner")
+                .toLogfmt();
+
+        assertTraceIdAndLogBody("event=auth_refresh_success domain=auth tenantId=t1 userId=u1 username=codeliu roleCode=owner success=true", actual);
+        Assert.assertFalse(actual.contains("refreshToken"));
+    }
+
     @Test
     public void shouldReuseTraceIdAndCreateDifferentLogIdsInSameContext() {
         TraceContext.setTraceId("11111111-1111-1111-1111-111111111111");

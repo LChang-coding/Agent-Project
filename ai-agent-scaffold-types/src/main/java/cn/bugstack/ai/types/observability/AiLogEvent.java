@@ -18,6 +18,12 @@ public enum AiLogEvent {
     AUTH_REGISTER_FAILED(AiLogDomain.AUTH, "auth_register_failed"),
     AUTH_LOGIN_SUCCESS(AiLogDomain.AUTH, "auth_login_success"),
     AUTH_LOGIN_FAILED(AiLogDomain.AUTH, "auth_login_failed"),
+    AUTH_REFRESH_SUCCESS(AiLogDomain.AUTH, "auth_refresh_success"),
+    AUTH_REFRESH_FAILED(AiLogDomain.AUTH, "auth_refresh_failed"),
+    AUTH_PASSWORD_CHANGED(AiLogDomain.AUTH, "auth_password_changed"),
+    AUTH_PASSWORD_CHANGE_FAILED(AiLogDomain.AUTH, "auth_password_change_failed"),
+    AUTH_PROFILE_UPDATED(AiLogDomain.AUTH, "auth_profile_updated"),
+    AUTH_PROFILE_UPDATE_FAILED(AiLogDomain.AUTH, "auth_profile_update_failed"),
 
     REDIS_COMMAND(AiLogDomain.REDIS, "redis_command"),
     REDIS_ERROR(AiLogDomain.REDIS, "redis_error"),
