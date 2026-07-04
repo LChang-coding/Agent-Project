@@ -16,9 +16,9 @@ thread:
 spring:
   config:
     import:
+            - optional:nacos:ai-agent-scaffold-app-dev.yml?group=DEFAULT_GROUP&refreshEnabled=true
     #        - classpath:agent/test-agent-02.yml
        #     - classpath:agent/test-agent.yml
-            - classpath:secrets.properties
             - classpath:agent/only-one-agent.yml
         #    - classpath:agent/parallel_research_app.yml
   datasource:
@@ -48,6 +48,12 @@ logging:
   level:
     root: info
   config: classpath:logback-spring.xml
+
+security:
+  jwt:
+    issuer: ai-agent-scaffold
+    secret: ${JWT_SECRET:dev-only-change-me-ai-agent-scaffold}
+    expire-seconds: 7200
 
 ai:
   observability:

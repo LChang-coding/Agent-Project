@@ -1,5 +1,27 @@
 spring:
+  application:
+    name: ai-agent-scaffold-app
   config:
     name: ai-agent-scaffold-app
+    import:
+      - classpath:secrets.properties
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:69.165.65.123:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+      config:
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        group: DEFAULT_GROUP
+        file-extension: yml
+        refresh-enabled: true
+      discovery:
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        service: ${spring.application.name}
+        group: DEFAULT_GROUP
+    compatibility-verifier:
+      enabled: false
   profiles:
     active: dev
