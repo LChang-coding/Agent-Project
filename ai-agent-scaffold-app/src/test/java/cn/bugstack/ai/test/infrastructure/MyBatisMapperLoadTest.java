@@ -34,6 +34,8 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/rag_chunk_mapper.xml",
                 "mybatis/mapper/skill_definition_mapper.xml",
                 "mybatis/mapper/mcp_server_config_mapper.xml",
+                "mybatis/mapper/agent_workflow_mapper.xml",
+                "mybatis/mapper/agent_workflow_version_mapper.xml",
                 "mybatis/mapper/agent_schedule_config_mapper.xml",
                 "mybatis/mapper/agent_schedule_task_mapper.xml",
                 "mybatis/mapper/agent_schedule_execution_mapper.xml"
@@ -46,10 +48,13 @@ public class MyBatisMapperLoadTest {
         }
 
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.ITenantDao.insert"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IUserSecretDao.upsertByUserIdAndType"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatSessionDao.queryBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.insert"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.ISkillDefinitionDao.insert"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IMcpServerConfigDao.insert"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentWorkflowDao.queryByWorkflowId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentWorkflowVersionDao.queryLatestPublished"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentScheduleConfigDao.queryListByRunAsUserId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentScheduleExecutionDao.queryByExecutionId"));
     }

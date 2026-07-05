@@ -22,6 +22,14 @@ public interface IUserSecretDao {
     int insert(UserSecretPO userSecret);
 
     /**
+     * 按用户和凭证类型新增或覆盖凭证。
+     *
+     * @param userSecret 用户凭证持久化对象
+     * @return 影响行数
+     */
+    int upsertByUserIdAndType(UserSecretPO userSecret);
+
+    /**
      * 按主键更新用户凭证记录。
      *
      * @param userSecret 用户凭证持久化对象

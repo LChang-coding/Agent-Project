@@ -145,8 +145,7 @@ public class AuthRepository implements IAuthRepository {
      */
     @Override
     public void saveRefreshToken(String tenantId, String userId, String refreshTokenHash, LocalDateTime expireTime) {
-        disableRefreshTokenByUserId(userId);
-        userSecretDao.insert(UserSecretPO.builder()
+        userSecretDao.upsertByUserIdAndType(UserSecretPO.builder()
                 .tenantId(tenantId)
                 .userId(userId)
                 .secretType(SECRET_TYPE_REFRESH_TOKEN)
