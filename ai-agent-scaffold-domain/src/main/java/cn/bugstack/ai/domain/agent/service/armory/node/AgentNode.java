@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreate
 import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.factory.DefaultMcpClientFactory;
 import cn.bugstack.ai.domain.agent.service.armory.matter.model.ObservabilitySpringAI;
 import cn.bugstack.ai.domain.agent.service.armory.matter.skills.ToolSkillsCreateService;
+import cn.bugstack.ai.domain.tool.service.GatewayToolset;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,8 @@ public class AgentNode extends AbstractArmorySupport {
     private DefaultMcpClientFactory defaultMcpClientFactory;
     @Resource
     private ToolSkillsCreateService toolSkillsCreateService;
+    @Resource
+    private GatewayToolset gatewayToolset;
 
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -49,6 +52,7 @@ public class AgentNode extends AbstractArmorySupport {
                     .model(new ObservabilitySpringAI(chatModel, agentModelName))
                     .instruction(agentConfig.getInstruction())
                     .outputKey(agentConfig.getOutputKey())
+                    .tools(gatewayToolset)
                     .build();
 
             dynamicContext.getAgentGroup().put(agentConfig.getName(), llmAgent);

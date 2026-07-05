@@ -193,8 +193,8 @@ public class WorkflowRuntimeCompiler {
         agent.setInstruction(defaultInstruction(node));
         agent.setOutputKey(safeAgentName(node.getNodeId(), "node") + "_output");
         agent.setModel(modelRouter.route(requestModelCode, node.getModelCode(), version.getDefaultModelCode()));
-        agent.setToolMcpList(buildMcpTools(tenantId, node.getMcpIds()));
-        agent.setToolSkillsList(buildSkillTools(tenantId, node.getSkillIds()));
+        agent.setToolMcpList(Collections.emptyList());
+        agent.setToolSkillsList(Collections.emptyList());
         return agent;
     }
 
@@ -248,8 +248,8 @@ public class WorkflowRuntimeCompiler {
             agent.setInstruction(defaultInstruction(node));
             agent.setOutputKey(safeAgentName(node.getNodeId(), "node") + "_output");
             agent.setModel(modelRouter.route(requestModelCode, node.getModelCode(), version.getDefaultModelCode()));
-            agent.setToolMcpList(buildMcpTools(tenantId, node.getMcpIds()));
-            agent.setToolSkillsList(buildSkillTools(tenantId, node.getSkillIds()));
+            agent.setToolMcpList(Collections.emptyList());
+            agent.setToolSkillsList(Collections.emptyList());
             agents.add(agent);
         }
         return agents;

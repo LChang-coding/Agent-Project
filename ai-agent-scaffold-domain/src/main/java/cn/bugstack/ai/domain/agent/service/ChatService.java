@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
+import cn.bugstack.ai.domain.tool.model.valobj.ToolRuntimeContextKeys;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRuntimeEntity;
 import cn.bugstack.ai.domain.workflow.service.IWorkflowService;
@@ -232,7 +233,8 @@ public class ChatService implements IChatService {
         String traceId = TraceContext.currentOrNewTraceId();
         sessionDomain.appendUserMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, describeContent(chatCommandEntity), traceId);
 
-        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), actualSessionId, content, RunConfig.builder().build(), traceStateDelta());
+        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), actualSessionId, content, RunConfig.builder().build(),
+                runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId, TenantContextHolder.getRoleCode()));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -259,7 +261,8 @@ public class ChatService implements IChatService {
         sessionDomain.appendUserMessage(tenantId, userId, actualSessionId, message, traceId);
 
         Content userMsg = Content.fromParts(Part.fromText(message));
-        Flowable<Event> events = runner.runAsync(userId, actualSessionId, userMsg, RunConfig.builder().build(), traceStateDelta());
+        Flowable<Event> events = runner.runAsync(userId, actualSessionId, userMsg, RunConfig.builder().build(),
+                runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId, TenantContextHolder.getRoleCode()));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -291,7 +294,8 @@ public class ChatService implements IChatService {
                 .build();
         StringBuilder assistantContent = new StringBuilder();
         AtomicBoolean assistantSaved = new AtomicBoolean(false);
-        return runner.runAsync(userId, actualSessionId, userMsg, runConfig, traceStateDelta())
+        return runner.runAsync(userId, actualSessionId, userMsg, runConfig,
+                        runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId, TenantContextHolder.getRoleCode()))
                 .doOnNext(event -> appendContent(assistantContent, event.stringifyContent()))
                 .doOnComplete(() -> saveAssistantMessageOnce(assistantSaved, tenantId, userId, actualSessionId, assistantContent.toString(), traceId))
                 .doOnError(throwable -> saveAssistantErrorMessageOnce(assistantSaved, tenantId, userId, actualSessionId, traceId, throwable, assistantContent.toString()))
@@ -310,7 +314,7 @@ public class ChatService implements IChatService {
         sessionDomain.appendUserMessage(tenantId, userId, actualSessionId, message, traceId);
 
         try {
-            String finalOutput = executeDagPlan(dagPlan, userId, actualSessionId, message, traceId);
+            String finalOutput = executeDagPlan(dagPlan, tenantId, userId, actualSessionId, message, traceId, TenantContextHolder.getRoleCode());
             AiLog.info(AiLog.workflow().dagCompleted(tenantId, userId, dagPlan.getWorkflowId(), dagPlan.getVersion(),
                     dagPlan.getNodes().size(), dagPlan.getEdges() == null ? 0 : dagPlan.getEdges().size(),
                     String.join(",", terminalNodeIds(dagPlan, outgoingEdges(dagPlan))), finalOutput.length()));
@@ -325,7 +329,7 @@ public class ChatService implements IChatService {
     /**
      * 执行 DAG 计划；参数是计划、用户、会话、用户消息和链路ID；返回终点节点输出。
      */
-    private String executeDagPlan(WorkflowDagPlanEntity dagPlan, String userId, String sessionId, String userMessage, String traceId) {
+    private String executeDagPlan(WorkflowDagPlanEntity dagPlan, String tenantId, String userId, String sessionId, String userMessage, String traceId, String roleCode) {
         Map<String, WorkflowDagPlanEntity.Node> nodeMap = dagPlan.getNodes().stream()
                 .collect(Collectors.toMap(WorkflowDagPlanEntity.Node::getNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
         Map<String, List<String>> outgoing = outgoingEdges(dagPlan);
@@ -346,7 +350,7 @@ public class ChatService implements IChatService {
             ready.clear();
             List<CompletableFuture<NodeRunResult>> futures = currentLevel.stream()
                     .map(nodeId -> CompletableFuture.supplyAsync(() -> runDagNode(nodeMap.get(nodeId), incoming.getOrDefault(nodeId, Collections.emptyList()),
-                            selfLoopNodeIds.contains(nodeId), outputs, userId, sessionId, userMessage, traceId)))
+                            selfLoopNodeIds.contains(nodeId), outputs, tenantId, userId, sessionId, dagPlan.getWorkflowId(), userMessage, traceId, roleCode)))
                     .collect(Collectors.toList());
             for (CompletableFuture<NodeRunResult> future : futures) {
                 NodeRunResult result = joinNodeResult(future);
@@ -374,10 +378,13 @@ public class ChatService implements IChatService {
                                      List<String> upstreamNodeIds,
                                      boolean selfLoop,
                                      Map<String, String> outputs,
+                                     String tenantId,
                                      String userId,
                                      String sessionId,
+                                     String workflowId,
                                      String userMessage,
-                                     String traceId) {
+                                     String traceId,
+                                     String roleCode) {
         if (node == null) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流 DAG 节点不存在");
         }
@@ -388,7 +395,7 @@ public class ChatService implements IChatService {
         String previousOutput = "";
         for (int index = 1; index <= runTimes; index++) {
             String prompt = buildDagNodePrompt(userMessage, upstreamOutputs, previousOutput, index, runTimes);
-            previousOutput = runDagNodeOnce(node, userId, sessionId, prompt, traceId);
+            previousOutput = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode);
         }
         return new NodeRunResult(node.getNodeId(), previousOutput);
     }
@@ -396,13 +403,13 @@ public class ChatService implements IChatService {
     /**
      * 执行一次节点 Agent；参数是节点、用户、会话、提示词和链路ID；返回模型输出。
      */
-    private String runDagNodeOnce(WorkflowDagPlanEntity.Node node, String userId, String sessionId, String prompt, String traceId) {
+    private String runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId, String sessionId, String workflowId, String prompt, String traceId, String roleCode) {
         AiAgentRegisterVO agent = requireAgent(node.getRuntimeAgentId());
         InMemoryRunner runner = agent.getRunner();
         ensureAdkSession(runner, agent.getAppName(), userId, sessionId);
         Content content = Content.fromParts(Part.fromText(prompt));
         StringBuilder output = new StringBuilder();
-        runner.runAsync(userId, sessionId, content, RunConfig.builder().build(), traceStateDelta(traceId))
+        runner.runAsync(userId, sessionId, content, RunConfig.builder().build(), runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode))
                 .blockingForEach(event -> appendContent(output, event.stringifyContent()));
         return output.toString();
     }
@@ -564,17 +571,27 @@ public class ChatService implements IChatService {
     }
 
     /**
-     * 获取链路状态；无参数；返回传给 ADK 的 trace 状态。
+     * 获取运行状态；参数是身份、会话、工作流和链路ID；返回传给 ADK 的状态。
      */
-    private Map<String, Object> traceStateDelta() {
-        return Map.of(TraceContext.TRACE_ID_STATE_KEY, TraceContext.currentOrNewTraceId());
+    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId, String roleCode) {
+        Map<String, Object> state = new HashMap<>();
+        putStateIfPresent(state, TraceContext.TRACE_ID_STATE_KEY, traceId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.TRACE_ID, traceId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.TENANT_ID, tenantId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.USER_ID, userId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.SESSION_ID, sessionId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.WORKFLOW_ID, workflowId);
+        putStateIfPresent(state, "roleCode", roleCode);
+        return state;
     }
 
     /**
-     * 获取指定链路状态；参数是链路ID；返回传给 ADK 的 trace 状态。
+     * 写入非空运行状态；参数是状态表、键和值；无返回值。
      */
-    private Map<String, Object> traceStateDelta(String traceId) {
-        return Map.of(TraceContext.TRACE_ID_STATE_KEY, traceId);
+    private void putStateIfPresent(Map<String, Object> state, String key, String value) {
+        if (key != null && value != null && !value.isBlank()) {
+            state.put(key, value);
+        }
     }
 
     /**
