@@ -10,9 +10,13 @@ public final class AiLogFields {
     public static final String USERNAME = "username";
     public static final String ROLE_CODE = "roleCode";
     public static final String SESSION_ID = "sessionId";
+    public static final String MESSAGE_ID = "messageId";
     public static final String AGENT_ID = "agentId";
     public static final String AGENT_NAME = "agentName";
     public static final String APP_NAME = "appName";
+    public static final String ROLE = "role";
+    public static final String SEQUENCE_NO = "sequenceNo";
+    public static final String CONTENT_LENGTH = "contentLength";
     public static final String INVOCATION_ID = "invocationId";
     public static final String TRACE_ID = "traceId";
     public static final String SUCCESS = "success";
@@ -25,6 +29,9 @@ public final class AiLogFields {
     public static final String ERROR_CODE = "errorCode";
     public static final String ERROR_MESSAGE = "errorMessage";
 
+    /**
+     * 禁止创建常量类实例；无参数；无返回值。
+     */
     private AiLogFields() {
     }
 }

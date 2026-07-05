@@ -23,6 +23,8 @@ public class DomainLogTest {
     public void shouldBuildDomainLogsForFutureMiddleware() {
         assertTraceIdAndLogBody("event=db_query domain=db database=mysql operation=select table=agent_session rows=1 costMs=8 success=true",
                 AiLog.db().query("mysql", "select", "agent_session", 1, 8L, true).toLogfmt());
+        assertTraceIdAndLogBody("event=chat_session_created domain=chat tenantId=t1 userId=u1 sessionId=s1 agentId=a1 agentName=onlyAgent appName=testAgent success=true",
+                AiLog.chat().sessionCreated("t1", "u1", "s1", "a1", "onlyAgent", "testAgent").toLogfmt());
         assertTraceIdAndLogBody("event=auth_login_success domain=auth tenantId=t1 userId=u1 username=codeliu roleCode=owner success=true",
                 AiLog.auth().loginSuccess("t1", "u1", "codeliu", "owner").toLogfmt());
         assertTraceIdAndLogBody("event=redis_command domain=redis command=GET key=session:s1 hit=true costMs=2 success=true",
@@ -68,6 +70,18 @@ public class DomainLogTest {
 
         assertTraceIdAndLogBody("event=auth_refresh_success domain=auth tenantId=t1 userId=u1 username=codeliu roleCode=owner success=true", actual);
         Assert.assertFalse(actual.contains("refreshToken"));
+    }
+
+    /**
+     * 校验聊天消息日志；无参数；验证日志包含会话和消息序号。
+     */
+    @Test
+    public void shouldBuildChatMessageLog() {
+        String actual = AiLog.chat()
+                .messageSaved("t1", "u1", "s1", "m1", "assistant", 2, 12)
+                .toLogfmt();
+
+        assertTraceIdAndLogBody("event=chat_message_saved domain=chat tenantId=t1 userId=u1 sessionId=s1 messageId=m1 role=assistant sequenceNo=2 contentLength=12 success=true", actual);
     }
 
     @Test

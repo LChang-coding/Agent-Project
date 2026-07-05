@@ -7,6 +7,10 @@ public enum AiLogEvent {
     HTTP_REQUEST(AiLogDomain.HTTP, "http_request"),
     HTTP_ERROR(AiLogDomain.HTTP, "http_error"),
 
+    CHAT_SESSION_CREATED(AiLogDomain.CHAT, "chat_session_created"),
+    CHAT_MESSAGE_SAVED(AiLogDomain.CHAT, "chat_message_saved"),
+    CHAT_SESSION_REJECTED(AiLogDomain.CHAT, "chat_session_rejected"),
+
     MODEL_CALL(AiLogDomain.MODEL, "model_call"),
     TOKEN_USAGE(AiLogDomain.MODEL, "token_usage"),
     MODEL_ERROR(AiLogDomain.MODEL, "model_error"),
@@ -41,15 +45,24 @@ public enum AiLogEvent {
     private final AiLogDomain domain;
     private final String code;
 
+    /**
+     * 创建日志事件；参数是领域和事件编码；返回枚举实例。
+     */
     AiLogEvent(AiLogDomain domain, String code) {
         this.domain = domain;
         this.code = code;
     }
 
+    /**
+     * 读取事件领域；无参数；返回日志领域。
+     */
     public AiLogDomain domain() {
         return domain;
     }
 
+    /**
+     * 读取事件编码；无参数；返回事件编码。
+     */
     public String code() {
         return code;
     }

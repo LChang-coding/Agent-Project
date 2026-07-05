@@ -16,6 +16,8 @@ public enum ResponseCode {
 
     E0001("E0001", "智能体ID不存在"),
     E0002("E0002", "智能体MCP配置不在可加载范围"),
+    SESSION_NOT_FOUND("SESSION_NOT_FOUND", "会话不存在"),
+    SESSION_ACCESS_DENIED("SESSION_ACCESS_DENIED", "无权访问会话"),
     AUTH_REGISTER_FAILED("AUTH_REGISTER_FAILED", "注册失败"),
     AUTH_LOGIN_FAILED("AUTH_LOGIN_FAILED", "登录失败"),
     AUTH_REFRESH_FAILED("AUTH_REFRESH_FAILED", "令牌续期失败"),
