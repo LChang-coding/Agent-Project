@@ -46,6 +46,10 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <!-- 系统模块 -->
         <dependency>
             <groupId>cn.bugstack.ai</groupId>

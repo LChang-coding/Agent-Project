@@ -202,6 +202,11 @@
                 <artifactId>commons-codec</artifactId>
                 <version>1.15</version>
             </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>8.5.17</version>
+            </dependency>
 
             <!-- 工程模块 -->
             <dependency>

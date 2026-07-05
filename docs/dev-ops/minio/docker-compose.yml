@@ -1,0 +1,29 @@
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: ai-agent-minio
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ./data:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: ai-agent-minio-init
+    depends_on:
+      - minio
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 2; done;
+      mc mb -p local/ai-agent-skills || true;
+      mc mb -p local/ai-agent-assets || true;
+      mc anonymous set none local/ai-agent-skills || true;
+      mc anonymous set none local/ai-agent-assets || true;
+      "
