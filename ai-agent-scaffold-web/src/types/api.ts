@@ -67,7 +67,10 @@ export interface AiAgentConfig {
 }
 
 export interface CreateSessionRequest {
-  agentId: string;
+  agentId?: string;
+  workflowId?: string;
+  workflowVersion?: number;
+  modelCode?: string;
   userId?: string;
 }
 
@@ -76,7 +79,10 @@ export interface CreateSessionResponse {
 }
 
 export interface ChatRequest {
-  agentId: string;
+  agentId?: string;
+  workflowId?: string;
+  workflowVersion?: number;
+  modelCode?: string;
   userId?: string;
   sessionId?: string;
   message: string;
@@ -99,6 +105,10 @@ export interface LocalChatSession {
   sessionId: string;
   agentId: string;
   agentName: string;
+  sourceType?: 'agent' | 'workflow';
+  workflowId?: string;
+  workflowName?: string;
+  modelCode?: string;
   title: string;
   updatedAt: string;
   messages: ChatMessage[];
@@ -109,4 +119,79 @@ export interface StreamHandlers {
   onChunk?: (content: string) => void;
   onError?: (message: string) => void;
   signal?: AbortSignal;
+}
+
+export interface WorkflowSummary {
+  workflowId: string;
+  workflowName: string;
+  description?: string;
+  visibility: string;
+  status: string;
+  defaultModelCode: string;
+  currentVersion: number;
+  publishedVersion: number;
+}
+
+export interface WorkflowGraph {
+  mode: 'sequential' | 'parallel' | 'loop';
+  rootNodeId: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface WorkflowNode {
+  nodeId: string;
+  nodeType: 'llm' | 'sequential' | 'parallel' | 'loop';
+  name: string;
+  description?: string;
+  instruction?: string;
+  modelCode?: string;
+  mcpIds?: string[];
+  skillIds?: string[];
+  maxIterations?: number;
+  x?: number;
+  y?: number;
+}
+
+export interface WorkflowEdge {
+  edgeId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+
+export interface WorkflowDetail {
+  workflow: WorkflowSummary;
+  version: number;
+  versionStatus: string;
+  graph: WorkflowGraph;
+}
+
+export interface WorkflowOption {
+  value: string;
+  label: string;
+  description?: string;
+  type?: string;
+  status?: string;
+}
+
+export interface WorkflowNodeOptions {
+  nodeTypes: WorkflowOption[];
+  models: WorkflowOption[];
+  mcpServers: WorkflowOption[];
+  skills: WorkflowOption[];
+}
+
+export interface WorkflowCreateRequest {
+  workflowName: string;
+  description?: string;
+  defaultModelCode?: string;
+  visibility?: string;
+}
+
+export interface WorkflowSaveDraftRequest {
+  workflowName: string;
+  description?: string;
+  defaultModelCode?: string;
+  visibility?: string;
+  graph: WorkflowGraph;
 }

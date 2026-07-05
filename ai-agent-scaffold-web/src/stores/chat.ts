@@ -6,18 +6,25 @@ import {
   sendChatMessage,
   sendChatMessageStream,
 } from '@/api/agent';
+import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import { useAuthStore } from '@/stores/auth';
-import type { AiAgentConfig, ChatMessage, LocalChatSession } from '@/types/api';
+import type { AiAgentConfig, ChatMessage, ChatRequest, LocalChatSession, WorkflowOption, WorkflowSummary } from '@/types/api';
 
 const SESSION_STORAGE_PREFIX = 'ai_agent_scaffold_chat_sessions';
 
 interface ChatState {
   agents: AiAgentConfig[];
+  workflows: WorkflowSummary[];
+  models: WorkflowOption[];
+  activeSourceType: 'agent' | 'workflow';
   activeAgentId: string;
+  activeWorkflowId: string;
+  activeModelCode: string;
   sessionId: string;
   messages: ChatMessage[];
   sessions: LocalChatSession[];
   loadingAgents: boolean;
+  loadingWorkflows: boolean;
   sending: boolean;
   streaming: boolean;
   errorMessage: string;
@@ -26,17 +33,24 @@ interface ChatState {
 export const useChatStore = defineStore('chat', {
   state: (): ChatState => ({
     agents: [],
+    workflows: [],
+    models: [],
+    activeSourceType: 'agent',
     activeAgentId: '',
+    activeWorkflowId: '',
+    activeModelCode: 'deepseek-v4-flash',
     sessionId: '',
     messages: [],
     sessions: [],
     loadingAgents: false,
+    loadingWorkflows: false,
     sending: false,
     streaming: true,
     errorMessage: '',
   }),
   getters: {
     activeAgent: (state) => state.agents.find((agent) => agent.agentId === state.activeAgentId),
+    activeWorkflow: (state) => state.workflows.find((workflow) => workflow.workflowId === state.activeWorkflowId),
     hasSession: (state) => Boolean(state.sessionId),
   },
   actions: {
@@ -45,14 +59,29 @@ export const useChatStore = defineStore('chat', {
      */
     async loadAgents() {
       this.loadingAgents = true;
+      this.loadingWorkflows = true;
       try {
-        this.agents = await queryAgentConfigs();
+        const [agents, workflows, options] = await Promise.all([
+          queryAgentConfigs(),
+          queryWorkflows(),
+          queryWorkflowNodeOptions(),
+        ]);
+        this.agents = agents;
+        this.workflows = workflows.filter((workflow) => workflow.publishedVersion > 0 && workflow.status === 'published');
+        this.models = options.models;
         this.restoreSessions();
         if (!this.activeAgentId && this.agents.length > 0) {
           this.activeAgentId = this.agents[0].agentId;
         }
+        if (!this.activeWorkflowId && this.workflows.length > 0) {
+          this.activeWorkflowId = this.workflows[0].workflowId;
+        }
+        if (this.activeSourceType === 'workflow' && !this.activeWorkflowId && this.agents.length > 0) {
+          this.activeSourceType = 'agent';
+        }
       } finally {
         this.loadingAgents = false;
+        this.loadingWorkflows = false;
       }
     },
 
@@ -60,7 +89,23 @@ export const useChatStore = defineStore('chat', {
      * 切换智能体；参数是智能体 ID；会清空当前会话草稿。
      */
     selectAgent(agentId: string) {
+      this.activeSourceType = 'agent';
       this.activeAgentId = agentId;
+      this.sessionId = '';
+      this.messages = [];
+      this.errorMessage = '';
+    },
+
+    /**
+     * 切换工作流；参数是工作流 ID；会清空当前会话草稿。
+     */
+    selectWorkflow(workflowId: string) {
+      this.activeSourceType = 'workflow';
+      this.activeWorkflowId = workflowId;
+      const workflow = this.workflows.find((item) => item.workflowId === workflowId);
+      if (workflow?.defaultModelCode) {
+        this.activeModelCode = workflow.defaultModelCode;
+      }
       this.sessionId = '';
       this.messages = [];
       this.errorMessage = '';
@@ -71,11 +116,7 @@ export const useChatStore = defineStore('chat', {
      */
     async createSession(agentId?: string) {
       const auth = useAuthStore();
-      const actualAgentId = agentId || this.activeAgentId;
-      const result = await createChatSession({
-        agentId: actualAgentId,
-        userId: auth.userId,
-      });
+      const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
       this.messages = [
         {
@@ -98,7 +139,13 @@ export const useChatStore = defineStore('chat', {
       if (!session) {
         return;
       }
-      this.activeAgentId = session.agentId;
+      this.activeSourceType = session.sourceType || 'agent';
+      if (this.activeSourceType === 'workflow') {
+        this.activeWorkflowId = session.workflowId || session.agentId;
+        this.activeModelCode = session.modelCode || this.activeModelCode;
+      } else {
+        this.activeAgentId = session.agentId;
+      }
       this.sessionId = session.sessionId;
       this.messages = session.messages.map((message) => ({ ...message }));
       this.errorMessage = '';
@@ -108,7 +155,7 @@ export const useChatStore = defineStore('chat', {
      * 发送聊天消息；参数是用户输入；根据开关返回流式或完整回复。
      */
     async send(message: string) {
-      if (!message.trim() || !this.activeAgentId) {
+      if (!message.trim() || !this.hasActiveTarget()) {
         return;
       }
 
@@ -141,12 +188,7 @@ export const useChatStore = defineStore('chat', {
           });
           let streamSnapshot = '';
           await sendChatMessageStream(
-            {
-              agentId: this.activeAgentId,
-              userId: auth.userId,
-              sessionId: this.sessionId,
-              message: userMessage.content,
-            },
+            this.buildChatPayload(auth.userId, userMessage.content),
             {
               onSession: (sessionId) => {
                 this.sessionId = sessionId;
@@ -170,12 +212,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
 
-        const response = await sendChatMessage({
-          agentId: this.activeAgentId,
-          userId: auth.userId,
-          sessionId: this.sessionId,
-          message: userMessage.content,
-        });
+        const response = await sendChatMessage(this.buildChatPayload(auth.userId, userMessage.content));
         this.sessionId = response.sessionId;
         this.replaceMessageContent(assistantMessageId, response.content);
         this.updateMessageStatus(assistantMessageId, 'done');
@@ -240,15 +277,23 @@ export const useChatStore = defineStore('chat', {
      * 保存当前会话；参数是默认标题；把当前会话写入本地会话列表。
      */
     saveCurrentSession(defaultTitle: string) {
-      if (!this.sessionId || !this.activeAgentId) {
+      if (!this.sessionId || !this.hasActiveTarget()) {
         return;
       }
       const activeAgent = this.activeAgent;
-      const title = firstUserMessage(this.messages) || defaultTitle || activeAgent?.agentName || '新会话';
+      const activeWorkflow = this.activeWorkflow;
+      const runtimeName = this.activeSourceType === 'workflow'
+        ? activeWorkflow?.workflowName || this.activeWorkflowId
+        : activeAgent?.agentName || this.activeAgentId;
+      const title = firstUserMessage(this.messages) || defaultTitle || runtimeName || '新会话';
       const session: LocalChatSession = {
         sessionId: this.sessionId,
-        agentId: this.activeAgentId,
-        agentName: activeAgent?.agentName || this.activeAgentId,
+        agentId: this.activeSourceType === 'workflow' ? this.activeWorkflowId : this.activeAgentId,
+        agentName: runtimeName,
+        sourceType: this.activeSourceType,
+        workflowId: this.activeSourceType === 'workflow' ? this.activeWorkflowId : undefined,
+        workflowName: this.activeSourceType === 'workflow' ? runtimeName : undefined,
+        modelCode: this.activeSourceType === 'workflow' ? this.activeModelCode : undefined,
         title: compactTitle(title),
         updatedAt: new Date().toISOString(),
         messages: this.messages.map((message) => ({ ...message })),
@@ -256,6 +301,36 @@ export const useChatStore = defineStore('chat', {
       const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)].slice(0, 30);
       this.sessions = nextSessions;
       localStorage.setItem(sessionStorageKey(), JSON.stringify(nextSessions));
+    },
+
+    /**
+     * 构建聊天请求；参数是用户、消息和可选 Agent；返回后端请求体。
+     */
+    buildChatPayload(userId: string, message: string, agentId?: string): ChatRequest {
+      if (this.activeSourceType === 'workflow') {
+        const workflow = this.activeWorkflow;
+        return {
+          workflowId: this.activeWorkflowId,
+          workflowVersion: workflow?.publishedVersion || undefined,
+          modelCode: this.activeModelCode,
+          userId,
+          sessionId: this.sessionId,
+          message,
+        };
+      }
+      return {
+        agentId: agentId || this.activeAgentId,
+        userId,
+        sessionId: this.sessionId,
+        message,
+      };
+    },
+
+    /**
+     * 判断是否已选择运行目标；无参数；返回是否可发送。
+     */
+    hasActiveTarget() {
+      return this.activeSourceType === 'workflow' ? Boolean(this.activeWorkflowId) : Boolean(this.activeAgentId);
     },
   },
 });

@@ -6,8 +6,8 @@
     >
       <template #actions>
         <div class="button-row">
-          <button class="button" type="button" @click="chatStore.loadAgents">刷新 Agent</button>
-          <button class="button button--primary" type="button" :disabled="!chatStore.activeAgentId" @click="createSession">
+          <button class="button" type="button" @click="chatStore.loadAgents">刷新运行目标</button>
+          <button class="button button--primary" type="button" :disabled="!canCreateSession" @click="createSession">
             新建会话
           </button>
         </div>
@@ -18,10 +18,33 @@
       <div class="chat-main card">
         <div class="chat-toolbar">
           <div class="field">
+            <label for="source">运行类型</label>
+            <select id="source" v-model="chatStore.activeSourceType" class="select" @change="onSourceChanged">
+              <option value="agent">系统 Agent</option>
+              <option value="workflow">数据库工作流</option>
+            </select>
+          </div>
+          <div v-if="chatStore.activeSourceType === 'agent'" class="field">
             <label for="agent">当前智能体</label>
             <select id="agent" v-model="chatStore.activeAgentId" class="select" @change="onAgentChanged">
               <option v-for="agent in chatStore.agents" :key="agent.agentId" :value="agent.agentId">
                 {{ agent.agentName }} · {{ agent.agentId }}
+              </option>
+            </select>
+          </div>
+          <div v-else class="field">
+            <label for="workflow">当前工作流</label>
+            <select id="workflow" v-model="chatStore.activeWorkflowId" class="select" @change="onWorkflowChanged">
+              <option v-for="workflow in chatStore.workflows" :key="workflow.workflowId" :value="workflow.workflowId">
+                {{ workflow.workflowName }} · v{{ workflow.publishedVersion }}
+              </option>
+            </select>
+          </div>
+          <div v-if="chatStore.activeSourceType === 'workflow'" class="field">
+            <label for="model">本次模型</label>
+            <select id="model" v-model="chatStore.activeModelCode" class="select">
+              <option v-for="model in chatStore.models" :key="model.value" :value="model.value">
+                {{ model.label }}
               </option>
             </select>
           </div>
@@ -44,8 +67,9 @@
             :class="['message', `message--${message.role}`]"
           >
             <div class="message__meta">
-              <span>{{ roleLabel(message.role) }}</span>
-              <span>{{ formatTime(message.createdAt) }}</span>
+            <span>{{ roleLabel(message.role) }}</span>
+            <span>{{ formatTime(message.createdAt) }}</span>
+              <span v-if="chatStore.activeSourceType === 'workflow'" class="badge">{{ chatStore.activeModelCode }}</span>
               <span v-if="message.status === 'streaming'" class="badge">生成中</span>
               <span v-if="message.status === 'error'" class="badge badge--red">失败</span>
             </div>
@@ -68,7 +92,7 @@
                 <span>流式响应</span>
               </label>
             </div>
-            <button class="button button--primary" type="submit" :disabled="chatStore.sending || !draft.trim()">
+            <button class="button button--primary" type="submit" :disabled="chatStore.sending || !draft.trim() || !canCreateSession">
               {{ chatStore.sending ? '发送中...' : '发送' }}
             </button>
           </div>
@@ -146,8 +170,14 @@ import type { ChatMessage } from '@/types/api';
 
 const chatStore = useChatStore();
 const draft = ref('');
+const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const visibleSessions = computed(() => {
-  return chatStore.sessions.filter((session) => session.agentId === chatStore.activeAgentId);
+  return chatStore.sessions.filter((session) => {
+    if (chatStore.activeSourceType === 'workflow') {
+      return session.sourceType === 'workflow' && session.workflowId === chatStore.activeWorkflowId;
+    }
+    return (session.sourceType || 'agent') === 'agent' && session.agentId === chatStore.activeAgentId;
+  });
 });
 
 onMounted(async () => {
@@ -168,6 +198,28 @@ async function createSession() {
  */
 function onAgentChanged() {
   chatStore.selectAgent(chatStore.activeAgentId);
+}
+
+/**
+ * 运行类型变更处理；无参数；切到对应默认目标。
+ */
+function onSourceChanged() {
+  if (chatStore.activeSourceType === 'workflow') {
+    if (!chatStore.activeWorkflowId && chatStore.workflows.length > 0) {
+      chatStore.selectWorkflow(chatStore.workflows[0].workflowId);
+    } else {
+      chatStore.selectWorkflow(chatStore.activeWorkflowId);
+    }
+    return;
+  }
+  chatStore.selectAgent(chatStore.activeAgentId);
+}
+
+/**
+ * 工作流变更处理；无参数；清空当前会话，避免串工作流。
+ */
+function onWorkflowChanged() {
+  chatStore.selectWorkflow(chatStore.activeWorkflowId);
 }
 
 /**
@@ -223,7 +275,7 @@ function roleLabel(role: ChatMessage['role']) {
 
 .chat-toolbar {
   display: grid;
-  grid-template-columns: minmax(240px, 420px) minmax(0, 1fr);
+  grid-template-columns: 150px minmax(220px, 1fr) minmax(180px, 240px) minmax(0, 1fr);
   gap: 16px;
   padding: 20px;
   border-bottom: 1px solid var(--line);
