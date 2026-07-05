@@ -6,6 +6,7 @@ import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,6 +48,9 @@ public class AuthFilter extends OncePerRequestFilter {
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        if (request.getDispatcherType() != DispatcherType.REQUEST) {
+            return true;
+        }
         String uri = request.getRequestURI();
         return uri.equals("/api/v1/auth/register")
                 || uri.equals("/api/v1/auth/login")
@@ -107,6 +111,9 @@ public class AuthFilter extends OncePerRequestFilter {
      * 写入未登录响应；参数是响应对象；无返回值。
      */
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
