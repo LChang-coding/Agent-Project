@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentWorkflowVersionDao">
+
+    <resultMap id="AgentWorkflowVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowVersionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="workflow_id" property="workflowId"/>
+        <result column="version" property="version"/>
+        <result column="version_status" property="versionStatus"/>
+        <result column="default_model_code" property="defaultModelCode"/>
+        <result column="graph_json" property="graphJson"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="published_by" property="publishedBy"/>
+        <result column="published_time" property="publishedTime"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="AgentWorkflowVersionColumns">
+        id, tenant_id, workflow_id, version, version_status, default_model_code, graph_json, created_by, published_by, published_time, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowVersionPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_workflow_version (tenant_id, workflow_id, version, version_status, default_model_code, graph_json, created_by, published_by, published_time, metadata)
+        VALUES (#{tenantId}, #{workflowId}, #{version}, #{versionStatus}, #{defaultModelCode}, #{graphJson}, #{createdBy}, #{publishedBy}, #{publishedTime}, #{metadata})
+    </insert>
+
+    <update id="updateByWorkflowVersion" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowVersionPO">
+        UPDATE agent_workflow_version
+        SET version_status = #{versionStatus},
+            default_model_code = #{defaultModelCode},
+            graph_json = #{graphJson},
+            created_by = #{createdBy},
+            published_by = #{publishedBy},
+            published_time = #{publishedTime},
+            metadata = #{metadata}
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND version = #{version}
+          AND deleted = 0
+    </update>
+
+    <select id="queryByWorkflowVersion" resultMap="AgentWorkflowVersionMap">
+        SELECT <include refid="AgentWorkflowVersionColumns"/>
+        FROM agent_workflow_version
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND version = #{version}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryLatestDraft" resultMap="AgentWorkflowVersionMap">
+        SELECT <include refid="AgentWorkflowVersionColumns"/>
+        FROM agent_workflow_version
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND version_status = 'draft'
+          AND deleted = 0
+        ORDER BY version DESC
+        LIMIT 1
+    </select>
+
+    <select id="queryLatestPublished" resultMap="AgentWorkflowVersionMap">
+        SELECT <include refid="AgentWorkflowVersionColumns"/>
+        FROM agent_workflow_version
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND version_status = 'published'
+          AND deleted = 0
+        ORDER BY version DESC
+        LIMIT 1
+    </select>
+
+    <select id="queryMaxVersion" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(version), 0)
+        FROM agent_workflow_version
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND deleted = 0
+    </select>
+
+</mapper>

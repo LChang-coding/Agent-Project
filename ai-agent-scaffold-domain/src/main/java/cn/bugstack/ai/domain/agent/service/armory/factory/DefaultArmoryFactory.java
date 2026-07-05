@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
@@ -62,14 +63,28 @@ public class DefaultArmoryFactory {
         private ChatModel chatModel;
 
         /**
+         * 全局模型名称。
+         */
+        private String chatModelName;
+
+        /**
+         * 全局工具回调。
+         */
+        @Builder.Default
+        private List<ToolCallback> toolCallbacks = new ArrayList<>();
+
+        /**
          * 智能体配置组
          */
+        @Builder.Default
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
 
+        @Builder.Default
         private AtomicInteger currentStepIndex = new AtomicInteger(0);
 
         private AiAgentConfigTableVO.Module.AgentWorkflow currentAgentWorkflow;
 
+        @Builder.Default
         private Map<String, Object> dataObjects = new HashMap<>();
 
         public <T> void setValue(String key, T value) {

@@ -142,6 +142,9 @@ public class AiAgentConfigTableVO {
             private String instruction;
             private String description;
             private String outputKey;
+            private String model;
+            private List<ChatModel.ToolMcp> toolMcpList;
+            private List<ChatModel.ToolSkills> toolSkillsList;
 
         }
 

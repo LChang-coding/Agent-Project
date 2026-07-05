@@ -75,8 +75,10 @@ public class AgentServiceController implements IAgentService {
     public Response<CreateSessionResponseDTO> createSession(@RequestBody CreateSessionRequestDTO requestDTO) {
         try {
             String userId = trustedUserId(requestDTO.getUserId());
-            log.info("创建会话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
-            String sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
+            log.info("创建会话 agentId:{} workflowId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getWorkflowId(), userId);
+            String sessionId = hasWorkflow(requestDTO)
+                    ? chatService.createWorkflowSession(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId)
+                    : chatService.createSession(requestDTO.getAgentId(), userId);
 
             CreateSessionResponseDTO responseDTO = new CreateSessionResponseDTO();
             responseDTO.setSessionId(sessionId);
@@ -114,13 +116,17 @@ public class AgentServiceController implements IAgentService {
     public Response<ChatResponseDTO> chat(@RequestBody ChatRequestDTO requestDTO) {
         try {
             String userId = trustedUserId(requestDTO.getUserId());
-            log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
+            log.info("智能体对话 agentId:{} workflowId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getWorkflowId(), userId);
             String sessionId = requestDTO.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
-                sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
+                sessionId = hasWorkflow(requestDTO)
+                        ? chatService.createWorkflowSession(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId)
+                        : chatService.createSession(requestDTO.getAgentId(), userId);
             }
 
-            List<String> messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
+            List<String> messages = hasWorkflow(requestDTO)
+                    ? chatService.handleWorkflowMessage(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId, sessionId, requestDTO.getMessage())
+                    : chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setSessionId(sessionId);
@@ -152,32 +158,20 @@ public class AgentServiceController implements IAgentService {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
             String userId = trustedUserId(requestDTO.getUserId());
-            log.info("流式对话 agentId:{} userId:{} sessionId:{} message:{}", requestDTO.getAgentId(), userId, requestDTO.getSessionId(), requestDTO.getMessage());
+            log.info("流式对话 agentId:{} workflowId:{} modelCode:{} userId:{} sessionId:{} message:{}",
+                    requestDTO.getAgentId(), requestDTO.getWorkflowId(), requestDTO.getModelCode(), userId, requestDTO.getSessionId(), requestDTO.getMessage());
             String sessionId = requestDTO.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
-                sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
+                sessionId = hasWorkflow(requestDTO)
+                        ? chatService.createWorkflowSession(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId)
+                        : chatService.createSession(requestDTO.getAgentId(), userId);
             }
             emitter.send(SseEmitter.event().name("session").data(sessionId));
 
             AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-            AtomicReference<String> lastContentRef = new AtomicReference<>("");
-            Disposable disposable = chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
-                    .subscribe(
-                            event -> {
-                                try {
-                                    String delta = streamDelta(lastContentRef, event.stringifyContent());
-                                    if (delta != null && !delta.isBlank()) {
-                                        emitter.send(SseEmitter.event().name("message").data(delta));
-                                    }
-                                } catch (Exception e) {
-                                    log.error("流式对话发送失败", e);
-                                    dispose(disposableRef);
-                                    emitter.completeWithError(e);
-                                }
-                            },
-                            emitter::completeWithError,
-                            emitter::complete
-                    );
+            Disposable disposable = hasWorkflow(requestDTO)
+                    ? subscribeWorkflowTextStream(requestDTO, userId, sessionId, emitter, disposableRef)
+                    : subscribeAgentEventStream(requestDTO, userId, sessionId, emitter, disposableRef);
             disposableRef.set(disposable);
             emitter.onCompletion(() -> dispose(disposableRef));
             emitter.onTimeout(() -> dispose(disposableRef));
@@ -186,6 +180,54 @@ public class AgentServiceController implements IAgentService {
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    /**
+     * 订阅工作流文本流；参数是请求、用户、会话、SSE 和订阅引用；返回订阅句柄。
+     */
+    private Disposable subscribeWorkflowTextStream(ChatRequestDTO requestDTO,
+                                                   String userId,
+                                                   String sessionId,
+                                                   SseEmitter emitter,
+                                                   AtomicReference<Disposable> disposableRef) {
+        return chatService.handleWorkflowMessageTextStream(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId, sessionId, requestDTO.getMessage())
+                .subscribe(
+                        content -> sendMessage(emitter, disposableRef, content),
+                        emitter::completeWithError,
+                        emitter::complete
+                );
+    }
+
+    /**
+     * 订阅普通 Agent 事件流；参数是请求、用户、会话、SSE 和订阅引用；返回订阅句柄。
+     */
+    private Disposable subscribeAgentEventStream(ChatRequestDTO requestDTO,
+                                                 String userId,
+                                                 String sessionId,
+                                                 SseEmitter emitter,
+                                                 AtomicReference<Disposable> disposableRef) {
+        AtomicReference<String> lastContentRef = new AtomicReference<>("");
+        return chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
+                .subscribe(
+                        event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
+                        emitter::completeWithError,
+                        emitter::complete
+                );
+    }
+
+    /**
+     * 发送 SSE 消息；参数是 SSE、订阅引用和内容；无返回值。
+     */
+    private void sendMessage(SseEmitter emitter, AtomicReference<Disposable> disposableRef, String content) {
+        try {
+            if (content != null && !content.isBlank()) {
+                emitter.send(SseEmitter.event().name("message").data(content));
+            }
+        } catch (Exception e) {
+            log.error("流式对话发送失败", e);
+            dispose(disposableRef);
+            emitter.completeWithError(e);
+        }
     }
 
     /**
@@ -210,6 +252,20 @@ public class AgentServiceController implements IAgentService {
     private String trustedUserId(String requestUserId) {
         String userId = TenantContextHolder.getUserId();
         return userId == null || userId.isBlank() ? requestUserId : userId;
+    }
+
+    /**
+     * 判断是否使用数据库工作流；参数是聊天请求；返回是否包含工作流ID。
+     */
+    private boolean hasWorkflow(ChatRequestDTO requestDTO) {
+        return requestDTO != null && requestDTO.getWorkflowId() != null && !requestDTO.getWorkflowId().isBlank();
+    }
+
+    /**
+     * 判断是否使用数据库工作流；参数是创建会话请求；返回是否包含工作流ID。
+     */
+    private boolean hasWorkflow(CreateSessionRequestDTO requestDTO) {
+        return requestDTO != null && requestDTO.getWorkflowId() != null && !requestDTO.getWorkflowId().isBlank();
     }
 
     /**

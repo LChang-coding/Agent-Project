@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentWorkflowDao">
+
+    <resultMap id="AgentWorkflowMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="visibility" property="visibility"/>
+        <result column="workflow_id" property="workflowId"/>
+        <result column="workflow_name" property="workflowName"/>
+        <result column="description" property="description"/>
+        <result column="status" property="status"/>
+        <result column="default_model_code" property="defaultModelCode"/>
+        <result column="current_version" property="currentVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="AgentWorkflowColumns">
+        id, tenant_id, owner_user_id, visibility, workflow_id, workflow_name, description, status, default_model_code, current_version, published_version, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO agent_workflow (tenant_id, owner_user_id, visibility, workflow_id, workflow_name, description, status, default_model_code, current_version, published_version, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{workflowId}, #{workflowName}, #{description}, #{status}, #{defaultModelCode}, #{currentVersion}, #{publishedVersion}, #{metadata})
+    </insert>
+
+    <update id="updateByWorkflowId" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowPO">
+        UPDATE agent_workflow
+        SET owner_user_id = #{ownerUserId},
+            visibility = #{visibility},
+            workflow_name = #{workflowName},
+            description = #{description},
+            status = #{status},
+            default_model_code = #{defaultModelCode},
+            current_version = #{currentVersion},
+            published_version = #{publishedVersion},
+            metadata = #{metadata}
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND deleted = 0
+    </update>
+
+    <select id="queryByWorkflowId" resultMap="AgentWorkflowMap">
+        SELECT <include refid="AgentWorkflowColumns"/>
+        FROM agent_workflow
+        WHERE tenant_id = #{tenantId}
+          AND workflow_id = #{workflowId}
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryListByTenantId" resultMap="AgentWorkflowMap">
+        SELECT <include refid="AgentWorkflowColumns"/>
+        FROM agent_workflow
+        WHERE tenant_id = #{tenantId}
+          AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryListByOwnerUserId" resultMap="AgentWorkflowMap">
+        SELECT <include refid="AgentWorkflowColumns"/>
+        FROM agent_workflow
+        WHERE owner_user_id = #{ownerUserId}
+          AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+</mapper>

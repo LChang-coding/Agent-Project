@@ -8,6 +8,7 @@ public enum AiLogDomain {
     MODEL("model"),
     DB("db"),
     AUTH("auth"),
+    WORKFLOW("workflow"),
     REDIS("redis"),
     RAG("rag"),
     OSS("oss"),

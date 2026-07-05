@@ -13,6 +13,7 @@ public final class AiLog {
     private static final ModelLog MODEL_LOG = new ModelLog();
     private static final DbLog DB_LOG = new DbLog();
     private static final AuthLog AUTH_LOG = new AuthLog();
+    private static final WorkflowLog WORKFLOW_LOG = new WorkflowLog();
     private static final RedisLog REDIS_LOG = new RedisLog();
     private static final RagLog RAG_LOG = new RagLog();
     private static final OssLog OSS_LOG = new OssLog();
@@ -78,6 +79,13 @@ public final class AiLog {
      */
     public static AuthLog auth() {
         return AUTH_LOG;
+    }
+
+    /**
+     * 获取工作流日志工具；无参数；返回工作流日志构造器。
+     */
+    public static WorkflowLog workflow() {
+        return WORKFLOW_LOG;
     }
 
     /**

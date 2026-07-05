@@ -29,6 +29,14 @@ public enum AiLogEvent {
     AUTH_PROFILE_UPDATED(AiLogDomain.AUTH, "auth_profile_updated"),
     AUTH_PROFILE_UPDATE_FAILED(AiLogDomain.AUTH, "auth_profile_update_failed"),
 
+    WORKFLOW_CREATED(AiLogDomain.WORKFLOW, "workflow_created"),
+    WORKFLOW_DRAFT_SAVED(AiLogDomain.WORKFLOW, "workflow_draft_saved"),
+    WORKFLOW_PUBLISHED(AiLogDomain.WORKFLOW, "workflow_published"),
+    WORKFLOW_RUNTIME_LOADED(AiLogDomain.WORKFLOW, "workflow_runtime_loaded"),
+    WORKFLOW_DAG_COMPLETED(AiLogDomain.WORKFLOW, "workflow_dag_completed"),
+    WORKFLOW_RUN_FAILED(AiLogDomain.WORKFLOW, "workflow_run_failed"),
+    MODEL_ROUTED(AiLogDomain.WORKFLOW, "model_routed"),
+
     REDIS_COMMAND(AiLogDomain.REDIS, "redis_command"),
     REDIS_ERROR(AiLogDomain.REDIS, "redis_error"),
 
