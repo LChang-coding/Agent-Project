@@ -160,11 +160,15 @@ public class AgentServiceController implements IAgentService {
             emitter.send(SseEmitter.event().name("session").data(sessionId));
 
             AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+            AtomicReference<String> lastContentRef = new AtomicReference<>("");
             Disposable disposable = chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
                     .subscribe(
                             event -> {
                                 try {
-                                    emitter.send(SseEmitter.event().data(event.stringifyContent()));
+                                    String delta = streamDelta(lastContentRef, event.stringifyContent());
+                                    if (delta != null && !delta.isBlank()) {
+                                        emitter.send(SseEmitter.event().name("message").data(delta));
+                                    }
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
                                     dispose(disposableRef);
@@ -182,6 +186,25 @@ public class AgentServiceController implements IAgentService {
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    /**
+     * 计算流式增量；参数是上一段内容引用和当前事件内容；返回本次应发送的文本。
+     */
+    private String streamDelta(AtomicReference<String> lastContentRef, String currentContent) {
+        if (currentContent == null || currentContent.isBlank()) {
+            return "";
+        }
+        String lastContent = lastContentRef.get();
+        if (currentContent.equals(lastContent)) {
+            return "";
+        }
+        if (lastContent != null && !lastContent.isBlank() && currentContent.startsWith(lastContent)) {
+            lastContentRef.set(currentContent);
+            return currentContent.substring(lastContent.length());
+        }
+        lastContentRef.set(lastContent == null ? currentContent : lastContent + currentContent);
+        return currentContent;
     }
 
     private String trustedUserId(String requestUserId) {

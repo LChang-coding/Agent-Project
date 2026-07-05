@@ -330,9 +330,19 @@ public class ChatService implements IChatService {
      * 追加流式内容；参数是内容缓冲和分片；无返回值。
      */
     private void appendContent(StringBuilder assistantContent, String content) {
-        if (content != null && !content.isBlank()) {
-            assistantContent.append(content);
+        if (content == null || content.isBlank()) {
+            return;
         }
+
+        String current = assistantContent.toString();
+        if (content.equals(current)) {
+            return;
+        }
+        if (!current.isBlank() && content.startsWith(current)) {
+            assistantContent.append(content.substring(current.length()));
+            return;
+        }
+        assistantContent.append(content);
     }
 
     /**
