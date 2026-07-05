@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
+import io.reactivex.rxjava3.disposables.Disposable;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -121,6 +123,7 @@ public class AgentServiceController implements IAgentService {
             List<String> messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
+            responseDTO.setSessionId(sessionId);
             responseDTO.setContent(String.join("\n", messages));
 
             return Response.<ChatResponseDTO>builder()
@@ -154,20 +157,26 @@ public class AgentServiceController implements IAgentService {
             if (sessionId == null || sessionId.isEmpty()) {
                 sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
             }
+            emitter.send(SseEmitter.event().name("session").data(sessionId));
 
-            chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
+            AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+            Disposable disposable = chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
                     .subscribe(
                             event -> {
                                 try {
                                     emitter.send(SseEmitter.event().data(event.stringifyContent()));
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
+                                    dispose(disposableRef);
                                     emitter.completeWithError(e);
                                 }
                             },
                             emitter::completeWithError,
                             emitter::complete
                     );
+            disposableRef.set(disposable);
+            emitter.onCompletion(() -> dispose(disposableRef));
+            emitter.onTimeout(() -> dispose(disposableRef));
         } catch (Exception e) {
             log.error("流式对话失败", e);
             emitter.completeWithError(e);
@@ -178,6 +187,16 @@ public class AgentServiceController implements IAgentService {
     private String trustedUserId(String requestUserId) {
         String userId = TenantContextHolder.getUserId();
         return userId == null || userId.isBlank() ? requestUserId : userId;
+    }
+
+    /**
+     * 释放流式订阅；参数是订阅引用；无返回值。
+     */
+    private void dispose(AtomicReference<Disposable> disposableRef) {
+        Disposable disposable = disposableRef.get();
+        if (disposable != null && !disposable.isDisposed()) {
+            disposable.dispose();
+        }
     }
 
 }

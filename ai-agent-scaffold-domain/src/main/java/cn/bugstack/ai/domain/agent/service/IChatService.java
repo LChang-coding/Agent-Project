@@ -14,16 +14,34 @@ import java.util.List;
  */
 public interface IChatService {
 
+    /**
+     * 查询 Agent 配置；无参数；返回当前可用 Agent 列表。
+     */
     List<AiAgentConfigTableVO.Agent> queryAiAgentConfigList();
 
+    /**
+     * 创建会话；参数是 Agent ID 和用户ID；返回平台会话ID。
+     */
     String createSession(String agentId, String userId);
 
+    /**
+     * 发送消息；参数是 Agent ID、用户ID和消息；返回模型回复列表。
+     */
     List<String> handleMessage(String agentId, String userId, String message);
 
+    /**
+     * 发送消息；参数是 Agent ID、用户ID、会话ID和消息；返回模型回复列表。
+     */
     List<String> handleMessage(String agentId, String userId, String sessionId, String message);
 
+    /**
+     * 流式发送消息；参数是 Agent ID、用户ID、会话ID和消息；返回事件流。
+     */
     Flowable<Event> handleMessageStream(String agentId, String userId, String sessionId, String message);
 
+    /**
+     * 发送复合消息；参数是聊天命令；返回模型回复列表。
+     */
     List<String> handleMessage(ChatCommandEntity chatCommandEntity);
 
 }

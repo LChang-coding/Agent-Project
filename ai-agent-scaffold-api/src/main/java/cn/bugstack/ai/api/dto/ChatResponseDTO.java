@@ -5,6 +5,8 @@ import lombok.Data;
 @Data
 public class ChatResponseDTO {
 
+    private String sessionId;
+
     private String content;
 
 }
