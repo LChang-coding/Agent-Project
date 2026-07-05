@@ -4,6 +4,7 @@ import cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -44,6 +45,44 @@ public interface IChatSessionDao {
      * @return 会话持久化对象
      */
     ChatSessionPO queryBySessionId(@Param("sessionId") String sessionId);
+
+    /**
+     * 按租户、用户和会话ID查询会话记录。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @return 会话持久化对象
+     */
+    ChatSessionPO queryByTenantUserSession(@Param("tenantId") String tenantId,
+                                           @Param("userId") String userId,
+                                           @Param("sessionId") String sessionId);
+
+    /**
+     * 按租户、用户和会话ID锁定会话记录。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @return 会话持久化对象
+     */
+    ChatSessionPO lockByTenantUserSession(@Param("tenantId") String tenantId,
+                                          @Param("userId") String userId,
+                                          @Param("sessionId") String sessionId);
+
+    /**
+     * 更新会话最后消息时间。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @param lastMessageTime 最后消息时间
+     * @return 影响行数
+     */
+    int updateLastMessageTime(@Param("tenantId") String tenantId,
+                              @Param("userId") String userId,
+                              @Param("sessionId") String sessionId,
+                              @Param("lastMessageTime") LocalDateTime lastMessageTime);
 
     /**
      * 按租户业务ID查询会话列表。

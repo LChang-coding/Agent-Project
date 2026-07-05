@@ -68,4 +68,16 @@ public interface IChatMessageDao {
      * @return 消息持久化对象列表
      */
     List<ChatMessagePO> queryListBySessionId(@Param("sessionId") String sessionId);
+
+    /**
+     * 查询会话内最大消息序号。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @return 最大消息序号
+     */
+    Integer queryMaxSequenceNo(@Param("tenantId") String tenantId,
+                               @Param("userId") String userId,
+                               @Param("sessionId") String sessionId);
 }

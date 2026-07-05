@@ -46,6 +46,57 @@
         WHERE session_id = #{sessionId} AND deleted = 0
     </select>
 
+    <select id="queryByTenantUserSession" resultMap="ChatSessionMap">
+        SELECT <include refid="ChatSessionColumns"/>
+        FROM chat_session
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <select id="lockByTenantUserSession" resultMap="ChatSessionMap">
+        SELECT <include refid="ChatSessionColumns"/>
+        FROM chat_session
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <update id="updateLastMessageTime">
+        UPDATE chat_session
+        SET last_message_time = #{lastMessageTime}
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </update>
+
     <select id="queryListByTenantId" resultMap="ChatSessionMap">
         SELECT <include refid="ChatSessionColumns"/>
         FROM chat_session
