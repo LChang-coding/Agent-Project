@@ -17,6 +17,7 @@ public final class AiLog {
     private static final RedisLog REDIS_LOG = new RedisLog();
     private static final RagLog RAG_LOG = new RagLog();
     private static final OssLog OSS_LOG = new OssLog();
+    private static final ToolLog TOOL_LOG = new ToolLog();
     private static final SchedulerLog SCHEDULER_LOG = new SchedulerLog();
 
     /**
@@ -107,6 +108,13 @@ public final class AiLog {
      */
     public static OssLog oss() {
         return OSS_LOG;
+    }
+
+    /**
+     * 获取工具日志工具；无参数；返回工具日志构造器。
+     */
+    public static ToolLog tool() {
+        return TOOL_LOG;
     }
 
     /**

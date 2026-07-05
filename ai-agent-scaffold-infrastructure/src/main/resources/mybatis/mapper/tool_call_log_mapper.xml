@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IToolCallLogDao">
+
+    <resultMap id="ToolCallLogMap" type="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="workflow_id" property="workflowId"/>
+        <result column="tool_type" property="toolType"/>
+        <result column="tool_id" property="toolId"/>
+        <result column="tool_name" property="toolName"/>
+        <result column="version" property="version"/>
+        <result column="invocation_id" property="invocationId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="input_json" property="inputJson"/>
+        <result column="output_json" property="outputJson"/>
+        <result column="status" property="status"/>
+        <result column="error_type" property="errorType"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="cost_ms" property="costMs"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="ToolCallLogColumns">
+        id, tenant_id, user_id, session_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, trace_id, input_json, output_json, status, error_type, error_message, cost_ms, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tool_call_log (tenant_id, user_id, session_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, trace_id, input_json, output_json, status, error_type, error_message, cost_ms, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO">
+        UPDATE tool_call_log
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, workflow_id = #{workflowId}, tool_type = #{toolType}, tool_id = #{toolId}, tool_name = #{toolName}, version = #{version}, invocation_id = #{invocationId}, trace_id = #{traceId}, input_json = #{inputJson}, output_json = #{outputJson}, status = #{status}, error_type = #{errorType}, error_message = #{errorMessage}, cost_ms = #{costMs}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryListBySessionId" resultMap="ToolCallLogMap">
+        SELECT <include refid="ToolCallLogColumns"/>
+        FROM tool_call_log
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        ORDER BY id DESC
+        LIMIT 100
+    </select>
+
+</mapper>

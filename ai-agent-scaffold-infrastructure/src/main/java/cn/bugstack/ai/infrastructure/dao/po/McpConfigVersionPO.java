@@ -6,14 +6,15 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
+/**
+ * MCP 配置版本持久化对象。
+ */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-public class McpServerConfigPO extends BasePO {
+public class McpConfigVersionPO extends BasePO {
 
     /**
      * 租户业务ID，个体户可为空
@@ -21,14 +22,9 @@ public class McpServerConfigPO extends BasePO {
     private String tenantId;
 
     /**
-     * MCP 拥有者用户ID
+     * 版本发布用户ID
      */
     private String ownerUserId;
-
-    /**
-     * 可见范围：private/tenant_public
-     */
-    private String visibility;
 
     /**
      * MCP 配置业务ID
@@ -36,17 +32,22 @@ public class McpServerConfigPO extends BasePO {
     private String mcpId;
 
     /**
-     * MCP 名称
+     * MCP 版本业务ID
      */
-    private String mcpName;
+    private String versionId;
 
     /**
-     * 传输类型：stdio/sse/http
+     * 版本号
+     */
+    private String version;
+
+    /**
+     * 传输类型：sse/http/stdio/local
      */
     private String transportType;
 
     /**
-     * 远程 MCP 地址，stdio 类型可为空
+     * 远程 MCP 地址
      */
     private String endpoint;
 
@@ -61,29 +62,14 @@ public class McpServerConfigPO extends BasePO {
     private String args;
 
     /**
-     * 运行环境变量，敏感值应加密或引用 user_secret
+     * 运行环境变量或 user_secret 引用
      */
     private String env;
 
     /**
-     * MCP 描述
+     * 最近一次测试得到的工具 Schema
      */
-    private String description;
-
-    /**
-     * 当前草稿版本号
-     */
-    private String currentVersion;
-
-    /**
-     * 当前发布版本号
-     */
-    private String publishedVersion;
-
-    /**
-     * 当前生效版本业务ID
-     */
-    private String activeVersionId;
+    private String toolSchemaJson;
 
     /**
      * 测试状态：untested/success/failed
@@ -91,17 +77,12 @@ public class McpServerConfigPO extends BasePO {
     private String testStatus;
 
     /**
-     * 最近一次测试结果说明
+     * 测试结果说明
      */
     private String testMessage;
 
     /**
-     * 最近一次测试时间
-     */
-    private LocalDateTime lastTestTime;
-
-    /**
-     * MCP 状态：draft/active/disabled/archived/pending_review
+     * 版本状态：draft/active/disabled/archived
      */
     private String status;
 

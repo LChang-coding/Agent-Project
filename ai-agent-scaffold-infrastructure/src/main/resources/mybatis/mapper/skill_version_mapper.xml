@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.ISkillVersionDao">
+
+    <resultMap id="SkillVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.SkillVersionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="skill_id" property="skillId"/>
+        <result column="version_id" property="versionId"/>
+        <result column="version" property="version"/>
+        <result column="asset_id" property="assetId"/>
+        <result column="bucket" property="bucket"/>
+        <result column="object_key" property="objectKey"/>
+        <result column="file_name" property="fileName"/>
+        <result column="sha256" property="sha256"/>
+        <result column="size_bytes" property="sizeBytes"/>
+        <result column="manifest_json" property="manifestJson"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="SkillVersionColumns">
+        id, tenant_id, owner_user_id, skill_id, version_id, version, asset_id, bucket, object_key, file_name, sha256, size_bytes, manifest_json, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillVersionPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO skill_version (tenant_id, owner_user_id, skill_id, version_id, version, asset_id, bucket, object_key, file_name, sha256, size_bytes, manifest_json, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{skillId}, #{versionId}, #{version}, #{assetId}, #{bucket}, #{objectKey}, #{fileName}, #{sha256}, COALESCE(#{sizeBytes}, 0), #{manifestJson}, COALESCE(#{status}, 'draft'), #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillVersionPO">
+        UPDATE skill_version
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, skill_id = #{skillId}, version_id = #{versionId}, version = #{version}, asset_id = #{assetId}, bucket = #{bucket}, object_key = #{objectKey}, file_name = #{fileName}, sha256 = #{sha256}, size_bytes = #{sizeBytes}, manifest_json = #{manifestJson}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryByVersionId" resultMap="SkillVersionMap">
+        SELECT <include refid="SkillVersionColumns"/>
+        FROM skill_version
+        WHERE version_id = #{versionId} AND deleted = 0
+    </select>
+
+    <select id="queryBySkillIdAndVersion" resultMap="SkillVersionMap">
+        SELECT <include refid="SkillVersionColumns"/>
+        FROM skill_version
+        WHERE skill_id = #{skillId} AND version = #{version} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryListBySkillId" resultMap="SkillVersionMap">
+        SELECT <include refid="SkillVersionColumns"/>
+        FROM skill_version
+        WHERE skill_id = #{skillId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryActiveBySkillId" resultMap="SkillVersionMap">
+        SELECT <include refid="SkillVersionColumns"/>
+        FROM skill_version
+        WHERE skill_id = #{skillId} AND status = 'active' AND deleted = 0
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

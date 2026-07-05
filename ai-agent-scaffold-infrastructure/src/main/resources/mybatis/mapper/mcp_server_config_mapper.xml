@@ -15,6 +15,12 @@
         <result column="args" property="args"/>
         <result column="env" property="env"/>
         <result column="description" property="description"/>
+        <result column="current_version" property="currentVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="active_version_id" property="activeVersionId"/>
+        <result column="test_status" property="testStatus"/>
+        <result column="test_message" property="testMessage"/>
+        <result column="last_test_time" property="lastTestTime"/>
         <result column="status" property="status"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
@@ -23,17 +29,17 @@
     </resultMap>
 
     <sql id="McpServerConfigColumns">
-        id, tenant_id, owner_user_id, visibility, mcp_id, mcp_name, transport_type, endpoint, command, args, env, description, status, metadata, create_time, update_time, deleted
+        id, tenant_id, owner_user_id, visibility, mcp_id, mcp_name, transport_type, endpoint, command, args, env, description, current_version, published_version, active_version_id, test_status, test_message, last_test_time, status, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.McpServerConfigPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO mcp_server_config (tenant_id, owner_user_id, visibility, mcp_id, mcp_name, transport_type, endpoint, command, args, env, description, status, metadata)
-        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{mcpId}, #{mcpName}, #{transportType}, #{endpoint}, #{command}, #{args}, #{env}, #{description}, #{status}, #{metadata})
+        INSERT INTO mcp_server_config (tenant_id, owner_user_id, visibility, mcp_id, mcp_name, transport_type, endpoint, command, args, env, description, current_version, published_version, active_version_id, test_status, test_message, last_test_time, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{mcpId}, #{mcpName}, #{transportType}, #{endpoint}, #{command}, #{args}, #{env}, #{description}, COALESCE(#{currentVersion}, '1.0.0'), #{publishedVersion}, #{activeVersionId}, COALESCE(#{testStatus}, 'untested'), #{testMessage}, #{lastTestTime}, COALESCE(#{status}, 'draft'), #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.McpServerConfigPO">
         UPDATE mcp_server_config
-        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, mcp_id = #{mcpId}, mcp_name = #{mcpName}, transport_type = #{transportType}, endpoint = #{endpoint}, command = #{command}, args = #{args}, env = #{env}, description = #{description}, status = #{status}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, mcp_id = #{mcpId}, mcp_name = #{mcpName}, transport_type = #{transportType}, endpoint = #{endpoint}, command = #{command}, args = #{args}, env = #{env}, description = #{description}, current_version = #{currentVersion}, published_version = #{publishedVersion}, active_version_id = #{activeVersionId}, test_status = #{testStatus}, test_message = #{testMessage}, last_test_time = #{lastTestTime}, status = #{status}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 

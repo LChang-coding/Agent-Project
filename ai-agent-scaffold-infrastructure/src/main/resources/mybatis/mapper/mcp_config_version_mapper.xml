@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IMcpConfigVersionDao">
+
+    <resultMap id="McpConfigVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.McpConfigVersionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="mcp_id" property="mcpId"/>
+        <result column="version_id" property="versionId"/>
+        <result column="version" property="version"/>
+        <result column="transport_type" property="transportType"/>
+        <result column="endpoint" property="endpoint"/>
+        <result column="command" property="command"/>
+        <result column="args" property="args"/>
+        <result column="env" property="env"/>
+        <result column="tool_schema_json" property="toolSchemaJson"/>
+        <result column="test_status" property="testStatus"/>
+        <result column="test_message" property="testMessage"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="McpConfigVersionColumns">
+        id, tenant_id, owner_user_id, mcp_id, version_id, version, transport_type, endpoint, command, args, env, tool_schema_json, test_status, test_message, status, metadata, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.McpConfigVersionPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO mcp_config_version (tenant_id, owner_user_id, mcp_id, version_id, version, transport_type, endpoint, command, args, env, tool_schema_json, test_status, test_message, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{mcpId}, #{versionId}, #{version}, #{transportType}, #{endpoint}, #{command}, #{args}, #{env}, #{toolSchemaJson}, COALESCE(#{testStatus}, 'untested'), #{testMessage}, COALESCE(#{status}, 'draft'), #{metadata})
+    </insert>
+
+    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.McpConfigVersionPO">
+        UPDATE mcp_config_version
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, mcp_id = #{mcpId}, version_id = #{versionId}, version = #{version}, transport_type = #{transportType}, endpoint = #{endpoint}, command = #{command}, args = #{args}, env = #{env}, tool_schema_json = #{toolSchemaJson}, test_status = #{testStatus}, test_message = #{testMessage}, status = #{status}, metadata = #{metadata}
+        WHERE id = #{id} AND deleted = 0
+    </update>
+
+    <select id="queryByVersionId" resultMap="McpConfigVersionMap">
+        SELECT <include refid="McpConfigVersionColumns"/>
+        FROM mcp_config_version
+        WHERE version_id = #{versionId} AND deleted = 0
+    </select>
+
+    <select id="queryByMcpIdAndVersion" resultMap="McpConfigVersionMap">
+        SELECT <include refid="McpConfigVersionColumns"/>
+        FROM mcp_config_version
+        WHERE mcp_id = #{mcpId} AND version = #{version} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryListByMcpId" resultMap="McpConfigVersionMap">
+        SELECT <include refid="McpConfigVersionColumns"/>
+        FROM mcp_config_version
+        WHERE mcp_id = #{mcpId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
+    <select id="queryActiveByMcpId" resultMap="McpConfigVersionMap">
+        SELECT <include refid="McpConfigVersionColumns"/>
+        FROM mcp_config_version
+        WHERE mcp_id = #{mcpId} AND status = 'active' AND deleted = 0
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

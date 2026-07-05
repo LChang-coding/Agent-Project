@@ -12,6 +12,7 @@ public enum AiLogDomain {
     REDIS("redis"),
     RAG("rag"),
     OSS("oss"),
+    TOOL("tool"),
     SCHEDULER("scheduler");
 
     private final String code;

@@ -64,6 +64,21 @@ public class SkillDefinitionPO extends BasePO {
     private String version;
 
     /**
+     * 当前草稿版本号
+     */
+    private String currentVersion;
+
+    /**
+     * 当前发布版本号
+     */
+    private String publishedVersion;
+
+    /**
+     * 当前生效版本业务ID
+     */
+    private String activeVersionId;
+
+    /**
      * Skill 状态：draft/active/disabled/archived/pending_review
      */
     private String status;

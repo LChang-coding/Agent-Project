@@ -47,6 +47,12 @@ public enum AiLogEvent {
     OSS_DOWNLOAD(AiLogDomain.OSS, "oss_download"),
     OSS_ERROR(AiLogDomain.OSS, "oss_error"),
 
+    TOOL_SKILL_PUBLISHED(AiLogDomain.TOOL, "tool_skill_published"),
+    TOOL_MCP_PUBLISHED(AiLogDomain.TOOL, "tool_mcp_published"),
+    TOOL_CALL_STARTED(AiLogDomain.TOOL, "tool_call_started"),
+    TOOL_CALL_SUCCESS(AiLogDomain.TOOL, "tool_call_success"),
+    TOOL_CALL_FAILED(AiLogDomain.TOOL, "tool_call_failed"),
+
     SCHEDULER_DONE(AiLogDomain.SCHEDULER, "scheduler_done"),
     SCHEDULER_ERROR(AiLogDomain.SCHEDULER, "scheduler_error");
 

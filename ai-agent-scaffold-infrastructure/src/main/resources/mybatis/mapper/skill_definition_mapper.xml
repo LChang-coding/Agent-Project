@@ -14,6 +14,9 @@
         <result column="source_type" property="sourceType"/>
         <result column="source_uri" property="sourceUri"/>
         <result column="version" property="version"/>
+        <result column="current_version" property="currentVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="active_version_id" property="activeVersionId"/>
         <result column="status" property="status"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
@@ -22,17 +25,17 @@
     </resultMap>
 
     <sql id="SkillDefinitionColumns">
-        id, tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, status, metadata, create_time, update_time, deleted
+        id, tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, current_version, published_version, active_version_id, status, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO skill_definition (tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, status, metadata)
-        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{skillId}, #{skillName}, #{skillCode}, #{description}, #{sourceType}, #{sourceUri}, #{version}, #{status}, #{metadata})
+        INSERT INTO skill_definition (tenant_id, owner_user_id, visibility, skill_id, skill_name, skill_code, description, source_type, source_uri, version, current_version, published_version, active_version_id, status, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{skillId}, #{skillName}, #{skillCode}, #{description}, #{sourceType}, #{sourceUri}, COALESCE(#{version}, '1.0.0'), COALESCE(#{currentVersion}, #{version}, '1.0.0'), #{publishedVersion}, #{activeVersionId}, COALESCE(#{status}, 'draft'), #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO">
         UPDATE skill_definition
-        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, skill_id = #{skillId}, skill_name = #{skillName}, skill_code = #{skillCode}, description = #{description}, source_type = #{sourceType}, source_uri = #{sourceUri}, version = #{version}, status = #{status}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, skill_id = #{skillId}, skill_name = #{skillName}, skill_code = #{skillCode}, description = #{description}, source_type = #{sourceType}, source_uri = #{sourceUri}, version = #{version}, current_version = #{currentVersion}, published_version = #{publishedVersion}, active_version_id = #{activeVersionId}, status = #{status}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
