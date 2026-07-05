@@ -124,6 +124,39 @@
 
         <div class="card">
           <div class="card__body">
+            <SectionHeader title="本轮可用工具" description="Agent 每轮会自动加载当前用户有权限的 Skill/MCP，不需要在工作流节点里固定绑定。" :level="2" />
+            <div class="tool-list">
+              <div v-for="tool in toolStore.catalog" :key="`${tool.toolType}-${tool.toolId}`" class="tool-item">
+                <strong>{{ tool.toolName }}</strong>
+                <span>{{ tool.toolType }} · {{ tool.version || '未发布' }} · {{ visibilityLabel(tool.visibility) }}</span>
+              </div>
+              <div v-if="toolStore.catalog.length === 0" class="session-empty">暂无可用工具。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__body">
+            <SectionHeader title="工具调用记录" description="从 tool_call_log 读取当前 session 的调用结果、耗时和 traceId。" :level="2" />
+            <div class="tool-list">
+              <div v-for="call in toolStore.calls" :key="`${call.toolId}-${call.invocationId}-${call.createTime}`" class="tool-call">
+                <div>
+                  <strong>{{ call.toolName }}</strong>
+                  <span>{{ call.toolType }} · {{ call.costMs || 0 }}ms</span>
+                </div>
+                <span :class="['badge', call.status === 'success' ? 'badge--green' : 'badge--red']">{{ call.status }}</span>
+                <code>{{ call.traceId || '--' }}</code>
+                <small v-if="call.errorMessage">{{ call.errorMessage }}</small>
+              </div>
+              <div v-if="toolStore.calls.length === 0" class="session-empty">
+                当前会话还没有工具调用记录。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__body">
             <SectionHeader title="上下文窗口" description="第一版先展示规划位，后续接 context manager 实际 token 统计。" :level="2" />
             <div class="context-meter">
               <div>
@@ -161,14 +194,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import FeaturePlaceholder from '@/components/common/FeaturePlaceholder.vue';
 import SectionHeader from '@/components/common/SectionHeader.vue';
 import { useChatStore } from '@/stores/chat';
+import { useToolStore } from '@/stores/tools';
 import type { ChatMessage } from '@/types/api';
 
 const chatStore = useChatStore();
+const toolStore = useToolStore();
 const draft = ref('');
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const visibleSessions = computed(() => {
@@ -184,7 +219,18 @@ onMounted(async () => {
   if (chatStore.agents.length === 0) {
     await chatStore.loadAgents();
   }
+  await toolStore.loadCatalog();
+  if (chatStore.sessionId) {
+    await toolStore.loadCalls(chatStore.sessionId);
+  }
 });
+
+watch(
+  () => chatStore.sessionId,
+  async (sessionId) => {
+    await toolStore.loadCalls(sessionId);
+  },
+);
 
 /**
  * 创建新会话；无参数；成功后把 sessionId 写入页面状态。
@@ -232,6 +278,8 @@ async function send() {
   }
   draft.value = '';
   await chatStore.send(message);
+  await toolStore.loadCatalog();
+  await toolStore.loadCalls(chatStore.sessionId);
 }
 
 /**
@@ -251,6 +299,13 @@ function roleLabel(role: ChatMessage['role']) {
     system: '系统',
   };
   return labels[role];
+}
+
+/**
+ * 可见范围展示；参数是范围编码；返回中文展示。
+ */
+function visibilityLabel(value: string) {
+  return value === 'tenant_public' ? '企业公共' : '个人私有';
 }
 </script>
 
@@ -442,10 +497,42 @@ function roleLabel(role: ChatMessage['role']) {
 }
 
 .session-item span,
-.session-empty {
+.session-empty,
+.tool-item span,
+.tool-call span,
+.tool-call small {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.tool-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.tool-item,
+.tool-call {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-muted);
+}
+
+.tool-call {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.tool-call code {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .context-meter,

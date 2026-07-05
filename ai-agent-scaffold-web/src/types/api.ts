@@ -195,3 +195,92 @@ export interface WorkflowSaveDraftRequest {
   visibility?: string;
   graph: WorkflowGraph;
 }
+
+export interface SkillPackageUploadResponse {
+  assetId: string;
+  bucket: string;
+  objectKey: string;
+  fileName: string;
+  sha256: string;
+  sizeBytes: number;
+}
+
+export interface SkillCreateRequest {
+  skillName: string;
+  skillCode?: string;
+  description?: string;
+  visibility?: 'private' | 'tenant_public';
+  version?: string;
+  assetId: string;
+}
+
+export interface SkillVersionCreateRequest {
+  version?: string;
+  assetId: string;
+}
+
+export interface SkillDefinition {
+  skillId: string;
+  skillName: string;
+  skillCode: string;
+  description?: string;
+  visibility: string;
+  currentVersion?: string;
+  publishedVersion?: string;
+  status: string;
+}
+
+export interface McpCreateRequest {
+  mcpName: string;
+  description?: string;
+  visibility?: 'private' | 'tenant_public';
+  version?: string;
+  transportType: 'http' | 'sse' | 'stdio' | 'local';
+  endpoint?: string;
+  command?: string;
+  args?: string;
+  env?: string;
+}
+
+export interface McpDefinition {
+  mcpId: string;
+  mcpName: string;
+  description?: string;
+  visibility: string;
+  transportType: string;
+  endpoint?: string;
+  currentVersion?: string;
+  publishedVersion?: string;
+  testStatus?: string;
+  testMessage?: string;
+  lastTestTime?: string;
+  status: string;
+}
+
+export interface ToolPublishRequest {
+  version?: string;
+}
+
+export interface ToolCatalogItem {
+  toolType: 'skill' | 'mcp';
+  toolId: string;
+  toolName: string;
+  toolCode?: string;
+  description?: string;
+  version?: string;
+  visibility: string;
+}
+
+export interface ToolCallLog {
+  toolType: string;
+  toolId: string;
+  toolName: string;
+  version?: string;
+  invocationId?: string;
+  traceId?: string;
+  status: string;
+  errorType?: string;
+  errorMessage?: string;
+  costMs?: number;
+  createTime?: string;
+}

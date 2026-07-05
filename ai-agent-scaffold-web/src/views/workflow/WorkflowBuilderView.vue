@@ -156,7 +156,7 @@
 
       <aside class="node-panel card">
         <div class="card__body" v-if="activeNode">
-          <SectionHeader title="节点属性" description="节点级模型优先于工作流默认模型；MCP 和 Skill 先占位，后续库里有数据会自动显示。" :level="2" />
+          <SectionHeader title="节点属性" description="节点级模型优先于工作流默认模型；工具由 ToolGateway 按当前用户权限自动加载。" :level="2" />
           <div class="form-grid">
             <div class="field">
               <label>节点名称</label>
@@ -180,22 +180,14 @@
               <textarea v-model="activeNode.instruction" class="textarea" />
             </div>
             <div class="field">
-              <label>MCP 工具</label>
-              <select v-model="activeNode.mcpIds" class="select select--multi" multiple>
-                <option v-for="mcp in workflowStore.options.mcpServers" :key="mcp.value" :value="mcp.value">
-                  {{ mcp.label }}
-                </option>
-              </select>
-              <small v-if="workflowStore.options.mcpServers.length === 0">当前数据库暂无 MCP 配置，发布不会受影响。</small>
-            </div>
-            <div class="field">
-              <label>Skill 工具</label>
-              <select v-model="activeNode.skillIds" class="select select--multi" multiple>
-                <option v-for="skill in workflowStore.options.skills" :key="skill.value" :value="skill.value">
-                  {{ skill.label }}
-                </option>
-              </select>
-              <small v-if="workflowStore.options.skills.length === 0">当前数据库暂无 Skill 配置，后续录入后会自动出现在这里。</small>
+              <label>自动加载工具</label>
+              <div class="auto-tools">
+                <div v-for="tool in toolStore.catalog" :key="`${tool.toolType}-${tool.toolId}`" class="auto-tool">
+                  <strong>{{ tool.toolName }}</strong>
+                  <span>{{ tool.toolType }} · {{ tool.version || '未发布' }}</span>
+                </div>
+                <small v-if="toolStore.catalog.length === 0">当前没有已发布且有权限的工具；后续发布后无需重建工作流，下轮运行自动可见。</small>
+              </div>
             </div>
             <div class="field" v-if="hasSelfLoop(activeNode.nodeId)">
               <label>最大循环次数</label>
@@ -227,6 +219,7 @@ import {
   createDefaultWorkflowGraph,
   useWorkflowStore,
 } from '@/stores/workflow';
+import { useToolStore } from '@/stores/tools';
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode } from '@/types/api';
 
 interface DragState {
@@ -248,6 +241,7 @@ const NODE_HEIGHT = 150;
 const CANVAS_WIDTH = 1160;
 const CANVAS_HEIGHT = 660;
 const workflowStore = useWorkflowStore();
+const toolStore = useToolStore();
 const canvasRef = ref<HTMLElement | null>(null);
 const newWorkflowName = ref('企业智能体工作流');
 const workflowName = ref('');
@@ -285,7 +279,7 @@ watch(
 );
 
 onMounted(async () => {
-  await Promise.all([workflowStore.loadOptions(), workflowStore.loadWorkflows()]);
+  await Promise.all([workflowStore.loadOptions(), workflowStore.loadWorkflows(), toolStore.loadCatalog()]);
   if (workflowStore.activeWorkflowId) {
     await workflowStore.loadDetail(workflowStore.activeWorkflowId);
   }
@@ -302,7 +296,7 @@ onBeforeUnmount(() => {
  * 重新加载页面数据；无参数；刷新选项、列表和当前详情。
  */
 async function reload() {
-  await Promise.all([workflowStore.loadOptions(), workflowStore.loadWorkflows()]);
+  await Promise.all([workflowStore.loadOptions(), workflowStore.loadWorkflows(), toolStore.loadCatalog()]);
   if (workflowStore.activeWorkflowId) {
     await workflowStore.loadDetail(workflowStore.activeWorkflowId);
   }
@@ -744,12 +738,11 @@ function statusLabel(status: string) {
  * 工具摘要；参数是节点；返回工具数量说明。
  */
 function toolSummary(node: WorkflowNode) {
-  const mcpCount = node.mcpIds?.length || 0;
-  const skillCount = node.skillIds?.length || 0;
-  if (mcpCount === 0 && skillCount === 0) {
-    return '未绑定工具';
+  const legacyCount = (node.mcpIds?.length || 0) + (node.skillIds?.length || 0);
+  if (toolStore.catalog.length > 0) {
+    return `${toolStore.catalog.length} 个自动工具`;
   }
-  return `${mcpCount} MCP / ${skillCount} Skill`;
+  return legacyCount > 0 ? `${legacyCount} 个旧绑定` : '自动工具';
 }
 
 /**
@@ -1081,6 +1074,27 @@ function clamp(value: number, min: number, max: number) {
 .select--multi {
   min-height: 92px;
   padding: 10px 12px;
+}
+
+.auto-tools {
+  display: grid;
+  gap: 10px;
+}
+
+.auto-tool {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.auto-tool span,
+.auto-tools small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .textarea--compact {
