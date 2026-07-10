@@ -763,13 +763,13 @@ function clamp(value: number, min: number, max: number) {
 <style scoped>
 .workflow-page {
   display: grid;
-  gap: 22px;
+  gap: 16px;
 }
 
 .workflow-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 360px;
-  gap: 18px;
+  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -777,7 +777,7 @@ function clamp(value: number, min: number, max: number) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   font-weight: 900;
 }
 
@@ -787,23 +787,23 @@ function clamp(value: number, min: number, max: number) {
 
 .create-box {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .workflow-items {
   display: grid;
-  gap: 10px;
+  gap: 4px;
 }
 
 .workflow-item {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  padding: 14px;
+  padding: 10px;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 9px;
   background: var(--surface-muted);
   cursor: pointer;
 }
@@ -827,8 +827,8 @@ function clamp(value: number, min: number, max: number) {
 .workflow-toolbar {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 190px 210px;
-  gap: 14px;
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -839,10 +839,10 @@ function clamp(value: number, min: number, max: number) {
 .mode-summary {
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid rgba(31, 83, 98, 0.16);
-  border-radius: 16px;
-  background: rgba(220, 233, 234, 0.44);
+  border-radius: 9px;
+  background: var(--accent-soft);
 }
 
 .mode-summary span,
@@ -859,7 +859,7 @@ function clamp(value: number, min: number, max: number) {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .button--dark {
@@ -871,8 +871,8 @@ function clamp(value: number, min: number, max: number) {
 .canvas-help {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 10px 14px;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
   font-size: 12px;
@@ -888,17 +888,16 @@ function clamp(value: number, min: number, max: number) {
   min-height: 660px;
   overflow: auto;
   background:
-    linear-gradient(rgba(31, 83, 98, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(31, 83, 98, 0.055) 1px, transparent 1px),
-    radial-gradient(circle at 18% 18%, rgba(220, 233, 234, 0.62), transparent 24%),
+    linear-gradient(rgba(30, 90, 103, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 90, 103, 0.045) 1px, transparent 1px),
     var(--surface);
-  background-size: 28px 28px, 28px 28px, 100% 100%, auto;
+  background-size: 24px 24px, 24px 24px, auto;
 }
 
 .workflow-canvas::after {
   position: absolute;
-  right: 22px;
-  bottom: 18px;
+  right: 16px;
+  bottom: 14px;
   color: rgba(24, 32, 42, 0.18);
   content: "WORKFLOW CANVAS";
   font-size: 11px;
@@ -947,13 +946,13 @@ function clamp(value: number, min: number, max: number) {
   top: 0;
   left: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-height: 150px;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid rgba(24, 32, 42, 0.14);
-  border-radius: 22px;
-  background: rgba(255, 253, 248, 0.96);
-  box-shadow: 0 18px 42px rgba(24, 32, 42, 0.1);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: none;
   cursor: grab;
   user-select: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
@@ -965,7 +964,7 @@ function clamp(value: number, min: number, max: number) {
 
 .canvas-node--active {
   border-color: rgba(31, 83, 98, 0.68);
-  box-shadow: 0 0 0 4px rgba(31, 83, 98, 0.1), 0 22px 48px rgba(24, 32, 42, 0.14);
+  box-shadow: 0 0 0 3px rgba(30, 90, 103, 0.1);
 }
 
 .canvas-node--linking {
@@ -995,7 +994,7 @@ function clamp(value: number, min: number, max: number) {
   height: 30px;
   color: #fffaf0;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 7px;
   background: var(--accent);
   font-weight: 900;
 }
@@ -1019,16 +1018,16 @@ function clamp(value: number, min: number, max: number) {
 
 .node-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .node-actions button {
   flex: 1;
-  padding: 7px 8px;
+  padding: 6px 7px;
   color: var(--accent-deep);
   border: 1px solid rgba(31, 83, 98, 0.16);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(220, 233, 234, 0.42);
   cursor: pointer;
   font-size: 12px;
@@ -1037,8 +1036,8 @@ function clamp(value: number, min: number, max: number) {
 
 .graph-footer {
   display: grid;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 8px;
+  padding: 10px 14px;
   color: var(--muted);
   border-top: 1px solid var(--line);
   font-size: 12px;
@@ -1057,14 +1056,14 @@ function clamp(value: number, min: number, max: number) {
 .edge-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .edge-chip {
-  padding: 7px 10px;
+  padding: 5px 8px;
   color: var(--accent-deep);
   border: 1px solid rgba(31, 83, 98, 0.16);
-  border-radius: 999px;
+  border-radius: 6px;
   background: rgba(220, 233, 234, 0.38);
   cursor: pointer;
   font-size: 12px;
@@ -1078,15 +1077,15 @@ function clamp(value: number, min: number, max: number) {
 
 .auto-tools {
   display: grid;
-  gap: 10px;
+  gap: 4px;
 }
 
 .auto-tool {
   display: grid;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--surface-muted);
 }
 
