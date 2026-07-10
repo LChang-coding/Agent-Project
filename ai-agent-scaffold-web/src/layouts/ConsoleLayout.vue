@@ -28,7 +28,7 @@
 
     <main class="main">
       <header class="topbar">
-        <div class="topbar__title">
+        <div class="topbar__breadcrumb">
           <strong>{{ currentTitle }}</strong>
           <span>{{ currentSubtitle }}</span>
         </div>
@@ -53,15 +53,10 @@ import {
   Activity,
   Blocks,
   Bot,
-  BrainCircuit,
-  ChartNoAxesCombined,
-  DatabaseZap,
   Gauge,
   GitBranch,
   MessageSquareText,
-  PackageOpen,
   Settings,
-  UsersRound,
 } from '@lucide/vue';
 
 import { useAuthStore } from '@/stores/auth';
@@ -78,29 +73,30 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 const navItems: NavItem[] = [
-  { path: '/dashboard', label: '总览', icon: Gauge, status: 'Live' },
-  { path: '/chat', label: '智能体会话', icon: MessageSquareText, status: 'Live' },
-  { path: '/context', label: '上下文管理', icon: BrainCircuit, status: '占位' },
-  { path: '/tokens', label: 'Token 用量', icon: ChartNoAxesCombined, status: '观测' },
-  { path: '/workflow', label: '工作流编排', icon: GitBranch, status: '占位' },
-  { path: '/mcp', label: 'MCP 中心', icon: Blocks, status: '占位' },
-  { path: '/skills', label: 'Skill 中心', icon: Bot, status: '占位' },
-  { path: '/rag', label: 'RAG 知识库', icon: DatabaseZap, status: '占位' },
-  { path: '/assets', label: '附件资产', icon: PackageOpen, status: '占位' },
-  { path: '/tenant', label: '租户与成员', icon: UsersRound, status: '占位' },
-  { path: '/observability', label: '可观测性', icon: Activity, status: 'Live' },
-  { path: '/settings', label: '账号设置', icon: Settings, status: 'Live' },
+  { path: '/dashboard', label: '总览', icon: Gauge },
+  { path: '/chat', label: '智能体会话', icon: MessageSquareText },
+  { path: '/workflow', label: '工作流编排', icon: GitBranch },
+  { path: '/mcp', label: 'MCP 中心', icon: Blocks },
+  { path: '/skills', label: 'Skill 中心', icon: Bot },
+  { path: '/observability', label: '可观测性', icon: Activity },
+  { path: '/settings', label: '账号设置', icon: Settings },
 ];
+
+const routeLabels: Record<string, string> = {
+  '/context': '上下文管理',
+  '/tokens': 'Token 用量',
+  '/rag': 'RAG 知识库',
+  '/assets': '附件资产',
+  '/tenant': '租户与成员',
+};
 
 const currentTitle = computed(() => {
   const item = navItems.find((nav) => route.path.startsWith(nav.path));
-  return item?.label || 'AI Agent Scaffold';
+  return item?.label || routeLabels[route.path] || 'AI Agent Scaffold';
 });
 
 const currentSubtitle = computed(() => {
-  const item = navItems.find((nav) => route.path.startsWith(nav.path));
-  const status = item?.status ? ` · ${item.status}` : '';
-  return `AI Agent Scaffold${status}`;
+  return 'AI Agent Scaffold · Minimal Console';
 });
 
 const avatarText = computed(() => {
