@@ -2,7 +2,7 @@
   <div class="page page-grid">
     <SectionHeader
       title="MCP 中心"
-      description="MCP 第一版面向远程 http/sse 服务，个人可发布私有 MCP，有权限的用户可发布企业公共 MCP。"
+      description="支持远程 HTTP/SSE 与服务端 stdio MCP。个人可发布私有 MCP，有权限的用户可发布企业公共 MCP。"
     >
       <template #actions>
         <div class="button-row">
@@ -17,7 +17,7 @@
     <section class="page-grid page-grid--two">
       <div class="card">
         <div class="card__body">
-          <SectionHeader title="配置 MCP" description="普通用户推荐使用 http/sse；stdio/local 后续作为管理员受控能力。" :level="2" />
+          <SectionHeader title="配置 MCP" description="HTTP/SSE 填远程地址；stdio 在服务端启动 MCP 进程后通过标准输入输出通信。" :level="2" />
           <div class="form-grid">
             <div class="field">
               <label>名称</label>
@@ -47,17 +47,31 @@
                   <option value="http">HTTP</option>
                   <option value="sse">SSE</option>
                   <option value="stdio">STDIO（管理员）</option>
-                  <option value="local">LOCAL（管理员）</option>
+                  <option value="local" disabled>LOCAL（暂未开放）</option>
                 </select>
               </div>
-              <div>
+              <div v-if="form.transportType !== 'stdio'">
                 <label>Endpoint</label>
                 <input v-model="form.endpoint" class="input" placeholder="https://example.com/mcp" />
               </div>
+              <div v-else class="field-hint">
+                <strong>服务端 stdio</strong>
+                <span>测试与调用都会由后端启动该命令，不需要填写 Endpoint。</span>
+              </div>
             </div>
-            <div class="field">
-              <label>命令 / 参数 / 环境变量（占位）</label>
-              <textarea v-model="form.args" class="textarea textarea--compact" placeholder='{"timeout": 15000}' />
+            <div v-if="form.transportType === 'stdio'" class="field">
+              <label>启动命令</label>
+              <input v-model="form.command" class="input" placeholder="输入服务端可执行命令" />
+            </div>
+            <div v-if="form.transportType === 'stdio'" class="field two-cols">
+              <div>
+                <label>启动参数（JSON 数组）</label>
+                <textarea v-model="form.args" class="textarea textarea--compact" placeholder='["参数1", "参数2"]' />
+              </div>
+              <div>
+                <label>环境变量（JSON 对象）</label>
+                <textarea v-model="form.env" class="textarea textarea--compact" placeholder='{"KEY":"VALUE"}' />
+              </div>
             </div>
           </div>
         </div>
@@ -104,7 +118,7 @@
           <tr v-for="mcp in toolStore.mcps" :key="mcp.mcpId">
             <td>
               <strong>{{ mcp.mcpName }}</strong>
-              <small>{{ mcp.endpoint || mcp.description || '暂无地址' }}</small>
+              <small>{{ mcp.endpoint || mcp.description || '已配置服务端 stdio 命令' }}</small>
             </td>
             <td>{{ mcp.transportType }}</td>
             <td>{{ visibilityLabel(mcp.visibility) }}</td>
@@ -117,13 +131,13 @@
             <td>
               <div class="button-row">
                 <button class="button" type="button" @click="toolStore.testMcp(mcp.mcpId)">测试</button>
-                <button class="button" type="button" @click="toolStore.publishMcp(mcp.mcpId, mcp.currentVersion)">发布</button>
+                <button class="button" type="button" :disabled="mcp.testStatus !== 'success' || toolStore.saving" @click="toolStore.publishMcp(mcp.mcpId, mcp.currentVersion)">发布</button>
                 <button class="button" type="button" @click="toolStore.disableMcp(mcp.mcpId)">禁用</button>
               </div>
             </td>
           </tr>
           <tr v-if="toolStore.mcps.length === 0">
-            <td colspan="7">暂无 MCP 配置，先创建一个远程 http/sse MCP。</td>
+            <td colspan="7">暂无 MCP 配置，先创建一个 HTTP、SSE 或 stdio MCP。</td>
           </tr>
         </tbody>
       </table>
@@ -242,24 +256,27 @@ function testStatusClass(value?: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
 }
 
 .catalog-list {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 1px;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
 }
 
 .catalog-item {
   display: grid;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-muted);
+  gap: 4px;
+  padding: 11px 12px;
+  background: var(--surface);
 }
 
 .catalog-item span,
@@ -272,6 +289,20 @@ function testStatusClass(value?: string) {
 }
 
 .textarea--compact {
-  min-height: 88px;
+  min-height: 78px;
+}
+
+.field-hint {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.field-hint strong {
+  color: var(--ink);
+  font-size: 13px;
 }
 </style>

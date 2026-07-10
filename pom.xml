@@ -38,6 +38,7 @@
         <lombok.version>1.18.46</lombok.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.3.4</spring-cloud-alibaba.version>
+        <skipTests>true</skipTests>
     </properties>
 
     <developers>

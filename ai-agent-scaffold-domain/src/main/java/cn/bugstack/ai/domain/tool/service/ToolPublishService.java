@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
 import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
+import cn.bugstack.ai.domain.tool.model.entity.McpConnectionConfigEntity;
 import cn.bugstack.ai.domain.tool.model.entity.McpCreateCommandEntity;
 import cn.bugstack.ai.domain.tool.model.entity.McpDefinitionEntity;
 import cn.bugstack.ai.domain.tool.model.entity.McpVersionEntity;
@@ -18,6 +19,7 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolUserContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolVisibility;
+import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,16 +55,16 @@ public class ToolPublishService implements IToolPublishService {
 
     private final IToolRepository toolRepository;
     private final ObjectStorageService objectStorageService;
-    private final McpSseClientSupport mcpSseClientSupport;
+    private final McpProtocolClientSupport mcpProtocolClientSupport;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 创建工具发布服务；参数是工具仓储和对象存储服务；返回服务实例。
      */
-    public ToolPublishService(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpSseClientSupport mcpSseClientSupport) {
+    public ToolPublishService(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport) {
         this.toolRepository = toolRepository;
         this.objectStorageService = objectStorageService;
-        this.mcpSseClientSupport = mcpSseClientSupport;
+        this.mcpProtocolClientSupport = mcpProtocolClientSupport;
     }
 
     /**
@@ -236,6 +238,7 @@ public class ToolPublishService implements IToolPublishService {
         checkMcpTransport(context, command.getTransportType());
         String args = normalizeJsonText(command.getArgs(), "args");
         String env = normalizeJsonText(command.getEnv(), "env");
+        validateMcpConnection(command.getTransportType(), command.getEndpoint(), command.getCommand(), args, env);
         String mcpId = "mcp_" + UUID.randomUUID();
         String version = defaultString(command.getVersion(), DEFAULT_VERSION);
         String versionId = "mcp_ver_" + UUID.randomUUID();
@@ -308,8 +311,8 @@ public class ToolPublishService implements IToolPublishService {
      * 构建 MCP 测试结果文案；参数是 MCP 版本和 Schema；返回测试说明。
      */
     private String mcpTestMessage(McpVersionEntity version, String schema) {
-        if ("sse".equalsIgnoreCase(version.getTransportType())) {
-            return "连接成功，发现 " + mcpSseClientSupport.toolNames(schema).size() + " 个远程工具";
+        if ("sse".equalsIgnoreCase(version.getTransportType()) || "stdio".equalsIgnoreCase(version.getTransportType())) {
+            return "连接成功，发现 " + mcpProtocolClientSupport.toolNames(schema).size() + " 个远程工具";
         }
         return "连接成功";
     }
@@ -324,6 +327,9 @@ public class ToolPublishService implements IToolPublishService {
         McpDefinitionEntity mcp = requireMcp(mcpId);
         assertOwnerOrTenantAdmin(context, mcp.getOwnerUserId(), mcp.getVisibility());
         McpVersionEntity mcpVersion = requireMcpVersion(mcpId, defaultString(version, mcp.getCurrentVersion()));
+        if (!ToolStatus.SUCCESS.equals(mcpVersion.getTestStatus())) {
+            throw new AppException("TOOL_MCP_TEST_NOT_PASSED", "MCP 必须测试通过后才能发布");
+        }
         mcpVersion.setStatus(ToolStatus.ACTIVE);
         mcp.setStatus(ToolStatus.ACTIVE);
         mcp.setCurrentVersion(mcpVersion.getVersion());
@@ -584,11 +590,12 @@ public class ToolPublishService implements IToolPublishService {
      * 测试远程 MCP；参数是 MCP 版本；返回工具 Schema 快照。
      */
     private String testRemoteMcp(McpVersionEntity version) throws Exception {
-        if (version.getEndpoint() == null || version.getEndpoint().isBlank()) {
+        if (!"stdio".equalsIgnoreCase(version.getTransportType())
+                && (version.getEndpoint() == null || version.getEndpoint().isBlank())) {
             throw new IllegalArgumentException("MCP endpoint 不能为空");
         }
-        if ("sse".equalsIgnoreCase(version.getTransportType())) {
-            return mcpSseClientSupport.listToolsSchema(version);
+        if ("sse".equalsIgnoreCase(version.getTransportType()) || "stdio".equalsIgnoreCase(version.getTransportType())) {
+            return mcpProtocolClientSupport.listToolsSchema(version);
         }
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(version.getEndpoint()))
@@ -600,6 +607,22 @@ public class ToolPublishService implements IToolPublishService {
             throw new IllegalStateException("MCP 服务返回 " + response.statusCode());
         }
         return toJson(Map.of("endpoint", version.getEndpoint(), "statusCode", response.statusCode(), "bodySample", truncate(response.body(), 512)));
+    }
+
+    /**
+     * 校验 MCP 运行连接配置；参数是传输和连接字段；无返回值。
+     */
+    private void validateMcpConnection(String transportType, String endpoint, String command, String args, String env) {
+        if (!"stdio".equalsIgnoreCase(transportType)) {
+            return;
+        }
+        mcpProtocolClientSupport.validate(McpConnectionConfigEntity.builder()
+                .transportType(transportType)
+                .endpoint(endpoint)
+                .command(command)
+                .args(args)
+                .env(env)
+                .build());
     }
 
     /**

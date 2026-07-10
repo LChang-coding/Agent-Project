@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
+import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -38,17 +39,17 @@ public class ToolGateway {
 
     private final IToolRepository toolRepository;
     private final ObjectStorageService objectStorageService;
-    private final McpSseClientSupport mcpSseClientSupport;
+    private final McpProtocolClientSupport mcpProtocolClientSupport;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
      * 创建工具网关；参数是工具仓储和对象存储服务；返回网关实例。
      */
-    public ToolGateway(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpSseClientSupport mcpSseClientSupport) {
+    public ToolGateway(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport) {
         this.toolRepository = toolRepository;
         this.objectStorageService = objectStorageService;
-        this.mcpSseClientSupport = mcpSseClientSupport;
+        this.mcpProtocolClientSupport = mcpProtocolClientSupport;
     }
 
     /**
@@ -111,15 +112,15 @@ public class ToolGateway {
      */
     private String invokeMcp(ToolCatalogEntity tool, Map<String, Object> input) {
         String transportType = tool.getTransportType() == null ? "" : tool.getTransportType().toLowerCase();
-        if (!"http".equals(transportType) && !"sse".equals(transportType)) {
-            throw new AppException("TOOL_MCP_LOCAL_DISABLED", "stdio/local MCP 第一版只允许管理员受控配置，当前网关不直接执行本机命令");
+        if (!"http".equals(transportType) && !"sse".equals(transportType) && !"stdio".equals(transportType)) {
+            throw new AppException("TOOL_MCP_LOCAL_DISABLED", "local MCP 当前未接入 ToolGateway");
         }
-        if (tool.getEndpoint() == null || tool.getEndpoint().isBlank()) {
+        if (!"stdio".equals(transportType) && (tool.getEndpoint() == null || tool.getEndpoint().isBlank())) {
             throw new AppException("TOOL_MCP_ENDPOINT_EMPTY", "MCP endpoint 不能为空");
         }
-        if ("sse".equals(transportType)) {
+        if ("sse".equals(transportType) || "stdio".equals(transportType)) {
             McpCallCommand command = parseMcpCallCommand(tool, input);
-            return mcpSseClientSupport.callTool(tool, command.toolName(), command.arguments());
+            return mcpProtocolClientSupport.callTool(tool, command.toolName(), command.arguments());
         }
         try {
             HttpRequest request = HttpRequest.newBuilder()
@@ -151,8 +152,8 @@ public class ToolGateway {
             toolName = inferSingleToolName(tool.getSchemaJson());
         }
         if (toolName == null || toolName.isBlank()) {
-            List<String> toolNames = mcpSseClientSupport.toolNames(tool.getSchemaJson());
-            throw new AppException("TOOL_MCP_TOOL_NAME_EMPTY", "MCP SSE 调用缺少 toolName，可用工具：" + String.join(",", toolNames));
+            List<String> toolNames = mcpProtocolClientSupport.toolNames(tool.getSchemaJson());
+            throw new AppException("TOOL_MCP_TOOL_NAME_EMPTY", "MCP 调用缺少 toolName，可用工具：" + String.join(",", toolNames));
         }
         return new McpCallCommand(toolName, arguments);
     }
@@ -193,7 +194,7 @@ public class ToolGateway {
      * 推断单工具 MCP 的工具名；参数是工具 Schema；返回工具名。
      */
     private String inferSingleToolName(String schemaJson) {
-        List<String> names = mcpSseClientSupport.toolNames(schemaJson);
+        List<String> names = mcpProtocolClientSupport.toolNames(schemaJson);
         return names.size() == 1 ? names.get(0) : null;
     }
 
