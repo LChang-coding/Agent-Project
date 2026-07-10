@@ -216,24 +216,27 @@ function statusClass(value: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
 }
 
 .catalog-list {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 1px;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
 }
 
 .catalog-item {
   display: grid;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-muted);
+  gap: 4px;
+  padding: 11px 12px;
+  background: var(--surface);
 }
 
 .catalog-item span,
@@ -250,6 +253,6 @@ function statusClass(value: string) {
 }
 
 .textarea--compact {
-  min-height: 88px;
+  min-height: 78px;
 }
 </style>

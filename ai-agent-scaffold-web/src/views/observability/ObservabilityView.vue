@@ -40,15 +40,18 @@ import SectionHeader from '@/components/common/SectionHeader.vue';
 <style scoped>
 .trace-flow {
   display: grid;
-  gap: 12px;
-  margin-top: 22px;
+  gap: 1px;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
 }
 
 .trace-flow span {
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-muted);
+  padding: 10px 12px;
+  background: var(--surface);
+  font-size: 13px;
   font-weight: 800;
 }
 </style>

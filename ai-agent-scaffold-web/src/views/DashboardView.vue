@@ -81,35 +81,38 @@ onMounted(() => {
 <style scoped>
 .roadmap {
   display: grid;
-  gap: 14px;
-  margin-top: 22px;
+  gap: 1px;
+  margin-top: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
 }
 
 .roadmap__item {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--surface-muted);
+  padding: 12px;
+  background: var(--surface);
 }
 
 .roadmap__item p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .identity-list {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
-  gap: 12px;
-  margin-top: 22px;
-  padding: 16px;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 10px;
   background: var(--surface-muted);
 }
 

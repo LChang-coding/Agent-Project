@@ -50,19 +50,23 @@ import StatCard from '@/components/common/StatCard.vue';
 .usage-bars {
   display: flex;
   align-items: end;
-  gap: 14px;
-  height: 260px;
-  margin-top: 22px;
-  padding: 22px;
+  gap: 10px;
+  height: 200px;
+  margin-top: 16px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 10px;
   background: var(--surface-muted);
 }
 
 .usage-bars span {
   flex: 1;
-  min-width: 18px;
-  border-radius: 999px 999px 8px 8px;
-  background: linear-gradient(180deg, var(--accent), var(--gold));
+  min-width: 14px;
+  border-radius: 5px 5px 2px 2px;
+  background: var(--accent);
+}
+
+.usage-bars span:nth-child(2n) {
+  background: #4f7b84;
 }
 </style>
