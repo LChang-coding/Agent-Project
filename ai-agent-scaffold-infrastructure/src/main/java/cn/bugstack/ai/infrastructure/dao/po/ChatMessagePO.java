@@ -49,6 +49,11 @@ public class ChatMessagePO extends BasePO {
     private String content;
 
     /**
+     * 上下文 token 预估值
+     */
+    private Integer estimatedTokenCount;
+
+    /**
      * 会话内消息序号
      */
     private Integer sequenceNo;

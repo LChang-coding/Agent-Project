@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.session.service;
 
 import cn.bugstack.ai.domain.session.adapter.repository.ISessionRepository;
+import cn.bugstack.ai.domain.context.service.CharacterTokenCounter;
 import cn.bugstack.ai.domain.session.model.entity.AppendMessageCommandEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
@@ -21,6 +22,7 @@ public class SessionDomain {
     public static final String ROLE_ASSISTANT = "assistant";
     private static final String STATUS_ACTIVE = "active";
     private static final String CONTENT_TYPE_TEXT = "text";
+    private static final CharacterTokenCounter TOKEN_COUNTER = new CharacterTokenCounter();
 
     private final ISessionRepository sessionRepository;
 
@@ -128,6 +130,7 @@ public class SessionDomain {
                 .role(command.getRole())
                 .contentType(command.getContentType())
                 .content(command.getContent())
+                .estimatedTokenCount(TOKEN_COUNTER.estimate(command.getContent()))
                 .sequenceNo(maxSequenceNo == null ? 1 : maxSequenceNo + 1)
                 .parentMessageId(command.getParentMessageId())
                 .traceId(command.getTraceId())

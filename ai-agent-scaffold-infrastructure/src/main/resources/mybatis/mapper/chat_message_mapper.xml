@@ -11,6 +11,7 @@
         <result column="role" property="role"/>
         <result column="content_type" property="contentType"/>
         <result column="content" property="content"/>
+        <result column="estimated_token_count" property="estimatedTokenCount"/>
         <result column="sequence_no" property="sequenceNo"/>
         <result column="parent_message_id" property="parentMessageId"/>
         <result column="trace_id" property="traceId"/>
@@ -21,17 +22,17 @@
     </resultMap>
 
     <sql id="ChatMessageColumns">
-        id, tenant_id, user_id, session_id, message_id, role, content_type, content, sequence_no, parent_message_id, trace_id, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, message_id, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_message (tenant_id, user_id, session_id, message_id, role, content_type, content, sequence_no, parent_message_id, trace_id, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{role}, #{contentType}, #{content}, #{sequenceNo}, #{parentMessageId}, #{traceId}, #{metadata})
+        INSERT INTO chat_message (tenant_id, user_id, session_id, message_id, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{role}, #{contentType}, #{content}, #{estimatedTokenCount}, #{sequenceNo}, #{parentMessageId}, #{traceId}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO">
         UPDATE chat_message
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, role = #{role}, content_type = #{contentType}, content = #{content}, sequence_no = #{sequenceNo}, parent_message_id = #{parentMessageId}, trace_id = #{traceId}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, role = #{role}, content_type = #{contentType}, content = #{content}, estimated_token_count = #{estimatedTokenCount}, sequence_no = #{sequenceNo}, parent_message_id = #{parentMessageId}, trace_id = #{traceId}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
@@ -73,6 +74,43 @@
         FROM chat_message
         WHERE user_id = #{userId}
           AND session_id = #{sessionId}
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="queryContextRange" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/>
+        FROM chat_message
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND sequence_no &gt; #{fromSequenceExclusive}
+          AND sequence_no &lt;= #{toSequenceInclusive}
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        ORDER BY sequence_no ASC, id ASC
+    </select>
+
+    <select id="sumContextTokens" resultType="java.lang.Integer">
+        SELECT COALESCE(SUM(COALESCE(estimated_token_count, CHAR_LENGTH(content))), 0)
+        FROM chat_message
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND sequence_no &gt; #{fromSequenceExclusive}
+          AND sequence_no &lt;= #{toSequenceInclusive}
           AND deleted = 0
         <choose>
             <when test="tenantId == null or tenantId == ''">

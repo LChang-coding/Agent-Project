@@ -122,6 +122,7 @@ public class SessionRepository implements ISessionRepository {
                 .role(message.getRole())
                 .contentType(message.getContentType())
                 .content(message.getContent())
+                .estimatedTokenCount(message.getEstimatedTokenCount())
                 .sequenceNo(message.getSequenceNo())
                 .parentMessageId(message.getParentMessageId())
                 .traceId(message.getTraceId())

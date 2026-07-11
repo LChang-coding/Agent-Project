@@ -80,4 +80,36 @@ public interface IChatMessageDao {
     Integer queryMaxSequenceNo(@Param("tenantId") String tenantId,
                                @Param("userId") String userId,
                                @Param("sessionId") String sessionId);
+
+    /**
+     * 查询会话消息范围。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @param fromSequenceExclusive 起始序号，不包含
+     * @param toSequenceInclusive 结束序号，包含
+     * @return 消息持久化对象列表
+     */
+    List<ChatMessagePO> queryContextRange(@Param("tenantId") String tenantId,
+                                          @Param("userId") String userId,
+                                          @Param("sessionId") String sessionId,
+                                          @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
+                                          @Param("toSequenceInclusive") Integer toSequenceInclusive);
+
+    /**
+     * 汇总会话消息 token。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @param fromSequenceExclusive 起始序号，不包含
+     * @param toSequenceInclusive 结束序号，包含
+     * @return token 预估总数
+     */
+    Integer sumContextTokens(@Param("tenantId") String tenantId,
+                             @Param("userId") String userId,
+                             @Param("sessionId") String sessionId,
+                             @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
+                             @Param("toSequenceInclusive") Integer toSequenceInclusive);
 }

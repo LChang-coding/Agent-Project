@@ -21,6 +21,11 @@ public class ChatMessageEntity {
 
     private String content;
 
+    /**
+     * 上下文 token 预估值。
+     */
+    private Integer estimatedTokenCount;
+
     private Integer sequenceNo;
 
     private String parentMessageId;
