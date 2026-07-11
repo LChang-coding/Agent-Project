@@ -1,0 +1,585 @@
+package cn.bugstack.ai.domain.context.service;
+
+import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
+import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.context.adapter.port.ContextCompressionPort;
+import cn.bugstack.ai.domain.context.adapter.port.ContextCompactionPublisher;
+import cn.bugstack.ai.domain.context.adapter.port.ContextContributor;
+import cn.bugstack.ai.domain.context.adapter.repository.IContextCacheRepository;
+import cn.bugstack.ai.domain.context.adapter.repository.IContextCompactionTaskRepository;
+import cn.bugstack.ai.domain.context.adapter.repository.IContextHistoryRepository;
+import cn.bugstack.ai.domain.context.adapter.repository.IConversationMemoryRepository;
+import cn.bugstack.ai.domain.context.model.ContextAssembleRequest;
+import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
+import cn.bugstack.ai.domain.context.model.ContextBudget;
+import cn.bugstack.ai.domain.context.model.ContextCompactionTaskEntity;
+import cn.bugstack.ai.domain.context.model.ContextCompactionTaskStatus;
+import cn.bugstack.ai.domain.context.model.ContextContribution;
+import cn.bugstack.ai.domain.context.model.ContextFragment;
+import cn.bugstack.ai.domain.context.model.ContextFragmentType;
+import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
+import cn.bugstack.ai.domain.context.model.ContextTaskCreateCommand;
+import cn.bugstack.ai.domain.context.model.ConversationMemorySnapshotEntity;
+import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
+import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
+import cn.bugstack.ai.domain.session.service.SessionDomain;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * 会话长期记忆服务。
+ * <p>负责上下文组装、压缩任务创建、任务重投和摘要激活。</p>
+ */
+@Slf4j
+@Service
+public class ConversationMemoryService {
+
+    private static final String STATUS_ACTIVE = "active";
+    private static final String KEY_SUMMARY = "conversationSummary";
+    private static final String KEY_DECISIONS = "confirmedDecisions";
+    private static final String KEY_CONSTRAINTS = "constraints";
+    private static final String KEY_OPEN_ITEMS = "openItems";
+    private static final String KEY_ENTITIES = "keyEntities";
+    private static final String KEY_SOURCE_RANGE = "sourceRange";
+
+    private final IConversationMemoryRepository memoryRepository;
+    private final IContextCompactionTaskRepository taskRepository;
+    private final IContextHistoryRepository historyRepository;
+    private final IContextCacheRepository cacheRepository;
+    private final ContextCompactionPublisher publisher;
+    private final ContextCompressionPort compressionPort;
+    private final List<ContextContributor> contributors;
+    private final ContextPolicyProperties properties;
+    private final TokenCounter tokenCounter;
+    private final ObjectMapper objectMapper;
+    private final SessionDomain sessionDomain;
+    private final ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider;
+
+    /**
+     * 创建会话记忆服务；参数是上下文依赖端口；返回服务实例。
+     */
+    public ConversationMemoryService(IConversationMemoryRepository memoryRepository,
+                                     IContextCompactionTaskRepository taskRepository,
+                                     IContextHistoryRepository historyRepository,
+                                     IContextCacheRepository cacheRepository,
+                                     ContextCompactionPublisher publisher,
+                                     ContextCompressionPort compressionPort,
+                                     List<ContextContributor> contributors,
+                                     ContextPolicyProperties properties,
+                                     ObjectMapper objectMapper,
+                                     SessionDomain sessionDomain,
+                                     ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider) {
+        this.memoryRepository = memoryRepository;
+        this.taskRepository = taskRepository;
+        this.historyRepository = historyRepository;
+        this.cacheRepository = cacheRepository;
+        this.publisher = publisher;
+        this.compressionPort = compressionPort;
+        this.contributors = contributors == null ? List.of() : contributors;
+        this.properties = properties;
+        this.tokenCounter = new CharacterTokenCounter();
+        this.objectMapper = objectMapper;
+        this.sessionDomain = sessionDomain;
+        this.defaultArmoryFactoryProvider = defaultArmoryFactoryProvider;
+    }
+
+    /**
+     * 组装模型调用上下文；参数是组装请求；返回可注入系统指令。
+     */
+    public ContextAssemblyResult assemble(ContextAssembleRequest request) {
+        if (!properties.isEnabled() || request == null || isBlank(request.getUserId()) || isBlank(request.getSessionId())) {
+            return emptyResult();
+        }
+
+        ContextBudget budget = properties.toBudget();
+        ConversationMemorySnapshotEntity snapshot = queryActiveSnapshot(request.getTenantId(), request.getUserId(), request.getSessionId());
+        int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
+        int visibleThrough = request.getVisibleThroughSequence() == null ? coveredToSequence : request.getVisibleThroughSequence();
+        List<ChatMessageEntity> messages = visibleThrough > coveredToSequence
+                ? queryMessages(request.getTenantId(), request.getUserId(), request.getSessionId(), coveredToSequence, visibleThrough)
+                : List.of();
+
+        List<ContextFragment> fragments = new ArrayList<>();
+        if (snapshot != null && !isBlank(snapshot.getContent())) {
+            fragments.add(ContextFragment.of(ContextFragmentType.LONG_TERM_MEMORY,
+                    renderLongTermMemory(snapshot), properties.getLongTermMemoryTokens()));
+        }
+
+        List<ChatMessageEntity> recentMessages = selectRecentMessages(messages, properties.getRecentConversationTokens());
+        if (!recentMessages.isEmpty()) {
+            fragments.add(ContextFragment.of(ContextFragmentType.RECENT_CONVERSATION,
+                    renderRecentMessages(recentMessages), properties.getRecentConversationTokens()));
+        }
+
+        if (!isBlank(request.getUpstreamOutput())) {
+            fragments.add(ContextFragment.of(ContextFragmentType.WORKFLOW_UPSTREAM,
+                    renderUpstreamOutput(request.getUpstreamOutput()), properties.getUpstreamTokens()));
+        }
+
+        for (ContextContributor contributor : contributors) {
+            List<ContextContribution> contributions = contributor.contribute(request, properties);
+            if (contributions == null) {
+                continue;
+            }
+            for (ContextContribution contribution : contributions) {
+                if (contribution == null || isBlank(contribution.getContent()) || contribution.getType() == null) {
+                    continue;
+                }
+                fragments.add(ContextFragment.of(contribution.getType(), contribution.getContent(), maxTokensFor(contribution.getType())));
+            }
+        }
+
+        List<ContextFragment> selected = new ContextAssembler(tokenCounter).assemble(budget, fragments);
+        String instruction = renderInstruction(selected);
+        int estimatedTokens = tokenCounter.estimate(instruction);
+        boolean trimmed = messages.size() > recentMessages.size();
+        log.info("上下文组装完成 tenantId:{} userId:{} sessionId:{} visibleThrough:{} memoryVersion:{} injectedTokens:{} trimmed:{}",
+                request.getTenantId(), request.getUserId(), request.getSessionId(), visibleThrough,
+                snapshot == null ? 0 : snapshot.getMemoryVersion(), estimatedTokens, trimmed);
+        return ContextAssemblyResult.builder()
+                .instruction(instruction)
+                .estimatedTokenCount(estimatedTokens)
+                .memoryVersion(snapshot == null ? 0 : snapshot.getMemoryVersion())
+                .coveredToSequence(coveredToSequence)
+                .cacheHit(false)
+                .trimReason(trimmed ? "recent_window_budget" : null)
+                .build();
+    }
+
+    /**
+     * 会话激活时重投未完成任务；参数是会话身份；无返回值。
+     */
+    public void republishUnfinished(String tenantId, String userId, String sessionId) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        List<ContextCompactionTaskEntity> tasks = taskRepository.queryUnfinished(tenantId, userId, sessionId);
+        for (ContextCompactionTaskEntity task : tasks) {
+            publisher.publish(task.toCommand());
+        }
+        if (!tasks.isEmpty()) {
+            log.info("上下文压缩任务已重投 tenantId:{} userId:{} sessionId:{} count:{}",
+                    tenantId, userId, sessionId, tasks.size());
+        }
+    }
+
+    /**
+     * 助手消息保存后检查是否需要压缩；参数是助手消息；无返回值。
+     */
+    public void onAssistantMessageSaved(ChatMessageEntity assistantMessage) {
+        if (!properties.isEnabled() || assistantMessage == null || assistantMessage.getSequenceNo() == null) {
+            return;
+        }
+        onMessageSaved(assistantMessage);
+        republishUnfinished(assistantMessage.getTenantId(), assistantMessage.getUserId(), assistantMessage.getSessionId());
+        ConversationMemorySnapshotEntity snapshot = queryActiveSnapshot(assistantMessage.getTenantId(), assistantMessage.getUserId(), assistantMessage.getSessionId());
+        int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
+        int uncoveredTokens = historyRepository.sumEstimatedTokens(assistantMessage.getTenantId(), assistantMessage.getUserId(),
+                assistantMessage.getSessionId(), coveredToSequence, assistantMessage.getSequenceNo());
+        if (uncoveredTokens < properties.getCompactionMinUncoveredTokens()) {
+            return;
+        }
+
+        List<ChatMessageEntity> uncoveredMessages = historyRepository.queryMessages(assistantMessage.getTenantId(), assistantMessage.getUserId(),
+                assistantMessage.getSessionId(), coveredToSequence, assistantMessage.getSequenceNo());
+        int toSequence = calculateCompactionToSequence(uncoveredMessages, properties.getCompactionRetainRecentTokens());
+        if (toSequence <= coveredToSequence) {
+            return;
+        }
+
+        ContextCompactionTaskEntity task = taskRepository.createIfAbsent(ContextTaskCreateCommand.builder()
+                .tenantId(assistantMessage.getTenantId())
+                .userId(assistantMessage.getUserId())
+                .sessionId(assistantMessage.getSessionId())
+                .fromSequence(coveredToSequence + 1)
+                .toSequence(toSequence)
+                .expectedMemoryVersion(ConversationMemorySnapshotEntity.versionOf(snapshot))
+                .policyVersion(properties.getPolicyVersion())
+                .traceId(assistantMessage.getTraceId())
+                .build());
+        if (task != null && (task.getStatus() == ContextCompactionTaskStatus.PENDING || task.getStatus() == ContextCompactionTaskStatus.RETRYING)) {
+            publisher.publish(task.toCommand());
+            log.info("上下文压缩任务已创建 tenantId:{} userId:{} sessionId:{} taskId:{} range:{}-{} uncoveredTokens:{}",
+                    task.getTenantId(), task.getUserId(), task.getSessionId(), task.getTaskId(),
+                    task.getFromSequence(), task.getToSequence(), uncoveredTokens);
+        }
+    }
+
+    /**
+     * 消息持久化后刷新会话短期窗口；参数是已保存消息；无返回值。
+     */
+    public void onMessageSaved(ChatMessageEntity message) {
+        if (!properties.isEnabled() || message == null || message.getSequenceNo() == null) {
+            return;
+        }
+        cacheRepository.appendRecentMessage(message, properties.getRecentWindowMaxMessages(),
+                Duration.ofSeconds(properties.getCacheTtlSeconds()));
+    }
+
+    /**
+     * 执行压缩任务；参数是任务ID；成功后激活新摘要。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void compactTask(String taskId) {
+        ContextCompactionTaskEntity task = taskRepository.queryByTaskId(taskId);
+        if (task == null) {
+            log.warn("上下文压缩任务不存在 taskId:{}", taskId);
+            return;
+        }
+
+        ConversationMemorySnapshotEntity active = memoryRepository.queryActive(task.getTenantId(), task.getUserId(), task.getSessionId());
+        int activeVersion = ConversationMemorySnapshotEntity.versionOf(active);
+        if (activeVersion != safe(task.getExpectedMemoryVersion())) {
+            if (ConversationMemorySnapshotEntity.coveredSequenceOf(active) >= safe(task.getToSequence())) {
+                taskRepository.complete(taskId);
+                return;
+            }
+            throw new IllegalStateException("上下文摘要版本已变化，等待新任务覆盖");
+        }
+
+        List<ChatMessageEntity> messages = historyRepository.queryMessages(task.getTenantId(), task.getUserId(), task.getSessionId(),
+                safe(task.getFromSequence()) - 1, task.getToSequence());
+        if (messages.isEmpty()) {
+            taskRepository.complete(taskId);
+            return;
+        }
+
+        ChatModel chatModel = resolveChatModel(task);
+        String prompt = buildCompressionPrompt(active, messages, task);
+        String json = normalizeSummaryJson(compressionPort.compress(chatModel, prompt), task);
+        ConversationMemorySnapshotEntity snapshot = ConversationMemorySnapshotEntity.builder()
+                .tenantId(task.getTenantId())
+                .userId(task.getUserId())
+                .sessionId(task.getSessionId())
+                .memoryVersion(activeVersion + 1)
+                .coveredToSequence(task.getToSequence())
+                .content(json)
+                .estimatedTokenCount(tokenCounter.estimate(json))
+                .policyVersion(task.getPolicyVersion())
+                .status(STATUS_ACTIVE)
+                .traceId(task.getTraceId())
+                .build();
+        boolean activated = memoryRepository.activate(task.getTenantId(), task.getUserId(), task.getSessionId(), activeVersion, snapshot);
+        if (!activated) {
+            throw new IllegalStateException("上下文摘要 CAS 激活失败");
+        }
+        taskRepository.complete(taskId);
+        refreshCacheAfterCommit(snapshot);
+        log.info("上下文压缩任务完成 tenantId:{} userId:{} sessionId:{} taskId:{} memoryVersion:{} coveredTo:{} tokens:{}",
+                task.getTenantId(), task.getUserId(), task.getSessionId(), taskId,
+                snapshot.getMemoryVersion(), snapshot.getCoveredToSequence(), snapshot.getEstimatedTokenCount());
+    }
+
+    /**
+     * 同步压缩当前会话；参数是会话身份和可见序号；返回是否完成压缩。
+     */
+    public boolean compactSynchronously(String tenantId, String userId, String sessionId, Integer visibleThroughSequence, String traceId) {
+        if (!properties.isEnabled() || visibleThroughSequence == null || visibleThroughSequence <= 0) {
+            return false;
+        }
+        ConversationMemorySnapshotEntity snapshot = queryActiveSnapshot(tenantId, userId, sessionId);
+        int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
+        if (visibleThroughSequence <= coveredToSequence) {
+            return false;
+        }
+        ContextCompactionTaskEntity task = taskRepository.createIfAbsent(ContextTaskCreateCommand.builder()
+                .tenantId(tenantId)
+                .userId(userId)
+                .sessionId(sessionId)
+                .fromSequence(coveredToSequence + 1)
+                .toSequence(visibleThroughSequence)
+                .expectedMemoryVersion(ConversationMemorySnapshotEntity.versionOf(snapshot))
+                .policyVersion(properties.getPolicyVersion())
+                .traceId(traceId)
+                .build());
+        if (task == null || !taskRepository.claim(task.getTaskId())) {
+            return false;
+        }
+        compactTask(task.getTaskId());
+        return true;
+    }
+
+    private ConversationMemorySnapshotEntity queryActiveSnapshot(String tenantId, String userId, String sessionId) {
+        ConversationMemorySnapshotEntity cached = cacheRepository.queryActiveSnapshot(tenantId, userId, sessionId);
+        if (cached != null) {
+            return cached;
+        }
+        ConversationMemorySnapshotEntity snapshot = memoryRepository.queryActive(tenantId, userId, sessionId);
+        if (snapshot != null) {
+            cacheRepository.cacheActiveSnapshot(snapshot, Duration.ofSeconds(properties.getCacheTtlSeconds()));
+        }
+        return snapshot;
+    }
+
+    /**
+     * 在数据库提交后切换缓存摘要和短期窗口；参数是新摘要；无返回值。
+     */
+    private void refreshCacheAfterCommit(ConversationMemorySnapshotEntity snapshot) {
+        Runnable refresh = () -> {
+            cacheRepository.cacheActiveSnapshot(snapshot, Duration.ofSeconds(properties.getCacheTtlSeconds()));
+            cacheRepository.removeRecentMessagesThrough(snapshot.getTenantId(), snapshot.getUserId(), snapshot.getSessionId(),
+                    snapshot.getCoveredToSequence());
+        };
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            refresh.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                refresh.run();
+            }
+        });
+    }
+
+    private List<ChatMessageEntity> queryMessages(String tenantId, String userId, String sessionId,
+                                                  Integer fromSequenceExclusive, Integer toSequenceInclusive) {
+        List<ChatMessageEntity> cached = cacheRepository.queryRecentMessages(tenantId, userId, sessionId,
+                fromSequenceExclusive, toSequenceInclusive);
+        if (cached != null) {
+            return cached;
+        }
+        List<ChatMessageEntity> messages = historyRepository.queryMessages(tenantId, userId, sessionId, fromSequenceExclusive, toSequenceInclusive);
+        cacheRepository.warmRecentMessages(tenantId, userId, sessionId, messages, properties.getRecentWindowMaxMessages(),
+                Duration.ofSeconds(properties.getCacheTtlSeconds()));
+        return messages;
+    }
+
+    private List<ChatMessageEntity> selectRecentMessages(List<ChatMessageEntity> messages, int tokenBudget) {
+        if (messages == null || messages.isEmpty() || tokenBudget <= 0) {
+            return List.of();
+        }
+        List<ChatMessageEntity> selected = new ArrayList<>();
+        int used = 0;
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            ChatMessageEntity message = messages.get(index);
+            int tokens = messageTokens(message);
+            if (!selected.isEmpty() && used + tokens > tokenBudget) {
+                break;
+            }
+            selected.add(message);
+            used += tokens;
+            if (used >= tokenBudget) {
+                break;
+            }
+        }
+        Collections.reverse(selected);
+        return selected;
+    }
+
+    private int calculateCompactionToSequence(List<ChatMessageEntity> messages, int retainTokenBudget) {
+        if (messages == null || messages.isEmpty()) {
+            return 0;
+        }
+        int retained = 0;
+        int toSequence = messages.get(messages.size() - 1).getSequenceNo();
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            ChatMessageEntity message = messages.get(index);
+            retained += messageTokens(message);
+            if (retained >= retainTokenBudget) {
+                toSequence = message.getSequenceNo() - 1;
+                break;
+            }
+        }
+        return Math.max(0, toSequence);
+    }
+
+    private int messageTokens(ChatMessageEntity message) {
+        if (message == null) {
+            return 0;
+        }
+        if (message.getEstimatedTokenCount() != null && message.getEstimatedTokenCount() > 0) {
+            return message.getEstimatedTokenCount();
+        }
+        return tokenCounter.estimate(message.getContent());
+    }
+
+    private String renderInstruction(List<ContextFragment> fragments) {
+        if (fragments == null || fragments.isEmpty()) {
+            return "";
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("以下是当前业务会话的可恢复历史上下文。请只把它作为同一 sessionId 的背景信息使用，不要复述本段。");
+        lines.add("<conversation_context>");
+        for (ContextFragment fragment : fragments) {
+            lines.add(fragment.getContent());
+        }
+        lines.add("</conversation_context>");
+        return String.join("\n", lines);
+    }
+
+    private String renderLongTermMemory(ConversationMemorySnapshotEntity snapshot) {
+        return "<long_term_memory memoryVersion=\"" + snapshot.getMemoryVersion()
+                + "\" coveredToSequence=\"" + snapshot.getCoveredToSequence() + "\">\n"
+                + snapshot.getContent() + "\n</long_term_memory>";
+    }
+
+    private String renderRecentMessages(List<ChatMessageEntity> messages) {
+        List<String> lines = new ArrayList<>();
+        lines.add("<recent_messages>");
+        for (ChatMessageEntity message : messages) {
+            lines.add("[seq=" + message.getSequenceNo() + " role=" + safeRole(message.getRole()) + "]");
+            lines.add(message.getContent() == null ? "" : message.getContent());
+        }
+        lines.add("</recent_messages>");
+        return String.join("\n", lines);
+    }
+
+    private String renderUpstreamOutput(String upstreamOutput) {
+        return "<workflow_upstream>\n" + upstreamOutput + "\n</workflow_upstream>";
+    }
+
+    private int maxTokensFor(ContextFragmentType type) {
+        if (type == ContextFragmentType.LONG_TERM_MEMORY) {
+            return properties.getLongTermMemoryTokens();
+        }
+        if (type == ContextFragmentType.RECENT_CONVERSATION) {
+            return properties.getRecentConversationTokens();
+        }
+        if (type == ContextFragmentType.WORKFLOW_UPSTREAM) {
+            return properties.getUpstreamTokens();
+        }
+        return properties.getRagTokens();
+    }
+
+    private String buildCompressionPrompt(ConversationMemorySnapshotEntity active,
+                                          List<ChatMessageEntity> messages,
+                                          ContextCompactionTaskEntity task) {
+        List<String> lines = new ArrayList<>();
+        lines.add("你是会话长期记忆压缩器。请把旧摘要和新增原始消息压缩成一个严格 JSON 对象。");
+        lines.add("只能输出 JSON，不要输出 Markdown，不要输出解释。JSON 必须包含：");
+        lines.add("conversationSummary:string, confirmedDecisions:array, constraints:array, openItems:array, keyEntities:array, sourceRange:object。");
+        lines.add("长期记忆只属于同一 sessionId，保留已确认事实、约束和待办，删除闲聊和重复内容。");
+        lines.add("旧摘要：");
+        lines.add(active == null || isBlank(active.getContent()) ? "{}" : active.getContent());
+        lines.add("新增消息范围：" + task.getFromSequence() + "-" + task.getToSequence());
+        lines.add("新增消息：");
+        for (ChatMessageEntity message : messages) {
+            lines.add("[seq=" + message.getSequenceNo() + " role=" + safeRole(message.getRole()) + "]");
+            lines.add(message.getContent() == null ? "" : message.getContent());
+        }
+        return String.join("\n", lines);
+    }
+
+    private String normalizeSummaryJson(String raw, ContextCompactionTaskEntity task) {
+        try {
+            String cleaned = stripCodeFence(raw);
+            JsonNode node = objectMapper.readTree(cleaned);
+            if (!node.isObject()) {
+                throw new IllegalStateException("上下文压缩结果不是 JSON 对象");
+            }
+            ObjectNode objectNode = (ObjectNode) node;
+            requireText(objectNode, KEY_SUMMARY);
+            ensureArray(objectNode, KEY_DECISIONS);
+            ensureArray(objectNode, KEY_CONSTRAINTS);
+            ensureArray(objectNode, KEY_OPEN_ITEMS);
+            ensureArray(objectNode, KEY_ENTITIES);
+            ObjectNode range = objectMapper.createObjectNode();
+            range.put("fromSequence", task.getFromSequence());
+            range.put("toSequence", task.getToSequence());
+            range.put("policyVersion", task.getPolicyVersion());
+            objectNode.set(KEY_SOURCE_RANGE, range);
+            return objectMapper.writeValueAsString(objectNode);
+        } catch (Exception e) {
+            throw new IllegalStateException("上下文压缩结果 JSON 校验失败", e);
+        }
+    }
+
+    private void requireText(ObjectNode node, String key) {
+        JsonNode value = node.get(key);
+        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+            throw new IllegalStateException("上下文压缩结果缺少字段 " + key);
+        }
+    }
+
+    private void ensureArray(ObjectNode node, String key) {
+        JsonNode value = node.get(key);
+        if (value == null || !value.isArray()) {
+            ArrayNode arrayNode = objectMapper.createArrayNode();
+            node.set(key, arrayNode);
+        }
+    }
+
+    private ChatModel resolveChatModel(ContextCompactionTaskEntity task) {
+        ChatSessionEntity session = sessionDomain.assertSessionAccess(task.getTenantId(), task.getUserId(), task.getSessionId(), null);
+        DefaultArmoryFactory defaultArmoryFactory = defaultArmoryFactoryProvider == null ? null : defaultArmoryFactoryProvider.getIfAvailable();
+        if (defaultArmoryFactory == null) {
+            throw new IllegalStateException("上下文压缩缺少 ArmoryFactory");
+        }
+        AiAgentRegisterVO agent = queryRegisteredAgent(defaultArmoryFactory, session.getAgentId());
+        if (agent == null && !isBlank(session.getAppName()) && !session.getAppName().equals(session.getAgentId())) {
+            agent = queryRegisteredAgent(defaultArmoryFactory, session.getAppName());
+        }
+        if (agent == null) {
+            throw new IllegalStateException("上下文压缩找不到会话 Agent：" + session.getAgentId());
+        }
+        if (agent.getChatModel() == null) {
+            throw new IllegalStateException("上下文压缩会话 Agent 未绑定模型：" + session.getAgentId());
+        }
+        return agent.getChatModel();
+    }
+
+    /**
+     * 查询已注册运行时 Agent；参数是装配工厂和 Agent 标识；找不到时返回空。
+     */
+    private AiAgentRegisterVO queryRegisteredAgent(DefaultArmoryFactory defaultArmoryFactory, String agentId) {
+        if (isBlank(agentId)) {
+            return null;
+        }
+        try {
+            return defaultArmoryFactory.getAiAgentRegisterVO(agentId);
+        } catch (NoSuchBeanDefinitionException e) {
+            return null;
+        }
+    }
+
+    private ContextAssemblyResult emptyResult() {
+        return ContextAssemblyResult.builder()
+                .instruction("")
+                .estimatedTokenCount(0)
+                .memoryVersion(0)
+                .coveredToSequence(0)
+                .cacheHit(false)
+                .build();
+    }
+
+    private String stripCodeFence(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim();
+        if (value.startsWith("```")) {
+            value = value.replaceFirst("^```[a-zA-Z]*\\s*", "");
+            value = value.replaceFirst("\\s*```$", "");
+        }
+        return value.trim();
+    }
+
+    private String safeRole(String role) {
+        return isBlank(role) ? "unknown" : role.toLowerCase(Locale.ROOT);
+    }
+
+    private int safe(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+}
