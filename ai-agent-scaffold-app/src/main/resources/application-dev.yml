@@ -36,6 +36,39 @@ spring:
     connection-timeout: 30000 #数据库连接超时时间,默认30秒，即30000
     connection-test-query: SELECT 1
   type: com.zaxxer.hikari.HikariDataSource
+  data:
+    redis:
+      host: ${REDIS_HOST:69.165.65.123}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      timeout: ${REDIS_TIMEOUT:3s}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
+    admin:
+      auto-create: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+    listener:
+      ack-mode: record
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_SSL}
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-512}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
+      ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      ssl.truststore.type: ${KAFKA_SSL_TRUSTSTORE_TYPE:PKCS12}
 
 # MyBatis 配置
 mybatis:
@@ -57,6 +90,27 @@ security:
     refresh-expire-seconds: 2592000
 
 ai:
+  context:
+    enabled: ${AI_CONTEXT_ENABLED:false}
+    policy-version: v1
+    model-window-tokens: ${AI_CONTEXT_MODEL_WINDOW_TOKENS:0}
+    reserve-output-tokens: ${AI_CONTEXT_RESERVE_OUTPUT_TOKENS:8192}
+    safety-margin-tokens: ${AI_CONTEXT_SAFETY_MARGIN_TOKENS:2048}
+    long-term-memory-tokens: ${AI_CONTEXT_LONG_TERM_MEMORY_TOKENS:2048}
+    recent-conversation-tokens: ${AI_CONTEXT_RECENT_CONVERSATION_TOKENS:8192}
+    recent-window-max-messages: ${AI_CONTEXT_RECENT_WINDOW_MAX_MESSAGES:100}
+    upstream-tokens: ${AI_CONTEXT_UPSTREAM_TOKENS:4096}
+    rag-tokens: ${AI_CONTEXT_RAG_TOKENS:0}
+    compaction-min-uncovered-tokens: ${AI_CONTEXT_COMPACTION_MIN_UNCOVERED_TOKENS:12000}
+    compaction-retain-recent-tokens: ${AI_CONTEXT_COMPACTION_RETAIN_RECENT_TOKENS:4096}
+    compaction-max-attempts: ${AI_CONTEXT_COMPACTION_MAX_ATTEMPTS:3}
+    cache-ttl-seconds: ${AI_CONTEXT_CACHE_TTL_SECONDS:1800}
+    kafka:
+      enabled: ${AI_CONTEXT_KAFKA_ENABLED:false}
+      topic: ${AI_CONTEXT_KAFKA_TOPIC:context.compaction.request.v1}
+      group-id: ${AI_CONTEXT_KAFKA_GROUP_ID:ai-agent-context-compaction}
+      retry-attempts: ${AI_CONTEXT_KAFKA_RETRY_ATTEMPTS:3}
+      retry-delay-ms: ${AI_CONTEXT_KAFKA_RETRY_DELAY_MS:1000}
   observability:
     sample:
       enabled: true
