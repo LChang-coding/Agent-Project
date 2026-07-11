@@ -41,7 +41,9 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/agent_workflow_version_mapper.xml",
                 "mybatis/mapper/agent_schedule_config_mapper.xml",
                 "mybatis/mapper/agent_schedule_task_mapper.xml",
-                "mybatis/mapper/agent_schedule_execution_mapper.xml"
+                "mybatis/mapper/agent_schedule_execution_mapper.xml",
+                "mybatis/mapper/conversation_memory_snapshot_mapper.xml",
+                "mybatis/mapper/context_compaction_task_mapper.xml"
         }) {
             new XMLMapperBuilder(
                     Resources.getResourceAsStream(mapperResource),
@@ -63,5 +65,7 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentWorkflowVersionDao.queryLatestPublished"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentScheduleConfigDao.queryListByRunAsUserId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentScheduleExecutionDao.queryByExecutionId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IConversationMemorySnapshotDao.queryActive"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.insertIgnore"));
     }
 }
