@@ -6,6 +6,8 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
+import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
@@ -38,6 +40,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -59,6 +62,9 @@ public class ChatService implements IChatService {
 
     @Resource
     private IWorkflowService workflowService;
+
+    @Resource
+    private ConversationMemoryService conversationMemoryService;
 
     /**
      * 查询 Agent 配置；无参数；返回当前可用 Agent 列表。
@@ -227,14 +233,16 @@ public class ChatService implements IChatService {
 
         Content content = Content.builder().role("user").parts(parts).build();
 
-        // 获取运行体
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
-        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), chatCommandEntity.getUserId(), actualSessionId);
         String traceId = TraceContext.currentOrNewTraceId();
-        sessionDomain.appendUserMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, describeContent(chatCommandEntity), traceId);
+        conversationMemoryService.republishUnfinished(tenantId, chatCommandEntity.getUserId(), actualSessionId);
+        ChatMessageEntity userMessage = saveUserMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, describeContent(chatCommandEntity), traceId);
+        String adkSessionId = invocationSessionId(actualSessionId);
+        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), chatCommandEntity.getUserId(), adkSessionId);
 
-        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), actualSessionId, content, RunConfig.builder().build(),
-                runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId, TenantContextHolder.getRoleCode()));
+        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder().build(),
+                runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
+                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -256,13 +264,16 @@ public class ChatService implements IChatService {
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(sessionAgentId, userId, sessionId, aiAgentRegisterVO);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, sessionAgentId);
-        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, actualSessionId);
         String traceId = TraceContext.currentOrNewTraceId();
-        sessionDomain.appendUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
+        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        String adkSessionId = invocationSessionId(actualSessionId);
+        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
 
         Content userMsg = Content.fromParts(Part.fromText(message));
-        Flowable<Event> events = runner.runAsync(userId, actualSessionId, userMsg, RunConfig.builder().build(),
-                runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId, TenantContextHolder.getRoleCode()));
+        Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder().build(),
+                runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
+                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -284,9 +295,11 @@ public class ChatService implements IChatService {
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(sessionAgentId, userId, sessionId, aiAgentRegisterVO);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, sessionAgentId);
-        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, actualSessionId);
         String traceId = TraceContext.currentOrNewTraceId();
-        sessionDomain.appendUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
+        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        String adkSessionId = invocationSessionId(actualSessionId);
+        ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
 
         Content userMsg = Content.fromParts(Part.fromText(message));
         RunConfig runConfig = RunConfig.builder()
@@ -294,8 +307,9 @@ public class ChatService implements IChatService {
                 .build();
         StringBuilder assistantContent = new StringBuilder();
         AtomicBoolean assistantSaved = new AtomicBoolean(false);
-        return runner.runAsync(userId, actualSessionId, userMsg, runConfig,
-                        runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId, TenantContextHolder.getRoleCode()))
+        return runner.runAsync(userId, adkSessionId, userMsg, runConfig,
+                        runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
+                                TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null))
                 .doOnNext(event -> appendContent(assistantContent, event.stringifyContent()))
                 .doOnComplete(() -> saveAssistantMessageOnce(assistantSaved, tenantId, userId, actualSessionId, assistantContent.toString(), traceId))
                 .doOnError(throwable -> saveAssistantErrorMessageOnce(assistantSaved, tenantId, userId, actualSessionId, traceId, throwable, assistantContent.toString()))
@@ -311,10 +325,12 @@ public class ChatService implements IChatService {
         AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
         String actualSessionId = ensureSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
-        sessionDomain.appendUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
+        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, message, traceId);
 
         try {
-            String finalOutput = executeDagPlan(dagPlan, tenantId, userId, actualSessionId, message, traceId, TenantContextHolder.getRoleCode());
+            String finalOutput = executeDagPlan(dagPlan, tenantId, userId, actualSessionId, message, traceId,
+                    TenantContextHolder.getRoleCode(), historyCutoff(userMessage));
             AiLog.info(AiLog.workflow().dagCompleted(tenantId, userId, dagPlan.getWorkflowId(), dagPlan.getVersion(),
                     dagPlan.getNodes().size(), dagPlan.getEdges() == null ? 0 : dagPlan.getEdges().size(),
                     String.join(",", terminalNodeIds(dagPlan, outgoingEdges(dagPlan))), finalOutput.length()));
@@ -329,7 +345,8 @@ public class ChatService implements IChatService {
     /**
      * 执行 DAG 计划；参数是计划、用户、会话、用户消息和链路ID；返回终点节点输出。
      */
-    private String executeDagPlan(WorkflowDagPlanEntity dagPlan, String tenantId, String userId, String sessionId, String userMessage, String traceId, String roleCode) {
+    private String executeDagPlan(WorkflowDagPlanEntity dagPlan, String tenantId, String userId, String sessionId,
+                                  String userMessage, String traceId, String roleCode, Integer historyCutoffSequence) {
         Map<String, WorkflowDagPlanEntity.Node> nodeMap = dagPlan.getNodes().stream()
                 .collect(Collectors.toMap(WorkflowDagPlanEntity.Node::getNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
         Map<String, List<String>> outgoing = outgoingEdges(dagPlan);
@@ -350,7 +367,8 @@ public class ChatService implements IChatService {
             ready.clear();
             List<CompletableFuture<NodeRunResult>> futures = currentLevel.stream()
                     .map(nodeId -> CompletableFuture.supplyAsync(() -> runDagNode(nodeMap.get(nodeId), incoming.getOrDefault(nodeId, Collections.emptyList()),
-                            selfLoopNodeIds.contains(nodeId), outputs, tenantId, userId, sessionId, dagPlan.getWorkflowId(), userMessage, traceId, roleCode)))
+                            selfLoopNodeIds.contains(nodeId), outputs, tenantId, userId, sessionId, dagPlan.getWorkflowId(),
+                            userMessage, traceId, roleCode, historyCutoffSequence)))
                     .collect(Collectors.toList());
             for (CompletableFuture<NodeRunResult> future : futures) {
                 NodeRunResult result = joinNodeResult(future);
@@ -384,7 +402,8 @@ public class ChatService implements IChatService {
                                      String workflowId,
                                      String userMessage,
                                      String traceId,
-                                     String roleCode) {
+                                     String roleCode,
+                                     Integer historyCutoffSequence) {
         if (node == null) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流 DAG 节点不存在");
         }
@@ -395,7 +414,8 @@ public class ChatService implements IChatService {
         String previousOutput = "";
         for (int index = 1; index <= runTimes; index++) {
             String prompt = buildDagNodePrompt(userMessage, upstreamOutputs, previousOutput, index, runTimes);
-            previousOutput = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode);
+            previousOutput = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode,
+                    historyCutoffSequence, String.join("\n\n", upstreamOutputs));
         }
         return new NodeRunResult(node.getNodeId(), previousOutput);
     }
@@ -403,13 +423,17 @@ public class ChatService implements IChatService {
     /**
      * 执行一次节点 Agent；参数是节点、用户、会话、提示词和链路ID；返回模型输出。
      */
-    private String runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId, String sessionId, String workflowId, String prompt, String traceId, String roleCode) {
+    private String runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId, String sessionId,
+                                  String workflowId, String prompt, String traceId, String roleCode,
+                                  Integer historyCutoffSequence, String upstreamOutput) {
         AiAgentRegisterVO agent = requireAgent(node.getRuntimeAgentId());
         InMemoryRunner runner = agent.getRunner();
-        ensureAdkSession(runner, agent.getAppName(), userId, sessionId);
+        String adkSessionId = invocationSessionId(sessionId + ":" + node.getNodeId());
+        ensureAdkSession(runner, agent.getAppName(), userId, adkSessionId);
         Content content = Content.fromParts(Part.fromText(prompt));
         StringBuilder output = new StringBuilder();
-        runner.runAsync(userId, sessionId, content, RunConfig.builder().build(), runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode))
+        runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
+                        runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode, historyCutoffSequence, upstreamOutput))
                 .blockingForEach(event -> appendContent(output, event.stringifyContent()));
         return output.toString();
     }
@@ -573,7 +597,8 @@ public class ChatService implements IChatService {
     /**
      * 获取运行状态；参数是身份、会话、工作流和链路ID；返回传给 ADK 的状态。
      */
-    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId, String roleCode) {
+    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
+                                                  String roleCode, Integer visibleThroughSequence, String upstreamOutput) {
         Map<String, Object> state = new HashMap<>();
         putStateIfPresent(state, TraceContext.TRACE_ID_STATE_KEY, traceId);
         putStateIfPresent(state, ToolRuntimeContextKeys.TRACE_ID, traceId);
@@ -582,6 +607,10 @@ public class ChatService implements IChatService {
         putStateIfPresent(state, ToolRuntimeContextKeys.SESSION_ID, sessionId);
         putStateIfPresent(state, ToolRuntimeContextKeys.WORKFLOW_ID, workflowId);
         putStateIfPresent(state, "roleCode", roleCode);
+        putStateIfPresent(state, ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT, upstreamOutput);
+        if (visibleThroughSequence != null) {
+            state.put(ToolRuntimeContextKeys.CONTEXT_VISIBLE_THROUGH_SEQUENCE, visibleThroughSequence);
+        }
         return state;
     }
 
@@ -592,6 +621,23 @@ public class ChatService implements IChatService {
         if (key != null && value != null && !value.isBlank()) {
             state.put(key, value);
         }
+    }
+
+    /**
+     * 计算历史可见切面；参数是本轮用户消息；返回当前输入之前的序号。
+     */
+    private Integer historyCutoff(ChatMessageEntity userMessage) {
+        if (userMessage == null || userMessage.getSequenceNo() == null) {
+            return 0;
+        }
+        return Math.max(0, userMessage.getSequenceNo() - 1);
+    }
+
+    /**
+     * 创建临时 ADK 会话ID；参数是业务会话ID；返回本轮独立执行会话ID。
+     */
+    private String invocationSessionId(String businessSessionId) {
+        return businessSessionId + ":inv:" + UUID.randomUUID();
     }
 
     /**
@@ -650,12 +696,24 @@ public class ChatService implements IChatService {
     }
 
     /**
-     * 保存助手消息；参数是租户、用户、会话、内容和链路ID；无返回值。
+     * 保存助手消息；参数是租户、用户、会话、内容和链路ID；返回已保存消息。
      */
-    private void saveAssistantMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
+    private ChatMessageEntity saveAssistantMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
         if (content != null && !content.isBlank()) {
-            sessionDomain.appendAssistantMessage(tenantId, userId, sessionId, content, traceId);
+            ChatMessageEntity message = sessionDomain.appendAssistantMessage(tenantId, userId, sessionId, content, traceId);
+            conversationMemoryService.onAssistantMessageSaved(message);
+            return message;
         }
+        return null;
+    }
+
+    /**
+     * 保存用户消息并刷新会话短期窗口；参数是身份、内容和链路ID；返回已保存消息。
+     */
+    private ChatMessageEntity saveUserMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
+        ChatMessageEntity message = sessionDomain.appendUserMessage(tenantId, userId, sessionId, content, traceId);
+        conversationMemoryService.onMessageSaved(message);
+        return message;
     }
 
     /**
@@ -681,7 +739,9 @@ public class ChatService implements IChatService {
                                            String traceId,
                                            Throwable throwable,
                                            String partialContent) {
-        sessionDomain.appendAssistantMessage(tenantId, userId, sessionId, errorContent(throwable, partialContent), traceId);
+        ChatMessageEntity message = sessionDomain.appendAssistantMessage(tenantId, userId, sessionId,
+                errorContent(throwable, partialContent), traceId);
+        conversationMemoryService.onMessageSaved(message);
     }
 
     /**

@@ -5,17 +5,17 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.agent.service.armory.matter.plugin.ContextInjectionPlugin;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.BaseAgent;
-import com.google.adk.agents.SequentialAgent;
 import com.google.adk.plugins.BasePlugin;
 import com.google.adk.runner.InMemoryRunner;
-import com.google.common.collect.ImmutableList;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -29,6 +29,15 @@ import java.util.List;
 @Slf4j
 @Service
 public class RunnerNode extends AbstractArmorySupport {
+
+    private final ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider;
+
+    /**
+     * 创建 Runner 装配节点；参数是上下文插件延迟提供器；返回节点实例。
+     */
+    public RunnerNode(ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider) {
+        this.contextInjectionPluginProvider = contextInjectionPluginProvider;
+    }
 
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         log.info("Ai Agent 装配操作 - RunnerNode");
@@ -48,6 +57,7 @@ public class RunnerNode extends AbstractArmorySupport {
                 .agentName(agentName)
                 .agentDesc(agentDesc)
                 .runner(runner)
+                .chatModel(dynamicContext.getChatModel())
                 .build();
 
         // 注册到 Spring 容器
@@ -77,10 +87,26 @@ public class RunnerNode extends AbstractArmorySupport {
                 plugins.add(plugin);
             }
         } else {
-            plugins = ImmutableList.of();
+            plugins = new ArrayList<>();
         }
+        appendContextPlugin(plugins);
 
         return new InMemoryRunner(baseAgent, appName, plugins);
+    }
+
+    /**
+     * 自动附加上下文插件；参数是插件列表；无返回值。
+     */
+    private void appendContextPlugin(List<BasePlugin> plugins) {
+        ContextInjectionPlugin contextInjectionPlugin = contextInjectionPluginProvider.getIfAvailable();
+        if (contextInjectionPlugin == null) {
+            return;
+        }
+        boolean exists = plugins.stream()
+                .anyMatch(plugin -> plugin != null && contextInjectionPlugin.getName().equals(plugin.getName()));
+        if (!exists) {
+            plugins.add(contextInjectionPlugin);
+        }
     }
 
     @Override

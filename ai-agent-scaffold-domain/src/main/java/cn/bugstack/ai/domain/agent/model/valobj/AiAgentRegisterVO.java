@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.springframework.ai.chat.model.ChatModel;
 
 /**
  * Ai Agent 智能体注册值对象
@@ -39,5 +40,10 @@ public class AiAgentRegisterVO {
      * 智能体执行对象
      */
     private InMemoryRunner runner;
+
+    /**
+     * 当前 Agent 使用的模型；上下文压缩复用该模型。
+     */
+    private ChatModel chatModel;
 
 }
