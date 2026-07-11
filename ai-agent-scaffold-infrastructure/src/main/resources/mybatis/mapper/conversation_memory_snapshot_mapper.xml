@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IConversationMemorySnapshotDao">
+
+    <resultMap id="SnapshotMap" type="cn.bugstack.ai.infrastructure.dao.po.ConversationMemorySnapshotPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="memory_version" property="memoryVersion"/>
+        <result column="covered_to_sequence" property="coveredToSequence"/>
+        <result column="content" property="content"/>
+        <result column="estimated_token_count" property="estimatedTokenCount"/>
+        <result column="policy_version" property="policyVersion"/>
+        <result column="status" property="status"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="SnapshotColumns">
+        id, tenant_id, user_id, session_id, memory_version, covered_to_sequence, content,
+        estimated_token_count, policy_version, status, trace_id, create_time, update_time, deleted
+    </sql>
+
+    <select id="queryActive" resultMap="SnapshotMap">
+        SELECT <include refid="SnapshotColumns"/>
+        FROM conversation_memory_snapshot
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND status = 'active'
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        ORDER BY memory_version DESC
+        LIMIT 1
+    </select>
+
+    <select id="countActiveVersion" resultType="java.lang.Integer">
+        SELECT COUNT(1)
+        FROM conversation_memory_snapshot
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND memory_version = #{memoryVersion}
+          AND status = 'active'
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </select>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ConversationMemorySnapshotPO">
+        INSERT INTO conversation_memory_snapshot (
+            tenant_id, user_id, session_id, memory_version, covered_to_sequence,
+            content, estimated_token_count, policy_version, status, trace_id
+        )
+        VALUES (
+            #{tenantId}, #{userId}, #{sessionId}, #{memoryVersion}, #{coveredToSequence},
+            #{content}, #{estimatedTokenCount}, #{policyVersion}, #{status}, #{traceId}
+        )
+    </insert>
+
+    <update id="supersede">
+        UPDATE conversation_memory_snapshot
+        SET status = 'superseded'
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND memory_version = #{memoryVersion}
+          AND status = 'active'
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </update>
+
+</mapper>

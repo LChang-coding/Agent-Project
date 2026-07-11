@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao">
+
+    <resultMap id="TaskMap" type="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="task_key" property="taskKey"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="from_sequence" property="fromSequence"/>
+        <result column="to_sequence" property="toSequence"/>
+        <result column="expected_memory_version" property="expectedMemoryVersion"/>
+        <result column="policy_version" property="policyVersion"/>
+        <result column="status" property="status"/>
+        <result column="attempt_count" property="attemptCount"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="TaskColumns">
+        id, task_id, task_key, tenant_id, user_id, session_id, from_sequence, to_sequence,
+        expected_memory_version, policy_version, status, attempt_count, error_message,
+        trace_id, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
+        INSERT IGNORE INTO context_compaction_task (
+            task_id, task_key, tenant_id, user_id, session_id, from_sequence, to_sequence,
+            expected_memory_version, policy_version, status, attempt_count, error_message, trace_id
+        )
+        VALUES (
+            #{taskId}, #{taskKey}, #{tenantId}, #{userId}, #{sessionId}, #{fromSequence}, #{toSequence},
+            #{expectedMemoryVersion}, #{policyVersion}, #{status}, #{attemptCount}, #{errorMessage}, #{traceId}
+        )
+    </insert>
+
+    <select id="queryByTaskKey" resultMap="TaskMap">
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE task_key = #{taskKey} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryByTaskId" resultMap="TaskMap">
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE task_id = #{taskId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryUnfinished" resultMap="TaskMap">
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND status IN ('pending', 'retrying')
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        ORDER BY id ASC
+        LIMIT 20
+    </select>
+
+    <update id="claim">
+        UPDATE context_compaction_task
+        SET status = 'processing',
+            attempt_count = attempt_count + 1
+        WHERE task_id = #{taskId}
+          AND status IN ('pending', 'retrying')
+          AND deleted = 0
+    </update>
+
+    <update id="complete">
+        UPDATE context_compaction_task
+        SET status = 'succeeded',
+            error_message = NULL
+        WHERE task_id = #{taskId}
+          AND status = 'processing'
+          AND deleted = 0
+    </update>
+
+    <update id="retry">
+        UPDATE context_compaction_task
+        SET status = 'retrying',
+            error_message = #{errorMessage}
+        WHERE task_id = #{taskId}
+          AND status = 'processing'
+          AND deleted = 0
+    </update>
+
+    <update id="dead">
+        UPDATE context_compaction_task
+        SET status = 'dead',
+            error_message = #{errorMessage}
+        WHERE task_id = #{taskId}
+          AND status IN ('processing', 'retrying', 'pending')
+          AND deleted = 0
+    </update>
+
+</mapper>
