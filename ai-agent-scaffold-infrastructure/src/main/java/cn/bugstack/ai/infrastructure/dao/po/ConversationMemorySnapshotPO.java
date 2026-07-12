@@ -1,14 +1,18 @@
 package cn.bugstack.ai.infrastructure.dao.po;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 /**
  * 会话长期记忆持久化对象。
  */
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 public class ConversationMemorySnapshotPO extends BasePO {
     private String tenantId;
