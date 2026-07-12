@@ -4,7 +4,7 @@ import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 
 /**
- * 对象存储服务接口。
+ * 对象存储服务接口。 minIO
  */
 public interface ObjectStorageService {
 

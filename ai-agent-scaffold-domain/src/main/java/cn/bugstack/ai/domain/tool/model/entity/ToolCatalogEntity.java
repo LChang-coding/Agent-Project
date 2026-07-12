@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 可用工具目录实体。
+ * 当前工具目录实体。
  */
 @Data
 @Builder
