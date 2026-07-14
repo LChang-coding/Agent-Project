@@ -30,15 +30,27 @@ public class AgentScheduleExecutionPO extends BasePO {
      */
     private String taskId;
 
+    private String configId;
+
     /**
      * 执行记录ID
      */
     private String executionId;
 
+    private String triggerKey;
+
     /**
      * 链路ID
      */
     private String traceId;
+
+    private LocalDateTime plannedTime;
+
+    private Integer attemptNo;
+
+    private Long fencingToken;
+
+    private String leaseOwner;
 
     /**
      * 执行开始时间
@@ -64,6 +76,8 @@ public class AgentScheduleExecutionPO extends BasePO {
      * 错误信息
      */
     private String errorMessage;
+
+    private String resultJson;
 
     /**
      * 扩展信息

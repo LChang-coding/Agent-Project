@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 定时任务配置 DAO。
@@ -85,4 +86,21 @@ public interface IAgentScheduleConfigDao {
      * @return 定时任务配置持久化对象列表
      */
     List<AgentScheduleConfigPO> queryListByTenantIdAndVisibility(@Param("tenantId") String tenantId, @Param("visibility") String visibility);
+
+    List<AgentScheduleConfigPO> queryForReconcile(@Param("limit") int limit);
+
+    AgentScheduleConfigPO queryOwned(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                     @Param("configId") String configId);
+
+    List<AgentScheduleConfigPO> queryOwnedList(@Param("tenantId") String tenantId, @Param("userId") String userId);
+
+    int updateOwned(AgentScheduleConfigPO config);
+
+    int updateEnabled(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                      @Param("configId") String configId, @Param("enabled") int enabled,
+                      @Param("status") String status);
+
+    int updateReconciled(@Param("configId") String configId, @Param("configHash") String configHash,
+                         @Param("configVersion") long configVersion,
+                         @Param("reconciledAt") LocalDateTime reconciledAt);
 }

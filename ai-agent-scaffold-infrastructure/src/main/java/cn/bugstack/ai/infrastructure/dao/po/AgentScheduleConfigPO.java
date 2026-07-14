@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Data
 @Builder
 @AllArgsConstructor
@@ -48,6 +50,12 @@ public class AgentScheduleConfigPO extends BasePO {
      */
     private String agentName;
 
+    private String taskType;
+
+    private String taskPayload;
+
+    private String runAsRoleCode;
+
     /**
      * Cron 表达式
      */
@@ -67,6 +75,16 @@ public class AgentScheduleConfigPO extends BasePO {
      * 配置状态：active/disabled/archived
      */
     private String status;
+
+    private String misfirePolicy;
+
+    private Integer maxRetries;
+
+    private String configHash;
+
+    private Long configVersion;
+
+    private LocalDateTime lastReconciledAt;
 
     /**
      * 扩展信息

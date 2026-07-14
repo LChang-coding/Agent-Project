@@ -8,9 +8,23 @@
         <result column="user_id" property="userId"/>
         <result column="config_id" property="configId"/>
         <result column="task_id" property="taskId"/>
+        <result column="business_key" property="businessKey"/>
+        <result column="config_hash" property="configHash"/>
+        <result column="config_version" property="configVersion"/>
+        <result column="cron_expr" property="cronExpr"/>
+        <result column="timezone" property="timezone"/>
+        <result column="misfire_policy" property="misfirePolicy"/>
+        <result column="max_retries" property="maxRetries"/>
         <result column="planned_time" property="plannedTime"/>
+        <result column="next_fire_time" property="nextFireTime"/>
+        <result column="last_planned_time" property="lastPlannedTime"/>
+        <result column="retry_at" property="retryAt"/>
         <result column="status" property="status"/>
         <result column="retry_count" property="retryCount"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="fencing_token" property="fencingToken"/>
+        <result column="row_version" property="rowVersion"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -18,7 +32,10 @@
     </resultMap>
 
     <sql id="AgentScheduleTaskColumns">
-        id, tenant_id, user_id, config_id, task_id, planned_time, status, retry_count, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, config_id, task_id, business_key, config_hash, config_version, cron_expr,
+        timezone, misfire_policy, max_retries, planned_time, next_fire_time, last_planned_time, retry_at,
+        status, retry_count, lease_owner, lease_until, fencing_token, row_version, metadata,
+        create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO" useGeneratedKeys="true" keyProperty="id">
@@ -71,5 +88,111 @@
         WHERE task_id = #{taskId} AND deleted = 0
         ORDER BY planned_time ASC, id ASC
     </select>
+
+    <insert id="upsertRuntime" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO">
+        INSERT INTO agent_schedule_task (tenant_id, user_id, config_id, task_id, business_key, config_hash,
+            config_version, cron_expr, timezone, misfire_policy, max_retries, planned_time, next_fire_time,
+            status, retry_count, fencing_token, row_version)
+        VALUES (#{tenantId}, #{userId}, #{configId}, #{taskId}, #{businessKey}, #{configHash}, 1,
+            #{cronExpr}, #{timezone}, #{misfirePolicy}, #{maxRetries}, #{plannedTime}, #{nextFireTime},
+            #{status}, 0, 0, 0)
+        ON DUPLICATE KEY UPDATE
+            tenant_id = VALUES(tenant_id), user_id = VALUES(user_id),
+            config_version = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), config_version + 1, config_version),
+            cron_expr = VALUES(cron_expr), timezone = VALUES(timezone),
+            misfire_policy = VALUES(misfire_policy), max_retries = VALUES(max_retries),
+            planned_time = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), VALUES(planned_time), planned_time),
+            next_fire_time = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), VALUES(next_fire_time), next_fire_time),
+            retry_at = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), NULL, retry_at),
+            retry_count = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), 0, retry_count),
+            lease_owner = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), NULL, lease_owner),
+            lease_until = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), NULL, lease_until),
+            status = IF(NOT (config_hash &lt;=&gt; VALUES(config_hash)), VALUES(status),
+                        IF(VALUES(status) = 'disabled', 'disabled', IF(status = 'disabled', 'ready', status))),
+            config_hash = VALUES(config_hash), row_version = row_version + 1, deleted = 0
+    </insert>
+
+    <select id="queryByConfigId" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE config_id = #{configId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="disableInactive">
+        UPDATE agent_schedule_task task
+        LEFT JOIN agent_schedule_config config
+          ON config.config_id = task.config_id AND config.deleted = 0
+        SET task.status = 'disabled', task.lease_owner = NULL, task.lease_until = NULL,
+            task.retry_at = NULL, task.row_version = task.row_version + 1
+        WHERE task.deleted = 0 AND task.status &lt;&gt; 'disabled'
+          AND (config.config_id IS NULL OR config.enabled = 0 OR config.status &lt;&gt; 'active')
+    </update>
+
+    <update id="claimDue">
+        UPDATE agent_schedule_task
+        SET status = 'running', lease_owner = #{leaseOwner}, lease_until = #{leaseUntil},
+            fencing_token = fencing_token + 1, row_version = row_version + 1
+        WHERE id = (
+            SELECT candidate.id FROM (
+                SELECT id FROM agent_schedule_task
+                WHERE deleted = 0 AND status IN ('ready', 'retry', 'running')
+                  AND COALESCE(retry_at, next_fire_time) &lt;= #{now}
+                  AND (lease_until IS NULL OR lease_until &lt; #{now})
+                ORDER BY COALESCE(retry_at, next_fire_time) ASC, id ASC
+                LIMIT 1
+            ) candidate
+        )
+    </update>
+
+    <select id="queryByLeaseOwner" resultMap="AgentScheduleTaskMap">
+        SELECT <include refid="AgentScheduleTaskColumns"/>
+        FROM agent_schedule_task
+        WHERE lease_owner = #{leaseOwner} AND status = 'running' AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="renewLease">
+        UPDATE agent_schedule_task SET lease_until = #{leaseUntil}, row_version = row_version + 1
+        WHERE task_id = #{taskId} AND lease_owner = #{leaseOwner} AND fencing_token = #{fencingToken}
+          AND status = 'running' AND deleted = 0
+    </update>
+
+    <update id="complete">
+        UPDATE agent_schedule_task
+        SET planned_time = #{nextFireTime}, next_fire_time = #{nextFireTime},
+            last_planned_time = #{lastPlannedTime}, retry_at = NULL, retry_count = 0,
+            status = 'ready', lease_owner = NULL, lease_until = NULL, row_version = row_version + 1
+        WHERE task_id = #{taskId} AND lease_owner = #{leaseOwner} AND fencing_token = #{fencingToken}
+          AND status = 'running' AND deleted = 0
+    </update>
+
+    <update id="retry">
+        UPDATE agent_schedule_task
+        SET status = 'retry', retry_count = #{retryCount}, retry_at = #{retryAt},
+            lease_owner = NULL, lease_until = NULL, row_version = row_version + 1
+        WHERE task_id = #{taskId} AND lease_owner = #{leaseOwner} AND fencing_token = #{fencingToken}
+          AND status = 'running' AND deleted = 0
+    </update>
+
+    <update id="releaseFailedOccurrence">
+        UPDATE agent_schedule_task
+        SET planned_time = #{nextFireTime}, next_fire_time = #{nextFireTime},
+            last_planned_time = #{lastPlannedTime}, retry_at = NULL, retry_count = 0,
+            status = 'ready', lease_owner = NULL, lease_until = NULL, row_version = row_version + 1
+        WHERE task_id = #{taskId} AND lease_owner = #{leaseOwner} AND fencing_token = #{fencingToken}
+          AND status = 'running' AND deleted = 0
+    </update>
+
+    <update id="triggerNow">
+        UPDATE agent_schedule_task task
+        INNER JOIN agent_schedule_config config ON config.config_id = task.config_id
+        SET task.next_fire_time = #{now}, task.planned_time = #{now}, task.retry_at = NULL,
+            task.status = 'ready', task.row_version = task.row_version + 1
+        WHERE task.tenant_id &lt;=&gt; #{tenantId} AND task.user_id = #{userId}
+          AND task.config_id = #{configId} AND config.owner_user_id = #{userId}
+          AND config.enabled = 1 AND config.status = 'active'
+          AND task.status &lt;&gt; 'running' AND task.deleted = 0 AND config.deleted = 0
+    </update>
 
 </mapper>

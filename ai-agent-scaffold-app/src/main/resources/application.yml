@@ -25,3 +25,28 @@ spring:
       enabled: false
   profiles:
     active: dev
+
+xxl:
+  job:
+    admin:
+      addresses: ${XXL_JOB_ADMIN_ADDRESSES:http://127.0.0.1:8080/xxl-job-admin}
+    access-token: ${XXL_JOB_ACCESS_TOKEN:}
+    executor:
+      enabled: ${XXL_JOB_EXECUTOR_ENABLED:false}
+      appname: ${XXL_JOB_EXECUTOR_APPNAME:ai-agent-scheduler}
+      address: ${XXL_JOB_EXECUTOR_ADDRESS:}
+      ip: ${XXL_JOB_EXECUTOR_IP:}
+      port: ${XXL_JOB_EXECUTOR_PORT:9999}
+      log-path: ${XXL_JOB_EXECUTOR_LOG_PATH:./data/xxl-job}
+      log-retention-days: ${XXL_JOB_EXECUTOR_LOG_RETENTION_DAYS:30}
+
+ai:
+  scheduler:
+    reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
+    dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}
+    lease-seconds: ${AI_SCHEDULER_LEASE_SECONDS:120}
+    heartbeat-seconds: ${AI_SCHEDULER_HEARTBEAT_SECONDS:30}
+    retry-base-seconds: ${AI_SCHEDULER_RETRY_BASE_SECONDS:30}
+    local-fallback-enabled: ${AI_SCHEDULER_LOCAL_FALLBACK_ENABLED:false}
+    local-reconcile-delay-ms: ${AI_SCHEDULER_LOCAL_RECONCILE_DELAY_MS:300000}
+    local-dispatch-delay-ms: ${AI_SCHEDULER_LOCAL_DISPATCH_DELAY_MS:5000}

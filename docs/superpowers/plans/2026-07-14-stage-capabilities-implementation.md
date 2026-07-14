@@ -144,6 +144,20 @@
 9. 在服务器部署 XXL-JOB、执行迁移并完成健康/回调验证；若外部状态阻断，保留可重复部署脚本和直接证据并继续其余闭环；
 10. 通过 Java 17 干净测试、前端构建和可行 E2E 后追加记录并按重大边界中文提交。
 
+#### 阶段 E 已确认设计（修改前）
+
+- 组件选择 XXL-JOB `3.4.0`：官方 GitHub 于 2026-04-05 发布该稳定版；使用固定版本镜像和 `xxl-job-core`，禁止 floating latest；
+- XXL-JOB Admin 独立使用 `xxl_job` 数据库，仅部署管理/唤醒能力；业务配置、下一触发时间、租约和执行历史仍以项目库为唯一真源；
+- 两个 Handler 固定命名 `scheduleReconcileJobHandler` 与 `scheduleDispatchJobHandler`，Admin 分别配置长间隔和短间隔 Cron；两者只调用同一 Domain Service，不承载业务状态；
+- `agent_schedule_config` 作为用户配置源，补齐 taskType/payload、runAsRole、misfire/maxRetry、configHash/version/reconciledAt；
+- `agent_schedule_task` 改为“一配置一运行态”，稳定 businessKey/configId 唯一，保存 Cron 快照、下一/上次计划时间、租约、fencing、retryAt 和 rowVersion；Reconciler 使用规范化 SHA-256 + `ON DUPLICATE KEY UPDATE`，Cron 改动只推进版本并重算 nextFire，不新增重复任务；
+- `agent_schedule_execution` 表达“一计划触发点一逻辑执行”，triggerKey 唯一，保存 configId/plannedTime/attempt/fencing/result；同一触发点重试更新原记录，不产生第二个逻辑执行；
+- Dispatcher 使用单条条件更新抢占到期 task，事务立即提交；业务执行在事务外并定时续租；完成时以 taskId + leaseOwner + fencingToken CAS，旧 worker 无权推进下一次时间；
+- 默认 misfire 为 `fire_once_now`：只补一次后从当前时间计算下一触发；支持 `skip` 与有上限的 `catch_up`；失败按指数退避到 maxRetries，超过后记录 dead 并推进下一 Cron；
+- 首版任务类型为 `agent_prompt`，API 强制 runAsUserId 为当前 JWT 用户并固化当前 roleCode，payload 只允许 message；后续 workflow 类型通过 Handler 扩展，不在 Dispatcher 写分支；
+- Spring fixed-delay 唤醒器仅在 `ai.scheduler.local-fallback-enabled=true` 时启用，生产默认关闭，防止与 XXL-JOB 的两个 Handler 重复唤醒；即使误开，多实例数据库租约仍保证单 task 抢占；
+- 官方依据：`https://github.com/xuxueli/xxl-job/releases/tag/v3.4.0` 与 `https://www.xuxueli.com/xxl-job/index.html`。
+
 #### 阶段 D 已确认设计（修改前）
 
 - 导出媒体类型为 `application/vnd.ai-agent.chat-session+json`，`schemaVersion=chat-session-export/v1`；顶层只包含导出时间、会话标题/Agent 展示信息和按序的有效消息；
@@ -301,3 +315,32 @@
 - `npm run build` 通过，`vue-tsc` 与 Vite 完成 1899 个模块；
 - 首次 20 项测试出现 1 个 mock 未声明 insert 成功导致的防御校验错误，补齐真实返回后原集合 20 项 0 失败、0 错误；
 - 真正 MinIO/MySQL 跨用户 API E2E 待阶段 F 部署迁移后一并验证。
+
+### 2026-07-15：阶段 E 子闭环一——分布式调度数据与执行后端
+
+#### 数据结构与一致性
+
+- 新增 `2026-07-15-distributed-scheduler.sql` 并同步全量建库脚本：配置表增加 taskType/payload、固化角色、misfire、重试与 hash/version；任务表成为 configId/businessKey 双唯一的单配置运行态；执行表以 triggerKey 唯一表达单计划触发点；
+- Reconciler 对 Cron、时区、白名单 payload、执行身份、misfire、重试与启停状态生成规范化 SHA-256，通过 MySQL null-safe `ON DUPLICATE KEY UPDATE` 冲突更新；Cron 修改保持 taskId 不变，只推进 configVersion 并重算 nextFire；
+- Dispatcher 通过单条条件更新抢占 ready/retry 或租约过期 running，领取时递增 fencingToken；长业务执行在事务外，心跳续租，结果以 execution/task 双栅栏在同一短事务提交；
+- 同一触发点重试复用原 execution 并增加 attemptNo；旧 worker 的完成更新因 fencingToken 不匹配被拒绝；数据库层保证一个逻辑执行记录，外部 Agent/工具副作用仍遵循可恢复的至少一次语义，依赖现有 run/tool 幂等闸门进一步约束；
+- 支持 `fire_once_now`、`skip` 与受 dispatch batch 上限约束的 `catch_up`，失败指数退避，超过 maxRetries 将 execution 标记 dead 并推进下一 Cron，避免单次失败永久阻塞配置。
+
+#### 接口与唤醒入口
+
+- 新增配置创建/修改、列表、启停、Cron 预览、执行历史、手动触发与重试 API；runAsUser/role 只能来自当前 `TenantContext`，payload 只允许一个非空 message；
+- 首个 `agent_prompt` Handler 复用 `IChatService`，执行前由 Dispatcher 绑定持久化 tenant/user/role，结束后必定清理线程上下文；
+- 锁定 XXL-JOB `3.4.0`，增加 `scheduleReconcileJobHandler` 与 `scheduleDispatchJobHandler`；Admin 仅作唤醒，业务数据库仍是唯一真源；
+- XXL 执行器默认关闭，只有 `XXL_JOB_EXECUTOR_ENABLED=true` 才注册；本地 fixed-delay 降级同样默认关闭，且调用与 XXL 相同的 Domain Service。
+
+#### 验证结果
+
+- Java 17 `mvn -DskipTests clean compile`：7 个 Reactor 模块全部通过；
+- `CronScheduleSupportTest, ScheduleReconcilerTest, ScheduleDispatcherTest, MyBatisMapperLoadTest` 共 5 项，0 失败、0 错误；覆盖时区转 UTC、非法时区、稳定 taskId/hash 版本推进、可信执行身份、栅栏提交和全部 Mapper XML 装载；
+- 首次专项测试仅有一处测试期望把上海当天 09:00 错写为次日，修正 UTC 断言后原集合通过；同时补强了过期 running 接管与 NULL hash 首次对账；
+- 依赖树确认 Spring 保持 `6.2.3`、Netty 保持项目既有 `4.1.118.Final`，XXL-JOB core 未把主框架升级到其父 POM 的 Spring Boot 4；
+- 既有父 POM 坐标警告仍存在，因此 Trigger 对 XXL 版本显式锁定 `3.4.0`；未在本闭环扩大修改全项目 Maven 坐标。
+
+#### 后续项
+
+- 本子闭环尚未包含 Web 管理页、XXL-JOB Admin Compose/服务器部署、业务表迁移和真实 API E2E；这些进入阶段 E 子闭环二与阶段 F，不将当前后端验证冒充上线完成。

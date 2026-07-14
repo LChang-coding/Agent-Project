@@ -35,10 +35,30 @@ public class AgentScheduleTaskPO extends BasePO {
      */
     private String taskId;
 
+    private String businessKey;
+
+    private String configHash;
+
+    private Long configVersion;
+
+    private String cronExpr;
+
+    private String timezone;
+
+    private String misfirePolicy;
+
+    private Integer maxRetries;
+
     /**
      * 计划执行时间
      */
     private LocalDateTime plannedTime;
+
+    private LocalDateTime nextFireTime;
+
+    private LocalDateTime lastPlannedTime;
+
+    private LocalDateTime retryAt;
 
     /**
      * 任务状态：pending/running/success/failed/canceled
@@ -49,6 +69,14 @@ public class AgentScheduleTaskPO extends BasePO {
      * 已重试次数
      */
     private Integer retryCount;
+
+    private String leaseOwner;
+
+    private LocalDateTime leaseUntil;
+
+    private Long fencingToken;
+
+    private Long rowVersion;
 
     /**
      * 扩展信息

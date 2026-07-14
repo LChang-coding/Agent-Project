@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 定时任务实例 DAO。
@@ -76,4 +77,34 @@ public interface IAgentScheduleTaskDao {
      * @return 定时任务实例持久化对象列表
      */
     List<AgentScheduleTaskPO> queryListByTaskId(@Param("taskId") String taskId);
+
+    int upsertRuntime(AgentScheduleTaskPO task);
+
+    AgentScheduleTaskPO queryByConfigId(@Param("configId") String configId);
+
+    int disableInactive();
+
+    int claimDue(@Param("leaseOwner") String leaseOwner, @Param("now") LocalDateTime now,
+                 @Param("leaseUntil") LocalDateTime leaseUntil);
+
+    AgentScheduleTaskPO queryByLeaseOwner(@Param("leaseOwner") String leaseOwner);
+
+    int renewLease(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
+                   @Param("fencingToken") long fencingToken, @Param("leaseUntil") LocalDateTime leaseUntil);
+
+    int complete(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
+                 @Param("fencingToken") long fencingToken, @Param("lastPlannedTime") LocalDateTime lastPlannedTime,
+                 @Param("nextFireTime") LocalDateTime nextFireTime);
+
+    int retry(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
+              @Param("fencingToken") long fencingToken, @Param("retryCount") int retryCount,
+              @Param("retryAt") LocalDateTime retryAt);
+
+    int releaseFailedOccurrence(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
+                                @Param("fencingToken") long fencingToken,
+                                @Param("lastPlannedTime") LocalDateTime lastPlannedTime,
+                                @Param("nextFireTime") LocalDateTime nextFireTime);
+
+    int triggerNow(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                   @Param("configId") String configId, @Param("now") LocalDateTime now);
 }

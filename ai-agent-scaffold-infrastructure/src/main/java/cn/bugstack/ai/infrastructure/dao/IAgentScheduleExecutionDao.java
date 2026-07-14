@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 定时任务执行记录 DAO。
@@ -68,4 +69,21 @@ public interface IAgentScheduleExecutionDao {
      * @return 定时任务执行记录持久化对象列表
      */
     List<AgentScheduleExecutionPO> queryListByTaskId(@Param("taskId") String taskId);
+
+    int insertIgnore(AgentScheduleExecutionPO execution);
+
+    AgentScheduleExecutionPO queryByTriggerKey(@Param("triggerKey") String triggerKey);
+
+    int markRunning(@Param("executionId") String executionId, @Param("leaseOwner") String leaseOwner,
+                    @Param("fencingToken") long fencingToken, @Param("startTime") LocalDateTime startTime);
+
+    int complete(@Param("executionId") String executionId, @Param("leaseOwner") String leaseOwner,
+                 @Param("fencingToken") long fencingToken, @Param("status") String status,
+                 @Param("endTime") LocalDateTime endTime, @Param("durationMs") long durationMs,
+                 @Param("errorMessage") String errorMessage, @Param("resultJson") String resultJson);
+
+    List<AgentScheduleExecutionPO> queryOwnedByConfig(@Param("tenantId") String tenantId,
+                                                      @Param("userId") String userId,
+                                                      @Param("configId") String configId,
+                                                      @Param("limit") int limit);
 }
