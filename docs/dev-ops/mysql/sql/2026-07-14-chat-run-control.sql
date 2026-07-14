@@ -43,7 +43,9 @@ ALTER TABLE context_compaction_task
     ADD COLUMN run_id VARCHAR(64) NULL COMMENT '触发压缩的运行ID' AFTER session_id,
     ADD COLUMN base_context_revision BIGINT NOT NULL DEFAULT 0 COMMENT '压缩基准上下文版本' AFTER expected_memory_version,
     ADD COLUMN coverage_hash VARCHAR(64) NULL COMMENT '覆盖有效消息哈希' AFTER base_context_revision,
-    ADD COLUMN lease_until DATETIME(3) NULL COMMENT '处理租约截止时间' AFTER attempt_count,
+    ADD COLUMN lease_owner VARCHAR(128) NULL COMMENT '处理租约持有者' AFTER attempt_count,
+    ADD COLUMN lease_until DATETIME(3) NULL COMMENT '处理租约截止时间' AFTER lease_owner,
+    ADD COLUMN fencing_token BIGINT NOT NULL DEFAULT 0 COMMENT '压缩执行围栏版本' AFTER lease_until,
     ADD KEY idx_context_compaction_run (tenant_id, user_id, session_id, run_id, status);
 
 ALTER TABLE conversation_memory_snapshot

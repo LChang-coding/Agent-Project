@@ -32,6 +32,11 @@ public class ToolCallLogPO extends BasePO {
     private String sessionId;
 
     /**
+     * 所属运行ID
+     */
+    private String runId;
+
+    /**
      * 工作流业务ID
      */
     private String workflowId;
@@ -62,6 +67,16 @@ public class ToolCallLogPO extends BasePO {
     private String invocationId;
 
     /**
+     * ADK 工具调用ID
+     */
+    private String functionCallId;
+
+    /**
+     * 外部调用幂等键
+     */
+    private String idempotencyKey;
+
+    /**
      * 链路ID
      */
     private String traceId;
@@ -80,6 +95,11 @@ public class ToolCallLogPO extends BasePO {
      * 调用状态：started/success/failed/timeout
      */
     private String status;
+
+    /**
+     * 外部调用开始时间
+     */
+    private java.time.LocalDateTime startedAt;
 
     /**
      * 错误类型

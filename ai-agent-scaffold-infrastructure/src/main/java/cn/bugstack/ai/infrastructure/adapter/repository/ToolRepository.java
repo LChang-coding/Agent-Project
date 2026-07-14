@@ -277,6 +277,36 @@ public class ToolRepository implements IToolRepository {
     }
 
     /**
+     * 幂等写入工具开始日志；参数是日志；返回是否首次写入。
+     */
+    @Override
+    public int claimToolCallLog(ToolCallLogEntity entity) {
+        ToolCallLogPO po = toToolCallLogPO(entity);
+        int affected = toolCallLogDao.insertIgnore(po);
+        entity.setId(po.getId());
+        return affected;
+    }
+
+    /**
+     * 按幂等键查询工具日志；参数是幂等键；返回日志或空。
+     */
+    @Override
+    public ToolCallLogEntity queryToolCallLogByIdempotencyKey(String idempotencyKey) {
+        ToolCallLogPO po = toolCallLogDao.queryByIdempotencyKey(idempotencyKey);
+        return po == null ? null : toToolCallLogEntity(po);
+    }
+
+    /**
+     * 完成工具日志；参数是幂等键、状态和结果；返回影响行数。
+     */
+    @Override
+    public int finishToolCallLog(String idempotencyKey, String outputJson, String status,
+                                 String errorType, String errorMessage, Long costMs) {
+        return toolCallLogDao.finishByIdempotencyKey(idempotencyKey, outputJson, status,
+                errorType, errorMessage, costMs);
+    }
+
+    /**
      * 查询会话工具调用日志；参数是租户、用户和会话；返回调用日志。
      */
     @Override
@@ -601,16 +631,20 @@ public class ToolRepository implements IToolRepository {
                 .tenantId(entity.getTenantId())
                 .userId(entity.getUserId())
                 .sessionId(entity.getSessionId())
+                .runId(entity.getRunId())
                 .workflowId(entity.getWorkflowId())
                 .toolType(entity.getToolType())
                 .toolId(entity.getToolId())
                 .toolName(entity.getToolName())
                 .version(entity.getVersion())
                 .invocationId(entity.getInvocationId())
+                .functionCallId(entity.getFunctionCallId())
+                .idempotencyKey(entity.getIdempotencyKey())
                 .traceId(entity.getTraceId())
                 .inputJson(entity.getInputJson())
                 .outputJson(entity.getOutputJson())
                 .status(entity.getStatus())
+                .startedAt(entity.getStartedAt())
                 .errorType(entity.getErrorType())
                 .errorMessage(entity.getErrorMessage())
                 .costMs(entity.getCostMs())
@@ -627,16 +661,20 @@ public class ToolRepository implements IToolRepository {
                 .tenantId(po.getTenantId())
                 .userId(po.getUserId())
                 .sessionId(po.getSessionId())
+                .runId(po.getRunId())
                 .workflowId(po.getWorkflowId())
                 .toolType(po.getToolType())
                 .toolId(po.getToolId())
                 .toolName(po.getToolName())
                 .version(po.getVersion())
                 .invocationId(po.getInvocationId())
+                .functionCallId(po.getFunctionCallId())
+                .idempotencyKey(po.getIdempotencyKey())
                 .traceId(po.getTraceId())
                 .inputJson(po.getInputJson())
                 .outputJson(po.getOutputJson())
                 .status(po.getStatus())
+                .startedAt(po.getStartedAt())
                 .errorType(po.getErrorType())
                 .errorMessage(po.getErrorMessage())
                 .costMs(po.getCostMs())

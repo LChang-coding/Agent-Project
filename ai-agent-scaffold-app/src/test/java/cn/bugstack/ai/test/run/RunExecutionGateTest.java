@@ -47,6 +47,6 @@ public class RunExecutionGateTest {
 
         gate.beforeDispatch(context);
 
-        verify(runControlService).requireExecutable("tenant-1", "user-1", "run-1", 9L);
+        verify(runControlService).authorizeToolDispatch("tenant-1", "user-1", "run-1", 9L);
     }
 }

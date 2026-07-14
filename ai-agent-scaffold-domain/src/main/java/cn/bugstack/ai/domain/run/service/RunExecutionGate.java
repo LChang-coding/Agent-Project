@@ -49,7 +49,7 @@ public class RunExecutionGate {
      */
     public void beforeDispatch(ToolInvokeContextEntity context) {
         if (context != null && !blank(context.getRunId())) {
-            runControlService.requireExecutable(context.getTenantId(), context.getUserId(), context.getRunId(),
+            runControlService.authorizeToolDispatch(context.getTenantId(), context.getUserId(), context.getRunId(),
                     context.getContextRevision());
         }
     }

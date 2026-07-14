@@ -2,6 +2,7 @@ package cn.bugstack.ai.trigger.http;
 
 import cn.bugstack.ai.api.dto.CancelRunRequestDTO;
 import cn.bugstack.ai.api.dto.RunControlResponseDTO;
+import cn.bugstack.ai.api.dto.SteerRunRequestDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
@@ -51,6 +52,27 @@ public class RunControlController {
             return Response.<RunControlResponseDTO>builder().code(e.getCode()).info(e.getInfo()).build();
         } catch (Exception e) {
             log.error("取消会话运行失败 runId:{}", runId, e);
+            return Response.<RunControlResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
+        }
+    }
+
+    /**
+     * 引导运行；参数是运行ID和引导指令；返回待启动后继运行。
+     */
+    @PostMapping("/{runId}/steer")
+    public Response<RunControlResponseDTO> steer(@PathVariable String runId,
+                                                 @RequestBody SteerRunRequestDTO request) {
+        try {
+            ChatRunEntity successor = runControlService.steer(TenantContextHolder.getTenantId(),
+                    TenantContextHolder.getUserId(), runId, request == null ? null : request.getInstruction());
+            return Response.<RunControlResponseDTO>builder()
+                    .code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo())
+                    .data(toResponse(successor)).build();
+        } catch (AppException e) {
+            return Response.<RunControlResponseDTO>builder().code(e.getCode()).info(e.getInfo()).build();
+        } catch (Exception e) {
+            log.error("引导会话运行失败 runId:{}", runId, e);
             return Response.<RunControlResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
         }

@@ -131,13 +131,27 @@ public class AgentServiceController implements IAgentService {
                         : chatService.createSession(requestDTO.getAgentId(), userId);
             }
 
-            List<String> messages = hasWorkflow(requestDTO)
-                    ? chatService.handleWorkflowMessage(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId, sessionId, requestDTO.getMessage())
-                    : chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
+            RunStreamEntity<?> runStream;
+            List<String> messages;
+            if (hasWorkflow(requestDTO)) {
+                RunStreamEntity<String> workflowRun = chatService.startWorkflowMessageTextStream(
+                        requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
+                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                runStream = workflowRun;
+                messages = workflowRun.getStream().toList().blockingGet();
+            } else {
+                RunStreamEntity<Event> agentRun = chatService.startMessageStream(requestDTO.getAgentId(), userId,
+                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                runStream = agentRun;
+                messages = agentRun.getStream().map(Event::stringifyContent).toList().blockingGet();
+            }
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setSessionId(sessionId);
             responseDTO.setContent(String.join("\n", messages));
+            responseDTO.setRunId(runStream.getRun().getRunId());
+            responseDTO.setRunStatus("completed");
+            responseDTO.setContextRevision(runStream.getRun().getCurrentContextRevision());
 
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -179,10 +193,18 @@ public class AgentServiceController implements IAgentService {
             String runId = null;
             Disposable disposable;
             if (hasWorkflow(requestDTO)) {
-                disposable = subscribeWorkflowTextStream(requestDTO, userId, sessionId, emitter, disposableRef);
+                RunStreamEntity<String> runStream = chatService.startWorkflowMessageTextStream(
+                        requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
+                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                runId = runStream.getRun().getRunId();
+                emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
+                        "runId", runId,
+                        "status", runStream.getRun().getStatus().name().toLowerCase(),
+                        "contextRevision", runStream.getRun().getCurrentContextRevision())));
+                disposable = subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef);
             } else {
                 RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
-                        sessionId, requestDTO.getMessage(), null);
+                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
                 runId = runStream.getRun().getRunId();
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
@@ -221,6 +243,19 @@ public class AgentServiceController implements IAgentService {
                         emitter::completeWithError,
                         emitter::complete
                 );
+    }
+
+    /**
+     * 订阅已创建的工作流文本流；参数是文本流、SSE 和订阅引用；返回订阅句柄。
+     */
+    private Disposable subscribeWorkflowTextStream(Flowable<String> stream,
+                                                    SseEmitter emitter,
+                                                    AtomicReference<Disposable> disposableRef) {
+        return stream.subscribe(
+                content -> sendMessage(emitter, disposableRef, content),
+                emitter::completeWithError,
+                emitter::complete
+        );
     }
 
     /**

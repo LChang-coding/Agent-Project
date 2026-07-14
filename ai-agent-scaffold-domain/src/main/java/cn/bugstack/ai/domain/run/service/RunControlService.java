@@ -3,6 +3,7 @@ package cn.bugstack.ai.domain.run.service;
 import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
+import cn.bugstack.ai.domain.run.model.RunMessageBindingEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
@@ -52,7 +53,7 @@ public class RunControlService {
         long revision = session.getContextRevision() == null ? 0L : session.getContextRevision();
         LocalDateTime now = LocalDateTime.now();
         ChatRunEntity run = ChatRunEntity.builder()
-                .runId(blank(requestedRunId) ? "run_" + UUID.randomUUID() : requestedRunId)
+                .runId(normalizeRequestedRunId(requestedRunId))
                 .turnId("turn_" + UUID.randomUUID())
                 .tenantId(session.getTenantId())
                 .userId(session.getUserId())
@@ -71,6 +72,107 @@ public class RunControlService {
     }
 
     /**
+     * 创建或恢复客户端已知运行；参数是可信身份、来源和运行ID；返回可执行运行。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity startOrResume(String tenantId, String userId, String sessionId, String sourceType,
+                                       String sourceId, String requestedRunId) {
+        if (blank(requestedRunId)) {
+            return start(tenantId, userId, sessionId, sourceType, sourceId, null, null);
+        }
+        validateRequestedRunId(requestedRunId);
+        ChatRunEntity existing = runRepository.query(tenantId, userId, requestedRunId);
+        return existing == null
+                ? start(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId, null)
+                : resumePrepared(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId);
+    }
+
+    /**
+     * 启动已由引导预建的后继运行；参数是可信身份、会话和来源；返回运行实体。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity resumePrepared(String tenantId, String userId, String sessionId, String sourceType,
+                                        String sourceId, String runId) {
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "待启动的后继运行不存在");
+        }
+        if (!equals(run.getSessionId(), sessionId) || !equals(run.getSourceType(), sourceType)
+                || !equals(run.getSourceId(), sourceId)) {
+            throw new AppException("RUN_SCOPE_MISMATCH", "后继运行与当前会话或执行源不匹配");
+        }
+        if (run.getStatus() != RunStatus.CREATED || blank(run.getPredecessorRunId())) {
+            throw new AppException("RUN_NOT_PREPARED", "运行不是可启动的引导后继状态");
+        }
+        if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, RunStatus.CREATED,
+                RunStatus.RUNNING, run.getVersion(), null, null, null) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "后继运行已被启动或状态已变化");
+        }
+        return require(run.getTenantId(), run.getUserId(), runId);
+    }
+
+    /**
+     * 引导当前运行；参数是可信身份、运行和新指令；返回待启动后继运行。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity steer(String tenantId, String userId, String runId, String instruction) {
+        String normalizedInstruction = normalizeInstruction(instruction);
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!blank(run.getSuccessorRunId())) {
+            ChatRunEntity existing = require(run.getTenantId(), run.getUserId(), run.getSuccessorRunId());
+            if (!normalizedInstruction.equals(existing.getSteerInstruction())) {
+                throw new AppException("RUN_STEER_CONFLICT", "当前运行已存在不同的引导后继");
+            }
+            return existing;
+        }
+        if (!run.getStatus().executable()) {
+            throw new AppException("RUN_NOT_EXECUTABLE", "仅执行中的运行可以接收引导");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(),
+                RunStatus.STEER_REQUESTED, run.getVersion(), "用户发起引导", now, null) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中运行状态已变化");
+        }
+        int version = run.getVersion() + 1;
+        sessionDomain.lockSessionAccess(run.getTenantId(), run.getUserId(), run.getSessionId(), null);
+        List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
+                run.getSessionId(), runId);
+        sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId, "用户引导替代");
+        contextInvalidationService.invalidateRun(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                runMessages, "用户引导替代");
+        long revision = sessionDomain.incrementContextRevision(run.getTenantId(), run.getUserId(), run.getSessionId());
+        if (runRepository.updateContextRevision(run.getTenantId(), run.getUserId(), runId, revision, version) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中上下文版本已变化");
+        }
+        version++;
+        ChatRunEntity successor = ChatRunEntity.builder()
+                .runId("run_" + UUID.randomUUID())
+                .turnId("turn_" + UUID.randomUUID())
+                .tenantId(run.getTenantId()).userId(run.getUserId()).sessionId(run.getSessionId())
+                .sourceType(run.getSourceType()).sourceId(run.getSourceId())
+                .status(RunStatus.CREATED).version(0)
+                .baseContextRevision(revision).currentContextRevision(revision)
+                .predecessorRunId(runId).steerInstruction(normalizedInstruction)
+                .startedAt(null)
+                .build();
+        runRepository.insert(successor);
+        if (runRepository.bindSuccessor(run.getTenantId(), run.getUserId(), runId, successor.getRunId(),
+                normalizedInstruction, version) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中后继关系建立失败");
+        }
+        version++;
+        if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, RunStatus.STEER_REQUESTED,
+                RunStatus.SUPERSEDED, version, "已由引导后继运行替代", now, now) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中旧运行终结失败");
+        }
+        interruptAfterCommit(runId);
+        return successor;
+    }
+
+    /**
      * 绑定用户消息；参数是运行和消息ID；返回刷新后的运行。
      */
     @Transactional(rollbackFor = Exception.class)
@@ -80,6 +182,69 @@ public class RunControlService {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "运行状态已变化，无法绑定用户消息");
         }
         return require(run.getTenantId(), run.getUserId(), run.getRunId());
+    }
+
+    /**
+     * 在运行锁内写入并绑定用户消息；参数是运行身份、内容和链路ID；返回运行与消息。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
+                                                      String content, String traceId) {
+        ChatRunEntity run = lockExecutable(tenantId, userId, runId);
+        ChatMessageEntity message = sessionDomain.appendUserMessage(run.getTenantId(), run.getUserId(),
+                run.getSessionId(), runId, content, traceId);
+        if (runRepository.bindUserMessage(run.getTenantId(), run.getUserId(), runId, message.getMessageId(),
+                run.getVersion()) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "写入用户消息时运行状态已变化");
+        }
+        return RunMessageBindingEntity.builder()
+                .run(require(run.getTenantId(), run.getUserId(), runId)).message(message).build();
+    }
+
+    /**
+     * 在运行锁内保存助手消息并完成运行；参数是运行、内容和链路ID；返回已保存消息，已取消时返回空。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
+                                                          String content, String traceId) {
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!run.getStatus().executable()) {
+            return null;
+        }
+        ChatMessageEntity message = blank(content) ? null : sessionDomain.appendAssistantMessage(run.getTenantId(),
+                run.getUserId(), run.getSessionId(), runId, content, traceId);
+        if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(), RunStatus.COMPLETED,
+                run.getVersion(), null, null, LocalDateTime.now()) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "完成运行时状态已变化");
+        }
+        removeAfterCommit(runId);
+        return message;
+    }
+
+    /**
+     * 在运行锁内保存错误消息并标记失败；参数是运行、错误内容和原因；返回已保存消息。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity failWithAssistantMessage(String tenantId, String userId, String runId,
+                                                       String content, String traceId, String reason) {
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!run.getStatus().executable()) {
+            return null;
+        }
+        ChatMessageEntity message = sessionDomain.appendAssistantMessage(run.getTenantId(), run.getUserId(),
+                run.getSessionId(), runId, content, traceId);
+        if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(), RunStatus.FAILED,
+                run.getVersion(), reason, null, LocalDateTime.now()) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "标记运行失败时状态已变化");
+        }
+        removeAfterCommit(runId);
+        return message;
     }
 
     /**
@@ -100,6 +265,7 @@ public class RunControlService {
             return require(run.getTenantId(), run.getUserId(), runId);
         }
         int version = run.getVersion() + 1;
+        sessionDomain.lockSessionAccess(run.getTenantId(), run.getUserId(), run.getSessionId(), null);
         List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId);
         sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
@@ -167,6 +333,25 @@ public class RunControlService {
     }
 
     /**
+     * 在运行行锁下授权外部工具开始；参数是可信身份、运行和预期上下文版本；返回当前运行。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity authorizeToolDispatch(String tenantId, String userId, String runId, Long expectedRevision) {
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!run.getStatus().executable()) {
+            throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
+        }
+        if (expectedRevision != null && run.getCurrentContextRevision() != null
+                && !expectedRevision.equals(run.getCurrentContextRevision())) {
+            throw new AppException("RUN_CONTEXT_STALE", "运行上下文版本已变化，需要重新推理");
+        }
+        return run;
+    }
+
+    /**
      * 刷新运行上下文版本；参数是可信身份和运行ID；返回刷新后的运行。
      */
     @Transactional(rollbackFor = Exception.class)
@@ -203,6 +388,59 @@ public class RunControlService {
 
     private boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String normalizeRequestedRunId(String requestedRunId) {
+        if (blank(requestedRunId)) {
+            return "run_" + UUID.randomUUID();
+        }
+        validateRequestedRunId(requestedRunId);
+        return requestedRunId;
+    }
+
+    private void validateRequestedRunId(String requestedRunId) {
+        if (requestedRunId.length() > 64 || !requestedRunId.matches("[A-Za-z0-9_-]+")) {
+            throw new AppException("RUN_ID_INVALID", "运行ID格式不合法");
+        }
+    }
+
+    private boolean equals(String left, String right) {
+        return left == null ? right == null : left.equals(right);
+    }
+
+    private String normalizeInstruction(String instruction) {
+        if (instruction == null || instruction.isBlank()) {
+            throw new AppException("RUN_STEER_INSTRUCTION_EMPTY", "引导指令不能为空");
+        }
+        String normalized = instruction.trim();
+        if (normalized.length() > 4_000) {
+            throw new AppException("RUN_STEER_INSTRUCTION_TOO_LONG", "引导指令不能超过 4000 个字符");
+        }
+        return normalized;
+    }
+
+    private ChatRunEntity lockExecutable(String tenantId, String userId, String runId) {
+        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+        if (run == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!run.getStatus().executable()) {
+            throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
+        }
+        return run;
+    }
+
+    private void removeAfterCommit(String runId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            activeRunRegistry.remove(runId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                activeRunRegistry.remove(runId);
+            }
+        });
     }
 
     private void interruptAfterCommit(String runId) {

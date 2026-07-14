@@ -1,16 +1,53 @@
 import { defineStore } from 'pinia';
 
 import {
+  cancelChatRun,
   createChatSession,
   queryAgentConfigs,
   sendChatMessage,
   sendChatMessageStream,
+  steerChatRun,
 } from '@/api/agent';
 import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import { useAuthStore } from '@/stores/auth';
-import type { AiAgentConfig, ChatMessage, ChatRequest, LocalChatSession, WorkflowOption, WorkflowSummary } from '@/types/api';
+import type {
+  AiAgentConfig,
+  ChatMessage,
+  ChatRequest,
+  LocalChatSession,
+  RunStreamEvent,
+  WorkflowOption,
+  WorkflowSummary,
+} from '@/types/api';
 
 const SESSION_STORAGE_PREFIX = 'ai_agent_scaffold_chat_sessions';
+
+interface TypewriterController {
+  push: (content: string) => void;
+  drain: () => Promise<void>;
+  pause: () => void;
+  resume: () => void;
+  cancel: () => void;
+}
+
+interface ActiveChatRequest {
+  generation: number;
+  sessionId: string;
+  runId: string;
+  assistantMessageId: string;
+  sessionTitle: string;
+  controller: AbortController;
+  typewriter?: TypewriterController;
+  cancelRequested: boolean;
+  streamSettled: boolean;
+  runReady: Promise<void>;
+  resolveRunReady: () => void;
+}
+
+let requestGeneration = 0;
+let activeRequest: ActiveChatRequest | null = null;
+let cancelPromise: Promise<void> | null = null;
+let steerPromise: Promise<boolean> | null = null;
 
 interface ChatState {
   agents: AiAgentConfig[];
@@ -26,7 +63,11 @@ interface ChatState {
   loadingAgents: boolean;
   loadingWorkflows: boolean;
   sending: boolean;
+  cancelling: boolean;
+  steering: boolean;
   streaming: boolean;
+  currentRunId: string;
+  contextRevision: number;
   errorMessage: string;
 }
 
@@ -45,7 +86,11 @@ export const useChatStore = defineStore('chat', {
     loadingAgents: false,
     loadingWorkflows: false,
     sending: false,
+    cancelling: false,
+    steering: false,
     streaming: true,
+    currentRunId: '',
+    contextRevision: 0,
     errorMessage: '',
   }),
   getters: {
@@ -88,7 +133,8 @@ export const useChatStore = defineStore('chat', {
     /**
      * 切换智能体；参数是智能体 ID；会清空当前会话草稿。
      */
-    selectAgent(agentId: string) {
+    async selectAgent(agentId: string) {
+      await this.cancelActiveRun('切换智能体');
       this.activeSourceType = 'agent';
       this.activeAgentId = agentId;
       this.sessionId = '';
@@ -99,7 +145,8 @@ export const useChatStore = defineStore('chat', {
     /**
      * 切换工作流；参数是工作流 ID；会清空当前会话草稿。
      */
-    selectWorkflow(workflowId: string) {
+    async selectWorkflow(workflowId: string) {
+      await this.cancelActiveRun('切换工作流');
       this.activeSourceType = 'workflow';
       this.activeWorkflowId = workflowId;
       const workflow = this.workflows.find((item) => item.workflowId === workflowId);
@@ -115,6 +162,7 @@ export const useChatStore = defineStore('chat', {
      * 新建聊天会话；参数可指定智能体；返回新会话 ID。
      */
     async createSession(agentId?: string) {
+      await this.cancelActiveRun('新建会话');
       const auth = useAuthStore();
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
@@ -134,7 +182,11 @@ export const useChatStore = defineStore('chat', {
     /**
      * 切换本地会话；参数是会话 ID；恢复该会话的 Agent 和消息。
      */
-    switchSession(sessionId: string) {
+    async switchSession(sessionId: string) {
+      if (sessionId === this.sessionId) {
+        return;
+      }
+      await this.cancelActiveRun('切换会话');
       const session = this.sessions.find((item) => item.sessionId === sessionId);
       if (!session) {
         return;
@@ -154,8 +206,8 @@ export const useChatStore = defineStore('chat', {
     /**
      * 发送聊天消息；参数是用户输入；根据开关返回流式或完整回复。
      */
-    async send(message: string) {
-      if (!message.trim() || !this.hasActiveTarget()) {
+    async send(message: string, requestedRunId = '') {
+      if (!message.trim() || !this.hasActiveTarget() || this.sending) {
         return;
       }
 
@@ -177,54 +229,298 @@ export const useChatStore = defineStore('chat', {
 
       this.messages.push(userMessage, assistantMessage);
       const assistantMessageId = assistantMessage.id;
+      const controller = new AbortController();
+      let resolveRunReady: () => void = () => {};
+      const runReady = new Promise<void>((resolve) => {
+        resolveRunReady = resolve;
+      });
+      const effectiveRunId = requestedRunId || createRunId();
+      const request: ActiveChatRequest = {
+        generation: ++requestGeneration,
+        sessionId: this.sessionId,
+        runId: effectiveRunId,
+        assistantMessageId,
+        sessionTitle: userMessage.content,
+        controller,
+        cancelRequested: false,
+        streamSettled: false,
+        runReady,
+        resolveRunReady,
+      };
+      activeRequest = request;
       this.sending = true;
+      this.cancelling = false;
+      this.currentRunId = effectiveRunId;
       this.errorMessage = '';
       this.saveCurrentSession(userMessage.content);
 
       try {
         if (this.streaming) {
           const typewriter = createTypewriter((content) => {
-            this.appendMessageContent(assistantMessageId, content);
+            if (this.isRequestWritable(request)) {
+              this.appendMessageContent(assistantMessageId, content);
+            }
           });
+          request.typewriter = typewriter;
           let streamSnapshot = '';
           await sendChatMessageStream(
-            this.buildChatPayload(auth.userId, userMessage.content),
+            this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId),
             {
               onSession: (sessionId) => {
+                if (!this.isRequestCurrent(request) || request.cancelRequested) {
+                  return;
+                }
+                request.sessionId = sessionId;
                 this.sessionId = sessionId;
                 this.saveCurrentSession(userMessage.content);
               },
+              onRun: (run) => {
+                this.bindRun(request, run);
+              },
               onChunk: (content) => {
+                if (!this.isRequestCurrent(request)) {
+                  return;
+                }
                 const result = resolveStreamChunk(streamSnapshot, content);
                 streamSnapshot = result.snapshot;
                 if (result.delta) {
+                  if (request.cancelRequested && !this.steering) {
+                    return;
+                  }
                   typewriter.push(result.delta);
                 }
               },
               onError: (error) => {
-                this.errorMessage = error;
+                if (this.isRequestWritable(request)) {
+                  this.errorMessage = error;
+                }
               },
+              signal: controller.signal,
             },
           );
           await typewriter.drain();
+          if (!this.isRequestWritable(request)) {
+            return;
+          }
           this.updateMessageStatus(assistantMessageId, 'done');
           this.saveCurrentSession(userMessage.content);
           return;
         }
 
-        const response = await sendChatMessage(this.buildChatPayload(auth.userId, userMessage.content));
+        const response = await sendChatMessage(
+          this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId),
+          controller.signal,
+        );
+        if (!this.isRequestWritable(request)) {
+          return;
+        }
+        request.sessionId = response.sessionId;
+        request.runId = response.runId;
+        this.currentRunId = response.runId;
+        this.contextRevision = response.contextRevision;
         this.sessionId = response.sessionId;
         this.replaceMessageContent(assistantMessageId, response.content);
         this.updateMessageStatus(assistantMessageId, 'done');
         this.saveCurrentSession(userMessage.content);
       } catch (error) {
+        if (isAbortError(error) || request.cancelRequested || !this.isRequestCurrent(request)) {
+          return;
+        }
         this.updateMessageStatus(assistantMessageId, 'error');
         this.replaceMessageContent(assistantMessageId, '这次对话请求失败了，请检查后端服务、令牌状态或模型配置。');
         this.errorMessage = error instanceof Error ? error.message : '发送失败';
         this.saveCurrentSession(userMessage.content);
       } finally {
-        this.sending = false;
+        request.streamSettled = true;
+        if (this.isRequestCurrent(request) && !request.cancelRequested) {
+          request.typewriter?.cancel();
+          activeRequest = null;
+          this.sending = false;
+          this.cancelling = false;
+          this.currentRunId = '';
+        }
       }
+    },
+
+    /**
+     * 取消当前运行；参数是取消原因；先通知服务端再中断本地流。
+     */
+    async cancelActiveRun(reason = '用户主动取消'): Promise<void> {
+      if (steerPromise) {
+        await steerPromise;
+        return this.cancelActiveRun(reason);
+      }
+      if (cancelPromise) {
+        return cancelPromise;
+      }
+      const request = activeRequest;
+      if (!request) {
+        return;
+      }
+      request.cancelRequested = true;
+      request.typewriter?.cancel();
+      this.cancelling = true;
+      cancelPromise = (async () => {
+        try {
+          if (!request.runId && this.streaming) {
+            await Promise.race([request.runReady, wait(1_500)]);
+          }
+          if (request.runId) {
+            const result = await cancelChatRun(request.runId, reason);
+            this.contextRevision = result.contextRevision;
+          }
+        } catch (error) {
+          this.errorMessage = error instanceof Error ? `取消请求失败：${error.message}` : '取消请求失败';
+        } finally {
+          request.controller.abort();
+          request.typewriter?.cancel();
+          requestGeneration += 1;
+          if (this.sessionId === request.sessionId || !request.sessionId) {
+            const message = this.messages.find((item) => item.id === request.assistantMessageId);
+            if (message) {
+              message.status = 'canceled';
+              if (!message.content) {
+                message.content = '已取消本次生成。';
+              }
+            }
+            this.saveCurrentSession(request.sessionTitle);
+          }
+          if (activeRequest === request) {
+            activeRequest = null;
+          }
+          this.sending = false;
+          this.cancelling = false;
+          this.currentRunId = '';
+        }
+      })();
+      try {
+        await cancelPromise;
+      } finally {
+        cancelPromise = null;
+      }
+    },
+
+    /**
+     * 引导当前运行；参数是新指令；返回是否成功启动后继运行。
+     */
+    async steerActiveRun(instruction: string) {
+      const normalizedInstruction = instruction.trim();
+      if (!normalizedInstruction) {
+        this.errorMessage = '请先输入引导指令';
+        return false;
+      }
+      if (cancelPromise || this.cancelling) {
+        this.errorMessage = '当前运行正在取消，无法再引导';
+        return false;
+      }
+      if (steerPromise) {
+        return steerPromise;
+      }
+      const request = activeRequest;
+      if (!request || !request.runId || !this.isRequestCurrent(request)) {
+        this.errorMessage = '运行尚未建立或已结束，无法引导';
+        return false;
+      }
+
+      request.cancelRequested = true;
+      this.steering = true;
+      request.typewriter?.pause();
+      this.errorMessage = '';
+      steerPromise = (async () => {
+        try {
+          const successor = await steerChatRun(request.runId, normalizedInstruction);
+          if (!this.isRequestCurrent(request) || this.sessionId !== request.sessionId) {
+            throw new Error('会话已变更，未在当前界面启动引导后继');
+          }
+
+          request.controller.abort();
+          request.typewriter?.cancel();
+          const previousAssistant = this.messages.find((item) => item.id === request.assistantMessageId);
+          if (previousAssistant) {
+            previousAssistant.status = 'superseded';
+            if (!previousAssistant.content) {
+              previousAssistant.content = '已由新的引导指令替代。';
+            }
+          }
+          this.contextRevision = successor.contextRevision;
+          this.currentRunId = successor.runId;
+          this.saveCurrentSession(request.sessionTitle);
+
+          requestGeneration += 1;
+          if (activeRequest === request) {
+            activeRequest = null;
+          }
+          this.sending = false;
+          this.cancelling = false;
+          void this.send(normalizedInstruction, successor.runId);
+          return true;
+        } catch (error) {
+          this.errorMessage = error instanceof Error ? `引导失败：${error.message}` : '引导失败';
+          if (this.isRequestCurrent(request)) {
+            request.cancelRequested = false;
+            const previousAssistant = this.messages.find((item) => item.id === request.assistantMessageId);
+            if (request.streamSettled) {
+              request.typewriter?.cancel();
+              activeRequest = null;
+              this.sending = false;
+              this.currentRunId = '';
+              if (previousAssistant) {
+                previousAssistant.status = previousAssistant.content ? 'done' : 'error';
+                if (!previousAssistant.content) {
+                  previousAssistant.content = '原运行已结束，引导未生效。';
+                }
+              }
+              this.saveCurrentSession(request.sessionTitle);
+            } else {
+              if (previousAssistant) {
+                previousAssistant.status = 'streaming';
+              }
+              request.typewriter?.resume();
+            }
+          }
+          return false;
+        } finally {
+          this.steering = false;
+        }
+      })();
+      try {
+        return await steerPromise;
+      } finally {
+        steerPromise = null;
+      }
+    },
+
+    /**
+     * 绑定 SSE 运行信息；参数是请求上下文和运行事件；只更新当前请求。
+     */
+    bindRun(request: ActiveChatRequest, run: RunStreamEvent) {
+      if (!this.isRequestCurrent(request) || !run.runId) {
+        return;
+      }
+      request.runId = run.runId;
+      this.currentRunId = run.runId;
+      this.contextRevision = run.contextRevision;
+      request.resolveRunReady();
+    },
+
+    /**
+     * 判断请求是否仍为当前请求；参数是请求上下文；返回代次是否匹配。
+     */
+    isRequestCurrent(request: ActiveChatRequest) {
+      return activeRequest === request && request.generation === requestGeneration;
+    },
+
+    /**
+     * 判断异步回调是否可写入；参数是请求上下文；返回会话、运行和代次是否一致。
+     */
+    isRequestWritable(request: ActiveChatRequest) {
+      if (!this.isRequestCurrent(request) || request.cancelRequested) {
+        return false;
+      }
+      if (request.sessionId && this.sessionId !== request.sessionId) {
+        return false;
+      }
+      return !request.runId || this.currentRunId === request.runId;
     },
 
     /**
@@ -306,7 +602,7 @@ export const useChatStore = defineStore('chat', {
     /**
      * 构建聊天请求；参数是用户、消息和可选 Agent；返回后端请求体。
      */
-    buildChatPayload(userId: string, message: string, agentId?: string): ChatRequest {
+    buildChatPayload(userId: string, message: string, agentId?: string, requestedRunId?: string): ChatRequest {
       if (this.activeSourceType === 'workflow') {
         const workflow = this.activeWorkflow;
         return {
@@ -315,6 +611,7 @@ export const useChatStore = defineStore('chat', {
           modelCode: this.activeModelCode,
           userId,
           sessionId: this.sessionId,
+          requestedRunId: requestedRunId || undefined,
           message,
         };
       }
@@ -322,6 +619,7 @@ export const useChatStore = defineStore('chat', {
         agentId: agentId || this.activeAgentId,
         userId,
         sessionId: this.sessionId,
+        requestedRunId: requestedRunId || undefined,
         message,
       };
     },
@@ -370,6 +668,7 @@ function resolveStreamChunk(previousSnapshot: string, incoming: string) {
 function createTypewriter(apply: (content: string) => void) {
   let queue = '';
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let paused = false;
   let drainResolvers: Array<() => void> = [];
 
   const resolveDrain = () => {
@@ -378,6 +677,10 @@ function createTypewriter(apply: (content: string) => void) {
   };
 
   const tick = () => {
+    if (paused) {
+      timer = null;
+      return;
+    }
     if (!queue) {
       timer = null;
       resolveDrain();
@@ -395,7 +698,7 @@ function createTypewriter(apply: (content: string) => void) {
      */
     push(content: string) {
       queue += content;
-      if (!timer) {
+      if (!timer && !paused) {
         tick();
       }
     },
@@ -410,7 +713,62 @@ function createTypewriter(apply: (content: string) => void) {
         drainResolvers.push(resolve);
       });
     },
+    /**
+     * 暂停展示队列；无参数；保留待展示文本供失败恢复。
+     */
+    pause() {
+      paused = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    /**
+     * 恢复展示队列；无参数；继续输出暂存文本。
+     */
+    resume() {
+      paused = false;
+      if (queue && !timer) {
+        tick();
+      } else if (!queue) {
+        resolveDrain();
+      }
+    },
+    /**
+     * 取消待展示文本；无参数；停止定时器并释放等待者。
+     */
+    cancel() {
+      queue = '';
+      paused = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      resolveDrain();
+    },
   };
+}
+
+/**
+ * 等待指定时间；参数是毫秒数；返回定时完成 Promise。
+ */
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * 判断异常是否由主动中断产生；参数是异常值；返回是否为 AbortError。
+ */
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
+    || error instanceof Error && error.name === 'CanceledError';
+}
+
+/**
+ * 创建浏览器侧可预知运行ID；无参数；返回符合服务端约束的运行ID。
+ */
+function createRunId() {
+  return `run_${crypto.randomUUID()}`;
 }
 
 /**

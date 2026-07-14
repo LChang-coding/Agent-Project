@@ -37,14 +37,14 @@
           <div class="runtime-controls">
             <label class="compact-field">
               <span>运行</span>
-              <select v-model="chatStore.activeSourceType" class="select select--compact" @change="onSourceChanged">
+              <select v-model="chatStore.activeSourceType" class="select select--compact" :disabled="chatStore.sending" @change="onSourceChanged">
                 <option value="agent">系统 Agent</option>
                 <option value="workflow">数据库工作流</option>
               </select>
             </label>
             <label v-if="chatStore.activeSourceType === 'agent'" class="compact-field compact-field--wide">
               <span>目标</span>
-              <select v-model="chatStore.activeAgentId" class="select select--compact" @change="onAgentChanged">
+              <select v-model="chatStore.activeAgentId" class="select select--compact" :disabled="chatStore.sending" @change="onAgentChanged">
                 <option v-for="agent in chatStore.agents" :key="agent.agentId" :value="agent.agentId">
                   {{ agent.agentName }}
                 </option>
@@ -52,7 +52,7 @@
             </label>
             <label v-else class="compact-field compact-field--wide">
               <span>工作流</span>
-              <select v-model="chatStore.activeWorkflowId" class="select select--compact" @change="onWorkflowChanged">
+              <select v-model="chatStore.activeWorkflowId" class="select select--compact" :disabled="chatStore.sending" @change="onWorkflowChanged">
                 <option v-for="workflow in chatStore.workflows" :key="workflow.workflowId" :value="workflow.workflowId">
                   {{ workflow.workflowName }} · v{{ workflow.publishedVersion }}
                 </option>
@@ -60,13 +60,13 @@
             </label>
             <label v-if="chatStore.activeSourceType === 'workflow'" class="compact-field">
               <span>模型</span>
-              <select v-model="chatStore.activeModelCode" class="select select--compact">
+              <select v-model="chatStore.activeModelCode" class="select select--compact" :disabled="chatStore.sending">
                 <option v-for="model in chatStore.models" :key="model.value" :value="model.value">
                   {{ model.label }}
                 </option>
               </select>
             </label>
-            <button class="icon-button" type="button" title="刷新运行目标" @click="reloadTargets">刷新</button>
+            <button class="icon-button" type="button" title="刷新运行目标" :disabled="chatStore.sending" @click="reloadTargets">刷新</button>
           </div>
         </header>
 
@@ -88,6 +88,8 @@
                 <span>{{ formatTime(message.createdAt) }}</span>
                 <span v-if="message.status === 'streaming'" class="mini-badge">生成中</span>
                 <span v-if="message.status === 'error'" class="mini-badge mini-badge--red">失败</span>
+                <span v-if="message.status === 'canceled'" class="mini-badge mini-badge--red">已取消</span>
+                <span v-if="message.status === 'superseded'" class="mini-badge">已被引导替代</span>
               </div>
               <p>{{ message.content || '...' }}</p>
             </article>
@@ -176,7 +178,7 @@
               </button>
               <span>{{ sessionText }}</span>
               <label class="stream-toggle">
-                <input v-model="chatStore.streaming" type="checkbox" />
+                <input v-model="chatStore.streaming" type="checkbox" :disabled="chatStore.sending" />
                 <span>流式</span>
               </label>
             </div>
@@ -184,17 +186,35 @@
             <textarea
               v-model="draft"
               class="composer-input"
-              placeholder="输入消息，Enter 发送，Shift + Enter 换行"
+              :placeholder="chatStore.sending ? '输入新指令引导当前运行' : '输入消息，Enter 发送，Shift + Enter 换行'"
               @compositionstart="onCompositionStart"
               @compositionend="onCompositionEnd"
               @keydown.enter="onComposerEnter"
             />
 
             <div class="composer-actions">
-              <span class="composer-hint">Enter 发送 · 输入法候选期间不会误发</span>
-              <button class="button button--primary" type="submit" :disabled="chatStore.sending || !draft.trim() || !canCreateSession">
-                {{ chatStore.sending ? '发送中' : '发送' }}
-              </button>
+              <span class="composer-hint">
+                {{ chatStore.sending ? '输入新指令后可引导当前运行' : 'Enter 发送 · 输入法候选期间不会误发' }}
+              </span>
+              <div class="button-row">
+                <button
+                  v-if="chatStore.sending"
+                  class="button button--soft"
+                  type="button"
+                  :disabled="!draft.trim() || !chatStore.currentRunId || chatStore.steering || chatStore.cancelling"
+                  @click="steerRun"
+                >
+                  {{ chatStore.steering ? '引导中' : '引导' }}
+                </button>
+                <button
+                  :class="['button', chatStore.sending ? 'button--danger' : 'button--primary']"
+                  :type="chatStore.sending ? 'button' : 'submit'"
+                  :disabled="chatStore.cancelling || chatStore.steering || (!chatStore.sending && (!draft.trim() || !canCreateSession))"
+                  @click="chatStore.sending ? cancelRun() : undefined"
+                >
+                  {{ chatStore.cancelling ? '取消中' : chatStore.sending ? '取消' : '发送' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -285,7 +305,7 @@ async function createSession() {
  * 切换本地会话；参数是会话 ID；恢复消息并刷新调用记录。
  */
 async function switchSession(sessionId: string) {
-  chatStore.switchSession(sessionId);
+  await chatStore.switchSession(sessionId);
   await toolStore.loadCalls(sessionId);
   scrollToLatest();
 }
@@ -301,30 +321,30 @@ async function reloadTargets() {
 /**
  * 智能体变更处理；无参数；清空当前会话，避免串 Agent。
  */
-function onAgentChanged() {
-  chatStore.selectAgent(chatStore.activeAgentId);
+async function onAgentChanged() {
+  await chatStore.selectAgent(chatStore.activeAgentId);
 }
 
 /**
  * 运行类型变更处理；无参数；切到对应默认目标。
  */
-function onSourceChanged() {
+async function onSourceChanged() {
   if (chatStore.activeSourceType === 'workflow') {
     if (!chatStore.activeWorkflowId && chatStore.workflows.length > 0) {
-      chatStore.selectWorkflow(chatStore.workflows[0].workflowId);
+      await chatStore.selectWorkflow(chatStore.workflows[0].workflowId);
     } else {
-      chatStore.selectWorkflow(chatStore.activeWorkflowId);
+      await chatStore.selectWorkflow(chatStore.activeWorkflowId);
     }
     return;
   }
-  chatStore.selectAgent(chatStore.activeAgentId);
+  await chatStore.selectAgent(chatStore.activeAgentId);
 }
 
 /**
  * 工作流变更处理；无参数；清空当前会话，避免串工作流。
  */
-function onWorkflowChanged() {
-  chatStore.selectWorkflow(chatStore.activeWorkflowId);
+async function onWorkflowChanged() {
+  await chatStore.selectWorkflow(chatStore.activeWorkflowId);
 }
 
 /**
@@ -388,6 +408,30 @@ async function send() {
   await chatStore.send(message);
   await toolStore.loadCatalog();
   await toolStore.loadCalls(chatStore.sessionId);
+  scrollToLatest();
+}
+
+/**
+ * 取消当前运行；无参数；服务端确认后中断本地流并刷新工具记录。
+ */
+async function cancelRun() {
+  await chatStore.cancelActiveRun();
+  await toolStore.loadCalls(chatStore.sessionId);
+  scrollToLatest();
+}
+
+/**
+ * 引导当前运行；无参数；成功后清空引导输入并跟踪后继流。
+ */
+async function steerRun() {
+  const instruction = draft.value.trim();
+  if (!instruction || chatStore.steering || chatStore.cancelling) {
+    return;
+  }
+  const success = await chatStore.steerActiveRun(instruction);
+  if (success) {
+    draft.value = '';
+  }
   scrollToLatest();
 }
 

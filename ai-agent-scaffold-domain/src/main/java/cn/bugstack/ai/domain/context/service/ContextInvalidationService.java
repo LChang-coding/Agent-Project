@@ -39,6 +39,8 @@ public class ContextInvalidationService {
     public void invalidateRun(String tenantId, String userId, String sessionId, String runId,
                               List<ChatMessageEntity> runMessages, String reason) {
         if (runMessages == null || runMessages.isEmpty()) {
+            taskRepository.staleOverlapping(tenantId, userId, sessionId, runId,
+                    Integer.MAX_VALUE, Integer.MIN_VALUE, reason);
             cacheRepository.evictSession(tenantId, userId, sessionId);
             return;
         }

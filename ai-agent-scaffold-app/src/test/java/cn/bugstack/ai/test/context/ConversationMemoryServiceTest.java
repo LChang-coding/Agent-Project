@@ -166,7 +166,7 @@ public class ConversationMemoryServiceTest {
     private static ConversationMemoryService newService(SessionDomain sessionDomain, DefaultArmoryFactory armoryFactory) {
         return new ConversationMemoryService(new FakeMemoryRepository(), new FakeTaskRepository(), new FakeHistoryRepository(),
                 new FakeCacheRepository(), new FakePublisher(), new FakeCompressionPort(), List.<ContextContributor>of(), properties(),
-                new ObjectMapper(), sessionDomain, new StaticObjectProvider(armoryFactory));
+                new ObjectMapper(), sessionDomain, new StaticObjectProvider(armoryFactory), null);
     }
 
     private static ContextPolicyProperties properties() {
@@ -193,7 +193,9 @@ public class ConversationMemoryServiceTest {
         private final ContextPolicyProperties properties = ConversationMemoryServiceTest.properties();
         private final ConversationMemoryService service = new ConversationMemoryService(memory, task, history, cache,
                 publisher, new FakeCompressionPort(), List.<ContextContributor>of(), properties,
-                new ObjectMapper(), (SessionDomain) null, (ObjectProvider<DefaultArmoryFactory>) null);
+                new ObjectMapper(), new FixedSessionDomain(ChatSessionEntity.builder()
+                        .tenantId("tenant_1").userId("user_1").sessionId("session_1").contextRevision(0L).build()),
+                (ObjectProvider<DefaultArmoryFactory>) null, null);
 
     }
 
@@ -207,6 +209,11 @@ public class ConversationMemoryServiceTest {
 
         @Override
         public ChatSessionEntity assertSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
+            return session;
+        }
+
+        @Override
+        public ChatSessionEntity lockSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
             return session;
         }
     }

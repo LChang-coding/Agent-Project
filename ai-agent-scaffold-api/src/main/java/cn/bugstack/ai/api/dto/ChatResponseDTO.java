@@ -9,4 +9,10 @@ public class ChatResponseDTO {
 
     private String content;
 
+    private String runId;
+
+    private String runStatus;
+
+    private Long contextRevision;
+
 }

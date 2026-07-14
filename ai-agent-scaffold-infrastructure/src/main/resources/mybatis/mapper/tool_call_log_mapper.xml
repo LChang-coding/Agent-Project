@@ -7,16 +7,20 @@
         <result column="tenant_id" property="tenantId"/>
         <result column="user_id" property="userId"/>
         <result column="session_id" property="sessionId"/>
+        <result column="run_id" property="runId"/>
         <result column="workflow_id" property="workflowId"/>
         <result column="tool_type" property="toolType"/>
         <result column="tool_id" property="toolId"/>
         <result column="tool_name" property="toolName"/>
         <result column="version" property="version"/>
         <result column="invocation_id" property="invocationId"/>
+        <result column="function_call_id" property="functionCallId"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
         <result column="trace_id" property="traceId"/>
         <result column="input_json" property="inputJson"/>
         <result column="output_json" property="outputJson"/>
         <result column="status" property="status"/>
+        <result column="started_at" property="startedAt"/>
         <result column="error_type" property="errorType"/>
         <result column="error_message" property="errorMessage"/>
         <result column="cost_ms" property="costMs"/>
@@ -27,19 +31,38 @@
     </resultMap>
 
     <sql id="ToolCallLogColumns">
-        id, tenant_id, user_id, session_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, trace_id, input_json, output_json, status, error_type, error_message, cost_ms, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, run_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, function_call_id, idempotency_key, trace_id, input_json, output_json, status, started_at, error_type, error_message, cost_ms, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO tool_call_log (tenant_id, user_id, session_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, trace_id, input_json, output_json, status, error_type, error_message, cost_ms, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
+        INSERT INTO tool_call_log (tenant_id, user_id, session_id, run_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, function_call_id, idempotency_key, trace_id, input_json, output_json, status, started_at, error_type, error_message, cost_ms, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{runId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{functionCallId}, #{idempotencyKey}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{startedAt}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
+    </insert>
+
+    <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO tool_call_log (tenant_id, user_id, session_id, run_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, function_call_id, idempotency_key, trace_id, input_json, output_json, status, started_at, error_type, error_message, cost_ms, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{runId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{functionCallId}, #{idempotencyKey}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{startedAt}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO">
         UPDATE tool_call_log
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, workflow_id = #{workflowId}, tool_type = #{toolType}, tool_id = #{toolId}, tool_name = #{toolName}, version = #{version}, invocation_id = #{invocationId}, trace_id = #{traceId}, input_json = #{inputJson}, output_json = #{outputJson}, status = #{status}, error_type = #{errorType}, error_message = #{errorMessage}, cost_ms = #{costMs}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, run_id = #{runId}, workflow_id = #{workflowId}, tool_type = #{toolType}, tool_id = #{toolId}, tool_name = #{toolName}, version = #{version}, invocation_id = #{invocationId}, function_call_id = #{functionCallId}, idempotency_key = #{idempotencyKey}, trace_id = #{traceId}, input_json = #{inputJson}, output_json = #{outputJson}, status = #{status}, started_at = #{startedAt}, error_type = #{errorType}, error_message = #{errorMessage}, cost_ms = #{costMs}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
+
+    <update id="finishByIdempotencyKey">
+        UPDATE tool_call_log
+        SET output_json = #{outputJson}, status = #{status}, error_type = #{errorType},
+            error_message = #{errorMessage}, cost_ms = #{costMs}
+        WHERE idempotency_key = #{idempotencyKey} AND status = 'started' AND deleted = 0
+    </update>
+
+    <select id="queryByIdempotencyKey" resultMap="ToolCallLogMap">
+        SELECT <include refid="ToolCallLogColumns"/>
+        FROM tool_call_log
+        WHERE idempotency_key = #{idempotencyKey} AND deleted = 0
+        LIMIT 1
+    </select>
 
     <select id="queryListBySessionId" resultMap="ToolCallLogMap">
         SELECT <include refid="ToolCallLogColumns"/>

@@ -1,9 +1,9 @@
 package cn.bugstack.ai.test.tool;
 
-import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.service.ToolGateway;
+import cn.bugstack.ai.domain.tool.service.ToolDispatchAuthorizationService;
 import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
 import org.junit.Assert;
 import org.junit.Test;
@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * stdio MCP 工具网关测试。
@@ -25,8 +26,7 @@ public class ToolGatewayStdioTest {
     @Test
     public void shouldInvokeStdioMcpThroughProtocolClient() {
         RecordingMcpProtocolClientSupport protocolClientSupport = new RecordingMcpProtocolClientSupport();
-        ToolGateway toolGateway = new ToolGateway(mock(IToolRepository.class), null, protocolClientSupport,
-                mock(cn.bugstack.ai.domain.run.service.RunExecutionGate.class));
+        ToolDispatchAuthorizationService authorizationService = mock(ToolDispatchAuthorizationService.class);
         ToolCatalogEntity tool = ToolCatalogEntity.builder()
                 .toolType("mcp")
                 .toolId("mcp_stdio_001")
@@ -41,12 +41,21 @@ public class ToolGatewayStdioTest {
         input.put("toolName", "echo");
         input.put("argumentsJson", "{\"content\":\"hello\"}");
 
-        Map<String, Object> result = toolGateway.invoke(tool, input, ToolInvokeContextEntity.builder()
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
                 .tenantId("tenant_001")
                 .userId("user_001")
                 .sessionId("session_001")
                 .traceId("trace_001")
-                .build());
+                .build();
+        cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity callLog =
+                cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity.builder()
+                        .idempotencyKey("test-key").build();
+        when(authorizationService.claim(tool, context, "{\"toolName\":\"echo\",\"argumentsJson\":\"{\\\"content\\\":\\\"hello\\\"}\"}"))
+                .thenReturn(cn.bugstack.ai.domain.tool.model.entity.ToolDispatchClaimEntity.builder()
+                        .claimed(true).callLog(callLog).build());
+        ToolGateway toolGateway = new ToolGateway(null, protocolClientSupport, authorizationService);
+
+        Map<String, Object> result = toolGateway.invoke(tool, input, context);
 
         Assert.assertEquals(true, result.get("success"));
         Assert.assertEquals("stdio-result", result.get("result"));

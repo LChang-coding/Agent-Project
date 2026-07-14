@@ -1,10 +1,9 @@
 package cn.bugstack.ai.domain.tool.service;
 
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
-import cn.bugstack.ai.domain.run.service.RunExecutionGate;
-import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
+import cn.bugstack.ai.domain.tool.model.entity.ToolDispatchClaimEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
@@ -25,7 +24,6 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -38,22 +36,20 @@ public class ToolGateway {
 
     private static final int MAX_RESULT_LENGTH = 16_000;
 
-    private final IToolRepository toolRepository;
     private final ObjectStorageService objectStorageService;
     private final McpProtocolClientSupport mcpProtocolClientSupport;
-    private final RunExecutionGate runExecutionGate;
+    private final ToolDispatchAuthorizationService dispatchAuthorizationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
-     * 创建工具网关；参数是工具仓储和对象存储服务；返回网关实例。
+     * 创建工具网关；参数是对象存储、MCP 客户端和分发授权服务；返回网关实例。
      */
-    public ToolGateway(IToolRepository toolRepository, ObjectStorageService objectStorageService,
-                       McpProtocolClientSupport mcpProtocolClientSupport, RunExecutionGate runExecutionGate) {
-        this.toolRepository = toolRepository;
+    public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
+                       ToolDispatchAuthorizationService dispatchAuthorizationService) {
         this.objectStorageService = objectStorageService;
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
-        this.runExecutionGate = runExecutionGate;
+        this.dispatchAuthorizationService = dispatchAuthorizationService;
     }
 
     /**
@@ -61,24 +57,64 @@ public class ToolGateway {
      */
     public Map<String, Object> invoke(ToolCatalogEntity tool, Map<String, Object> input, ToolInvokeContextEntity context) {
         checkInvoke(tool, context);
-        runExecutionGate.beforeDispatch(context);
         long begin = System.currentTimeMillis();
         String inputJson = toJson(input);
+        ToolDispatchClaimEntity claim = dispatchAuthorizationService.claim(tool, context, inputJson);
+        if (!claim.isClaimed()) {
+            return duplicateResult(claim.getCallLog());
+        }
+        ToolCallLogEntity callLog = claim.getCallLog();
         AiLog.info(AiLog.tool().callStarted(context.getTenantId(), context.getUserId(), context.getSessionId(),
                 tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId()));
         try {
             String output = dispatch(tool, input);
             long costMs = System.currentTimeMillis() - begin;
-            saveCallLog(tool, context, inputJson, toJson(Map.of("result", output)), ToolStatus.SUCCESS, null, null, costMs);
+            dispatchAuthorizationService.finish(callLog, toJson(Map.of("result", output)),
+                    ToolStatus.SUCCESS, null, null, costMs);
             AiLog.info(AiLog.tool().callSuccess(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs));
             return Map.of("success", true, "result", output);
         } catch (Exception e) {
             long costMs = System.currentTimeMillis() - begin;
-            saveCallLog(tool, context, inputJson, null, ToolStatus.FAILED, e.getClass().getSimpleName(), safeMessage(e), costMs);
+            finishFailedSafely(callLog, e, costMs);
             AiLog.error(AiLog.tool().callFailed(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs, e));
             return Map.of("success", false, "error", safeMessage(e));
+        }
+    }
+
+    /**
+     * 读取重复调用的持久化结果；参数是既有日志；返回模型可消费结果。
+     */
+    private Map<String, Object> duplicateResult(ToolCallLogEntity log) {
+        if (ToolStatus.SUCCESS.equals(log.getStatus()) && log.getOutputJson() != null) {
+            try {
+                Map<String, Object> output = objectMapper.readValue(log.getOutputJson(), new TypeReference<>() {
+                });
+                return Map.of("success", true, "result", String.valueOf(output.getOrDefault("result", "")),
+                        "replayed", true);
+            } catch (Exception ignored) {
+                return Map.of("success", false, "error", "工具调用已完成，但历史结果无法解析");
+            }
+        }
+        if (ToolStatus.FAILED.equals(log.getStatus())) {
+            return Map.of("success", false, "error", defaultString(log.getErrorMessage(), "工具调用此前已失败"),
+                    "replayed", true);
+        }
+        return Map.of("success", false, "error", "工具调用已开始，当前结果未知；为避免重复消耗不再执行",
+                "replayed", true);
+    }
+
+    /**
+     * 尽力记录工具失败结果；参数是 started 日志、异常和耗时；无返回值。
+     */
+    private void finishFailedSafely(ToolCallLogEntity log, Exception error, long costMs) {
+        try {
+            dispatchAuthorizationService.finish(log, null, ToolStatus.FAILED,
+                    error.getClass().getSimpleName(), safeMessage(error), costMs);
+        } catch (Exception auditError) {
+            AiLog.error(AiLog.tool().callFailed(log.getTenantId(), log.getUserId(), log.getSessionId(),
+                    log.getToolType(), log.getToolId(), log.getToolName(), log.getTraceId(), costMs, auditError));
         }
     }
 
@@ -217,38 +253,6 @@ public class ToolGateway {
             }
         }
         return null;
-    }
-
-    /**
-     * 写调用日志；参数是工具、上下文、输入输出和状态；无返回值。
-     */
-    private void saveCallLog(ToolCatalogEntity tool,
-                             ToolInvokeContextEntity context,
-                             String inputJson,
-                             String outputJson,
-                             String status,
-                             String errorType,
-                             String errorMessage,
-                             Long costMs) {
-        ToolCallLogEntity log = ToolCallLogEntity.builder()
-                .tenantId(context.getTenantId())
-                .userId(context.getUserId())
-                .sessionId(context.getSessionId())
-                .workflowId(context.getWorkflowId())
-                .toolType(tool.getToolType())
-                .toolId(tool.getToolId())
-                .toolName(tool.getToolName())
-                .version(tool.getVersion())
-                .invocationId(defaultString(context.getInvocationId(), "tool_inv_" + UUID.randomUUID()))
-                .traceId(context.getTraceId())
-                .inputJson(inputJson)
-                .outputJson(outputJson)
-                .status(status)
-                .errorType(errorType)
-                .errorMessage(errorMessage)
-                .costMs(costMs)
-                .build();
-        toolRepository.saveToolCallLog(log);
     }
 
     /**

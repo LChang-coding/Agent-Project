@@ -52,6 +52,7 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
         task.setPolicyVersion(command.getPolicyVersion());
         task.setStatus("pending");
         task.setAttemptCount(0);
+        task.setFencingToken(0L);
         task.setTraceId(command.getTraceId());
         dao.insertIgnore(task);
         return toEntity(dao.queryByTaskKey(taskKey));
@@ -133,6 +134,9 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
                 .policyVersion(po.getPolicyVersion())
                 .status(toStatus(po.getStatus()))
                 .attemptCount(po.getAttemptCount())
+                .leaseOwner(po.getLeaseOwner())
+                .leaseUntil(po.getLeaseUntil())
+                .fencingToken(po.getFencingToken())
                 .errorMessage(po.getErrorMessage())
                 .traceId(po.getTraceId())
                 .build();

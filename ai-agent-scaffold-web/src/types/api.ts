@@ -85,12 +85,16 @@ export interface ChatRequest {
   modelCode?: string;
   userId?: string;
   sessionId?: string;
+  requestedRunId?: string;
   message: string;
 }
 
 export interface ChatResponse {
   sessionId: string;
   content: string;
+  runId: string;
+  runStatus: string;
+  contextRevision: number;
 }
 
 export interface ChatMessage {
@@ -98,7 +102,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: string;
-  status?: 'sending' | 'streaming' | 'done' | 'error';
+  status?: 'sending' | 'streaming' | 'done' | 'error' | 'canceled' | 'superseded';
 }
 
 export interface LocalChatSession {
@@ -116,9 +120,24 @@ export interface LocalChatSession {
 
 export interface StreamHandlers {
   onSession?: (sessionId: string) => void;
+  onRun?: (run: RunStreamEvent) => void;
   onChunk?: (content: string) => void;
   onError?: (message: string) => void;
   signal?: AbortSignal;
+}
+
+export interface RunStreamEvent {
+  runId: string;
+  status: string;
+  contextRevision: number;
+}
+
+export interface RunControlResponse {
+  runId: string;
+  sessionId: string;
+  status: string;
+  contextRevision: number;
+  successorRunId?: string;
 }
 
 export interface WorkflowSummary {

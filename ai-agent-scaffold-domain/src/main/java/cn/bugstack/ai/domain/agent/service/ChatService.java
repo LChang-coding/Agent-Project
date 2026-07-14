@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
+import cn.bugstack.ai.domain.run.model.RunMessageBindingEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
@@ -47,6 +48,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -167,10 +169,8 @@ public class ChatService implements IChatService {
      */
     @Override
     public List<String> handleWorkflowMessage(String workflowId, Integer workflowVersion, String modelCode, String userId, String sessionId, String message) {
-        String tenantId = currentTenantId();
-        String traceId = TraceContext.currentOrNewTraceId();
-        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
-        return List.of(doHandleWorkflowDagMessage(runtime, tenantId, userId, sessionId, message, traceId));
+        return List.of(startWorkflowMessageTextStream(workflowId, workflowVersion, modelCode, userId, sessionId,
+                message, null).getStream().blockingFirst());
     }
 
     /**
@@ -190,11 +190,12 @@ public class ChatService implements IChatService {
         AiAgentRegisterVO aiAgentRegisterVO = requireAgent(agentId);
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(agentId, userId, sessionId, aiAgentRegisterVO);
-        ChatRunEntity run = runControlService.start(tenantId, userId, actualSessionId, "agent", agentId,
-                requestedRunId, null);
+        ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
+                "agent", agentId, requestedRunId);
+        String effectiveMessage = steerResumeMessage(run, message);
         return RunStreamEntity.<Event>builder()
                 .run(run)
-                .stream(doHandleMessageStream(agentId, userId, actualSessionId, message, aiAgentRegisterVO, run))
+                .stream(doHandleMessageStream(agentId, userId, actualSessionId, effectiveMessage, aiAgentRegisterVO, run))
                 .build();
     }
 
@@ -211,12 +212,30 @@ public class ChatService implements IChatService {
      */
     @Override
     public Flowable<String> handleWorkflowMessageTextStream(String workflowId, Integer workflowVersion, String modelCode, String userId, String sessionId, String message) {
+        return startWorkflowMessageTextStream(workflowId, workflowVersion, modelCode, userId, sessionId, message, null)
+                .getStream();
+    }
+
+    /**
+     * 创建并启动工作流文本运行；参数是工作流身份、会话和可选运行ID；返回运行与文本流。
+     */
+    @Override
+    public RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
+                                                                   String modelCode, String userId, String sessionId,
+                                                                   String message, String requestedRunId) {
         String tenantId = currentTenantId();
         String traceId = TraceContext.currentOrNewTraceId();
-        return Flowable.fromCallable(() -> {
-            WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
-            return doHandleWorkflowDagMessage(runtime, tenantId, userId, sessionId, message, traceId);
-        }).subscribeOn(Schedulers.io());
+        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
+        AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
+        String actualSessionId = ensureSessionId(tenantId, workflowId, userId, sessionId, rootAgent);
+        ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
+                "workflow", workflowId, requestedRunId);
+        String effectiveMessage = steerResumeMessage(run, message);
+        return RunStreamEntity.<String>builder()
+                .run(run)
+                .stream(Flowable.fromCallable(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
+                        actualSessionId, effectiveMessage, traceId, run)).subscribeOn(Schedulers.io()))
+                .build();
     }
 
     /**
@@ -257,21 +276,34 @@ public class ChatService implements IChatService {
 
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         String traceId = TraceContext.currentOrNewTraceId();
+        ChatRunEntity run = runControlService.start(tenantId, chatCommandEntity.getUserId(), actualSessionId,
+                "agent", chatCommandEntity.getAgentId(), null, null);
         conversationMemoryService.republishUnfinished(tenantId, chatCommandEntity.getUserId(), actualSessionId);
-        ChatMessageEntity userMessage = saveUserMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, describeContent(chatCommandEntity), traceId);
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, chatCommandEntity.getUserId(), run.getRunId(),
+                describeContent(chatCommandEntity), traceId);
+        ChatMessageEntity userMessage = binding.getMessage();
+        ChatRunEntity activeRun = binding.getRun();
         String adkSessionId = invocationSessionId(actualSessionId);
         ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), chatCommandEntity.getUserId(), adkSessionId);
 
         Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
-                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null));
+                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision()));
 
         List<String> outputs = new ArrayList<>();
         try {
-            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
-            saveAssistantMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, String.join("\n", outputs), traceId);
+            events.blockingForEach(event -> {
+                runControlService.requireExecutable(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(), null);
+                outputs.add(event.stringifyContent());
+            });
+            completeRunWithAssistant(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(),
+                    String.join("\n", outputs), traceId);
         } catch (RuntimeException e) {
-            saveAssistantErrorMessage(tenantId, chatCommandEntity.getUserId(), actualSessionId, traceId, e, String.join("\n", outputs));
+            if (!runControlService.cancelled(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId())) {
+                failRunWithAssistantError(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(), traceId, e,
+                        String.join("\n", outputs));
+            }
             throw e;
         }
 
@@ -287,22 +319,32 @@ public class ChatService implements IChatService {
         String actualSessionId = ensureSessionId(sessionAgentId, userId, sessionId, aiAgentRegisterVO);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, sessionAgentId);
         String traceId = TraceContext.currentOrNewTraceId();
+        ChatRunEntity run = runControlService.start(tenantId, userId, actualSessionId, "agent", sessionAgentId,
+                null, null);
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        ChatMessageEntity userMessage = binding.getMessage();
+        ChatRunEntity activeRun = binding.getRun();
         String adkSessionId = invocationSessionId(actualSessionId);
         ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
 
         Content userMsg = Content.fromParts(Part.fromText(message));
         Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
-                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null));
+                        TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision()));
 
         List<String> outputs = new ArrayList<>();
         try {
-            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
-            saveAssistantMessage(tenantId, userId, actualSessionId, String.join("\n", outputs), traceId);
+            events.blockingForEach(event -> {
+                runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
+                outputs.add(event.stringifyContent());
+            });
+            completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), String.join("\n", outputs), traceId);
         } catch (RuntimeException e) {
-            saveAssistantErrorMessage(tenantId, userId, actualSessionId, traceId, e, String.join("\n", outputs));
+            if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
+                failRunWithAssistantError(tenantId, userId, activeRun.getRunId(), traceId, e, String.join("\n", outputs));
+            }
             throw e;
         }
 
@@ -320,8 +362,9 @@ public class ChatService implements IChatService {
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, sessionAgentId);
         String traceId = TraceContext.currentOrNewTraceId();
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, run.getRunId(), message, traceId);
-        run = runControlService.bindUserMessage(run, userMessage.getMessageId());
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        ChatMessageEntity userMessage = binding.getMessage();
+        run = binding.getRun();
         String adkSessionId = invocationSessionId(actualSessionId);
         ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
 
@@ -336,22 +379,22 @@ public class ChatService implements IChatService {
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision()))
+                .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
+                        .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
                 .doOnNext(event -> {
                     runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
                     appendContent(assistantContent, event.stringifyContent());
                 })
                 .doOnComplete(() -> {
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
-                        saveAssistantMessageOnce(assistantSaved, tenantId, userId, actualSessionId, activeRun.getRunId(),
+                        completeRunWithAssistantOnce(assistantSaved, tenantId, userId, activeRun.getRunId(),
                                 assistantContent.toString(), traceId);
-                        runControlService.complete(tenantId, userId, activeRun.getRunId());
                     }
                 })
                 .doOnError(throwable -> {
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
-                        saveAssistantErrorMessageOnce(assistantSaved, tenantId, userId, actualSessionId, activeRun.getRunId(),
-                                traceId, throwable, assistantContent.toString());
-                        runControlService.fail(tenantId, userId, activeRun.getRunId(), safeMessage(throwable));
+                        failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId, activeRun.getRunId(), traceId,
+                                throwable, assistantContent.toString());
                     }
                 })
                 .doOnCancel(() -> {
@@ -364,24 +407,30 @@ public class ChatService implements IChatService {
     /**
      * 执行 DAG 工作流对话；参数是运行时、用户、会话和消息；返回最终节点输出。
      */
-    private String doHandleWorkflowDagMessage(WorkflowRuntimeEntity runtime, String tenantId, String userId, String sessionId, String message, String traceId) {
+    private String doHandleWorkflowDagMessage(WorkflowRuntimeEntity runtime, String tenantId, String userId,
+                                              String sessionId, String message, String traceId, ChatRunEntity run) {
         WorkflowDagPlanEntity dagPlan = requireDagPlan(runtime);
         AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
         String actualSessionId = ensureSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        ChatMessageEntity userMessage = saveUserMessage(tenantId, userId, actualSessionId, message, traceId);
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        ChatMessageEntity userMessage = binding.getMessage();
+        ChatRunEntity activeRun = binding.getRun();
 
         try {
             String finalOutput = executeDagPlan(dagPlan, tenantId, userId, actualSessionId, message, traceId,
-                    TenantContextHolder.getRoleCode(), historyCutoff(userMessage));
+                    TenantContextHolder.getRoleCode(), historyCutoff(userMessage), activeRun);
             AiLog.info(AiLog.workflow().dagCompleted(tenantId, userId, dagPlan.getWorkflowId(), dagPlan.getVersion(),
                     dagPlan.getNodes().size(), dagPlan.getEdges() == null ? 0 : dagPlan.getEdges().size(),
                     String.join(",", terminalNodeIds(dagPlan, outgoingEdges(dagPlan))), finalOutput.length()));
-            saveAssistantMessage(tenantId, userId, actualSessionId, finalOutput, traceId);
+            runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
+            completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), finalOutput, traceId);
             return finalOutput;
         } catch (RuntimeException e) {
-            saveAssistantErrorMessage(tenantId, userId, actualSessionId, traceId, e, "");
+            if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
+                failRunWithAssistantError(tenantId, userId, activeRun.getRunId(), traceId, e, "");
+            }
             throw e;
         }
     }
@@ -390,7 +439,8 @@ public class ChatService implements IChatService {
      * 执行 DAG 计划；参数是计划、用户、会话、用户消息和链路ID；返回终点节点输出。
      */
     private String executeDagPlan(WorkflowDagPlanEntity dagPlan, String tenantId, String userId, String sessionId,
-                                  String userMessage, String traceId, String roleCode, Integer historyCutoffSequence) {
+                                  String userMessage, String traceId, String roleCode, Integer historyCutoffSequence,
+                                  ChatRunEntity run) {
         Map<String, WorkflowDagPlanEntity.Node> nodeMap = dagPlan.getNodes().stream()
                 .collect(Collectors.toMap(WorkflowDagPlanEntity.Node::getNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
         Map<String, List<String>> outgoing = outgoingEdges(dagPlan);
@@ -407,12 +457,13 @@ public class ChatService implements IChatService {
 
         Map<String, String> outputs = new LinkedHashMap<>();
         while (!ready.isEmpty()) {
+            runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
             List<String> currentLevel = new ArrayList<>(ready);
             ready.clear();
             List<CompletableFuture<NodeRunResult>> futures = currentLevel.stream()
                     .map(nodeId -> CompletableFuture.supplyAsync(() -> runDagNode(nodeMap.get(nodeId), incoming.getOrDefault(nodeId, Collections.emptyList()),
                             selfLoopNodeIds.contains(nodeId), outputs, tenantId, userId, sessionId, dagPlan.getWorkflowId(),
-                            userMessage, traceId, roleCode, historyCutoffSequence)))
+                            userMessage, traceId, roleCode, historyCutoffSequence, run)))
                     .collect(Collectors.toList());
             for (CompletableFuture<NodeRunResult> future : futures) {
                 NodeRunResult result = joinNodeResult(future);
@@ -447,7 +498,8 @@ public class ChatService implements IChatService {
                                      String userMessage,
                                      String traceId,
                                      String roleCode,
-                                     Integer historyCutoffSequence) {
+                                     Integer historyCutoffSequence,
+                                     ChatRunEntity run) {
         if (node == null) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流 DAG 节点不存在");
         }
@@ -457,9 +509,10 @@ public class ChatService implements IChatService {
         int runTimes = selfLoop ? safeLoopTimes(node.getMaxIterations()) : 1;
         String previousOutput = "";
         for (int index = 1; index <= runTimes; index++) {
+            runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
             String prompt = buildDagNodePrompt(userMessage, upstreamOutputs, previousOutput, index, runTimes);
             previousOutput = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode,
-                    historyCutoffSequence, String.join("\n\n", upstreamOutputs));
+                    historyCutoffSequence, String.join("\n\n", upstreamOutputs), run);
         }
         return new NodeRunResult(node.getNodeId(), previousOutput);
     }
@@ -469,7 +522,8 @@ public class ChatService implements IChatService {
      */
     private String runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId, String sessionId,
                                   String workflowId, String prompt, String traceId, String roleCode,
-                                  Integer historyCutoffSequence, String upstreamOutput) {
+                                  Integer historyCutoffSequence, String upstreamOutput, ChatRunEntity run) {
+        runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
         AiAgentRegisterVO agent = requireAgent(node.getRuntimeAgentId());
         InMemoryRunner runner = agent.getRunner();
         String adkSessionId = invocationSessionId(sessionId + ":" + node.getNodeId());
@@ -477,8 +531,12 @@ public class ChatService implements IChatService {
         Content content = Content.fromParts(Part.fromText(prompt));
         StringBuilder output = new StringBuilder();
         runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
-                        runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode, historyCutoffSequence, upstreamOutput))
-                .blockingForEach(event -> appendContent(output, event.stringifyContent()));
+                        runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
+                                historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision()))
+                .blockingForEach(event -> {
+                    runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
+                    appendContent(output, event.stringifyContent());
+                });
         return output.toString();
     }
 
@@ -754,122 +812,50 @@ public class ChatService implements IChatService {
     }
 
     /**
-     * 保存助手消息；参数是租户、用户、会话、内容和链路ID；返回已保存消息。
+     * 原子写入运行用户消息；参数是可信身份、运行、内容和链路ID；返回绑定结果。
      */
-    private ChatMessageEntity saveAssistantMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
-        return saveAssistantMessage(tenantId, userId, sessionId, null, content, traceId);
+    private RunMessageBindingEntity saveRunUserMessage(String tenantId, String userId, String runId,
+                                                        String content, String traceId) {
+        RunMessageBindingEntity binding = runControlService.appendUserMessage(tenantId, userId, runId, content, traceId);
+        conversationMemoryService.onMessageSaved(binding.getMessage());
+        return binding;
     }
 
     /**
-     * 保存运行助手消息；参数是可信身份、运行、内容和链路ID；返回已保存消息。
+     * 原子保存助手消息并完成运行；参数是运行身份、内容和链路ID；无返回值。
      */
-    private ChatMessageEntity saveAssistantMessage(String tenantId, String userId, String sessionId, String runId,
-                                                   String content, String traceId) {
-        if (content != null && !content.isBlank()) {
-            ChatMessageEntity message = sessionDomain.appendAssistantMessage(tenantId, userId, sessionId, runId, content, traceId);
+    private void completeRunWithAssistant(String tenantId, String userId, String runId,
+                                          String content, String traceId) {
+        ChatMessageEntity message = runControlService.completeWithAssistantMessage(tenantId, userId, runId,
+                content, traceId);
+        if (message != null) {
             conversationMemoryService.onAssistantMessageSaved(message);
-            return message;
         }
-        return null;
     }
 
-    /**
-     * 保存用户消息并刷新会话短期窗口；参数是身份、内容和链路ID；返回已保存消息。
-     */
-    private ChatMessageEntity saveUserMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
-        return saveUserMessage(tenantId, userId, sessionId, null, content, traceId);
-    }
-
-    /**
-     * 保存运行用户消息；参数是可信身份、运行、内容和链路ID；返回已保存消息。
-     */
-    private ChatMessageEntity saveUserMessage(String tenantId, String userId, String sessionId, String runId,
+    private void completeRunWithAssistantOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
                                               String content, String traceId) {
-        ChatMessageEntity message = sessionDomain.appendUserMessage(tenantId, userId, sessionId, runId, content, traceId);
-        conversationMemoryService.onMessageSaved(message);
-        return message;
-    }
-
-    /**
-     * 只保存一次助手消息；参数是保存标记、身份、内容和链路ID；无返回值。
-     */
-    private void saveAssistantMessageOnce(AtomicBoolean saved,
-                                          String tenantId,
-                                          String userId,
-                                          String sessionId,
-                                          String content,
-                                          String traceId) {
-        saveAssistantMessageOnce(saved, tenantId, userId, sessionId, null, content, traceId);
-    }
-
-    /**
-     * 只保存一次运行助手消息；参数是保存标记、身份、运行、内容和链路ID；无返回值。
-     */
-    private void saveAssistantMessageOnce(AtomicBoolean saved,
-                                          String tenantId,
-                                          String userId,
-                                          String sessionId,
-                                          String runId,
-                                          String content,
-                                          String traceId) {
         if (saved.compareAndSet(false, true)) {
-            saveAssistantMessage(tenantId, userId, sessionId, runId, content, traceId);
+            completeRunWithAssistant(tenantId, userId, runId, content, traceId);
         }
     }
 
     /**
-     * 保存助手错误消息；参数是身份、链路ID、异常和已生成内容；无返回值。
+     * 原子保存助手错误并终结运行；参数是运行、异常和已生成内容；无返回值。
      */
-    private void saveAssistantErrorMessage(String tenantId,
-                                           String userId,
-                                           String sessionId,
-                                           String traceId,
-                                           Throwable throwable,
-                                           String partialContent) {
-        saveAssistantErrorMessage(tenantId, userId, sessionId, null, traceId, throwable, partialContent);
+    private void failRunWithAssistantError(String tenantId, String userId, String runId, String traceId,
+                                           Throwable throwable, String partialContent) {
+        ChatMessageEntity message = runControlService.failWithAssistantMessage(tenantId, userId, runId,
+                errorContent(throwable, partialContent), traceId, safeMessage(throwable));
+        if (message != null) {
+            conversationMemoryService.onMessageSaved(message);
+        }
     }
 
-    /**
-     * 保存运行助手错误消息；参数是身份、运行、异常和已生成内容；无返回值。
-     */
-    private void saveAssistantErrorMessage(String tenantId,
-                                           String userId,
-                                           String sessionId,
-                                           String runId,
-                                           String traceId,
-                                           Throwable throwable,
-                                           String partialContent) {
-        ChatMessageEntity message = sessionDomain.appendAssistantMessage(tenantId, userId, sessionId, runId,
-                errorContent(throwable, partialContent), traceId);
-        conversationMemoryService.onMessageSaved(message);
-    }
-
-    /**
-     * 只保存一次助手错误消息；参数是保存标记、身份、异常和已生成内容；无返回值。
-     */
-    private void saveAssistantErrorMessageOnce(AtomicBoolean saved,
-                                               String tenantId,
-                                               String userId,
-                                               String sessionId,
-                                               String traceId,
-                                               Throwable throwable,
-                                               String partialContent) {
-        saveAssistantErrorMessageOnce(saved, tenantId, userId, sessionId, null, traceId, throwable, partialContent);
-    }
-
-    /**
-     * 只保存一次运行助手错误消息；参数是保存标记、身份、运行、异常和内容；无返回值。
-     */
-    private void saveAssistantErrorMessageOnce(AtomicBoolean saved,
-                                               String tenantId,
-                                               String userId,
-                                               String sessionId,
-                                               String runId,
-                                               String traceId,
-                                               Throwable throwable,
-                                               String partialContent) {
+    private void failRunWithAssistantErrorOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
+                                               String traceId, Throwable throwable, String partialContent) {
         if (saved.compareAndSet(false, true)) {
-            saveAssistantErrorMessage(tenantId, userId, sessionId, runId, traceId, throwable, partialContent);
+            failRunWithAssistantError(tenantId, userId, runId, traceId, throwable, partialContent);
         }
     }
 
@@ -925,6 +911,23 @@ public class ChatService implements IChatService {
             chatCommandEntity.getInlineDatas().forEach(inlineData -> contentList.add("[inline_data] " + inlineData.getMimeType()));
         }
         return String.join("\n", contentList);
+    }
+
+    /**
+     * 组装引导后继输入；参数是运行和请求消息；返回后继运行的完整用户输入。
+     */
+    private String steerResumeMessage(ChatRunEntity run, String requestMessage) {
+        if (run == null || run.getPredecessorRunId() == null || run.getPredecessorRunId().isBlank()) {
+            return requestMessage;
+        }
+        String originalMessage = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(),
+                        run.getPredecessorRunId()).stream()
+                .filter(message -> SessionDomain.ROLE_USER.equals(message.getRole()))
+                .map(ChatMessageEntity::getContent)
+                .filter(content -> content != null && !content.isBlank())
+                .findFirst()
+                .orElse(requestMessage == null ? "" : requestMessage);
+        return originalMessage + "\n\n[用户执行中引导]\n" + run.getSteerInstruction();
     }
 
     /**

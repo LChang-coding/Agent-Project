@@ -67,6 +67,13 @@ public interface IChatService {
     Flowable<String> handleWorkflowMessageTextStream(String workflowId, Integer workflowVersion, String modelCode, String userId, String sessionId, String message);
 
     /**
+     * 创建并启动工作流文本运行；参数是工作流身份、会话和可选运行ID；返回运行与文本流。
+     */
+    RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
+                                                            String modelCode, String userId, String sessionId,
+                                                            String message, String requestedRunId);
+
+    /**
      * 发送复合消息；参数是聊天命令；返回模型回复列表。
      */
     List<String> handleMessage(ChatCommandEntity chatCommandEntity);

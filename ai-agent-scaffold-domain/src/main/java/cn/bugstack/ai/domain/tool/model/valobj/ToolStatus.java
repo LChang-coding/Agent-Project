@@ -8,6 +8,7 @@ public final class ToolStatus {
     public static final String DRAFT = "draft";
     public static final String ACTIVE = "active";
     public static final String DISABLED = "disabled";
+    public static final String STARTED = "started";
     public static final String FAILED = "failed";
     public static final String SUCCESS = "success";
     public static final String UNTESTED = "untested";

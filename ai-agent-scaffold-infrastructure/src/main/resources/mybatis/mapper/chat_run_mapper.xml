@@ -61,6 +61,7 @@
         UPDATE chat_run SET status = #{targetStatus}, version = version + 1,
             terminal_reason = COALESCE(#{reason}, terminal_reason),
             cancel_requested_at = COALESCE(#{cancelRequestedAt}, cancel_requested_at),
+            started_at = CASE WHEN #{targetStatus} = 'running' THEN COALESCE(started_at, CURRENT_TIMESTAMP(3)) ELSE started_at END,
             finished_at = COALESCE(#{finishedAt}, finished_at)
         WHERE user_id = #{userId} AND run_id = #{runId} AND status = #{expectedStatus}
           AND version = #{expectedVersion} AND deleted = 0

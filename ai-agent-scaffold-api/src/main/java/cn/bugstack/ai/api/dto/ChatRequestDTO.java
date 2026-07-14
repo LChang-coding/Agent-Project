@@ -11,6 +11,7 @@ public class ChatRequestDTO {
     private String modelCode;
     private String userId;
     private String sessionId;
+    private String requestedRunId;
     private String message;
 
 }

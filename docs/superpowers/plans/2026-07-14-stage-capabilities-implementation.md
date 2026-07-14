@@ -129,20 +129,19 @@
 
 ## 6. 当前执行段
 
-当前阶段：**阶段 B：统一 run/context 基础、工具前压缩与取消**。
+当前阶段：**阶段 D：会话分享与导入闭环**。
 
 本段计划：
 
-1. 新增增量 SQL：`chat_run`，并兼容扩展 session/message/compaction/snapshot/tool log；
-2. 在 Domain 新增 RunService/Repository 契约、运行状态和执行闸门；
-3. 在 SessionDomain 与上下文仓储统一实现有效消息过滤和 context revision；
-4. 在 ChatService 创建/传播/终结 run，SSE 先返回 run 事件；取消时不再保存有效 `[assistant_error]`；
-5. 在 ADK `beforeToolCallback` 与 `ToolGateway.dispatch` 前共用执行闸门，并封闭 Spring AI ToolCallback 旁路；
-6. 将同步压缩改造成可创建/复用/等待、带 revision/hash 校验的安全能力；
-7. 新增 cancel API、跨节点取消通知和本地 Disposable/Future 加速中断；
-8. 前端增加 currentRun、AbortController、取消按钮和基于 sessionId/runId 的旧流隔离；
-9. 优先编写状态机、有效消息、压缩 CAS、工具调用计数和取消竞态测试；
-10. 完成干净 Maven 测试、前端构建和可行 API 集成验证后追加执行记录并提交。
+1. 复核 SessionDomain、消息查询、ObjectStorageService、认证与现有前端会话事实源；
+2. 在本计划先固定版本化导出格式、白名单字段、对象键、校验和与生命周期；
+3. 新增分享记录与导入幂等记录迁移，所有读写带 tenantId/userId；
+4. 扩展对象存储流式/删除/边界校验能力，MinIO bucket 继续保持私有；
+5. 实现创建分享、受控下载/预览、撤销和复制导入 API；
+6. 导出仅包含有效消息，导入重建新 session/message ID 与 sequence，绝不继承运行态和原权限；
+7. 前端实现分享、复制链接、预览、导入和失效反馈；
+8. 覆盖越权、过期、撤销、篡改、失效消息泄漏、重复导入和对象键穿越测试；
+9. 通过 Maven 干净测试与前端构建后追加真实结果并中文提交。
 
 ## 7. 执行记录
 
@@ -223,3 +222,38 @@
 - 首次测试在系统 Java 25 下遇到现有 ByteBuddy 不支持 class version 69，按项目 Java 17 基线重跑后通过；
 - MyBatis Mapper 全量 XML 装载测试通过，新增/扩展映射无语法错误；
 - 尚未完成前端取消、非流式/工作流 run 覆盖、跨节点通知和 steer，因此阶段 B 仍保持进行中。
+
+### 2026-07-15：阶段 B/C 完成——取消、引导、压缩与工具副作用闭环
+
+#### 运行与消息一致性
+
+- `RunControlService` 将用户消息写入/绑定、助手消息写入/完成、错误写入/失败均收敛为运行行锁内的短事务，取消或引导先取得锁时，晚到消息不会落成有效上下文；
+- Agent、工作流、复合与非流式入口统一创建和传播 run；浏览器预分配受格式约束的 runId，因此非流式响应返回前也能发起服务端取消；
+- SSE 在正文前返回 run 事件；工作流 DAG 在层、节点、循环和事件边界检查取消，Agent 流增加跨节点 250ms 轮询，本机注册表用于立即 dispose；
+- 引导 API 将旧 run 迁移为 `STEER_REQUESTED -> SUPERSEDED`，失效旧消息与重叠压缩、推进 revision，并只创建一个 `CREATED` 后继；后继启动时校验会话、来源和 predecessor。
+
+#### 上下文压缩与并发恢复
+
+- 工具回调前执行 token 阈值检查并同步创建/复用压缩任务；压缩生效后拒绝旧工具意图，要求模型基于新 revision 重新推理；
+- 压缩任务新增 owner/lease/fencing，worker 可回收过期 processing；取消/引导会将相关任务 stale，完成激活再次锁定 session 并校验任务围栏、revision、coverage hash 和当前版本；
+- 远程摘要模型调用保持在事务外，最终激活使用独立短事务，避免长事务与取消互锁；没有消息但属于被取消 run 的压缩任务同样会失效。
+
+#### 工具副作用边界
+
+- 新增 `ToolDispatchAuthorizationService`，在同一短事务中锁定 run 并以 SHA-256 幂等键写入 `started` 日志；只有首次取得分发权才会离开事务调用外部工具；
+- `tool_call_log` 实际接入 runId、functionCallId、idempotencyKey、startedAt，成功/失败使用 started CAS 完成；重复 functionCallId 复用历史结果或拒绝未知状态，不会二次产生外部消耗；
+- `GatewayToolset + ToolGateway` 保持唯一分发入口，模型 options 中的旧 Spring AI ToolCallback 旁路已移除。
+
+#### 前端取消与引导
+
+- Store 增加 AbortController、request generation、sessionId/runId 三重隔离，取消先请求服务端再中断本地流，旧 SSE 与打字机回调无法污染新会话；
+- 发送按钮在运行中切换为取消按钮，并提供引导输入；引导成功冻结旧输出、标记 superseded 并以服务端后继 run 启动新流，引导失败恢复原输出；
+- 流式、非流式、Agent 与工作流均使用客户端可知 runId，切换会话/目标和新建会话前会收口当前运行。
+
+#### 验证结果
+
+- `JAVA_HOME=Java17 mvn -DskipTests clean compile`：7 个 Reactor 模块全部通过；
+- 干净定向测试：`ConversationMemoryServiceTest, RunControlServiceTest, RunExecutionGateTest, ToolDispatchAuthorizationServiceTest, ToolGatewayStdioTest, MyBatisMapperLoadTest, WorkflowDagCompilerTest, WorkflowRuntimeCompilerTest` 共 19 项，0 失败、0 错误；
+- `npm run build`：`vue-tsc --noEmit` 与 Vite production build 通过，1895 个模块完成构建；
+- `git diff --check` 通过；既有 Maven parent relativePath 警告仍为任务外基线，不影响当前闭环；
+- 端到端真实模型/数据库验证留到阶段 F，在增量 SQL 部署后统一执行。

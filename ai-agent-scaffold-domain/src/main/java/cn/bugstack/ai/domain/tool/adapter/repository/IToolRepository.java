@@ -116,6 +116,22 @@ public interface IToolRepository {
     int saveToolCallLog(ToolCallLogEntity entity);
 
     /**
+     * 幂等写入工具开始日志；参数是 started 日志；返回是否首次写入。
+     */
+    int claimToolCallLog(ToolCallLogEntity entity);
+
+    /**
+     * 按幂等键查询工具日志；参数是幂等键；返回日志或空。
+     */
+    ToolCallLogEntity queryToolCallLogByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * 完成工具日志；参数是幂等键、状态和执行结果；返回影响行数。
+     */
+    int finishToolCallLog(String idempotencyKey, String outputJson, String status,
+                          String errorType, String errorMessage, Long costMs);
+
+    /**
      * 查询会话工具调用日志；参数是租户、用户和会话；返回调用日志。
      */
     List<ToolCallLogEntity> queryToolCallLogs(String tenantId, String userId, String sessionId);

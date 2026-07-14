@@ -79,6 +79,21 @@ public class SessionDomain {
     }
 
     /**
+     * 锁定并校验会话归属；参数是可信身份、会话和来源；返回被锁定会话。
+     */
+    public ChatSessionEntity lockSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
+        checkSessionIdentity(userId, sessionId);
+        ChatSessionEntity session = sessionRepository.lockSession(blankToNull(tenantId), userId, sessionId);
+        if (session == null) {
+            throw new AppException(ResponseCode.SESSION_NOT_FOUND.getCode(), ResponseCode.SESSION_NOT_FOUND.getInfo());
+        }
+        if (!isBlank(agentId) && !agentId.equals(session.getAgentId())) {
+            throw new AppException(ResponseCode.SESSION_ACCESS_DENIED.getCode(), ResponseCode.SESSION_ACCESS_DENIED.getInfo());
+        }
+        return session;
+    }
+
+    /**
      * 保存用户消息；参数是租户、用户、会话ID、内容和链路ID；返回消息实体。
      */
     @Transactional(rollbackFor = Exception.class)

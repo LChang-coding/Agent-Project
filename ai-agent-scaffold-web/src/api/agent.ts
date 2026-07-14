@@ -5,6 +5,8 @@ import type {
   ChatResponse,
   CreateSessionRequest,
   CreateSessionResponse,
+  RunControlResponse,
+  RunStreamEvent,
   StreamHandlers,
 } from '@/types/api';
 
@@ -30,13 +32,14 @@ export async function createChatSession(payload: CreateSessionRequest) {
 }
 
 /**
- * 发送非流式聊天；参数是智能体、会话和消息；返回完整回复。
+ * 发送非流式聊天；参数是聊天请求和可选中断信号；返回完整回复。
  */
-export async function sendChatMessage(payload: ChatRequest) {
+export async function sendChatMessage(payload: ChatRequest, signal?: AbortSignal) {
   return request<ChatResponse>({
     url: '/v1/chat',
     method: 'POST',
     data: payload,
+    signal,
   });
 }
 
@@ -45,6 +48,28 @@ export async function sendChatMessage(payload: ChatRequest) {
  */
 export async function sendChatMessageStream(payload: ChatRequest, handlers: StreamHandlers = {}) {
   return postStream(payload, handlers, true);
+}
+
+/**
+ * 取消正在执行的运行；参数是运行 ID 和取消原因；返回服务端运行终态。
+ */
+export async function cancelChatRun(runId: string, reason = '用户主动取消') {
+  return request<RunControlResponse>({
+    url: `/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    method: 'POST',
+    data: { reason },
+  });
+}
+
+/**
+ * 引导正在执行的运行；参数是运行 ID 和新指令；返回待启动的后继运行。
+ */
+export async function steerChatRun(runId: string, instruction: string) {
+  return request<RunControlResponse>({
+    url: `/v1/runs/${encodeURIComponent(runId)}/steer`,
+    method: 'POST',
+    data: { instruction },
+  });
 }
 
 /**
@@ -127,6 +152,16 @@ function handleSseBlock(block: string, handlers: StreamHandlers) {
   }
   if (eventName === 'session') {
     handlers.onSession?.(data);
+    return;
+  }
+  if (eventName === 'run') {
+    try {
+      handlers.onRun?.(JSON.parse(data) as RunStreamEvent);
+    } catch {
+      const message = '运行信息解析失败';
+      handlers.onError?.(message);
+      throw new Error(message);
+    }
     return;
   }
   handlers.onChunk?.(data);

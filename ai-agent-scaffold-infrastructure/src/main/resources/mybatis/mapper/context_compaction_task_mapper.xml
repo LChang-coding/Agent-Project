@@ -18,6 +18,9 @@
         <result column="policy_version" property="policyVersion"/>
         <result column="status" property="status"/>
         <result column="attempt_count" property="attemptCount"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="fencing_token" property="fencingToken"/>
         <result column="error_message" property="errorMessage"/>
         <result column="trace_id" property="traceId"/>
         <result column="create_time" property="createTime"/>
@@ -27,18 +30,21 @@
 
     <sql id="TaskColumns">
         id, task_id, task_key, tenant_id, user_id, session_id, run_id, from_sequence, to_sequence,
-        expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count, error_message,
+        expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count,
+        lease_owner, lease_until, fencing_token, error_message,
         trace_id, create_time, update_time, deleted
     </sql>
 
     <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
         INSERT IGNORE INTO context_compaction_task (
             task_id, task_key, tenant_id, user_id, session_id, run_id, from_sequence, to_sequence,
-            expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count, error_message, trace_id
+            expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count,
+            lease_owner, lease_until, fencing_token, error_message, trace_id
         )
         VALUES (
             #{taskId}, #{taskKey}, #{tenantId}, #{userId}, #{sessionId}, #{runId}, #{fromSequence}, #{toSequence},
-            #{expectedMemoryVersion}, #{baseContextRevision}, #{coverageHash}, #{policyVersion}, #{status}, #{attemptCount}, #{errorMessage}, #{traceId}
+            #{expectedMemoryVersion}, #{baseContextRevision}, #{coverageHash}, #{policyVersion}, #{status}, #{attemptCount},
+            #{leaseOwner}, #{leaseUntil}, #{fencingToken}, #{errorMessage}, #{traceId}
         )
     </insert>
 
@@ -61,7 +67,7 @@
         FROM context_compaction_task
         WHERE user_id = #{userId}
           AND session_id = #{sessionId}
-          AND status IN ('pending', 'retrying')
+          AND (status IN ('pending', 'retrying') OR (status = 'processing' AND lease_until &lt; CURRENT_TIMESTAMP(3)))
           AND deleted = 0
         <choose>
             <when test="tenantId == null or tenantId == ''">
@@ -78,15 +84,20 @@
     <update id="claim">
         UPDATE context_compaction_task
         SET status = 'processing',
-            attempt_count = attempt_count + 1
+            attempt_count = attempt_count + 1,
+            lease_owner = CONCAT('mysql-', CONNECTION_ID()),
+            lease_until = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 60 SECOND),
+            fencing_token = fencing_token + 1
         WHERE task_id = #{taskId}
-          AND status IN ('pending', 'retrying')
+          AND (status IN ('pending', 'retrying') OR (status = 'processing' AND lease_until &lt; CURRENT_TIMESTAMP(3)))
           AND deleted = 0
     </update>
 
     <update id="complete">
         UPDATE context_compaction_task
         SET status = 'succeeded',
+            lease_owner = NULL,
+            lease_until = NULL,
             error_message = NULL
         WHERE task_id = #{taskId}
           AND status = 'processing'
@@ -96,6 +107,8 @@
     <update id="retry">
         UPDATE context_compaction_task
         SET status = 'retrying',
+            lease_owner = NULL,
+            lease_until = NULL,
             error_message = #{errorMessage}
         WHERE task_id = #{taskId}
           AND status = 'processing'
@@ -105,6 +118,8 @@
     <update id="dead">
         UPDATE context_compaction_task
         SET status = 'dead',
+            lease_owner = NULL,
+            lease_until = NULL,
             error_message = #{errorMessage}
         WHERE task_id = #{taskId}
           AND status IN ('processing', 'retrying', 'pending')
@@ -113,7 +128,7 @@
 
     <update id="staleOverlapping">
         UPDATE context_compaction_task
-        SET status = 'stale', error_message = #{reason}
+        SET status = 'stale', lease_owner = NULL, lease_until = NULL, error_message = #{reason}
         WHERE user_id = #{userId} AND session_id = #{sessionId}
           AND status IN ('pending', 'processing', 'retrying', 'succeeded')
           AND (run_id = #{runId} OR (from_sequence &lt;= #{maxSequence} AND to_sequence &gt;= #{minSequence}))

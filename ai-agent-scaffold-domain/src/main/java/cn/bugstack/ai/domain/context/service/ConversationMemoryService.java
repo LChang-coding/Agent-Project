@@ -32,9 +32,11 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.HexFormat;
+import java.util.Objects;
 
 /**
  * 会话长期记忆服务。
@@ -74,6 +77,7 @@ public class ConversationMemoryService {
     private final ObjectMapper objectMapper;
     private final SessionDomain sessionDomain;
     private final ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider;
+    private final ObjectProvider<PlatformTransactionManager> transactionManagerProvider;
 
     /**
      * 创建会话记忆服务；参数是上下文依赖端口；返回服务实例。
@@ -88,7 +92,8 @@ public class ConversationMemoryService {
                                      ContextPolicyProperties properties,
                                      ObjectMapper objectMapper,
                                      SessionDomain sessionDomain,
-                                     ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider) {
+                                     ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider,
+                                     ObjectProvider<PlatformTransactionManager> transactionManagerProvider) {
         this.memoryRepository = memoryRepository;
         this.taskRepository = taskRepository;
         this.historyRepository = historyRepository;
@@ -101,6 +106,7 @@ public class ConversationMemoryService {
         this.objectMapper = objectMapper;
         this.sessionDomain = sessionDomain;
         this.defaultArmoryFactoryProvider = defaultArmoryFactoryProvider;
+        this.transactionManagerProvider = transactionManagerProvider;
     }
 
     /**
@@ -279,37 +285,86 @@ public class ConversationMemoryService {
         String json = normalizeSummaryJson(compressionPort.compress(chatModel, prompt), task);
         ContextCompactionTaskEntity latestTask = taskRepository.queryByTaskId(taskId);
         if (latestTask == null || latestTask.getStatus() == ContextCompactionTaskStatus.STALE
-                || latestTask.getStatus() == ContextCompactionTaskStatus.CANCEL_REQUESTED) {
+                || latestTask.getStatus() == ContextCompactionTaskStatus.CANCEL_REQUESTED
+                || !Objects.equals(latestTask.getFencingToken(), task.getFencingToken())) {
             throw new IllegalStateException("压缩任务已取消或陈旧，结果禁止激活");
         }
         if (sessionRevision(task.getTenantId(), task.getUserId(), task.getSessionId()) != currentRevision) {
             throw new IllegalStateException("压缩期间上下文版本已变化，结果禁止激活");
         }
-        ConversationMemorySnapshotEntity snapshot = ConversationMemorySnapshotEntity.builder()
-                .tenantId(task.getTenantId())
-                .userId(task.getUserId())
-                .sessionId(task.getSessionId())
-                .memoryVersion(activeVersion + 1)
-                .baseContextRevision(currentRevision)
-                .coveredToSequence(task.getToSequence())
-                .coverageHash(currentHash)
-                .parentMemoryVersion(activeVersion == 0 ? null : activeVersion)
-                .content(json)
-                .estimatedTokenCount(tokenCounter.estimate(json))
-                .policyVersion(task.getPolicyVersion())
-                .status(STATUS_ACTIVE)
-                .traceId(task.getTraceId())
-                .build();
-        boolean activated = memoryRepository.activate(task.getTenantId(), task.getUserId(), task.getSessionId(), activeVersion, snapshot);
-        if (!activated) {
-            throw new IllegalStateException("上下文摘要 CAS 激活失败");
-        }
-        taskRepository.complete(taskId);
-        sessionDomain.incrementContextRevision(task.getTenantId(), task.getUserId(), task.getSessionId());
+        ConversationMemorySnapshotEntity snapshot = activateCompaction(taskId, task, json, currentHash,
+                tokenCounter.estimate(json));
         refreshCacheAfterCommit(snapshot);
         log.info("上下文压缩任务完成 tenantId:{} userId:{} sessionId:{} taskId:{} memoryVersion:{} coveredTo:{} tokens:{}",
                 task.getTenantId(), task.getUserId(), task.getSessionId(), taskId,
                 snapshot.getMemoryVersion(), snapshot.getCoveredToSequence(), snapshot.getEstimatedTokenCount());
+    }
+
+    /**
+     * 在短事务中激活压缩结果；参数是任务、摘要和覆盖指纹；返回新快照。
+     */
+    private ConversationMemorySnapshotEntity activateCompaction(String taskId, ContextCompactionTaskEntity task,
+                                                                 String json, String expectedHash, int estimatedTokens) {
+        PlatformTransactionManager transactionManager = transactionManagerProvider == null
+                ? null : transactionManagerProvider.getIfAvailable();
+        if (transactionManager == null) {
+            return activateCompactionInTransaction(taskId, task, json, expectedHash, estimatedTokens, false);
+        }
+        ConversationMemorySnapshotEntity snapshot = new TransactionTemplate(transactionManager).execute(status ->
+                activateCompactionInTransaction(taskId, task, json, expectedHash, estimatedTokens, true));
+        if (snapshot == null) {
+            throw new IllegalStateException("上下文摘要激活事务未返回结果");
+        }
+        return snapshot;
+    }
+
+    private ConversationMemorySnapshotEntity activateCompactionInTransaction(String taskId,
+                                                                               ContextCompactionTaskEntity task,
+                                                                               String json,
+                                                                               String expectedHash,
+                                                                               int estimatedTokens,
+                                                                               boolean lockSession) {
+        ChatSessionEntity lockedSession = lockSession
+                ? sessionDomain.lockSessionAccess(task.getTenantId(), task.getUserId(), task.getSessionId(), null)
+                : sessionDomain.assertSessionAccess(task.getTenantId(), task.getUserId(), task.getSessionId(), null);
+        ContextCompactionTaskEntity latest = taskRepository.queryByTaskId(taskId);
+        if (latest == null || latest.getStatus() == ContextCompactionTaskStatus.STALE
+                || latest.getStatus() == ContextCompactionTaskStatus.CANCEL_REQUESTED
+                || latest.getStatus() == ContextCompactionTaskStatus.DEAD
+                || !Objects.equals(latest.getFencingToken(), task.getFencingToken())) {
+            throw new IllegalStateException("压缩任务已失效，结果禁止激活");
+        }
+        long lockedRevision = lockedSession.getContextRevision() == null ? 0L : lockedSession.getContextRevision();
+        if (task.getBaseContextRevision() != null && task.getBaseContextRevision() != lockedRevision) {
+            throw new IllegalStateException("压缩激活前上下文版本已变化");
+        }
+        List<ChatMessageEntity> effectiveMessages = historyRepository.queryMessages(task.getTenantId(), task.getUserId(),
+                task.getSessionId(), safe(task.getFromSequence()) - 1, task.getToSequence());
+        String lockedHash = coverageHash(effectiveMessages, task.getFromSequence(), task.getToSequence());
+        if (!expectedHash.equals(lockedHash)) {
+            throw new IllegalStateException("压缩激活前有效消息集合已变化");
+        }
+        ConversationMemorySnapshotEntity active = memoryRepository.queryActive(task.getTenantId(), task.getUserId(),
+                task.getSessionId());
+        int activeVersion = ConversationMemorySnapshotEntity.versionOf(active);
+        if (activeVersion != safe(task.getExpectedMemoryVersion())) {
+            throw new IllegalStateException("压缩激活前摘要版本已变化");
+        }
+        ConversationMemorySnapshotEntity snapshot = ConversationMemorySnapshotEntity.builder()
+                .tenantId(task.getTenantId()).userId(task.getUserId()).sessionId(task.getSessionId())
+                .memoryVersion(activeVersion + 1).baseContextRevision(lockedRevision)
+                .coveredToSequence(task.getToSequence()).coverageHash(lockedHash)
+                .parentMemoryVersion(activeVersion == 0 ? null : activeVersion)
+                .content(json).estimatedTokenCount(estimatedTokens).policyVersion(task.getPolicyVersion())
+                .status(STATUS_ACTIVE).traceId(task.getTraceId()).build();
+        if (!memoryRepository.activate(task.getTenantId(), task.getUserId(), task.getSessionId(), activeVersion, snapshot)) {
+            throw new IllegalStateException("上下文摘要 CAS 激活失败");
+        }
+        if (taskRepository.complete(taskId) != 1) {
+            throw new IllegalStateException("压缩任务状态已变化，摘要激活回滚");
+        }
+        sessionDomain.incrementContextRevision(task.getTenantId(), task.getUserId(), task.getSessionId());
+        return snapshot;
     }
 
     /**

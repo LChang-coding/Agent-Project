@@ -24,6 +24,9 @@ public class ContextCompactionTaskEntity {
     private String policyVersion;
     private ContextCompactionTaskStatus status;
     private Integer attemptCount;
+    private String leaseOwner;
+    private java.time.LocalDateTime leaseUntil;
+    private Long fencingToken;
     private String errorMessage;
     private String traceId;
 
