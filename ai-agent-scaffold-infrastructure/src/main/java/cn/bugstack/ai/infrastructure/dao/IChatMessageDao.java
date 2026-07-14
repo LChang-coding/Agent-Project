@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 消息 DAO。
@@ -112,4 +113,22 @@ public interface IChatMessageDao {
                              @Param("sessionId") String sessionId,
                              @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
                              @Param("toSequenceInclusive") Integer toSequenceInclusive);
+
+    /**
+     * 失效指定运行的有效消息。
+     */
+    int invalidateRunMessages(@Param("tenantId") String tenantId,
+                              @Param("userId") String userId,
+                              @Param("sessionId") String sessionId,
+                              @Param("runId") String runId,
+                              @Param("reason") String reason,
+                              @Param("invalidatedAt") LocalDateTime invalidatedAt);
+
+    /**
+     * 查询指定运行的消息。
+     */
+    List<ChatMessagePO> queryRunMessages(@Param("tenantId") String tenantId,
+                                         @Param("userId") String userId,
+                                         @Param("sessionId") String sessionId,
+                                         @Param("runId") String runId);
 }

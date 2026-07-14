@@ -26,4 +26,10 @@ public interface IConversationMemoryRepository {
      * 激活新摘要；参数是旧摘要版本和新摘要；返回是否激活成功。
      */
     boolean activate(String tenantId, String userId, String sessionId, Integer expectedMemoryVersion, ConversationMemorySnapshotEntity snapshot);
+
+    /**
+     * 失效覆盖指定消息的快照并恢复安全祖先；参数是会话和最早失效序号；返回恢复后的摘要。
+     */
+    ConversationMemorySnapshotEntity invalidateCoveringAndRestore(String tenantId, String userId, String sessionId,
+                                                                   Integer minInvalidSequence);
 }

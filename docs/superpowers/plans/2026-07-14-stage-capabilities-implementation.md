@@ -202,3 +202,24 @@
 - 新增需求规划稿：`docs/superpowers/specs/2026-07-14-stage-capabilities-roadmap-and-core-prompts.md`；
 - 新增并持续维护本执行计划：`docs/superpowers/plans/2026-07-14-stage-capabilities-implementation.md`；
 - 未修改业务代码、SQL、配置或前端源码。
+
+### 2026-07-14：阶段 B 子闭环一——运行基座、取消失效与工具前压缩闸门
+
+#### 实际代码改动
+
+- 新增 `chat_run` 运行表及 Repository/DAO/Mapper，建立 run/turn、状态、版本、context revision、前驱/后继关系等基础字段；
+- 增量扩展 session/message/compaction/snapshot/tool log：消息可绑定 run 并标记无效，压缩任务与快照携带 revision/hash/血缘；
+- 新增 `RunControlService`、`ActiveRunRegistry`、`RunExecutionGate`和取消 API，取消时先迁移状态，再失效 run 消息、废弃重叠压缩任务、恢复安全摘要、推进 revision，事务提交后中断本机流；
+- `ChatService` 流式 agent 路径创建并传播 runId/contextRevision，用户和助手消息绑定 run，取消后不再落库有效 `[assistant_error]`；
+- 上下文查询与 token 统计统一排除无效消息；压缩在远程 LLM 前后均校验 revision/hash，避免旧结果激活；
+- 新增工具前同步压缩能力，支持复用/领取已有任务；压缩完成时拦截当次工具调用并要求模型基于新上下文重新推理；
+- 在 ADK `beforeToolCallback` 与 `ToolGateway.invoke` 外部副作用前建立双层闸门，同时从 ChatModel/Agent 模型 options 移除旧 Spring AI `ToolCallback` 执行旁路，保持 `GatewayToolset + ToolGateway` 唯一分发；
+- 补齐了会话/压缩测试 Fake Repository 对新契约的实现，并新增取消与工具闸门单元测试。
+
+#### 验证结果
+
+- `JAVA_HOME=Java17 mvn -DskipTests clean compile`：通过，7 个 Reactor 模块全部 SUCCESS；
+- `RunControlServiceTest, RunExecutionGateTest, MyBatisMapperLoadTest, ToolGatewayStdioTest`：5 项全部通过；
+- 首次测试在系统 Java 25 下遇到现有 ByteBuddy 不支持 class version 69，按项目 Java 17 基线重跑后通过；
+- MyBatis Mapper 全量 XML 装载测试通过，新增/扩展映射无语法错误；
+- 尚未完成前端取消、非流式/工作流 run 覆盖、跨节点通知和 steer，因此阶段 B 仍保持进行中。

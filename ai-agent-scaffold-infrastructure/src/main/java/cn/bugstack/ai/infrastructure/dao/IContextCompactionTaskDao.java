@@ -19,4 +19,11 @@ public interface IContextCompactionTaskDao {
     int complete(@Param("taskId") String taskId);
     int retry(@Param("taskId") String taskId, @Param("errorMessage") String errorMessage);
     int dead(@Param("taskId") String taskId, @Param("errorMessage") String errorMessage);
+    int staleOverlapping(@Param("tenantId") String tenantId,
+                         @Param("userId") String userId,
+                         @Param("sessionId") String sessionId,
+                         @Param("runId") String runId,
+                         @Param("minSequence") Integer minSequence,
+                         @Param("maxSequence") Integer maxSequence,
+                         @Param("reason") String reason);
 }

@@ -11,6 +11,8 @@ public class AppendMessageCommandEntity {
 
     private String sessionId;
 
+    private String runId;
+
     private String role;
 
     private String contentType;

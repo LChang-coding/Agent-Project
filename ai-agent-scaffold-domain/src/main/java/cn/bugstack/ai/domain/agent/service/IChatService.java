@@ -6,6 +6,7 @@ import com.google.adk.events.Event;
 import io.reactivex.rxjava3.core.Flowable;
 
 import java.util.List;
+import cn.bugstack.ai.domain.run.model.RunStreamEntity;
 
 /**
  * 对话接口
@@ -48,6 +49,12 @@ public interface IChatService {
      * 流式发送消息；参数是 Agent ID、用户ID、会话ID和消息；返回事件流。
      */
     Flowable<Event> handleMessageStream(String agentId, String userId, String sessionId, String message);
+
+    /**
+     * 创建并启动流式运行；参数是 Agent、可信用户、会话、消息和可选运行ID；返回运行与事件流。
+     */
+    RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
+                                              String requestedRunId);
 
     /**
      * 流式发送工作流消息；参数是工作流、版本、模型、用户、会话和消息；返回事件流。

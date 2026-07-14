@@ -10,6 +10,8 @@ public final class ToolRuntimeContextKeys {
     public static final String SESSION_ID = "sessionId";
     public static final String WORKFLOW_ID = "workflowId";
     public static final String TRACE_ID = "traceId";
+    public static final String RUN_ID = "runId";
+    public static final String CONTEXT_REVISION = "contextRevision";
     public static final String CONTEXT_VISIBLE_THROUGH_SEQUENCE = "contextVisibleThroughSequence";
     public static final String CONTEXT_UPSTREAM_OUTPUT = "contextUpstreamOutput";
 

@@ -9,9 +9,12 @@
         <result column="tenant_id" property="tenantId"/>
         <result column="user_id" property="userId"/>
         <result column="session_id" property="sessionId"/>
+        <result column="run_id" property="runId"/>
         <result column="from_sequence" property="fromSequence"/>
         <result column="to_sequence" property="toSequence"/>
         <result column="expected_memory_version" property="expectedMemoryVersion"/>
+        <result column="base_context_revision" property="baseContextRevision"/>
+        <result column="coverage_hash" property="coverageHash"/>
         <result column="policy_version" property="policyVersion"/>
         <result column="status" property="status"/>
         <result column="attempt_count" property="attemptCount"/>
@@ -23,19 +26,19 @@
     </resultMap>
 
     <sql id="TaskColumns">
-        id, task_id, task_key, tenant_id, user_id, session_id, from_sequence, to_sequence,
-        expected_memory_version, policy_version, status, attempt_count, error_message,
+        id, task_id, task_key, tenant_id, user_id, session_id, run_id, from_sequence, to_sequence,
+        expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count, error_message,
         trace_id, create_time, update_time, deleted
     </sql>
 
     <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
         INSERT IGNORE INTO context_compaction_task (
-            task_id, task_key, tenant_id, user_id, session_id, from_sequence, to_sequence,
-            expected_memory_version, policy_version, status, attempt_count, error_message, trace_id
+            task_id, task_key, tenant_id, user_id, session_id, run_id, from_sequence, to_sequence,
+            expected_memory_version, base_context_revision, coverage_hash, policy_version, status, attempt_count, error_message, trace_id
         )
         VALUES (
-            #{taskId}, #{taskKey}, #{tenantId}, #{userId}, #{sessionId}, #{fromSequence}, #{toSequence},
-            #{expectedMemoryVersion}, #{policyVersion}, #{status}, #{attemptCount}, #{errorMessage}, #{traceId}
+            #{taskId}, #{taskKey}, #{tenantId}, #{userId}, #{sessionId}, #{runId}, #{fromSequence}, #{toSequence},
+            #{expectedMemoryVersion}, #{baseContextRevision}, #{coverageHash}, #{policyVersion}, #{status}, #{attemptCount}, #{errorMessage}, #{traceId}
         )
     </insert>
 
@@ -106,6 +109,16 @@
         WHERE task_id = #{taskId}
           AND status IN ('processing', 'retrying', 'pending')
           AND deleted = 0
+    </update>
+
+    <update id="staleOverlapping">
+        UPDATE context_compaction_task
+        SET status = 'stale', error_message = #{reason}
+        WHERE user_id = #{userId} AND session_id = #{sessionId}
+          AND status IN ('pending', 'processing', 'retrying', 'succeeded')
+          AND (run_id = #{runId} OR (from_sequence &lt;= #{maxSequence} AND to_sequence &gt;= #{minSequence}))
+          AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
     </update>
 
 </mapper>

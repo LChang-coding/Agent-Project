@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.agent.service.armory.matter.plugin.ContextInjectionPlugin;
+import cn.bugstack.ai.domain.agent.service.armory.matter.plugin.ToolExecutionGuardPlugin;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
@@ -31,12 +32,15 @@ import java.util.List;
 public class RunnerNode extends AbstractArmorySupport {
 
     private final ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider;
+    private final ObjectProvider<ToolExecutionGuardPlugin> toolExecutionGuardPluginProvider;
 
     /**
      * 创建 Runner 装配节点；参数是上下文插件延迟提供器；返回节点实例。
      */
-    public RunnerNode(ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider) {
+    public RunnerNode(ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider,
+                      ObjectProvider<ToolExecutionGuardPlugin> toolExecutionGuardPluginProvider) {
         this.contextInjectionPluginProvider = contextInjectionPluginProvider;
+        this.toolExecutionGuardPluginProvider = toolExecutionGuardPluginProvider;
     }
 
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -90,6 +94,7 @@ public class RunnerNode extends AbstractArmorySupport {
             plugins = new ArrayList<>();
         }
         appendContextPlugin(plugins);
+        appendToolExecutionGuardPlugin(plugins);
 
         return new InMemoryRunner(baseAgent, appName, plugins);
     }
@@ -106,6 +111,21 @@ public class RunnerNode extends AbstractArmorySupport {
                 .anyMatch(plugin -> plugin != null && contextInjectionPlugin.getName().equals(plugin.getName()));
         if (!exists) {
             plugins.add(contextInjectionPlugin);
+        }
+    }
+
+    /**
+     * 自动附加工具执行守卫插件；参数是插件列表；无返回值。
+     */
+    private void appendToolExecutionGuardPlugin(List<BasePlugin> plugins) {
+        ToolExecutionGuardPlugin plugin = toolExecutionGuardPluginProvider.getIfAvailable();
+        if (plugin == null) {
+            return;
+        }
+        boolean exists = plugins.stream()
+                .anyMatch(item -> item != null && plugin.getName().equals(item.getName()));
+        if (!exists) {
+            plugins.add(plugin);
         }
     }
 

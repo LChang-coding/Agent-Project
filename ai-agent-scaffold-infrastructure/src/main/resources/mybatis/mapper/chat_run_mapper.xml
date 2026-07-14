@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatRunDao">
+
+    <resultMap id="ChatRunMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatRunPO">
+        <id column="id" property="id"/>
+        <result column="run_id" property="runId"/>
+        <result column="turn_id" property="turnId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_id" property="sourceId"/>
+        <result column="status" property="status"/>
+        <result column="version" property="version"/>
+        <result column="base_context_revision" property="baseContextRevision"/>
+        <result column="current_context_revision" property="currentContextRevision"/>
+        <result column="predecessor_run_id" property="predecessorRunId"/>
+        <result column="successor_run_id" property="successorRunId"/>
+        <result column="user_message_id" property="userMessageId"/>
+        <result column="steer_instruction" property="steerInstruction"/>
+        <result column="terminal_reason" property="terminalReason"/>
+        <result column="cancel_requested_at" property="cancelRequestedAt"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="finished_at" property="finishedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="ChatRunColumns">
+        id, run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, status, version,
+        base_context_revision, current_context_revision, predecessor_run_id, successor_run_id, user_message_id,
+        steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatRunPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_run (run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, status, version,
+                              base_context_revision, current_context_revision, predecessor_run_id, successor_run_id,
+                              user_message_id, steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at)
+        VALUES (#{runId}, #{turnId}, #{tenantId}, #{userId}, #{sessionId}, #{sourceType}, #{sourceId}, #{status}, #{version},
+                #{baseContextRevision}, #{currentContextRevision}, #{predecessorRunId}, #{successorRunId},
+                #{userMessageId}, #{steerInstruction}, #{terminalReason}, #{cancelRequestedAt}, #{startedAt}, #{finishedAt})
+    </insert>
+
+    <select id="query" resultMap="ChatRunMap">
+        SELECT <include refid="ChatRunColumns"/> FROM chat_run
+        WHERE user_id = #{userId} AND run_id = #{runId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        LIMIT 1
+    </select>
+
+    <select id="lock" resultMap="ChatRunMap">
+        SELECT <include refid="ChatRunColumns"/> FROM chat_run
+        WHERE user_id = #{userId} AND run_id = #{runId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        LIMIT 1 FOR UPDATE
+    </select>
+
+    <update id="transition">
+        UPDATE chat_run SET status = #{targetStatus}, version = version + 1,
+            terminal_reason = COALESCE(#{reason}, terminal_reason),
+            cancel_requested_at = COALESCE(#{cancelRequestedAt}, cancel_requested_at),
+            finished_at = COALESCE(#{finishedAt}, finished_at)
+        WHERE user_id = #{userId} AND run_id = #{runId} AND status = #{expectedStatus}
+          AND version = #{expectedVersion} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+    <update id="bindUserMessage">
+        UPDATE chat_run SET user_message_id = #{messageId}, version = version + 1
+        WHERE user_id = #{userId} AND run_id = #{runId} AND version = #{expectedVersion} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+    <update id="bindSuccessor">
+        UPDATE chat_run SET successor_run_id = #{successorRunId}, steer_instruction = #{steerInstruction}, version = version + 1
+        WHERE user_id = #{userId} AND run_id = #{runId} AND version = #{expectedVersion} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+    <update id="updateContextRevision">
+        UPDATE chat_run SET current_context_revision = #{contextRevision}, version = version + 1
+        WHERE user_id = #{userId} AND run_id = #{runId} AND version = #{expectedVersion} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+</mapper>

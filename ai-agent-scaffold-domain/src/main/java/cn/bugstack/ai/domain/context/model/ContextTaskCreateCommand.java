@@ -13,9 +13,12 @@ public class ContextTaskCreateCommand {
     private String tenantId;
     private String userId;
     private String sessionId;
+    private String runId;
     private Integer fromSequence;
     private Integer toSequence;
     private Integer expectedMemoryVersion;
+    private Long baseContextRevision;
+    private String coverageHash;
     private String policyVersion;
     private String traceId;
 }

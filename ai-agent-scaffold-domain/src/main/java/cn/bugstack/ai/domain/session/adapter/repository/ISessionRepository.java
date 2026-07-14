@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface ISessionRepository {
 
@@ -36,4 +37,20 @@ public interface ISessionRepository {
      * 新增消息；参数是消息实体；返回影响行数。
      */
     int insertMessage(ChatMessageEntity message);
+
+    /**
+     * 推进上下文版本；参数是可信会话身份；返回新版本。
+     */
+    long incrementContextRevision(String tenantId, String userId, String sessionId);
+
+    /**
+     * 失效运行消息；参数是可信身份、运行和原因；返回影响行数。
+     */
+    int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId, String reason,
+                              LocalDateTime invalidatedAt);
+
+    /**
+     * 查询运行消息；参数是可信身份和运行；返回消息列表。
+     */
+    List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId);
 }

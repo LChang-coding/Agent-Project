@@ -85,6 +85,18 @@ public interface IChatSessionDao {
                               @Param("lastMessageTime") LocalDateTime lastMessageTime);
 
     /**
+     * 原子推进上下文版本。
+     *
+     * @param tenantId 租户业务ID
+     * @param userId 用户业务ID
+     * @param sessionId 会话业务ID
+     * @return 影响行数
+     */
+    int incrementContextRevision(@Param("tenantId") String tenantId,
+                                 @Param("userId") String userId,
+                                 @Param("sessionId") String sessionId);
+
+    /**
      * 按租户业务ID查询会话列表。
      *
      * @param tenantId 租户业务ID

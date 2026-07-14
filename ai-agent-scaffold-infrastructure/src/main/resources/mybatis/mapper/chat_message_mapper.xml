@@ -8,6 +8,10 @@
         <result column="user_id" property="userId"/>
         <result column="session_id" property="sessionId"/>
         <result column="message_id" property="messageId"/>
+        <result column="run_id" property="runId"/>
+        <result column="validity_status" property="validityStatus"/>
+        <result column="invalid_reason" property="invalidReason"/>
+        <result column="invalidated_at" property="invalidatedAt"/>
         <result column="role" property="role"/>
         <result column="content_type" property="contentType"/>
         <result column="content" property="content"/>
@@ -22,17 +26,17 @@
     </resultMap>
 
     <sql id="ChatMessageColumns">
-        id, tenant_id, user_id, session_id, message_id, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, message_id, run_id, validity_status, invalid_reason, invalidated_at, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_message (tenant_id, user_id, session_id, message_id, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{role}, #{contentType}, #{content}, #{estimatedTokenCount}, #{sequenceNo}, #{parentMessageId}, #{traceId}, #{metadata})
+        INSERT INTO chat_message (tenant_id, user_id, session_id, message_id, run_id, validity_status, invalid_reason, invalidated_at, role, content_type, content, estimated_token_count, sequence_no, parent_message_id, trace_id, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{runId}, #{validityStatus}, #{invalidReason}, #{invalidatedAt}, #{role}, #{contentType}, #{content}, #{estimatedTokenCount}, #{sequenceNo}, #{parentMessageId}, #{traceId}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO">
         UPDATE chat_message
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, role = #{role}, content_type = #{contentType}, content = #{content}, estimated_token_count = #{estimatedTokenCount}, sequence_no = #{sequenceNo}, parent_message_id = #{parentMessageId}, trace_id = #{traceId}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, message_id = #{messageId}, run_id = #{runId}, validity_status = #{validityStatus}, invalid_reason = #{invalidReason}, invalidated_at = #{invalidatedAt}, role = #{role}, content_type = #{contentType}, content = #{content}, estimated_token_count = #{estimatedTokenCount}, sequence_no = #{sequenceNo}, parent_message_id = #{parentMessageId}, trace_id = #{traceId}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
@@ -92,6 +96,7 @@
           AND session_id = #{sessionId}
           AND sequence_no &gt; #{fromSequenceExclusive}
           AND sequence_no &lt;= #{toSequenceInclusive}
+          AND validity_status = 'active'
           AND deleted = 0
         <choose>
             <when test="tenantId == null or tenantId == ''">
@@ -111,6 +116,7 @@
           AND session_id = #{sessionId}
           AND sequence_no &gt; #{fromSequenceExclusive}
           AND sequence_no &lt;= #{toSequenceInclusive}
+          AND validity_status = 'active'
           AND deleted = 0
         <choose>
             <when test="tenantId == null or tenantId == ''">
@@ -120,6 +126,21 @@
                 AND tenant_id = #{tenantId}
             </otherwise>
         </choose>
+    </select>
+
+    <update id="invalidateRunMessages">
+        UPDATE chat_message
+        SET validity_status = 'invalidated', invalid_reason = #{reason}, invalidated_at = #{invalidatedAt}
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND run_id = #{runId}
+          AND validity_status = 'active' AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+    <select id="queryRunMessages" resultMap="ChatMessageMap">
+        SELECT <include refid="ChatMessageColumns"/> FROM chat_message
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND run_id = #{runId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        ORDER BY sequence_no ASC, id ASC
     </select>
 
 </mapper>

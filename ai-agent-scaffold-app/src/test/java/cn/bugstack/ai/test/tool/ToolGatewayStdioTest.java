@@ -25,7 +25,8 @@ public class ToolGatewayStdioTest {
     @Test
     public void shouldInvokeStdioMcpThroughProtocolClient() {
         RecordingMcpProtocolClientSupport protocolClientSupport = new RecordingMcpProtocolClientSupport();
-        ToolGateway toolGateway = new ToolGateway(mock(IToolRepository.class), null, protocolClientSupport);
+        ToolGateway toolGateway = new ToolGateway(mock(IToolRepository.class), null, protocolClientSupport,
+                mock(cn.bugstack.ai.domain.run.service.RunExecutionGate.class));
         ToolCatalogEntity tool = ToolCatalogEntity.builder()
                 .toolType("mcp")
                 .toolId("mcp_stdio_001")

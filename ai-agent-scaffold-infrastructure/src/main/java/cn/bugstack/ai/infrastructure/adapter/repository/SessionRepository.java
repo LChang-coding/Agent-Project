@@ -10,6 +10,8 @@ import cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Repository
 public class SessionRepository implements ISessionRepository {
@@ -73,6 +75,26 @@ public class SessionRepository implements ISessionRepository {
         return chatMessageDao.insert(toMessagePO(message));
     }
 
+    @Override
+    public long incrementContextRevision(String tenantId, String userId, String sessionId) {
+        chatSessionDao.incrementContextRevision(tenantId, userId, sessionId);
+        ChatSessionPO session = chatSessionDao.queryByTenantUserSession(tenantId, userId, sessionId);
+        return session == null || session.getContextRevision() == null ? 0L : session.getContextRevision();
+    }
+
+    @Override
+    public int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId, String reason,
+                                     LocalDateTime invalidatedAt) {
+        return chatMessageDao.invalidateRunMessages(tenantId, userId, sessionId, runId, reason, invalidatedAt);
+    }
+
+    @Override
+    public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId) {
+        return chatMessageDao.queryRunMessages(tenantId, userId, sessionId, runId).stream()
+                .map(this::toMessageEntity)
+                .collect(Collectors.toList());
+    }
+
     /**
      * 转换会话持久化对象；参数是会话实体；返回会话 PO。
      */
@@ -87,6 +109,7 @@ public class SessionRepository implements ISessionRepository {
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .lastMessageTime(session.getLastMessageTime())
+                .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();
     }
 
@@ -107,6 +130,7 @@ public class SessionRepository implements ISessionRepository {
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .lastMessageTime(session.getLastMessageTime())
+                .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();
     }
 
@@ -119,6 +143,10 @@ public class SessionRepository implements ISessionRepository {
                 .userId(message.getUserId())
                 .sessionId(message.getSessionId())
                 .messageId(message.getMessageId())
+                .runId(message.getRunId())
+                .validityStatus(message.getValidityStatus())
+                .invalidReason(message.getInvalidReason())
+                .invalidatedAt(message.getInvalidatedAt())
                 .role(message.getRole())
                 .contentType(message.getContentType())
                 .content(message.getContent())
@@ -127,5 +155,15 @@ public class SessionRepository implements ISessionRepository {
                 .parentMessageId(message.getParentMessageId())
                 .traceId(message.getTraceId())
                 .build();
+    }
+
+    private ChatMessageEntity toMessageEntity(ChatMessagePO message) {
+        return ChatMessageEntity.builder()
+                .tenantId(message.getTenantId()).userId(message.getUserId()).sessionId(message.getSessionId())
+                .messageId(message.getMessageId()).runId(message.getRunId()).validityStatus(message.getValidityStatus())
+                .invalidReason(message.getInvalidReason()).invalidatedAt(message.getInvalidatedAt())
+                .role(message.getRole()).contentType(message.getContentType()).content(message.getContent())
+                .estimatedTokenCount(message.getEstimatedTokenCount()).sequenceNo(message.getSequenceNo())
+                .parentMessageId(message.getParentMessageId()).traceId(message.getTraceId()).build();
     }
 }

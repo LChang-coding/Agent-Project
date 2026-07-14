@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.tool.service;
 
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
+import cn.bugstack.ai.domain.run.service.RunExecutionGate;
 import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
@@ -40,16 +41,19 @@ public class ToolGateway {
     private final IToolRepository toolRepository;
     private final ObjectStorageService objectStorageService;
     private final McpProtocolClientSupport mcpProtocolClientSupport;
+    private final RunExecutionGate runExecutionGate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
      * 创建工具网关；参数是工具仓储和对象存储服务；返回网关实例。
      */
-    public ToolGateway(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport) {
+    public ToolGateway(IToolRepository toolRepository, ObjectStorageService objectStorageService,
+                       McpProtocolClientSupport mcpProtocolClientSupport, RunExecutionGate runExecutionGate) {
         this.toolRepository = toolRepository;
         this.objectStorageService = objectStorageService;
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
+        this.runExecutionGate = runExecutionGate;
     }
 
     /**
@@ -57,6 +61,7 @@ public class ToolGateway {
      */
     public Map<String, Object> invoke(ToolCatalogEntity tool, Map<String, Object> input, ToolInvokeContextEntity context) {
         checkInvoke(tool, context);
+        runExecutionGate.beforeDispatch(context);
         long begin = System.currentTimeMillis();
         String inputJson = toJson(input);
         AiLog.info(AiLog.tool().callStarted(context.getTenantId(), context.getUserId(), context.getSessionId(),

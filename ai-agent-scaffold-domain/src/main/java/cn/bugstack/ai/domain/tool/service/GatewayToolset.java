@@ -48,6 +48,8 @@ public class GatewayToolset implements BaseToolset {
                 .sessionId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.SESSION_ID)), readonlyContext.sessionId()))
                 .workflowId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_ID)))
                 .invocationId(readonlyContext.invocationId())
+                .runId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RUN_ID)))
+                .contextRevision(longValue(readonlyContext.state().get(ToolRuntimeContextKeys.CONTEXT_REVISION)))
                 .traceId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TRACE_ID)), TraceContext.currentOrNewTraceId()))
                 .build();
         List<ToolCatalogEntity> tools = toolResolver.resolve(context);
@@ -74,5 +76,22 @@ public class GatewayToolset implements BaseToolset {
      */
     private String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    /**
+     * 转长整数；参数是对象；返回可空长整数。
+     */
+    private Long longValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

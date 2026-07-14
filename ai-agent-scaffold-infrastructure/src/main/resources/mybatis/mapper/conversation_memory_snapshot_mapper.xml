@@ -8,7 +8,10 @@
         <result column="user_id" property="userId"/>
         <result column="session_id" property="sessionId"/>
         <result column="memory_version" property="memoryVersion"/>
+        <result column="base_context_revision" property="baseContextRevision"/>
         <result column="covered_to_sequence" property="coveredToSequence"/>
+        <result column="coverage_hash" property="coverageHash"/>
+        <result column="parent_memory_version" property="parentMemoryVersion"/>
         <result column="content" property="content"/>
         <result column="estimated_token_count" property="estimatedTokenCount"/>
         <result column="policy_version" property="policyVersion"/>
@@ -20,7 +23,7 @@
     </resultMap>
 
     <sql id="SnapshotColumns">
-        id, tenant_id, user_id, session_id, memory_version, covered_to_sequence, content,
+        id, tenant_id, user_id, session_id, memory_version, base_context_revision, covered_to_sequence, coverage_hash, parent_memory_version, content,
         estimated_token_count, policy_version, status, trace_id, create_time, update_time, deleted
     </sql>
 
@@ -63,11 +66,11 @@
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ConversationMemorySnapshotPO">
         INSERT INTO conversation_memory_snapshot (
-            tenant_id, user_id, session_id, memory_version, covered_to_sequence,
+            tenant_id, user_id, session_id, memory_version, base_context_revision, covered_to_sequence, coverage_hash, parent_memory_version,
             content, estimated_token_count, policy_version, status, trace_id
         )
         VALUES (
-            #{tenantId}, #{userId}, #{sessionId}, #{memoryVersion}, #{coveredToSequence},
+            #{tenantId}, #{userId}, #{sessionId}, #{memoryVersion}, #{baseContextRevision}, #{coveredToSequence}, #{coverageHash}, #{parentMemoryVersion},
             #{content}, #{estimatedTokenCount}, #{policyVersion}, #{status}, #{traceId}
         )
     </insert>
@@ -88,6 +91,28 @@
                 AND tenant_id = #{tenantId}
             </otherwise>
         </choose>
+    </update>
+
+    <update id="staleCovering">
+        UPDATE conversation_memory_snapshot SET status = 'stale'
+        WHERE user_id = #{userId} AND session_id = #{sessionId}
+          AND covered_to_sequence &gt;= #{minInvalidSequence}
+          AND status IN ('active', 'superseded') AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
+
+    <select id="queryLatestSafe" resultMap="SnapshotMap">
+        SELECT <include refid="SnapshotColumns"/> FROM conversation_memory_snapshot
+        WHERE user_id = #{userId} AND session_id = #{sessionId}
+          AND covered_to_sequence &lt; #{minInvalidSequence}
+          AND status = 'superseded' AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        ORDER BY memory_version DESC LIMIT 1
+    </select>
+
+    <update id="reactivate">
+        UPDATE conversation_memory_snapshot SET status = 'active'
+        WHERE id = #{id} AND status = 'superseded' AND deleted = 0
     </update>
 
 </mapper>

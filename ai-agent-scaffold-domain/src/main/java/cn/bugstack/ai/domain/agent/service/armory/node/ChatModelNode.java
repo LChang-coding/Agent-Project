@@ -5,34 +5,21 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
-import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
-import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.client.factory.DefaultMcpClientFactory;
-import cn.bugstack.ai.domain.agent.service.armory.matter.skills.ToolSkillsCreateService;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.ArrayList;
-import java.util.List;
-
 @Slf4j
 @Service
 public class ChatModelNode extends AbstractArmorySupport {
 
     @Resource
     private AgentNode agentNode;
-
-    @Resource
-    private DefaultMcpClientFactory defaultMcpClientFactory;
-
-    @Resource
-    private ToolSkillsCreateService toolSkillsCreateService;
 
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -44,40 +31,17 @@ public class ChatModelNode extends AbstractArmorySupport {
         // 获取配置对象
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         AiAgentConfigTableVO.Module.ChatModel chatModelConfig = aiAgentConfigTableVO.getModule().getChatModel();
-        List<AiAgentConfigTableVO.Module.ChatModel.ToolMcp> toolMcpList = chatModelConfig.getToolMcpList();
-        List<AiAgentConfigTableVO.Module.ChatModel.ToolSkills> toolSkillsList = chatModelConfig.getToolSkillsList();
-
-        // 构建mcp服务（工厂）
-        List<ToolCallback> toolCallbackList = new ArrayList<>();
-
-        if (null != toolMcpList && !toolMcpList.isEmpty()) {
-            for (AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp : toolMcpList) {
-                TooMcpCreateService tooMcpCreateService = defaultMcpClientFactory.getTooMcpCreateService(toolMcp);
-                ToolCallback[] toolCallbacks = tooMcpCreateService.buildToolCallback(toolMcp);
-                toolCallbackList.addAll(List.of(toolCallbacks));
-            }
-        }
-
-        // 构建skills服务
-        if (null != toolSkillsList && !toolSkillsList.isEmpty()) {
-            for (AiAgentConfigTableVO.Module.ChatModel.ToolSkills toolSkills : toolSkillsList) {
-                ToolCallback[] toolCallbacks = toolSkillsCreateService.buildToolCallback(toolSkills);
-                toolCallbackList.addAll(List.of(toolCallbacks));
-            }
-        }
-
-        // 构建对话模型
+        // 工具由 GatewayToolset + ToolGateway 唯一分发，禁止模型内置 ToolCallback 绕过运行闸门。
         ChatModel chatModel = OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
                 .defaultOptions(OpenAiChatOptions.builder()
                         .model(chatModelConfig.getModel())
-                        .toolCallbacks(toolCallbackList)
                         .build())
                 .build();
 
         dynamicContext.setChatModel(chatModel);
         dynamicContext.setChatModelName(chatModelConfig.getModel());
-        dynamicContext.setToolCallbacks(toolCallbackList);
+        dynamicContext.getToolCallbacks().clear();
         dynamicContext.setValue("chatModelName", chatModelConfig.getModel());
 
         return router(requestParameter, dynamicContext);

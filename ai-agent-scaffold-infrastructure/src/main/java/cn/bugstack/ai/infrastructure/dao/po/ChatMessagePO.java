@@ -34,6 +34,26 @@ public class ChatMessagePO extends BasePO {
     private String messageId;
 
     /**
+     * 所属运行ID。
+     */
+    private String runId;
+
+    /**
+     * 消息有效性状态。
+     */
+    private String validityStatus;
+
+    /**
+     * 失效原因。
+     */
+    private String invalidReason;
+
+    /**
+     * 失效时间。
+     */
+    private java.time.LocalDateTime invalidatedAt;
+
+    /**
      * 消息角色：user/assistant/tool/system
      */
     private String role;

@@ -13,4 +13,10 @@ public interface IConversationMemorySnapshotDao {
     int insert(ConversationMemorySnapshotPO snapshot);
     int supersede(@Param("tenantId") String tenantId, @Param("userId") String userId, @Param("sessionId") String sessionId, @Param("memoryVersion") Integer memoryVersion);
     int countActiveVersion(@Param("tenantId") String tenantId, @Param("userId") String userId, @Param("sessionId") String sessionId, @Param("memoryVersion") Integer memoryVersion);
+    int staleCovering(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                      @Param("sessionId") String sessionId, @Param("minInvalidSequence") Integer minInvalidSequence);
+    ConversationMemorySnapshotPO queryLatestSafe(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                                 @Param("sessionId") String sessionId,
+                                                 @Param("minInvalidSequence") Integer minInvalidSequence);
+    int reactivate(@Param("id") Long id);
 }

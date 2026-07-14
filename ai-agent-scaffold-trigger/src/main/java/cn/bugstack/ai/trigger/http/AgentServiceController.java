@@ -5,6 +5,10 @@ import cn.bugstack.ai.api.dto.*;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.service.IChatService;
+import cn.bugstack.ai.domain.run.model.RunStreamEntity;
+import cn.bugstack.ai.domain.run.service.ActiveRunRegistry;
+import com.google.adk.events.Event;
+import io.reactivex.rxjava3.core.Flowable;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
@@ -32,6 +36,9 @@ public class AgentServiceController implements IAgentService {
 
     @Resource
     private IChatService chatService;
+
+    @Resource
+    private ActiveRunRegistry activeRunRegistry;
 
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
     @Override
@@ -169,11 +176,29 @@ public class AgentServiceController implements IAgentService {
             emitter.send(SseEmitter.event().name("session").data(sessionId));
 
             AtomicReference<Disposable> disposableRef = new AtomicReference<>();
-            Disposable disposable = hasWorkflow(requestDTO)
-                    ? subscribeWorkflowTextStream(requestDTO, userId, sessionId, emitter, disposableRef)
-                    : subscribeAgentEventStream(requestDTO, userId, sessionId, emitter, disposableRef);
+            String runId = null;
+            Disposable disposable;
+            if (hasWorkflow(requestDTO)) {
+                disposable = subscribeWorkflowTextStream(requestDTO, userId, sessionId, emitter, disposableRef);
+            } else {
+                RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
+                        sessionId, requestDTO.getMessage(), null);
+                runId = runStream.getRun().getRunId();
+                emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
+                        "runId", runId,
+                        "status", runStream.getRun().getStatus().name().toLowerCase(),
+                        "contextRevision", runStream.getRun().getCurrentContextRevision())));
+                disposable = subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef);
+            }
             disposableRef.set(disposable);
-            emitter.onCompletion(() -> dispose(disposableRef));
+            String activeRunId = runId;
+            if (activeRunId != null) {
+                activeRunRegistry.register(activeRunId, () -> dispose(disposableRef));
+            }
+            emitter.onCompletion(() -> {
+                dispose(disposableRef);
+                activeRunRegistry.remove(activeRunId);
+            });
             emitter.onTimeout(() -> dispose(disposableRef));
         } catch (Exception e) {
             log.error("流式对话失败", e);
@@ -213,6 +238,20 @@ public class AgentServiceController implements IAgentService {
                         emitter::completeWithError,
                         emitter::complete
                 );
+    }
+
+    /**
+     * 订阅已创建的 Agent 运行流；参数是事件流、SSE 和订阅引用；返回订阅句柄。
+     */
+    private Disposable subscribeAgentEventStream(Flowable<Event> stream,
+                                                  SseEmitter emitter,
+                                                  AtomicReference<Disposable> disposableRef) {
+        AtomicReference<String> lastContentRef = new AtomicReference<>("");
+        return stream.subscribe(
+                event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
+                emitter::completeWithError,
+                emitter::complete
+        );
     }
 
     /**

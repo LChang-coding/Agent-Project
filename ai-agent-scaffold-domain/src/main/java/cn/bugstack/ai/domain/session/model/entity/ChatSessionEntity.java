@@ -26,4 +26,9 @@ public class ChatSessionEntity {
     private String status;
 
     private LocalDateTime lastMessageTime;
+
+    /**
+     * 有效上下文版本。
+     */
+    private Long contextRevision;
 }

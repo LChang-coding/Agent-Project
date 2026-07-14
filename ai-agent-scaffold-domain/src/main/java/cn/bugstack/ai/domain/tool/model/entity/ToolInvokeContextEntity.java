@@ -19,5 +19,8 @@ public class ToolInvokeContextEntity {
     private String sessionId;
     private String workflowId;
     private String invocationId;
+    private String runId;
+    private Long contextRevision;
+    private String functionCallId;
     private String traceId;
 }

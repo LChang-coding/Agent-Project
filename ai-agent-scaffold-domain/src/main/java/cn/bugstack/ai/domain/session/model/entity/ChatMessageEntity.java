@@ -15,6 +15,14 @@ public class ChatMessageEntity {
 
     private String messageId;
 
+    private String runId;
+
+    private String validityStatus;
+
+    private String invalidReason;
+
+    private java.time.LocalDateTime invalidatedAt;
+
     private String role;
 
     private String contentType;

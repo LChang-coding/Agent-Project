@@ -71,6 +71,20 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
         return dao.insert(toPO(snapshot)) == 1;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ConversationMemorySnapshotEntity invalidateCoveringAndRestore(String tenantId, String userId, String sessionId,
+                                                                          Integer minInvalidSequence) {
+        String normalizedTenantId = blankToNull(tenantId);
+        dao.staleCovering(normalizedTenantId, userId, sessionId, minInvalidSequence);
+        ConversationMemorySnapshotPO safe = dao.queryLatestSafe(normalizedTenantId, userId, sessionId, minInvalidSequence);
+        if (safe != null && dao.reactivate(safe.getId()) == 1) {
+            safe.setStatus("active");
+            return toEntity(safe);
+        }
+        return null;
+    }
+
     private ConversationMemorySnapshotEntity toEntity(ConversationMemorySnapshotPO po) {
         if (po == null) {
             return null;
@@ -80,7 +94,10 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
                 .userId(po.getUserId())
                 .sessionId(po.getSessionId())
                 .memoryVersion(po.getMemoryVersion())
+                .baseContextRevision(po.getBaseContextRevision())
                 .coveredToSequence(po.getCoveredToSequence())
+                .coverageHash(po.getCoverageHash())
+                .parentMemoryVersion(po.getParentMemoryVersion())
                 .content(po.getContent())
                 .estimatedTokenCount(po.getEstimatedTokenCount())
                 .policyVersion(po.getPolicyVersion())
@@ -95,7 +112,10 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
                 .userId(value.getUserId())
                 .sessionId(value.getSessionId())
                 .memoryVersion(value.getMemoryVersion())
+                .baseContextRevision(value.getBaseContextRevision())
                 .coveredToSequence(value.getCoveredToSequence())
+                .coverageHash(value.getCoverageHash())
+                .parentMemoryVersion(value.getParentMemoryVersion())
                 .content(value.getContent())
                 .estimatedTokenCount(value.getEstimatedTokenCount())
                 .policyVersion(value.getPolicyVersion())

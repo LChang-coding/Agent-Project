@@ -61,6 +61,11 @@ public class ChatSessionPO extends BasePO {
     private LocalDateTime lastMessageTime;
 
     /**
+     * 有效上下文版本。
+     */
+    private Long contextRevision;
+
+    /**
      * 扩展信息
      */
     private String metadata;

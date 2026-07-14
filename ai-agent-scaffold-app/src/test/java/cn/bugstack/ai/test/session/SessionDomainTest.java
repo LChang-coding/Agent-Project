@@ -131,6 +131,26 @@ public class SessionDomainTest {
             return 1;
         }
 
+        @Override
+        public long incrementContextRevision(String tenantId, String userId, String sessionId) {
+            ChatSessionEntity session = querySession(tenantId, userId, sessionId);
+            long revision = session.getContextRevision() == null ? 1L : session.getContextRevision() + 1L;
+            session.setContextRevision(revision);
+            return revision;
+        }
+
+        @Override
+        public int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId,
+                                         String reason, LocalDateTime invalidatedAt) {
+            return 0;
+        }
+
+        @Override
+        public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId,
+                                                        String runId) {
+            return messages.stream().filter(message -> runId.equals(message.getRunId())).toList();
+        }
+
         /**
          * 生成仓储键；参数是租户、用户和会话ID；返回字符串键。
          */

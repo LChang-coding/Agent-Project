@@ -85,6 +85,9 @@ public class GatewayAdkTool extends BaseTool {
                 .sessionId(defaultString(defaultString(stringValue(state.get(ToolRuntimeContextKeys.SESSION_ID)), toolContext.sessionId()), fallbackContext.getSessionId()))
                 .workflowId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.WORKFLOW_ID)), fallbackContext.getWorkflowId()))
                 .invocationId(defaultString(toolContext.invocationId(), fallbackContext.getInvocationId()))
+                .runId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RUN_ID)), fallbackContext.getRunId()))
+                .contextRevision(defaultLong(longValue(state.get(ToolRuntimeContextKeys.CONTEXT_REVISION)), fallbackContext.getContextRevision()))
+                .functionCallId(toolContext.functionCallId().orElse(null))
                 .traceId(defaultString(defaultString(stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID)), fallbackContext.getTraceId()), TraceContext.currentOrNewTraceId()))
                 .build();
     }
@@ -99,6 +102,9 @@ public class GatewayAdkTool extends BaseTool {
                 .sessionId(fallbackContext.getSessionId())
                 .workflowId(fallbackContext.getWorkflowId())
                 .invocationId(fallbackContext.getInvocationId())
+                .runId(fallbackContext.getRunId())
+                .contextRevision(fallbackContext.getContextRevision())
+                .functionCallId(fallbackContext.getFunctionCallId())
                 .traceId(defaultString(fallbackContext.getTraceId(), TraceContext.currentOrNewTraceId()))
                 .build();
     }
@@ -211,6 +217,30 @@ public class GatewayAdkTool extends BaseTool {
      */
     private static String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    /**
+     * 转长整数；参数是对象；返回可空长整数。
+     */
+    private static Long longValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 默认长整数；参数是候选值和默认值；返回非空优先值。
+     */
+    private static Long defaultLong(Long value, Long defaultValue) {
+        return value == null ? defaultValue : value;
     }
 
     /**

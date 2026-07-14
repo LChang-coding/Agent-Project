@@ -19,7 +19,10 @@ public class ConversationMemorySnapshotPO extends BasePO {
     private String userId;
     private String sessionId;
     private Integer memoryVersion;
+    private Long baseContextRevision;
     private Integer coveredToSequence;
+    private String coverageHash;
+    private Integer parentMemoryVersion;
     private String content;
     private Integer estimatedTokenCount;
     private String policyVersion;

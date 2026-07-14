@@ -44,4 +44,10 @@ public interface IContextCompactionTaskRepository {
      * 标记任务进入死信；参数是任务ID和错误摘要；返回影响行数。
      */
     int dead(String taskId, String errorMessage);
+
+    /**
+     * 废弃覆盖失效消息的任务；参数是会话、运行和消息序号范围；返回影响行数。
+     */
+    int staleOverlapping(String tenantId, String userId, String sessionId, String runId,
+                         Integer minSequence, Integer maxSequence, String reason);
 }

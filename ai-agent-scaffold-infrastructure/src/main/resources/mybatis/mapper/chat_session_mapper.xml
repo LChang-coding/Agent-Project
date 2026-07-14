@@ -13,6 +13,7 @@
         <result column="title" property="title"/>
         <result column="status" property="status"/>
         <result column="last_message_time" property="lastMessageTime"/>
+        <result column="context_revision" property="contextRevision"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -20,17 +21,17 @@
     </resultMap>
 
     <sql id="ChatSessionColumns">
-        id, tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, context_revision, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{appName}, #{title}, #{status}, #{lastMessageTime}, #{metadata})
+        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, context_revision, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{appName}, #{title}, #{status}, #{lastMessageTime}, #{contextRevision}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO">
         UPDATE chat_session
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, app_name = #{appName}, title = #{title}, status = #{status}, last_message_time = #{lastMessageTime}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, app_name = #{appName}, title = #{title}, status = #{status}, last_message_time = #{lastMessageTime}, context_revision = #{contextRevision}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
@@ -95,6 +96,12 @@
                 AND tenant_id = #{tenantId}
             </otherwise>
         </choose>
+    </update>
+
+    <update id="incrementContextRevision">
+        UPDATE chat_session SET context_revision = context_revision + 1
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
     </update>
 
     <select id="queryListByTenantId" resultMap="ChatSessionMap">

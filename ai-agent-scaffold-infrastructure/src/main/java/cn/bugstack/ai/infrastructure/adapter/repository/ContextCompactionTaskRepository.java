@@ -43,9 +43,12 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
         task.setTenantId(blankToNull(command.getTenantId()));
         task.setUserId(command.getUserId());
         task.setSessionId(command.getSessionId());
+        task.setRunId(command.getRunId());
         task.setFromSequence(command.getFromSequence());
         task.setToSequence(command.getToSequence());
         task.setExpectedMemoryVersion(command.getExpectedMemoryVersion());
+        task.setBaseContextRevision(command.getBaseContextRevision());
+        task.setCoverageHash(command.getCoverageHash());
         task.setPolicyVersion(command.getPolicyVersion());
         task.setStatus("pending");
         task.setAttemptCount(0);
@@ -104,6 +107,13 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
         return dao.dead(taskId, truncate(errorMessage));
     }
 
+    @Override
+    public int staleOverlapping(String tenantId, String userId, String sessionId, String runId,
+                                Integer minSequence, Integer maxSequence, String reason) {
+        return dao.staleOverlapping(blankToNull(tenantId), userId, sessionId, runId, minSequence, maxSequence,
+                truncate(reason));
+    }
+
     private ContextCompactionTaskEntity toEntity(ContextCompactionTaskPO po) {
         if (po == null) {
             return null;
@@ -114,9 +124,12 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
                 .tenantId(po.getTenantId())
                 .userId(po.getUserId())
                 .sessionId(po.getSessionId())
+                .runId(po.getRunId())
                 .fromSequence(po.getFromSequence())
                 .toSequence(po.getToSequence())
                 .expectedMemoryVersion(po.getExpectedMemoryVersion())
+                .baseContextRevision(po.getBaseContextRevision())
+                .coverageHash(po.getCoverageHash())
                 .policyVersion(po.getPolicyVersion())
                 .status(toStatus(po.getStatus()))
                 .attemptCount(po.getAttemptCount())
@@ -140,6 +153,8 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
                 String.valueOf(command.getFromSequence()),
                 String.valueOf(command.getToSequence()),
                 String.valueOf(command.getExpectedMemoryVersion()),
+                String.valueOf(command.getBaseContextRevision()),
+                blank(command.getCoverageHash()),
                 blank(command.getPolicyVersion()));
         return sha256(raw);
     }

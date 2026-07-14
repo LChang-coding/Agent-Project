@@ -271,6 +271,14 @@ public class ConversationMemoryServiceTest {
             active = snapshot;
             return true;
         }
+
+        @Override
+        public ConversationMemorySnapshotEntity invalidateCoveringAndRestore(String tenantId, String userId,
+                                                                               String sessionId,
+                                                                               Integer minInvalidSequence) {
+            active = null;
+            return null;
+        }
     }
 
     private static class FakeTaskRepository implements IContextCompactionTaskRepository {
@@ -321,6 +329,12 @@ public class ConversationMemoryServiceTest {
 
         @Override
         public int dead(String taskId, String errorMessage) {
+            return 1;
+        }
+
+        @Override
+        public int staleOverlapping(String tenantId, String userId, String sessionId, String runId,
+                                    Integer minSequence, Integer maxSequence, String reason) {
             return 1;
         }
     }

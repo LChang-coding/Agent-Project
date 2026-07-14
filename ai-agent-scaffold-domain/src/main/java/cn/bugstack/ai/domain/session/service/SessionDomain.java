@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class SessionDomain {
@@ -50,6 +51,7 @@ public class SessionDomain {
                 .title(blankToDefault(command.getTitle(), command.getAgentName()))
                 .status(STATUS_ACTIVE)
                 .lastMessageTime(now)
+                .contextRevision(0L)
                 .build();
         sessionRepository.insertSession(session);
         AiLog.info(AiLog.chat().sessionCreated(session.getTenantId(), session.getUserId(), session.getSessionId(),
@@ -81,10 +83,20 @@ public class SessionDomain {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendUserMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
+        return appendUserMessage(tenantId, userId, sessionId, null, content, traceId);
+    }
+
+    /**
+     * 保存运行用户消息；参数是可信身份、运行、内容和链路ID；返回消息实体。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity appendUserMessage(String tenantId, String userId, String sessionId, String runId,
+                                               String content, String traceId) {
         AppendMessageCommandEntity command = new AppendMessageCommandEntity();
         command.setTenantId(tenantId);
         command.setUserId(userId);
         command.setSessionId(sessionId);
+        command.setRunId(runId);
         command.setRole(ROLE_USER);
         command.setContentType(CONTENT_TYPE_TEXT);
         command.setContent(content);
@@ -97,10 +109,20 @@ public class SessionDomain {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
+        return appendAssistantMessage(tenantId, userId, sessionId, null, content, traceId);
+    }
+
+    /**
+     * 保存运行助手消息；参数是可信身份、运行、内容和链路ID；返回消息实体。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String runId,
+                                                    String content, String traceId) {
         AppendMessageCommandEntity command = new AppendMessageCommandEntity();
         command.setTenantId(tenantId);
         command.setUserId(userId);
         command.setSessionId(sessionId);
+        command.setRunId(runId);
         command.setRole(ROLE_ASSISTANT);
         command.setContentType(CONTENT_TYPE_TEXT);
         command.setContent(content);
@@ -127,6 +149,8 @@ public class SessionDomain {
                 .userId(session.getUserId())
                 .sessionId(session.getSessionId())
                 .messageId("msg_" + UUID.randomUUID())
+                .runId(command.getRunId())
+                .validityStatus("active")
                 .role(command.getRole())
                 .contentType(command.getContentType())
                 .content(command.getContent())
@@ -140,6 +164,34 @@ public class SessionDomain {
         AiLog.info(AiLog.chat().messageSaved(message.getTenantId(), message.getUserId(), message.getSessionId(),
                 message.getMessageId(), message.getRole(), message.getSequenceNo(), contentLength(message.getContent())));
         return message;
+    }
+
+    /**
+     * 推进会话上下文版本；参数是可信会话身份；返回新版本。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public long incrementContextRevision(String tenantId, String userId, String sessionId) {
+        ChatSessionEntity session = sessionRepository.lockSession(blankToNull(tenantId), userId, sessionId);
+        if (session == null) {
+            throw new AppException(ResponseCode.SESSION_NOT_FOUND.getCode(), ResponseCode.SESSION_NOT_FOUND.getInfo());
+        }
+        return sessionRepository.incrementContextRevision(session.getTenantId(), session.getUserId(), session.getSessionId());
+    }
+
+    /**
+     * 失效运行消息；参数是可信身份、运行和原因；返回影响行数。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId, String reason) {
+        return sessionRepository.invalidateRunMessages(blankToNull(tenantId), userId, sessionId, runId,
+                reason, LocalDateTime.now());
+    }
+
+    /**
+     * 查询运行消息；参数是可信身份和运行；返回消息列表。
+     */
+    public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId) {
+        return sessionRepository.queryRunMessages(blankToNull(tenantId), userId, sessionId, runId);
     }
 
     /**
