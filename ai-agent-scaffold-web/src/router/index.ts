@@ -24,6 +24,7 @@ const routes: RouteRecordRaw[] = [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
       { path: 'chat', name: 'chat', component: () => import('@/views/chat/ChatWorkspaceView.vue') },
+      { path: 'share/:token', name: 'session-share', component: () => import('@/views/chat/SessionShareView.vue') },
       { path: 'context', name: 'context', component: () => import('@/views/context/ContextInsightView.vue') },
       { path: 'tokens', name: 'tokens', component: () => import('@/views/tokens/TokenUsageView.vue') },
       { path: 'workflow', name: 'workflow', component: () => import('@/views/workflow/WorkflowBuilderView.vue') },

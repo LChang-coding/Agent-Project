@@ -16,6 +16,7 @@ import type {
   ChatRequest,
   LocalChatSession,
   RunStreamEvent,
+  SessionShareResponse,
   WorkflowOption,
   WorkflowSummary,
 } from '@/types/api';
@@ -200,6 +201,47 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = session.sessionId;
       this.messages = session.messages.map((message) => ({ ...message }));
+      this.errorMessage = '';
+    },
+
+    /**
+     * 接收服务端复制导入会话；参数是导入响应；写入当前用户本地展示索引并打开会话。
+     */
+    acceptImportedSession(imported: SessionShareResponse) {
+      if (!imported.sessionId) {
+        throw new Error('导入结果缺少会话ID');
+      }
+      const workflow = this.workflows.find((item) => item.workflowId === imported.agentId);
+      const sourceType: 'agent' | 'workflow' = workflow ? 'workflow' : 'agent';
+      const messages: ChatMessage[] = (imported.messages || []).map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: message.createdAt || new Date().toISOString(),
+        status: 'done',
+      }));
+      const session: LocalChatSession = {
+        sessionId: imported.sessionId,
+        sourceType,
+        agentId: imported.agentId || this.activeAgentId,
+        workflowId: workflow?.workflowId,
+        modelCode: workflow?.defaultModelCode,
+        agentName: imported.agentName || workflow?.workflowName || '导入会话',
+        title: imported.title || '导入会话',
+        messages,
+        updatedAt: new Date().toISOString(),
+      };
+      this.sessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)];
+      localStorage.setItem(sessionStorageKey(), JSON.stringify(this.sessions));
+      this.activeSourceType = sourceType;
+      if (sourceType === 'workflow') {
+        this.activeWorkflowId = workflow!.workflowId;
+        this.activeModelCode = workflow!.defaultModelCode || this.activeModelCode;
+      } else {
+        this.activeAgentId = session.agentId;
+      }
+      this.sessionId = session.sessionId;
+      this.messages = messages.map((message) => ({ ...message }));
       this.errorMessage = '';
     },
 

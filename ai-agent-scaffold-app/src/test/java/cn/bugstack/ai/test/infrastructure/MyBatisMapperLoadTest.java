@@ -27,6 +27,8 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/user_secret_mapper.xml",
                 "mybatis/mapper/chat_session_mapper.xml",
                 "mybatis/mapper/chat_message_mapper.xml",
+                "mybatis/mapper/chat_session_share_mapper.xml",
+                "mybatis/mapper/chat_session_import_mapper.xml",
                 "mybatis/mapper/model_usage_mapper.xml",
                 "mybatis/mapper/artifact_asset_mapper.xml",
                 "mybatis/mapper/rag_knowledge_base_mapper.xml",

@@ -131,4 +131,11 @@ public interface IChatMessageDao {
                                          @Param("userId") String userId,
                                          @Param("sessionId") String sessionId,
                                          @Param("runId") String runId);
+
+    /**
+     * 查询会话有效消息。
+     */
+    List<ChatMessagePO> queryValidMessages(@Param("tenantId") String tenantId,
+                                           @Param("userId") String userId,
+                                           @Param("sessionId") String sessionId);
 }

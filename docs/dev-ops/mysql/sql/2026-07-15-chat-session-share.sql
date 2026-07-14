@@ -1,0 +1,50 @@
+-- 会话安全分享与复制导入增量结构。
+
+CREATE TABLE IF NOT EXISTS `chat_session_share` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `share_id` VARCHAR(64) NOT NULL COMMENT '分享业务ID',
+  `owner_tenant_id` VARCHAR(64) NULL COMMENT '创建租户ID',
+  `owner_user_id` VARCHAR(64) NOT NULL COMMENT '创建用户ID',
+  `source_session_id` VARCHAR(128) NOT NULL COMMENT '来源会话ID',
+  `token_hash` CHAR(64) NOT NULL COMMENT '分享令牌SHA-256',
+  `bucket` VARCHAR(128) NOT NULL COMMENT '私有存储桶',
+  `object_key` VARCHAR(512) NOT NULL COMMENT '私有对象键',
+  `schema_version` VARCHAR(64) NOT NULL COMMENT '导出协议版本',
+  `content_sha256` CHAR(64) NOT NULL COMMENT '导出内容摘要',
+  `size_bytes` BIGINT NOT NULL COMMENT '导出字节数',
+  `message_count` INT NOT NULL COMMENT '有效消息数',
+  `title` VARCHAR(255) NULL COMMENT '会话标题快照',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active/revoked/expired',
+  `expires_at` DATETIME(3) NOT NULL COMMENT '失效时间',
+  `max_downloads` INT NOT NULL DEFAULT 20 COMMENT '最大读取次数',
+  `download_count` INT NOT NULL DEFAULT 0 COMMENT '已读取次数',
+  `revoked_at` DATETIME(3) NULL COMMENT '撤销时间',
+  `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_chat_share_id` (`share_id`),
+  UNIQUE KEY `uk_chat_share_token` (`token_hash`),
+  KEY `idx_chat_share_owner` (`owner_tenant_id`, `owner_user_id`, `source_session_id`, `status`),
+  KEY `idx_chat_share_expiry` (`status`, `expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会话分享授权';
+
+CREATE TABLE IF NOT EXISTS `chat_session_import` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `import_id` VARCHAR(64) NOT NULL COMMENT '导入业务ID',
+  `share_id` VARCHAR(64) NOT NULL COMMENT '来源分享ID',
+  `recipient_scope_key` CHAR(64) NOT NULL COMMENT '接收者租户用户摘要',
+  `tenant_id` VARCHAR(64) NULL COMMENT '接收租户ID',
+  `user_id` VARCHAR(64) NOT NULL COMMENT '接收用户ID',
+  `source_sha256` CHAR(64) NOT NULL COMMENT '来源内容摘要',
+  `new_session_id` VARCHAR(128) NOT NULL COMMENT '复制后的会话ID',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'completed' COMMENT 'completed/failed',
+  `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_chat_import_id` (`import_id`),
+  UNIQUE KEY `uk_chat_import_recipient` (`share_id`, `recipient_scope_key`),
+  UNIQUE KEY `uk_chat_import_session` (`new_session_id`),
+  KEY `idx_chat_import_user` (`tenant_id`, `user_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会话复制导入记录';

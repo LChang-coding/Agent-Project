@@ -39,4 +39,6 @@ public class ChatMessageEntity {
     private String parentMessageId;
 
     private String traceId;
+
+    private java.time.LocalDateTime createTime;
 }

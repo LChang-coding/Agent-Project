@@ -129,19 +129,32 @@
 
 ## 6. 当前执行段
 
-当前阶段：**阶段 D：会话分享与导入闭环**。
+当前阶段：**阶段 E：分布式定时任务闭环**。
 
 本段计划：
 
-1. 复核 SessionDomain、消息查询、ObjectStorageService、认证与现有前端会话事实源；
-2. 在本计划先固定版本化导出格式、白名单字段、对象键、校验和与生命周期；
-3. 新增分享记录与导入幂等记录迁移，所有读写带 tenantId/userId；
-4. 扩展对象存储流式/删除/边界校验能力，MinIO bucket 继续保持私有；
-5. 实现创建分享、受控下载/预览、撤销和复制导入 API；
-6. 导出仅包含有效消息，导入重建新 session/message ID 与 sequence，绝不继承运行态和原权限；
-7. 前端实现分享、复制链接、预览、导入和失效反馈；
-8. 覆盖越权、过期、撤销、篡改、失效消息泄漏、重复导入和对象键穿越测试；
-9. 通过 Maven 干净测试与前端构建后追加真实结果并中文提交。
+1. 复核现有三张调度表、PO/DAO/Mapper、Spring 配置、Docker/服务器部署和前端导航；
+2. 查询 XXL-JOB 官方当前稳定版与 Spring Boot 3/Java 17 接入边界，先将选型版本和部署拓扑写入本计划；
+3. 设计增量表结构：业务唯一键、规范化 config hash/version、next fire、misfire、租约、fencing、trigger key 和执行幂等；
+4. 实现长间隔 Reconciler，以配置为真源做 hash upsert、Cron 修改冲突更新、禁用收敛；
+5. 实现短间隔 Dispatcher，以短事务 claim、事务外执行、fencing CAS 完成并推进下一触发时间；
+6. 建立可替换唤醒入口：XXL-JOB handler 调用同一 Domain Service，本地 fixed-delay 仅作为显式降级；
+7. 实现调度配置/启停/Cron 预览/历史/重试/手动触发 API 与前端管理页；
+8. 编写多实例抢占、Cron 改动、幂等、misfire、租户隔离和 Mapper 测试；
+9. 在服务器部署 XXL-JOB、执行迁移并完成健康/回调验证；若外部状态阻断，保留可重复部署脚本和直接证据并继续其余闭环；
+10. 通过 Java 17 干净测试、前端构建和可行 E2E 后追加记录并按重大边界中文提交。
+
+#### 阶段 D 已确认设计（修改前）
+
+- 导出媒体类型为 `application/vnd.ai-agent.chat-session+json`，`schemaVersion=chat-session-export/v1`；顶层只包含导出时间、会话标题/Agent 展示信息和按序的有效消息；
+- 消息白名单仅为 `sequenceNo/role/contentType/content/createdAt`，禁止输出 tenantId、userId、sessionId、messageId、runId、traceId、失效原因、工具凭据和上下文快照；
+- `chat_session_share` 保存 owner、source session、token SHA-256、私有 bucket/objectKey、内容 SHA-256/size、状态、有效期和下载上限；数据库只保存 token hash，分享 URL 中的原 token 只返回创建者一次；
+- `chat_session_import` 以 `tenantId + userId + shareId` 唯一，保存来源 checksum 和新 sessionId；同一接收者重复导入返回同一副本；
+- MinIO 对象键由服务端生成 `chat-shares/yyyy/MM/{shareId}.json`，bucket 保持私有；下载、预览和导入均先验证 token、状态、过期、次数与 checksum，不向浏览器暴露 MinIO 凭据；
+- 创建分享先生成不可变导出字节并写对象，再写授权记录；数据库写失败时尽力删除对象；撤销立即阻断服务端读取并删除对象；
+- 导入在对象读取与 checksum 校验后进入短事务，锁分享记录、再次检查授权、创建新 session、重建新 messageId/sequence/parent 映射并写幂等记录；不复制 run、压缩、工具日志或原租户权限；
+- 下载和导入链接要求现有 JWT 登录，由 Web API 携带 Bearer token 访问服务端；跨用户允许依赖高熵分享 token，不依赖原会话 tenant/user 权限；
+- 单文件首版限制 8 MiB、最多 10,000 条消息、单消息最多 256 KiB，避免 byte[] 现有基建被滥用；对象存储同时补齐删除、大小检查与本地路径 root 边界校验。
 
 ## 7. 执行记录
 
@@ -257,3 +270,34 @@
 - `npm run build`：`vue-tsc --noEmit` 与 Vite production build 通过，1895 个模块完成构建；
 - `git diff --check` 通过；既有 Maven parent relativePath 警告仍为任务外基线，不影响当前闭环；
 - 端到端真实模型/数据库验证留到阶段 F，在增量 SQL 部署后统一执行。
+
+### 2026-07-15：阶段 D 完成——会话安全分享与复制导入
+
+#### 数据与协议
+
+- 新增 `chat_session_share` 与 `chat_session_import` 增量表；分享记录保存 token hash、私有对象位置、checksum、有效期、状态和读取上限，导入按 `shareId + recipientScopeKey` 唯一；
+- 固定 `chat-session-export/v1` 白名单协议，导出仅包含会话标题/Agent 展示字段以及有效文本消息的 sequence、role、content、createdAt；
+- 服务端生成 256-bit URL-safe token，数据库不保存原令牌；对象键固定在 `chat-shares/yyyy/MM/{shareId}.json`，浏览器只访问带令牌的服务端路由。
+
+#### 后端闭环
+
+- 新增创建、预览、受控下载、复制导入和撤销 API；所有创建者操作使用可信 TenantContext，跨用户读取必须同时具备登录身份与高熵 token；
+- 创建分享从 `SessionDomain` 查询有效消息，序列化不可变 JSON、写入私有 MinIO/本地对象后落授权记录，数据库失败会尽力清理孤儿对象；
+- 下载和导入均执行状态、过期、次数、8 MiB 上限和 SHA-256 校验；读取次数使用条件更新原子消费；
+- 导入先在事务外读取对象，随后在短事务中锁分享、检查接收者幂等记录、创建独立 session、重建全部 messageId/sequence 并写导入记录；不复制 run、trace、压缩、工具日志或原权限；
+- 对象存储补齐限量读取与删除，本地 fallback 使用绝对规范化 root 边界检查，拒绝 `../` 越界。
+
+#### 前端闭环
+
+- 聊天工作台增加分享按钮，生成链接后自动尝试复制并允许手动复制；
+- 新增 `/share/:token` 预览页，支持下载服务端校验后的 JSON、复制导入和失效反馈；
+- 导入成功后把服务端返回的独立会话与消息写入当前用户隔离的本地展示索引，并跳转打开该会话。
+
+#### 验证结果
+
+- Java 17 干净编译通过；分享、对象存储、会话、Mapper、取消/压缩/工具回归共 20 项测试最终全部通过；
+- 白名单测试直接断言导出 JSON 不含 tenantId、userId、messageId、runId、traceId；重复导入测试断言不再次消费读取次数；路径测试断言本地对象键越界被拒绝；
+- MyBatis 全量 Mapper 装载包含新增分享/导入 XML 并通过；
+- `npm run build` 通过，`vue-tsc` 与 Vite 完成 1899 个模块；
+- 首次 20 项测试出现 1 个 mock 未声明 insert 成功导致的防御校验错误，补齐真实返回后原集合 20 项 0 失败、0 错误；
+- 真正 MinIO/MySQL 跨用户 API E2E 待阶段 F 部署迁移后一并验证。

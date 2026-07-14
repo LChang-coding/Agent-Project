@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatSessionImportDao">
+    <resultMap id="ImportMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatSessionImportPO">
+        <id column="id" property="id"/><result column="import_id" property="importId"/>
+        <result column="share_id" property="shareId"/><result column="recipient_scope_key" property="recipientScopeKey"/>
+        <result column="tenant_id" property="tenantId"/><result column="user_id" property="userId"/>
+        <result column="source_sha256" property="sourceSha256"/><result column="new_session_id" property="newSessionId"/>
+        <result column="status" property="status"/><result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/><result column="deleted" property="deleted"/>
+    </resultMap>
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionImportPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_session_import (import_id, share_id, recipient_scope_key, tenant_id, user_id, source_sha256, new_session_id, status)
+        VALUES (#{importId}, #{shareId}, #{recipientScopeKey}, #{tenantId}, #{userId}, #{sourceSha256}, #{newSessionId}, #{status})
+    </insert>
+    <select id="queryByRecipient" resultMap="ImportMap">
+        SELECT id, import_id, share_id, recipient_scope_key, tenant_id, user_id, source_sha256, new_session_id, status, create_time, update_time, deleted
+        FROM chat_session_import WHERE share_id=#{shareId} AND recipient_scope_key=#{recipientScopeKey} AND deleted=0 LIMIT 1
+    </select>
+</mapper>

@@ -67,8 +67,17 @@
               </select>
             </label>
             <button class="icon-button" type="button" title="刷新运行目标" :disabled="chatStore.sending" @click="reloadTargets">刷新</button>
+            <button class="icon-button" type="button" title="分享当前会话" :disabled="!chatStore.sessionId || chatStore.sending || sharing" @click="shareSession">
+              {{ sharing ? '生成中' : '分享' }}
+            </button>
           </div>
         </header>
+
+        <div v-if="shareLink" class="share-strip">
+          <span>安全分享已生成：{{ shareLink }}</span>
+          <button type="button" class="button button--soft" @click="copyShareLink">复制链接</button>
+          <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
+        </div>
 
         <div ref="messageListRef" class="message-list">
           <div v-if="chatStore.messages.length === 0" class="empty-chat">
@@ -228,6 +237,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
+import { createSessionShare } from '@/api/share';
 import { useChatStore } from '@/stores/chat';
 import { useToolStore } from '@/stores/tools';
 import type { ChatMessage } from '@/types/api';
@@ -241,6 +251,8 @@ const isComposing = ref(false);
 const insightPanelOpen = ref(false);
 const activeInsightTab = ref<InsightTab>('context');
 const messageListRef = ref<HTMLElement | null>(null);
+const sharing = ref(false);
+const shareLink = ref('');
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const visibleSessions = computed(() => {
   return chatStore.sessions.filter((session) => {
@@ -436,6 +448,40 @@ async function steerRun() {
 }
 
 /**
+ * 创建当前会话安全分享；无参数；展示服务器令牌链接。
+ */
+async function shareSession() {
+  if (!chatStore.sessionId || sharing.value) {
+    return;
+  }
+  sharing.value = true;
+  chatStore.errorMessage = '';
+  try {
+    const result = await createSessionShare(chatStore.sessionId);
+    shareLink.value = new URL(result.shareUrl || '', window.location.origin).toString();
+    await copyShareLink();
+  } catch (error) {
+    chatStore.errorMessage = error instanceof Error ? error.message : '创建分享失败';
+  } finally {
+    sharing.value = false;
+  }
+}
+
+/**
+ * 复制分享链接；无参数；写入系统剪贴板。
+ */
+async function copyShareLink() {
+  if (!shareLink.value) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(shareLink.value);
+  } catch {
+    chatStore.errorMessage = '链接已生成，但浏览器未授权访问剪贴板，请手动复制';
+  }
+}
+
+/**
  * 滚动到最新消息；无参数；让流式输出始终可见。
  */
 function scrollToLatest() {
@@ -488,6 +534,25 @@ function modelLabel(modelCode: string) {
   min-height: 0;
   overflow: hidden;
   padding: 12px;
+}
+
+.share-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.share-strip span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-workbench {

@@ -140,6 +140,32 @@ export interface RunControlResponse {
   successorRunId?: string;
 }
 
+export interface SessionShareMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  contentType: string;
+  content: string;
+  sequenceNo: number;
+  createdAt?: string;
+}
+
+export interface SessionShareResponse {
+  shareId: string;
+  shareUrl?: string;
+  downloadUrl?: string;
+  status: string;
+  expiresAt: string;
+  maxDownloads: number;
+  downloadCount: number;
+  messageCount: number;
+  title: string;
+  sessionId?: string;
+  agentId?: string;
+  agentName?: string;
+  appName?: string;
+  messages?: SessionShareMessage[];
+}
+
 export interface WorkflowSummary {
   workflowId: string;
   workflowName: string;

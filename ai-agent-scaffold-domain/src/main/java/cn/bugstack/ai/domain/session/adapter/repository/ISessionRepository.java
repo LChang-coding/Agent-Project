@@ -53,4 +53,9 @@ public interface ISessionRepository {
      * 查询运行消息；参数是可信身份和运行；返回消息列表。
      */
     List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId);
+
+    /**
+     * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
+     */
+    List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId);
 }

@@ -210,6 +210,14 @@ public class SessionDomain {
     }
 
     /**
+     * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
+     */
+    public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
+        assertSessionAccess(tenantId, userId, sessionId, null);
+        return sessionRepository.queryValidMessages(blankToNull(tenantId), userId, sessionId);
+    }
+
+    /**
      * 校验创建参数；参数是创建命令；非法时抛出异常。
      */
     private void checkCreateCommand(CreateSessionCommandEntity command) {

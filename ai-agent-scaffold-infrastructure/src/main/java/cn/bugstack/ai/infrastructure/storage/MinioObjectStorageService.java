@@ -10,6 +10,7 @@ import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,8 @@ import java.util.HexFormat;
 @Slf4j
 @Service
 public class MinioObjectStorageService implements ObjectStorageService {
+
+    private static final long DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024;
 
     private final ObjectStorageProperties properties;
 
@@ -70,9 +73,21 @@ public class MinioObjectStorageService implements ObjectStorageService {
      */
     @Override
     public byte[] getObject(String bucket, String objectKey) {
+        return getObject(bucket, objectKey, DEFAULT_MAX_READ_BYTES);
+    }
+
+    /**
+     * 限量读取对象；参数是桶、对象键和最大字节数；返回文件字节内容。
+     */
+    @Override
+    public byte[] getObject(String bucket, String objectKey, long maxBytes) {
         long start = System.currentTimeMillis();
+        checkLocation(bucket, objectKey);
+        if (maxBytes <= 0 || maxBytes > Integer.MAX_VALUE - 1L) {
+            throw new AppException("OBJECT_STORAGE_LIMIT_INVALID", "对象读取上限不合法");
+        }
         try {
-            byte[] bytes = useMinio() ? getMinio(bucket, objectKey) : getLocal(bucket, objectKey);
+            byte[] bytes = useMinio() ? getMinio(bucket, objectKey, maxBytes) : getLocal(bucket, objectKey, maxBytes);
             long costMs = System.currentTimeMillis() - start;
             AiLog.info(AiLog.oss().download(bucket, objectKey, (long) bytes.length, costMs, true));
             return bytes;
@@ -80,6 +95,23 @@ public class MinioObjectStorageService implements ObjectStorageService {
             long costMs = System.currentTimeMillis() - start;
             AiLog.error(AiLog.oss().error("download", bucket, objectKey, costMs, e));
             throw new AppException("OBJECT_STORAGE_DOWNLOAD_FAILED", "对象下载失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除对象；参数是桶和对象键；无返回值。
+     */
+    @Override
+    public void deleteObject(String bucket, String objectKey) {
+        checkLocation(bucket, objectKey);
+        try {
+            if (useMinio()) {
+                minioClient().removeObject(RemoveObjectArgs.builder().bucket(bucket).object(objectKey).build());
+            } else {
+                Files.deleteIfExists(localPath(bucket, objectKey));
+            }
+        } catch (Exception e) {
+            throw new AppException("OBJECT_STORAGE_DELETE_FAILED", "对象删除失败：" + e.getMessage());
         }
     }
 
@@ -125,9 +157,11 @@ public class MinioObjectStorageService implements ObjectStorageService {
     /**
      * 从 MinIO 下载；参数是存储桶和对象 Key；返回字节内容。
      */
-    private byte[] getMinio(String bucket, String objectKey) throws Exception {
+    private byte[] getMinio(String bucket, String objectKey, long maxBytes) throws Exception {
         try (InputStream inputStream = minioClient().getObject(GetObjectArgs.builder().bucket(bucket).object(objectKey).build())) {
-            return inputStream.readAllBytes();
+            byte[] bytes = inputStream.readNBytes((int) maxBytes + 1);
+            checkReadSize(bytes.length, maxBytes);
+            return bytes;
         }
     }
 
@@ -143,15 +177,24 @@ public class MinioObjectStorageService implements ObjectStorageService {
     /**
      * 从本地目录下载；参数是存储桶和对象 Key；返回字节内容。
      */
-    private byte[] getLocal(String bucket, String objectKey) throws Exception {
-        return Files.readAllBytes(localPath(bucket, objectKey));
+    private byte[] getLocal(String bucket, String objectKey, long maxBytes) throws Exception {
+        Path path = localPath(bucket, objectKey);
+        checkReadSize(Files.size(path), maxBytes);
+        return Files.readAllBytes(path);
     }
 
     /**
      * 构造本地路径；参数是存储桶和对象 Key；返回本地路径。
      */
     private Path localPath(String bucket, String objectKey) {
-        return Path.of(properties.getLocalRoot()).resolve(bucket).resolve(objectKey).normalize();
+        checkLocation(bucket, objectKey);
+        Path root = Path.of(properties.getLocalRoot()).toAbsolutePath().normalize();
+        Path bucketRoot = root.resolve(bucket).normalize();
+        Path target = bucketRoot.resolve(objectKey).normalize();
+        if (!target.startsWith(bucketRoot)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象键越出存储根目录");
+        }
+        return target;
     }
 
     /**
@@ -182,6 +225,20 @@ public class MinioObjectStorageService implements ObjectStorageService {
                 || command.getObjectKey() == null || command.getObjectKey().isBlank()
                 || command.getBytes() == null) {
             throw new AppException("OBJECT_STORAGE_PARAM_INVALID", "对象存储参数不完整");
+        }
+        checkLocation(command.getBucket(), command.getObjectKey());
+    }
+
+    private void checkLocation(String bucket, String objectKey) {
+        if (bucket == null || bucket.isBlank() || objectKey == null || objectKey.isBlank()
+                || bucket.contains("/") || bucket.contains("\\") || objectKey.indexOf('\0') >= 0) {
+            throw new AppException("OBJECT_STORAGE_PARAM_INVALID", "对象存储位置不合法");
+        }
+    }
+
+    private void checkReadSize(long actualBytes, long maxBytes) {
+        if (actualBytes > maxBytes) {
+            throw new AppException("OBJECT_STORAGE_TOO_LARGE", "对象大小超过读取上限");
         }
     }
 

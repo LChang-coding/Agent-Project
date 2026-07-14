@@ -95,6 +95,12 @@ public class SessionRepository implements ISessionRepository {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
+        return chatMessageDao.queryValidMessages(tenantId, userId, sessionId).stream()
+                .map(this::toMessageEntity).collect(Collectors.toList());
+    }
+
     /**
      * 转换会话持久化对象；参数是会话实体；返回会话 PO。
      */
@@ -164,6 +170,7 @@ public class SessionRepository implements ISessionRepository {
                 .invalidReason(message.getInvalidReason()).invalidatedAt(message.getInvalidatedAt())
                 .role(message.getRole()).contentType(message.getContentType()).content(message.getContent())
                 .estimatedTokenCount(message.getEstimatedTokenCount()).sequenceNo(message.getSequenceNo())
-                .parentMessageId(message.getParentMessageId()).traceId(message.getTraceId()).build();
+                .parentMessageId(message.getParentMessageId()).traceId(message.getTraceId())
+                .createTime(message.getCreateTime()).build();
     }
 }

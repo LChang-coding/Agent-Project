@@ -19,6 +19,16 @@ public interface ObjectStorageService {
     byte[] getObject(String bucket, String objectKey);
 
     /**
+     * 限量读取对象；参数是桶、对象键和最大字节数；返回对象内容。
+     */
+    byte[] getObject(String bucket, String objectKey, long maxBytes);
+
+    /**
+     * 删除对象；参数是桶和对象键；无返回值。
+     */
+    void deleteObject(String bucket, String objectKey);
+
+    /**
      * 获取 Skill 包默认桶；无参数；返回桶名称。
      */
     String skillBucket();

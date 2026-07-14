@@ -151,6 +151,13 @@ public class SessionDomainTest {
             return messages.stream().filter(message -> runId.equals(message.getRunId())).toList();
         }
 
+        @Override
+        public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
+            return messages.stream().filter(message -> key(tenantId, userId, sessionId)
+                    .equals(key(message.getTenantId(), message.getUserId(), message.getSessionId())))
+                    .filter(message -> "active".equals(message.getValidityStatus())).toList();
+        }
+
         /**
          * 生成仓储键；参数是租户、用户和会话ID；返回字符串键。
          */
