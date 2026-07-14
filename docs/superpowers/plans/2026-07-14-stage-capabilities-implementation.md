@@ -154,6 +154,17 @@
 6. 执行 `docker compose config`、Java 调度回归、TypeScript/Vite production build；
 7. 将真实变更、测试与仍待服务器执行项追加到本计划，精确暂存并以中文提交“部署与前端管理”闭环。
 
+#### 当前服务器上线执行计划
+
+1. 只读预检 `CentOS-Server`：Docker/Compose 版本、磁盘/内存、端口占用、现有容器、应用发布目录与数据库三表结构；
+2. 确认服务器不存在冲突的 XXL-JOB/`xxl_job` 库，生成部署专用高熵密码/token，仅写入服务器权限受限 `.env`；
+3. 对业务三张调度表做带时间戳的结构与数据备份，记录迁移前行数和字段；
+4. 执行 `2026-07-15-distributed-scheduler.sql`，核验新增字段、唯一键和现有数据兼容结果；
+5. 上传固定版本部署资产，在服务器执行 Compose 展开验证与 `deploy.sh`，核对 Admin HTTP、独立 MySQL、两条唤醒任务和样例任务清理；
+6. 核对当前应用发布方式；只有确认可安全滚动发布本仓库新版本时，才配置执行器并验证自动注册，不覆盖未知人工进程；
+7. 使用真实 JWT 完成定时任务 API 创建/预览/启停/立即触发/历史 E2E，并核验业务 task/execution 数据推进；
+8. 失败时按检查点停止唤醒、恢复备份或保留数据卷，记录直接证据；成功后追加计划、执行最终回归并中文提交上线记录。
+
 #### 阶段 E 已确认设计（修改前）
 
 - 组件选择 XXL-JOB `3.4.0`：官方 GitHub 于 2026-04-05 发布该稳定版；使用固定版本镜像和 `xxl-job-core`，禁止 floating latest；
@@ -383,3 +394,28 @@
 #### 下一执行段
 
 - 将本闭环本地提交后，进入服务器预检：只读确认 Docker/Compose、端口、磁盘和现有 MySQL 表版本；再备份业务表、执行迁移、部署 XXL-JOB、配置应用执行器并完成真实 API/前端 E2E。
+
+### 2026-07-15：阶段 E 子闭环三——服务器数据迁移与 XXL-JOB 上线
+
+#### 业务库迁移
+
+- 只读预检确认服务器为 Docker `29.6.1` / Compose `5.2.0`，端口 `8080` 与 `9999` 未被占用，且原环境不存在 XXL-JOB 容器或 `xxl_job` 库；
+- 迁移前对业务库三张调度表生成结构与数据备份，备份位于服务器 `/root/backups/ai-agent-scheduler/20260714-151510`，同目录保存 SHA-256 校验文件；
+- 执行 `2026-07-15-distributed-scheduler.sql` 成功：配置/任务/执行表字段数分别从 16/12/15 提升为 24/26/22，`uk_schedule_task_config`、`uk_schedule_task_business`、`uk_schedule_execution_trigger` 均存在；
+- 三张表迁移前后都是 0 行，没有发生旧任务重复、丢失或意外触发。
+
+#### XXL-JOB 服务器部署
+
+- 部署目录为 `/opt/ai-agent-scheduler/xxl-job`，真实 `.env` 仅存服务器且权限为 `600`，仓库和执行输出未暴露密码或 access token；
+- 首次启动在 `source .env` 处发现带空格的 JVM 参数未加引号，尚未创建容器即安全停止；已修正 `.env.example` 和服务器 `.env`，`bash -n` 与 `docker compose config --quiet` 通过后重试成功；
+- `xxl-job-mysql` 运行且健康，数据库端口只在 Compose 内部网络；`xxl-job-admin` 运行且仅映射 `127.0.0.1:8080`，两容器重启策略均为 `unless-stopped`；
+- Admin 根路径返回预期 `302` 登录跳转，使用服务器安全密码调用 3.4.0 的 `/auth/doLogin` 返回业务码 `200`，带会话访问任务页同样为 HTTP `200`；
+- 官方库共 8 张表，当前只有 1 个 `ai-agent-scheduler` 执行器组和 2 个业务唤醒任务，官方样例组/任务数均为 0；
+- 由于服务器当前没有运行业务应用，两个唤醒任务保持 `trigger_status=0`；bootstrap 已改为首次默认停用且重复部署不强制启用，避免在执行器未注册时产生持续失败与额外消耗；
+- 最近 10 分钟 Admin/MySQL 日志未匹配到 `exception`/`fatal`/`access denied`/`failed`。
+
+#### 当前安全边界与下一步
+
+- 服务器上已有的 `0.0.0.0:3306` 属于原业务 MySQL `mysqld`，不是新部署的 XXL-JOB MySQL；本次没有改动原服务暴露策略；
+- XXL-JOB 管理页尚未对公网开放，需要后续通过 Nginx/TLS 与访问控制发布；这不影响 Admin 对执行器的内网调度；
+- 下一执行段先审计业务应用安全发布方式，再部署/启动执行器；只有 Admin 确认注册地址可回调后才启用两条唤醒任务，随后使用真实 API 完成配置、对账、派发和历史 E2E。

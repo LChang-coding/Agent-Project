@@ -20,7 +20,7 @@ INSERT INTO xxl_job_info (job_group, job_desc, add_time, update_time, author, al
 SELECT job_group.id, '业务定时配置对账', NOW(), NOW(), 'system', '',
        'CRON', '0 */5 * * * ?', 'DO_NOTHING', 'ROUND',
        'scheduleReconcileJobHandler', '', 'SERIAL_EXECUTION', 120,
-       0, 'BEAN', '', '系统初始化', NOW(), '', 1, 0, UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000
+       0, 'BEAN', '', '系统初始化', NOW(), '', 0, 0, 0
 FROM xxl_job_group job_group
 WHERE job_group.app_name = 'ai-agent-scheduler'
   AND NOT EXISTS (
@@ -37,7 +37,7 @@ INSERT INTO xxl_job_info (job_group, job_desc, add_time, update_time, author, al
 SELECT job_group.id, '业务到期任务派发', NOW(), NOW(), 'system', '',
        'CRON', '*/5 * * * * ?', 'DO_NOTHING', 'ROUND',
        'scheduleDispatchJobHandler', '', 'SERIAL_EXECUTION', 120,
-       0, 'BEAN', '', '系统初始化', NOW(), '', 1, 0, UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000
+       0, 'BEAN', '', '系统初始化', NOW(), '', 0, 0, 0
 FROM xxl_job_group job_group
 WHERE job_group.app_name = 'ai-agent-scheduler'
   AND NOT EXISTS (
@@ -54,9 +54,6 @@ SET info.schedule_type = 'CRON',
     info.executor_block_strategy = 'SERIAL_EXECUTION',
     info.executor_timeout = 120,
     info.executor_fail_retry_count = 0,
-    info.trigger_status = 1,
-    info.trigger_next_time = IF(info.trigger_next_time > 0, info.trigger_next_time,
-                                UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000),
     info.update_time = NOW()
 WHERE job_group.app_name = 'ai-agent-scheduler'
   AND info.executor_handler IN ('scheduleReconcileJobHandler', 'scheduleDispatchJobHandler');

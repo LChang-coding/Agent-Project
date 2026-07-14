@@ -5,7 +5,7 @@
 ## 部署
 
 1. 复制 `.env.example` 为 `.env`，为四个必填项设置不同的高熵值；`.env` 不得提交。
-2. 执行 `./deploy.sh`。脚本先启动独立 MySQL，再下载并校验 XXL-JOB `v3.4.0` 官方初始化 SQL，删除官方示例任务，幂等写入两个业务唤醒任务，最后启动 Admin 并做 HTTP 健康检查。
+2. 执行 `./deploy.sh`。脚本先启动独立 MySQL，再下载并校验 XXL-JOB `v3.4.0` 官方初始化 SQL，删除官方示例任务，幂等写入两个默认停用的业务唤醒任务，最后启动 Admin 并做 HTTP 健康检查。
 3. 默认 Admin 只监听 `127.0.0.1:8080`。通过 Nginx/TLS 和访问控制开放管理页面，禁止直接暴露数据库端口。
 4. 应用容器/进程配置：
 
@@ -29,6 +29,7 @@ AI_SCHEDULER_LOCAL_FALLBACK_ENABLED=false
 | `scheduleDispatchJobHandler` | `*/5 * * * * ?` | 短间隔抢占到期运行态并执行 |
 
 `bootstrap-business-jobs.sql` 会按 appName + handler 幂等创建/更新，不因重复部署产生第二份唤醒任务。
+首次部署时两项任务保持停用；确认应用执行器已经自动注册且 Admin 能回调 `9999/tcp` 后，再从 Admin 页面启用，避免空执行器期间持续产生失败日志。
 
 ## 上线与回滚
 
