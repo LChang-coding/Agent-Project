@@ -419,3 +419,34 @@
 - 服务器上已有的 `0.0.0.0:3306` 属于原业务 MySQL `mysqld`，不是新部署的 XXL-JOB MySQL；本次没有改动原服务暴露策略；
 - XXL-JOB 管理页尚未对公网开放，需要后续通过 Nginx/TLS 与访问控制发布；这不影响 Admin 对执行器的内网调度；
 - 下一执行段先审计业务应用安全发布方式，再部署/启动执行器；只有 Admin 确认注册地址可回调后才启用两条唤醒任务，随后使用真实 API 完成配置、对账、派发和历史 E2E。
+
+#### 执行器与调度 E2E 执行计划
+
+1. 遵循 `codex.md` “本地运行项目代码、服务器只部署中间件”的边界，在本地构建和运行业务应用，不上传包含本地 `secrets.properties` 的 JAR；
+2. 使用临时 SSH 本地转发让应用访问只绑定服务器 loopback 的 Admin；使用临时反向转发与只在 XXL Docker 内网网关监听的 TCP relay，让 Admin 回调本地 `9999`，不向公网开放执行器；
+3. 使用服务器 `.env` 中现有 access token 通过标准输入传给本地进程，不打印、不写入仓库；启动时禁用 local fallback，确保触发来自 XXL-JOB；
+4. 先验证应用启动、执行器自动注册和 Admin 对 handler 的手动调用，再启用 Reconciler/Dispatcher 两条唤醒任务；
+5. 使用新建的 E2E 用户/JWT 调用定时任务 API，完成 Cron 预览、创建、对账、立即触发和历史检查；优先使用不产生外部模型费用的可控 handler 验证派发基建，如现有业务类型只有 `agent_prompt`，则仅执行一次最小真实请求并核对 run/tool 幂等边界；
+6. 验收后立即停用两条唤醒任务、清理 E2E 数据、结束本地应用/隧道/relay，再证明服务器无 `9999` 公网监听；
+7. 执行 Java 综合回归、前端 production build、Compose/脚本检查和服务器最终健康检查，将真实证据追加到本文档后中文提交。
+
+#### E2E 发现的存量迁移缺口与修复计划
+
+- 首次真实 E2E 已完成注册、JWT、Cron 预览、配置创建/启用/立即触发、XXL Dispatcher 回调和执行栅栏，但 `agent_prompt` 在创建会话时因服务器 `chat_session` 缺少 `context_revision` 失败；
+- Dispatcher 已将本次记录标为 `dead`，未发起模型或工具调用；E2E 配置和 task 已立即强制停用并清除租约；
+- 修复前先对照 `2026-07-11-context-manager.sql`、`2026-07-14-chat-run-control.sql`、`2026-07-15-chat-session-share.sql` 与服务器实际 schema，只执行缺失且可幂等的增量；
+- 对即将修改的会话、消息、上下文、run、工具和分享表做带校验文件的二次备份，执行后核对字段/索引与行数；
+- 迁移后新建第二个临时 E2E 用户与调度，重复同一条完整路径；成功后删除两次 E2E 租户的所有数据，失败则保留匿名化错误证据后再清理。
+
+#### 执行器与真实 E2E 结果
+
+- 本地 Java 17 执行 `mvn -DskipTests package` 成功，7 个 Reactor 模块均为 SUCCESS；使用新 JAR 在 `18091` 启动独立实例，未停止用户原有 IntelliJ `8091` 进程；
+- 临时 SSH 路径为本地 `127.0.0.1:18080 -> 服务器 127.0.0.1:8080`、服务器 `127.0.0.1:19999 -> 本地 127.0.0.1:9999`，relay 只绑定 XXL Docker 网关 `172.21.0.1:9999`；全程无公网 `9999` 监听；
+- 执行器成功向 Admin 注册 `http://172.21.0.1:9999`，两个 handler 均被执行器加载；Admin 手动唤醒 Reconciler 的 trigger/handle 码都为 200，首次证明 Admin -> relay -> SSH -> 本地 handler 回调闭环；
+- 首次 API E2E 已完成注册、登录、Cron 预览、创建、列表、启用、立即触发和 Dispatcher 唤醒，但因 `chat_session.context_revision` 缺失记录为 `dead`，在创建会话阶段停止，未调用模型/工具；
+- 对会话、消息、上下文、工具日志 5 张存量表生成第二份备份 `/root/backups/ai-agent-scheduler/20260714-154100-pre-run-share`，大小约 8.8 MB 且保存 SHA-256；
+- 核对后仅补执行缺失的 `2026-07-14-chat-run-control.sql` 和 `2026-07-15-chat-session-share.sql`；`chat_run`、两张分享表和 18 个必需运行控制字段全部存在，30 条旧会话以 revision 0 兼容保留；
+- 迁移后重跑同一条真实路径，execution 为 `success`、耗时 5969 ms、模型最终返回 `OK`；输入 51 token、输出 1 token，本次无工具调用；
+- 终态前共核对到 2 条 execution（1 success/1 dead）、1 个会话、2 条有效消息、1 个 run、0 条工具调用；随后按租户删除全部 E2E 数据，租户/用户/配置/会话/run 均为 0 残留；
+- 本地 E2E 应用优雅退出时 Admin 返回 registry-remove 200；relay、隧道、`18080/18091/9999/19999` 临时监听和 3 条 XXL 测试日志均已清理；
+- 最终 Admin HTTP 为预期 302，Admin/MySQL 容器保持运行且 MySQL healthy，2 条业务唤醒任务 enabled 数仍为 0，未在本地业务应用停止后留下无执行器调度。

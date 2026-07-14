@@ -4,10 +4,11 @@
 
 ## 部署
 
-1. 复制 `.env.example` 为 `.env`，为四个必填项设置不同的高熵值；`.env` 不得提交。
-2. 执行 `./deploy.sh`。脚本先启动独立 MySQL，再下载并校验 XXL-JOB `v3.4.0` 官方初始化 SQL，删除官方示例任务，幂等写入两个默认停用的业务唤醒任务，最后启动 Admin 并做 HTTP 健康检查。
-3. 默认 Admin 只监听 `127.0.0.1:8080`。通过 Nginx/TLS 和访问控制开放管理页面，禁止直接暴露数据库端口。
-4. 应用容器/进程配置：
+1. 先备份业务库，并按时间顺序幂等应用 `2026-07-11-context-manager.sql`、`2026-07-14-chat-run-control.sql`、`2026-07-15-chat-session-share.sql`、`2026-07-15-distributed-scheduler.sql`。至少确认 `chat_session.context_revision`、`chat_run` 和三张 `agent_schedule_*` 表存在，再允许 `agent_prompt` 执行。
+2. 复制 `.env.example` 为 `.env`，为四个必填项设置不同的高熵值；`.env` 不得提交。
+3. 执行 `./deploy.sh`。脚本先启动独立 MySQL，再下载并校验 XXL-JOB `v3.4.0` 官方初始化 SQL，删除官方示例任务，幂等写入两个默认停用的业务唤醒任务，最后启动 Admin 并做 HTTP 健康检查。
+4. 默认 Admin 只监听 `127.0.0.1:8080`。通过 Nginx/TLS 和访问控制开放管理页面，禁止直接暴露数据库端口。
+5. 应用容器/进程配置：
 
 ```text
 XXL_JOB_EXECUTOR_ENABLED=true
