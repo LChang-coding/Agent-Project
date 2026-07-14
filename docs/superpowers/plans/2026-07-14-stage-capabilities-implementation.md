@@ -450,3 +450,14 @@
 - 终态前共核对到 2 条 execution（1 success/1 dead）、1 个会话、2 条有效消息、1 个 run、0 条工具调用；随后按租户删除全部 E2E 数据，租户/用户/配置/会话/run 均为 0 残留；
 - 本地 E2E 应用优雅退出时 Admin 返回 registry-remove 200；relay、隧道、`18080/18091/9999/19999` 临时监听和 3 条 XXL 测试日志均已清理；
 - 最终 Admin HTTP 为预期 302，Admin/MySQL 容器保持运行且 MySQL healthy，2 条业务唤醒任务 enabled 数仍为 0，未在本地业务应用停止后留下无执行器调度。
+
+### 2026-07-15：阶段 F——最终综合回归与交付审计
+
+#### 综合验证结果
+
+- Java 17 最终回归覆盖 JWT/Trace、上下文组装与压缩、run 取消/引导、工具授权与 stdio MCP、会话分享/存储、调度对账/派发、工作流与全部 Mapper：23 个测试类共 42 项，0 失败、0 错误、0 跳过；
+- 首次 Reactor 测试命令因前置 API 模块不存在指定测试而被 Surefire 拒绝，未执行测试代码；增加 `-Dsurefire.failIfNoSpecifiedTests=false` 后原测试集合全部通过；
+- 前端 `npm run build` 通过：`vue-tsc --noEmit` 与 Vite production build 完成 1903 个模块，定时任务、分享与聊天页面均进入生产产物；
+- `bash -n docs/dev-ops/xxl-job/deploy.sh` 通过；服务器 `docker compose config --quiet` 通过，Admin 为 HTTP 302，XXL MySQL healthy，`9999/19999` 临时端口不存在；
+- 全仓 `git diff --check` 只报告用户既有 4 个运行日志的尾随空格；任务文件排除运行日志后无格式错误，日志与 `data-alloy/`、`docs/design-questions/`、`docs/design-viz-methodology.md`、`skills/` 均未修改/未暂存；
+- 已知 Maven `ai-agent-scaffold-api` parent `relativePath` 坐标告警仍是项目原有基线，不影响本轮 7 模块 package 与 42 项回归，本阶段未扩大修改 Maven 坐标。
