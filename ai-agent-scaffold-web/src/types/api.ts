@@ -166,6 +166,48 @@ export interface SessionShareResponse {
   messages?: SessionShareMessage[];
 }
 
+export type ScheduleMisfirePolicy = 'fire_once_now' | 'skip' | 'catch_up';
+
+export interface ScheduleConfig {
+  configId: string;
+  agentId: string;
+  agentName?: string;
+  message: string;
+  cronExpr: string;
+  timezone: string;
+  enabled: boolean;
+  status: string;
+  misfirePolicy: ScheduleMisfirePolicy;
+  maxRetries: number;
+  configVersion: number;
+  lastReconciledAt?: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface ScheduleSaveRequest {
+  agentId: string;
+  agentName?: string;
+  message: string;
+  cronExpr: string;
+  timezone: string;
+  enabled: boolean;
+  misfirePolicy: ScheduleMisfirePolicy;
+  maxRetries: number;
+}
+
+export interface ScheduleExecution {
+  executionId: string;
+  traceId?: string;
+  plannedTime: string;
+  attemptNo: number;
+  status: string;
+  startTime?: string;
+  endTime?: string;
+  durationMs?: number;
+  errorMessage?: string;
+}
+
 export interface WorkflowSummary {
   workflowId: string;
   workflowName: string;

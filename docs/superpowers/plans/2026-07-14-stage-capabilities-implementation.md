@@ -144,6 +144,16 @@
 9. 在服务器部署 XXL-JOB、执行迁移并完成健康/回调验证；若外部状态阻断，保留可重复部署脚本和直接证据并继续其余闭环；
 10. 通过 Java 17 干净测试、前端构建和可行 E2E 后追加记录并按重大边界中文提交。
 
+#### 当前子闭环二执行计划（部署与前端管理）
+
+1. 复核现有 Compose 分层、环境变量模板、Web 路由/导航/API 封装和 UI 组件约定；
+2. 增加固定 `3.4.0` 镜像的 XXL-JOB Admin 部署定义、独立 `xxl_job` 库初始化方式、健康检查、持久化与最小暴露端口；
+3. 增加执行器/Admin 环境变量模板、两个固定唤醒任务的初始化/核对说明和可重复部署脚本，不在仓库写入服务器凭据；
+4. 实现前端定时任务 API 类型与调用、管理路由和导航入口；
+5. 实现配置创建/修改、Cron 预览、启停、手动触发、历史与失败重试交互，所有错误沿用现有登录与提示规范；
+6. 执行 `docker compose config`、Java 调度回归、TypeScript/Vite production build；
+7. 将真实变更、测试与仍待服务器执行项追加到本计划，精确暂存并以中文提交“部署与前端管理”闭环。
+
 #### 阶段 E 已确认设计（修改前）
 
 - 组件选择 XXL-JOB `3.4.0`：官方 GitHub 于 2026-04-05 发布该稳定版；使用固定版本镜像和 `xxl-job-core`，禁止 floating latest；
@@ -344,3 +354,32 @@
 #### 后续项
 
 - 本子闭环尚未包含 Web 管理页、XXL-JOB Admin Compose/服务器部署、业务表迁移和真实 API E2E；这些进入阶段 E 子闭环二与阶段 F，不将当前后端验证冒充上线完成。
+
+### 2026-07-15：阶段 E 子闭环二——部署资产与前端管理
+
+#### XXL-JOB 部署资产
+
+- 新增独立 `docs/dev-ops/xxl-job` 部署单元，固定 `xuxueli/xxl-job-admin:3.4.0` 与 MySQL `8.0.32`，Admin 数据使用独立命名卷和内部网络，不复用业务数据库；
+- `.env.example` 只保留占位值，`.gitignore` 明确排除任意真实 `.env`；Admin 默认只绑定 `127.0.0.1`，数据库不暴露宿主端口，执行器 token、数据库密码和后台密码全部要求显式安全值；
+- `deploy.sh` 下载固定 tag 的官方初始化 SQL 并校验 SHA-256，初始化后立即修改默认 Admin 密码、移除官方示例任务，再运行本项目幂等 bootstrap；
+- `bootstrap-business-jobs.sql` 以 appName + handler 判重并冲突更新，创建每五分钟的 Reconciler 与每五秒的 Dispatcher，重复部署不会新增第二份唤醒配置；
+- README 记录应用执行器变量、9999 端口网络边界、上线顺序、暂停与回滚路径；真实凭据没有进入仓库。
+
+#### 前端管理闭环
+
+- 新增 `/schedules` 控制台路由与导航，沿用现有 SectionHeader、card、table、badge 和鉴权请求封装；
+- 新增定时任务 API/类型，覆盖列表、创建、更新、启停、Cron 预览、历史、立即触发和失败重触发；
+- 管理页支持 Agent 选择、消息白名单、六段式 Cron、时区、misfire、重试次数与启用状态；预览同时显示后端 UTC 值和浏览器本地时间；
+- 配置表展示稳定版本与对账时间，执行表展示计划时间、attempt、状态、耗时和错误；失败/dead 可重新排入派发；页面明确数据库逻辑幂等与外部至少一次语义。
+
+#### 验证结果
+
+- `bash -n docs/dev-ops/xxl-job/deploy.sh`：通过；部署脚本无 shell 语法错误；
+- `npm run build`：`vue-tsc --noEmit` 与 Vite production build 通过，共转换 1903 个模块；
+- Java 17 调度回归 `CronScheduleSupportTest, ScheduleReconcilerTest, ScheduleDispatcherTest, MyBatisMapperLoadTest` 共 5 项再次全部通过；
+- 任务文件范围 `git diff --check` 通过；运行日志中的既有尾随空格不属于本任务且不会暂存；
+- 本机没有 Docker CLI，`docker compose config` 返回 `command not found`，因此 Compose 展开、镜像启动和 HTTP 健康检查必须在下一服务器部署段补证，当前不声明组件已经上线。
+
+#### 下一执行段
+
+- 将本闭环本地提交后，进入服务器预检：只读确认 Docker/Compose、端口、磁盘和现有 MySQL 表版本；再备份业务表、执行迁移、部署 XXL-JOB、配置应用执行器并完成真实 API/前端 E2E。

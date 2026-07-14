@@ -40,6 +40,8 @@ build/
 
 ### Secrets ###
 **/secrets.properties
+**/.env
+!**/.env.example
 
 ### Runtime logs ###
 /data/log/

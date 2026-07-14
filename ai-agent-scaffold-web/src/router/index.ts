@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'context', name: 'context', component: () => import('@/views/context/ContextInsightView.vue') },
       { path: 'tokens', name: 'tokens', component: () => import('@/views/tokens/TokenUsageView.vue') },
       { path: 'workflow', name: 'workflow', component: () => import('@/views/workflow/WorkflowBuilderView.vue') },
+      { path: 'schedules', name: 'schedules', component: () => import('@/views/schedule/ScheduleManagerView.vue') },
       { path: 'mcp', name: 'mcp', component: () => import('@/views/mcp/McpRegistryView.vue') },
       { path: 'skills', name: 'skills', component: () => import('@/views/skills/SkillRegistryView.vue') },
       { path: 'rag', name: 'rag', component: () => import('@/views/rag/KnowledgeBaseView.vue') },
