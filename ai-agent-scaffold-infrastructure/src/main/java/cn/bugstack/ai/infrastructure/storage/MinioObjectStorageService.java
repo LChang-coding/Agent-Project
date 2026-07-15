@@ -12,6 +12,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
@@ -44,6 +45,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
     /**
      * 创建对象存储服务；参数是对象存储配置；返回服务实例。
      */
+    @Autowired
     public MinioObjectStorageService(ObjectStorageProperties properties) {
         this(properties, () -> buildMinioClient(properties));
     }

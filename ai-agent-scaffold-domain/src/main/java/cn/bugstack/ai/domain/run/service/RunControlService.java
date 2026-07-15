@@ -12,6 +12,7 @@ import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -40,6 +41,7 @@ public class RunControlService {
     /**
      * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
      */
+    @Autowired
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                              ModelUsageService modelUsageService, AssetService assetService) {
