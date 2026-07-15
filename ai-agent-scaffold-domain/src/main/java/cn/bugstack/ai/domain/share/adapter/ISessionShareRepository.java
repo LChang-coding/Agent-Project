@@ -13,6 +13,7 @@ public interface ISessionShareRepository {
     SessionShareEntity lockByShareId(String shareId);
     int consumeAccess(String shareId);
     int revoke(String tenantId, String userId, String shareId);
+    int revokeBySession(String tenantId, String userId, String sessionId);
     SessionImportEntity queryImport(String shareId, String recipientScopeKey);
     int insertImport(SessionImportEntity sessionImport);
 }

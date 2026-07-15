@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 会话运行仓储。
@@ -24,6 +25,11 @@ public interface IChatRunRepository {
      * 锁定运行；参数是可信租户、用户和运行ID；返回运行实体。
      */
     ChatRunEntity lock(String tenantId, String userId, String runId);
+
+    /**
+     * 查询会话可执行运行；参数是可信身份和会话；返回仍可能产生副作用的运行。
+     */
+    List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId);
 
     /**
      * 按版本迁移状态；参数是运行、原状态、目标状态和终态信息；返回影响行数。

@@ -51,6 +51,13 @@ public class SessionRepository implements ISessionRepository {
         return toSessionEntity(chatSessionDao.lockByTenantUserSession(tenantId, userId, sessionId));
     }
 
+    @Override
+    public List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,
+                                                 String cursorSessionId, int limit) {
+        return chatSessionDao.queryPage(tenantId, userId, cursorTime, cursorSessionId, limit).stream()
+                .map(this::toSessionEntity).collect(Collectors.toList());
+    }
+
     /**
      * 更新最后消息时间；参数是租户、用户、会话ID和时间；返回影响行数。
      */
@@ -99,6 +106,18 @@ public class SessionRepository implements ISessionRepository {
     public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
         return chatMessageDao.queryValidMessages(tenantId, userId, sessionId).stream()
                 .map(this::toMessageEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ChatMessageEntity> queryValidMessagesBefore(String tenantId, String userId, String sessionId,
+                                                            Integer beforeSequence, int limit) {
+        return chatMessageDao.queryValidMessagesBefore(tenantId, userId, sessionId, beforeSequence, limit).stream()
+                .map(this::toMessageEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public int softDelete(String tenantId, String userId, String sessionId) {
+        return chatSessionDao.softDelete(tenantId, userId, sessionId);
     }
 
     /**

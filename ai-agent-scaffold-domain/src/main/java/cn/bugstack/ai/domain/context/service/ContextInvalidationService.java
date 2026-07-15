@@ -6,6 +6,8 @@ import cn.bugstack.ai.domain.context.adapter.repository.IConversationMemoryRepos
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Comparator;
 import java.util.List;
@@ -53,5 +55,28 @@ public class ContextInvalidationService {
             memoryRepository.invalidateCoveringAndRestore(tenantId, userId, sessionId, minSequence);
         }
         cacheRepository.evictSession(tenantId, userId, sessionId);
+    }
+
+    /**
+     * 失效整个会话派生上下文；参数是可信身份、会话和原因；无返回值。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void invalidateSession(String tenantId, String userId, String sessionId, String reason) {
+        taskRepository.staleOverlapping(tenantId, userId, sessionId, null, 1, Integer.MAX_VALUE, reason);
+        memoryRepository.invalidateCoveringAndRestore(tenantId, userId, sessionId, 1);
+        evictAfterCommit(tenantId, userId, sessionId);
+    }
+
+    private void evictAfterCommit(String tenantId, String userId, String sessionId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            cacheRepository.evictSession(tenantId, userId, sessionId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cacheRepository.evictSession(tenantId, userId, sessionId);
+            }
+        });
     }
 }

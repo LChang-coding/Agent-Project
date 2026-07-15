@@ -218,6 +218,37 @@ public class SessionDomain {
     }
 
     /**
+     * 游标查询用户会话；参数是可信身份、游标和数量；返回会话列表。
+     */
+    public List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,
+                                                 String cursorSessionId, int limit) {
+        if (isBlank(userId) || limit < 1 || limit > 101) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "用户ID或分页数量不合法");
+        }
+        return sessionRepository.querySessions(blankToNull(tenantId), userId, cursorTime, cursorSessionId, limit);
+    }
+
+    /**
+     * 游标查询有效消息；参数是可信身份、会话、前序号和数量；返回倒序消息。
+     */
+    public List<ChatMessageEntity> queryValidMessagesBefore(String tenantId, String userId, String sessionId,
+                                                            Integer beforeSequence, int limit) {
+        assertSessionAccess(tenantId, userId, sessionId, null);
+        if (limit < 1 || limit > 101 || (beforeSequence != null && beforeSequence < 1)) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "消息分页参数不合法");
+        }
+        return sessionRepository.queryValidMessagesBefore(blankToNull(tenantId), userId, sessionId,
+                beforeSequence, limit);
+    }
+
+    /**
+     * 软删除会话；参数是可信身份和会话；返回影响行数。
+     */
+    public int softDelete(String tenantId, String userId, String sessionId) {
+        return sessionRepository.softDelete(blankToNull(tenantId), userId, sessionId);
+    }
+
+    /**
      * 校验创建参数；参数是创建命令；非法时抛出异常。
      */
     private void checkCreateCommand(CreateSessionCommandEntity command) {

@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import cn.bugstack.ai.types.exception.AppException;
 
 /**
@@ -34,7 +34,7 @@ public class RunControlServiceTest {
     public void shouldCreateRunWithClientPreallocatedId() {
         IChatRunRepository runRepository = mock(IChatRunRepository.class);
         SessionDomain sessionDomain = mock(SessionDomain.class);
-        when(sessionDomain.assertSessionAccess("tenant-1", "user-1", "session-1", "agent-1"))
+        when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", "agent-1"))
                 .thenReturn(ChatSessionEntity.builder().tenantId("tenant-1").userId("user-1")
                         .sessionId("session-1").contextRevision(4L).build());
         when(runRepository.insert(any())).thenReturn(1);
@@ -66,6 +66,7 @@ public class RunControlServiceTest {
                 .status(RunStatus.CANCELLED).version(3).currentContextRevision(8L).build();
         List<ChatMessageEntity> messages = List.of(ChatMessageEntity.builder()
                 .messageId("message-1").sequenceNo(12).runId("run-1").build());
+        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(running, cancelled);
         when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(running);
         when(runRepository.transition(eq("tenant-1"), eq("user-1"), eq("run-1"), any(), any(),
                 eq(0), eq("用户取消"), any(), eq(null))).thenReturn(1);
@@ -76,7 +77,6 @@ public class RunControlServiceTest {
         when(runRepository.transition(eq("tenant-1"), eq("user-1"), eq("run-1"),
                 eq(RunStatus.CANCEL_REQUESTED), eq(RunStatus.CANCELLED), eq(2), eq("用户取消"), any(), any()))
                 .thenReturn(1);
-        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(cancelled);
 
         ChatRunEntity result = service.cancel("tenant-1", "user-1", "run-1", "用户取消");
 
@@ -101,6 +101,7 @@ public class RunControlServiceTest {
                 .status(RunStatus.RUNNING).version(0).currentContextRevision(2L).build();
         List<ChatMessageEntity> messages = List.of(ChatMessageEntity.builder()
                 .messageId("message-old").role("user").sequenceNo(3).runId("run-old").build());
+        when(runRepository.query("tenant-1", "user-1", "run-old")).thenReturn(running);
         when(runRepository.lock("tenant-1", "user-1", "run-old")).thenReturn(running);
         when(runRepository.transition(eq("tenant-1"), eq("user-1"), eq("run-old"), eq(RunStatus.RUNNING),
                 eq(RunStatus.STEER_REQUESTED), eq(0), any(), any(), eq(null))).thenReturn(1);
@@ -137,6 +138,9 @@ public class RunControlServiceTest {
         when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
                 .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .status(RunStatus.CANCELLED).version(3).build());
+        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
+                .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
+                .status(RunStatus.CANCELLED).version(3).build());
 
         try {
             service.appendUserMessage("tenant-1", "user-1", "run-1", "晚到消息", "trace-1");
@@ -144,7 +148,7 @@ public class RunControlServiceTest {
         } catch (AppException e) {
             assertEquals("RUN_NOT_EXECUTABLE", e.getCode());
         }
-        verifyNoInteractions(sessionDomain);
+        verify(sessionDomain, never()).appendUserMessage(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -156,8 +160,11 @@ public class RunControlServiceTest {
         when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
                 .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .status(RunStatus.CANCELLED).version(3).build());
+        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
+                .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
+                .status(RunStatus.CANCELLED).version(3).build());
 
         assertNull(service.completeWithAssistantMessage("tenant-1", "user-1", "run-1", "晚到回复", "trace-1"));
-        verifyNoInteractions(sessionDomain);
+        verify(sessionDomain, never()).appendAssistantMessage(any(), any(), any(), any(), any(), any());
     }
 }

@@ -54,7 +54,7 @@ async function importCopy() {
   errorMessage.value = '';
   try {
     const result = await importSessionShare(token);
-    chatStore.acceptImportedSession(result);
+    await chatStore.acceptImportedSession(result);
     await router.push({ name: 'chat' });
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '导入失败';

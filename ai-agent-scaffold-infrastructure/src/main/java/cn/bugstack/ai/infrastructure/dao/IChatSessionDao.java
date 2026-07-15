@@ -71,6 +71,13 @@ public interface IChatSessionDao {
                                           @Param("sessionId") String sessionId);
 
     /**
+     * 游标查询用户会话。
+     */
+    List<ChatSessionPO> queryPage(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                  @Param("cursorTime") LocalDateTime cursorTime,
+                                  @Param("cursorSessionId") String cursorSessionId, @Param("limit") int limit);
+
+    /**
      * 更新会话最后消息时间。
      *
      * @param tenantId 租户业务ID
@@ -119,4 +126,10 @@ public interface IChatSessionDao {
      * @return 会话持久化对象列表
      */
     List<ChatSessionPO> queryListBySessionId(@Param("sessionId") String sessionId);
+
+    /**
+     * 软删除会话。
+     */
+    int softDelete(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                   @Param("sessionId") String sessionId);
 }

@@ -9,6 +9,7 @@ import {
   steerChatRun,
 } from '@/api/agent';
 import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
+import { deleteChatSession, queryChatSessionMessages, queryChatSessions } from '@/api/session';
 import { useAuthStore } from '@/stores/auth';
 import type {
   AiAgentConfig,
@@ -20,8 +21,6 @@ import type {
   WorkflowOption,
   WorkflowSummary,
 } from '@/types/api';
-
-const SESSION_STORAGE_PREFIX = 'ai_agent_scaffold_chat_sessions';
 
 interface TypewriterController {
   push: (content: string) => void;
@@ -49,6 +48,7 @@ let requestGeneration = 0;
 let activeRequest: ActiveChatRequest | null = null;
 let cancelPromise: Promise<void> | null = null;
 let steerPromise: Promise<boolean> | null = null;
+let sessionSwitchGeneration = 0;
 
 interface ChatState {
   agents: AiAgentConfig[];
@@ -70,6 +70,8 @@ interface ChatState {
   currentRunId: string;
   contextRevision: number;
   errorMessage: string;
+  loadingSessions: boolean;
+  deletingSessionId: string;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -93,6 +95,8 @@ export const useChatStore = defineStore('chat', {
     currentRunId: '',
     contextRevision: 0,
     errorMessage: '',
+    loadingSessions: false,
+    deletingSessionId: '',
   }),
   getters: {
     activeAgent: (state) => state.agents.find((agent) => agent.agentId === state.activeAgentId),
@@ -115,7 +119,7 @@ export const useChatStore = defineStore('chat', {
         this.agents = agents;
         this.workflows = workflows.filter((workflow) => workflow.publishedVersion > 0 && workflow.status === 'published');
         this.models = options.models;
-        this.restoreSessions();
+        await this.loadSessions();
         if (!this.activeAgentId && this.agents.length > 0) {
           this.activeAgentId = this.agents[0].agentId;
         }
@@ -181,13 +185,14 @@ export const useChatStore = defineStore('chat', {
     },
 
     /**
-     * 切换本地会话；参数是会话 ID；恢复该会话的 Agent 和消息。
+     * 切换数据库会话；参数是会话 ID；从服务端恢复运行目标和有效消息。
      */
     async switchSession(sessionId: string) {
       if (sessionId === this.sessionId) {
         return;
       }
       await this.cancelActiveRun('切换会话');
+      const generation = ++sessionSwitchGeneration;
       const session = this.sessions.find((item) => item.sessionId === sessionId);
       if (!session) {
         return;
@@ -200,49 +205,51 @@ export const useChatStore = defineStore('chat', {
         this.activeAgentId = session.agentId;
       }
       this.sessionId = session.sessionId;
-      this.messages = session.messages.map((message) => ({ ...message }));
-      this.errorMessage = '';
+      this.contextRevision = session.contextRevision || 0;
+      try {
+        const pages = [];
+        let beforeSequence: number | undefined;
+        do {
+          const page = await queryChatSessionMessages(sessionId, beforeSequence);
+          pages.unshift(...page.items);
+          beforeSequence = page.hasMore ? page.nextBeforeSequence : undefined;
+        } while (beforeSequence !== undefined);
+        if (generation !== sessionSwitchGeneration || this.sessionId !== sessionId) {
+          return;
+        }
+        this.messages = pages.map((message) => ({
+          id: message.messageId,
+          role: message.role,
+          content: message.content,
+          createdAt: message.createTime,
+          status: 'done',
+        }));
+        this.errorMessage = '';
+      } catch (error) {
+        if (generation === sessionSwitchGeneration) {
+          this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
+        }
+      }
     },
 
     /**
      * 接收服务端复制导入会话；参数是导入响应；写入当前用户本地展示索引并打开会话。
      */
-    acceptImportedSession(imported: SessionShareResponse) {
+    async acceptImportedSession(imported: SessionShareResponse) {
       if (!imported.sessionId) {
         throw new Error('导入结果缺少会话ID');
       }
       const workflow = this.workflows.find((item) => item.workflowId === imported.agentId);
       const sourceType: 'agent' | 'workflow' = workflow ? 'workflow' : 'agent';
-      const messages: ChatMessage[] = (imported.messages || []).map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        createdAt: message.createdAt || new Date().toISOString(),
-        status: 'done',
-      }));
-      const session: LocalChatSession = {
-        sessionId: imported.sessionId,
-        sourceType,
-        agentId: imported.agentId || this.activeAgentId,
-        workflowId: workflow?.workflowId,
-        modelCode: workflow?.defaultModelCode,
-        agentName: imported.agentName || workflow?.workflowName || '导入会话',
-        title: imported.title || '导入会话',
-        messages,
-        updatedAt: new Date().toISOString(),
-      };
-      this.sessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)];
-      localStorage.setItem(sessionStorageKey(), JSON.stringify(this.sessions));
       this.activeSourceType = sourceType;
       if (sourceType === 'workflow') {
         this.activeWorkflowId = workflow!.workflowId;
         this.activeModelCode = workflow!.defaultModelCode || this.activeModelCode;
       } else {
-        this.activeAgentId = session.agentId;
+        this.activeAgentId = imported.agentId || this.activeAgentId;
       }
-      this.sessionId = session.sessionId;
-      this.messages = messages.map((message) => ({ ...message }));
-      this.errorMessage = '';
+      await this.loadSessions();
+      await this.switchSession(imported.sessionId);
     },
 
     /**
@@ -596,23 +603,73 @@ export const useChatStore = defineStore('chat', {
     },
 
     /**
-     * 恢复本地会话列表；无参数；从浏览器缓存加载当前用户的会话。
+     * 加载数据库会话列表；无参数；覆盖浏览器内的会话摘要。
      */
-    restoreSessions() {
-      const raw = localStorage.getItem(sessionStorageKey());
-      if (!raw) {
-        this.sessions = [];
-        return;
-      }
+    async loadSessions() {
+      this.loadingSessions = true;
       try {
-        this.sessions = JSON.parse(raw) as LocalChatSession[];
-      } catch {
-        this.sessions = [];
+        const rows = [];
+        let cursor: string | undefined;
+        do {
+          const page = await queryChatSessions(cursor);
+          rows.push(...page.items);
+          cursor = page.hasMore ? page.nextCursor : undefined;
+        } while (cursor);
+        this.sessions = rows.map((session) => {
+          const workflow = this.workflows.find((item) => item.workflowId === session.agentId);
+          return {
+            sessionId: session.sessionId,
+            agentId: session.agentId,
+            agentName: workflow?.workflowName || session.agentName,
+            sourceType: workflow ? 'workflow' : 'agent',
+            workflowId: workflow?.workflowId,
+            workflowName: workflow?.workflowName,
+            modelCode: workflow?.defaultModelCode,
+            title: session.title,
+            updatedAt: session.lastMessageTime,
+            contextRevision: session.contextRevision,
+          } satisfies LocalChatSession;
+        });
+      } finally {
+        this.loadingSessions = false;
       }
     },
 
     /**
-     * 保存当前会话；参数是默认标题；把当前会话写入本地会话列表。
+     * 删除数据库会话；参数是会话ID；取消当前运行后移除列表并选择下一会话。
+     */
+    async deleteSession(sessionId: string) {
+      if (this.deletingSessionId) {
+        return;
+      }
+      this.deletingSessionId = sessionId;
+      this.errorMessage = '';
+      try {
+        if (sessionId === this.sessionId) {
+          await this.cancelActiveRun('删除会话');
+        }
+        await deleteChatSession(sessionId);
+        const remaining = this.sessions.filter((item) => item.sessionId !== sessionId);
+        this.sessions = remaining;
+        if (sessionId === this.sessionId) {
+          this.sessionId = '';
+          this.messages = [];
+          this.currentRunId = '';
+          const next = remaining.find((item) => item.sourceType === this.activeSourceType);
+          if (next) {
+            await this.switchSession(next.sessionId);
+          }
+        }
+      } catch (error) {
+        this.errorMessage = error instanceof Error ? error.message : '删除会话失败';
+        throw error;
+      } finally {
+        this.deletingSessionId = '';
+      }
+    },
+
+    /**
+     * 保存当前会话摘要；参数是默认标题；只更新内存并异步刷新数据库列表。
      */
     saveCurrentSession(defaultTitle: string) {
       if (!this.sessionId || !this.hasActiveTarget()) {
@@ -634,11 +691,10 @@ export const useChatStore = defineStore('chat', {
         modelCode: this.activeSourceType === 'workflow' ? this.activeModelCode : undefined,
         title: compactTitle(title),
         updatedAt: new Date().toISOString(),
-        messages: this.messages.map((message) => ({ ...message })),
+        contextRevision: this.contextRevision,
       };
       const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)].slice(0, 30);
       this.sessions = nextSessions;
-      localStorage.setItem(sessionStorageKey(), JSON.stringify(nextSessions));
     },
 
     /**
@@ -811,14 +867,6 @@ function isAbortError(error: unknown) {
  */
 function createRunId() {
   return `run_${crypto.randomUUID()}`;
-}
-
-/**
- * 读取本地会话缓存键；无参数；返回当前用户隔离的缓存键。
- */
-function sessionStorageKey() {
-  const auth = useAuthStore();
-  return `${SESSION_STORAGE_PREFIX}:${auth.tenantId || 'tenant'}:${auth.userId || 'user'}`;
 }
 
 /**

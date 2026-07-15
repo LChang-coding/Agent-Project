@@ -115,7 +115,43 @@ export interface LocalChatSession {
   modelCode?: string;
   title: string;
   updatedAt: string;
-  messages: ChatMessage[];
+  contextRevision?: number;
+}
+
+export interface SessionListPage {
+  items: Array<{
+    sessionId: string;
+    agentId: string;
+    agentName: string;
+    appName?: string;
+    title: string;
+    status: string;
+    lastMessageTime: string;
+    contextRevision: number;
+  }>;
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+export interface SessionMessagePage {
+  sessionId: string;
+  items: Array<{
+    messageId: string;
+    runId?: string;
+    role: 'user' | 'assistant' | 'system';
+    contentType: string;
+    content: string;
+    estimatedTokenCount?: number;
+    sequenceNo: number;
+    createTime: string;
+  }>;
+  nextBeforeSequence?: number;
+  hasMore: boolean;
+}
+
+export interface SessionDeleteResponse {
+  sessionId: string;
+  contextRevision: number;
 }
 
 export interface StreamHandlers {

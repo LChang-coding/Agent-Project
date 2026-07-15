@@ -30,4 +30,9 @@
         UPDATE chat_session_share SET status='revoked', revoked_at=NOW(3) WHERE owner_user_id=#{userId} AND share_id=#{shareId} AND status='active' AND deleted=0
         <choose><when test="tenantId == null or tenantId == ''">AND (owner_tenant_id IS NULL OR owner_tenant_id='')</when><otherwise>AND owner_tenant_id=#{tenantId}</otherwise></choose>
     </update>
+    <update id="revokeBySession">
+        UPDATE chat_session_share SET status='revoked', revoked_at=NOW(3)
+        WHERE owner_user_id=#{userId} AND source_session_id=#{sessionId} AND status='active' AND deleted=0
+        <choose><when test="tenantId == null or tenantId == ''">AND (owner_tenant_id IS NULL OR owner_tenant_id='')</when><otherwise>AND owner_tenant_id=#{tenantId}</otherwise></choose>
+    </update>
 </mapper>

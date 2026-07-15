@@ -57,6 +57,15 @@
         LIMIT 1 FOR UPDATE
     </select>
 
+    <select id="queryExecutableBySession" resultMap="ChatRunMap">
+        SELECT <include refid="ChatRunColumns"/> FROM chat_run
+        WHERE user_id = #{userId} AND session_id = #{sessionId}
+          AND status IN ('created', 'running', 'waiting_compaction', 'waiting_tool', 'steer_requested',
+                         'cancel_requested', 'cancelling') AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        ORDER BY id ASC
+    </select>
+
     <update id="transition">
         UPDATE chat_run SET status = #{targetStatus}, version = version + 1,
             terminal_reason = COALESCE(#{reason}, terminal_reason),

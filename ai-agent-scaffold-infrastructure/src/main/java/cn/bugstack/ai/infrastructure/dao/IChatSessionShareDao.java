@@ -18,4 +18,6 @@ public interface IChatSessionShareDao {
     int consumeAccess(@Param("shareId") String shareId);
     int revoke(@Param("tenantId") String tenantId, @Param("userId") String userId,
                @Param("shareId") String shareId);
+    int revokeBySession(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                        @Param("sessionId") String sessionId);
 }

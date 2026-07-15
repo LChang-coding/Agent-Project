@@ -137,5 +137,14 @@ public interface IChatMessageDao {
      */
     List<ChatMessagePO> queryValidMessages(@Param("tenantId") String tenantId,
                                            @Param("userId") String userId,
-                                           @Param("sessionId") String sessionId);
+                                          @Param("sessionId") String sessionId);
+
+    /**
+     * 游标查询会话有效消息；参数是可信身份、前序号和数量；返回倒序消息。
+     */
+    List<ChatMessagePO> queryValidMessagesBefore(@Param("tenantId") String tenantId,
+                                                 @Param("userId") String userId,
+                                                 @Param("sessionId") String sessionId,
+                                                 @Param("beforeSequence") Integer beforeSequence,
+                                                 @Param("limit") int limit);
 }

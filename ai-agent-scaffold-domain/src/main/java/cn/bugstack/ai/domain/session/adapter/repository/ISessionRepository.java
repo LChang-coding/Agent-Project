@@ -24,6 +24,12 @@ public interface ISessionRepository {
     ChatSessionEntity lockSession(String tenantId, String userId, String sessionId);
 
     /**
+     * 游标查询用户会话；参数是可信身份、游标和数量；返回按最后活跃时间倒序的会话。
+     */
+    List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,
+                                          String cursorSessionId, int limit);
+
+    /**
      * 更新最后消息时间；参数是租户、用户、会话ID和时间；返回影响行数。
      */
     int updateLastMessageTime(String tenantId, String userId, String sessionId, LocalDateTime lastMessageTime);
@@ -58,4 +64,15 @@ public interface ISessionRepository {
      * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
      */
     List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId);
+
+    /**
+     * 游标查询会话有效消息；参数是可信身份、会话、前序号和数量；返回倒序消息。
+     */
+    List<ChatMessageEntity> queryValidMessagesBefore(String tenantId, String userId, String sessionId,
+                                                     Integer beforeSequence, int limit);
+
+    /**
+     * 软删除会话；参数是可信身份和会话；返回影响行数。
+     */
+    int softDelete(String tenantId, String userId, String sessionId);
 }

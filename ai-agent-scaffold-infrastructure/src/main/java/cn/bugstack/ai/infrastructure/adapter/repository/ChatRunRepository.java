@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 会话运行仓储实现。
@@ -38,6 +40,12 @@ public class ChatRunRepository implements IChatRunRepository {
     @Override
     public ChatRunEntity lock(String tenantId, String userId, String runId) {
         return toEntity(dao.lock(blankToNull(tenantId), userId, runId));
+    }
+
+    @Override
+    public List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId) {
+        return dao.queryExecutableBySession(blankToNull(tenantId), userId, sessionId).stream()
+                .map(this::toEntity).collect(Collectors.toList());
     }
 
     @Override

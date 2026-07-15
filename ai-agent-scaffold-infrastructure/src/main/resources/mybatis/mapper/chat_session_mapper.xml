@@ -82,6 +82,19 @@
         FOR UPDATE
     </select>
 
+    <select id="queryPage" resultMap="ChatSessionMap">
+        SELECT <include refid="ChatSessionColumns"/>
+        FROM chat_session
+        WHERE user_id = #{userId} AND status != 'deleted' AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        <if test="cursorTime != null">
+            AND (last_message_time &lt; #{cursorTime}
+                OR (last_message_time = #{cursorTime} AND session_id &lt; #{cursorSessionId}))
+        </if>
+        ORDER BY last_message_time DESC, session_id DESC
+        LIMIT #{limit}
+    </select>
+
     <update id="updateLastMessageTime">
         UPDATE chat_session
         SET last_message_time = #{lastMessageTime}
@@ -124,5 +137,11 @@
         WHERE session_id = #{sessionId} AND deleted = 0
         ORDER BY id DESC
     </select>
+
+    <update id="softDelete">
+        UPDATE chat_session SET status = 'deleted', deleted = 1
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+    </update>
 
 </mapper>

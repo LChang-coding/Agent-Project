@@ -57,6 +57,11 @@ public class SessionShareRepository implements ISessionShareRepository {
     }
 
     @Override
+    public int revokeBySession(String tenantId, String userId, String sessionId) {
+        return shareDao.revokeBySession(tenantId, userId, sessionId);
+    }
+
+    @Override
     public SessionImportEntity queryImport(String shareId, String recipientScopeKey) {
         return toImportEntity(importDao.queryByRecipient(shareId, recipientScopeKey));
     }

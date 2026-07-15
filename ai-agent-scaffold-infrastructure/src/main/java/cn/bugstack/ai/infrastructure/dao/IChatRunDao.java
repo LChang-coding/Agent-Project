@@ -4,6 +4,7 @@ import cn.bugstack.ai.infrastructure.dao.po.ChatRunPO;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 会话运行 DAO。
@@ -24,6 +25,13 @@ public interface IChatRunDao {
      * 锁定运行；参数是可信身份和运行ID；返回持久化对象。
      */
     ChatRunPO lock(@Param("tenantId") String tenantId, @Param("userId") String userId, @Param("runId") String runId);
+
+    /**
+     * 查询会话可执行运行；参数是可信身份和会话；返回活动运行。
+     */
+    List<ChatRunPO> queryExecutableBySession(@Param("tenantId") String tenantId,
+                                             @Param("userId") String userId,
+                                             @Param("sessionId") String sessionId);
 
     /**
      * 按版本迁移状态；参数是状态迁移字段；返回影响行数。

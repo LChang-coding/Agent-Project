@@ -8,16 +8,20 @@
         </div>
 
         <div class="session-list">
-          <button
+          <div
             v-for="session in visibleSessions"
             :key="session.sessionId"
             :class="['session-item', { 'session-item--active': session.sessionId === chatStore.sessionId }]"
-            type="button"
-            @click="switchSession(session.sessionId)"
           >
-            <strong>{{ session.title }}</strong>
-            <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}</span>
-          </button>
+            <button class="session-open" type="button" @click="switchSession(session.sessionId)">
+              <strong>{{ session.title }}</strong>
+              <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}</span>
+            </button>
+            <button class="session-delete" type="button" :disabled="chatStore.deletingSessionId === session.sessionId"
+                    :aria-label="`删除会话 ${session.title}`" @click.stop="deleteSession(session.sessionId, session.title)">
+              {{ chatStore.deletingSessionId === session.sessionId ? '…' : '×' }}
+            </button>
+          </div>
           <div v-if="visibleSessions.length === 0" class="session-empty">
             还没有会话，发送第一条消息后会自动归档在这里。
           </div>
@@ -320,6 +324,21 @@ async function switchSession(sessionId: string) {
   await chatStore.switchSession(sessionId);
   await toolStore.loadCalls(sessionId);
   scrollToLatest();
+}
+
+/**
+ * 删除会话；参数是会话ID和标题；确认后调用服务端软删除。
+ */
+async function deleteSession(sessionId: string, title: string) {
+  if (!window.confirm(`确定删除会话“${title}”吗？历史审计记录会保留，但会话将不再显示。`)) {
+    return;
+  }
+  try {
+    await chatStore.deleteSession(sessionId);
+    await toolStore.loadCalls(chatStore.sessionId);
+  } catch {
+    // Store 已保存可展示的服务端错误。
+  }
 }
 
 /**
@@ -632,16 +651,43 @@ function modelLabel(modelCode: string) {
 }
 
 .session-item {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
   width: 100%;
   padding: 10px;
   text-align: left;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
-  cursor: pointer;
   transition: transform var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
+}
+
+.session-open {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+  padding: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.session-delete {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.session-delete:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .session-item:hover {

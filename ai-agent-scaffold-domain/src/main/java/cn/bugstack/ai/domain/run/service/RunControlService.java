@@ -49,7 +49,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity start(String tenantId, String userId, String sessionId, String sourceType,
                                String sourceId, String requestedRunId, String predecessorRunId) {
-        ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, sourceId);
+        ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, sourceId);
         long revision = session.getContextRevision() == null ? 0L : session.getContextRevision();
         LocalDateTime now = LocalDateTime.now();
         ChatRunEntity run = ChatRunEntity.builder()
@@ -117,8 +117,13 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity steer(String tenantId, String userId, String runId, String instruction) {
         String normalizedInstruction = normalizeInstruction(instruction);
-        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
-        if (run == null) {
+        ChatRunEntity scope = runRepository.query(tenantId, userId, runId);
+        if (scope == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        sessionDomain.lockSessionAccess(scope.getTenantId(), scope.getUserId(), scope.getSessionId(), null);
+        ChatRunEntity run = runRepository.lock(scope.getTenantId(), scope.getUserId(), runId);
+        if (run == null || !equals(scope.getSessionId(), run.getSessionId())) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
         if (!blank(run.getSuccessorRunId())) {
@@ -137,7 +142,6 @@ public class RunControlService {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中运行状态已变化");
         }
         int version = run.getVersion() + 1;
-        sessionDomain.lockSessionAccess(run.getTenantId(), run.getUserId(), run.getSessionId(), null);
         List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId);
         sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId, "用户引导替代");
@@ -190,7 +194,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
                                                       String content, String traceId) {
-        ChatRunEntity run = lockExecutable(tenantId, userId, runId);
+        ChatRunEntity run = lockExecutableWithSessionFirst(tenantId, userId, runId);
         ChatMessageEntity message = sessionDomain.appendUserMessage(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId, content, traceId);
         if (runRepository.bindUserMessage(run.getTenantId(), run.getUserId(), runId, message.getMessageId(),
@@ -207,10 +211,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
                                                           String content, String traceId) {
-        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
-        if (run == null) {
-            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
-        }
+        ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
             return null;
         }
@@ -230,10 +231,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity failWithAssistantMessage(String tenantId, String userId, String runId,
                                                        String content, String traceId, String reason) {
-        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
-        if (run == null) {
-            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
-        }
+        ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
             return null;
         }
@@ -252,8 +250,13 @@ public class RunControlService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity cancel(String tenantId, String userId, String runId, String reason) {
-        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
-        if (run == null) {
+        ChatRunEntity scope = runRepository.query(tenantId, userId, runId);
+        if (scope == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        sessionDomain.lockSessionAccess(scope.getTenantId(), scope.getUserId(), scope.getSessionId(), null);
+        ChatRunEntity run = runRepository.lock(scope.getTenantId(), scope.getUserId(), runId);
+        if (run == null || !equals(scope.getSessionId(), run.getSessionId())) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
         if (run.getStatus().terminal()) {
@@ -265,7 +268,6 @@ public class RunControlService {
             return require(run.getTenantId(), run.getUserId(), runId);
         }
         int version = run.getVersion() + 1;
-        sessionDomain.lockSessionAccess(run.getTenantId(), run.getUserId(), run.getSessionId(), null);
         List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId);
         sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
@@ -377,6 +379,13 @@ public class RunControlService {
     }
 
     /**
+     * 查询会话可执行运行；参数是可信身份和会话；返回活动运行列表。
+     */
+    public List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId) {
+        return runRepository.queryExecutableBySession(tenantId, userId, sessionId);
+    }
+
+    /**
      * 判断运行已取消；参数是可信身份和运行ID；返回是否取消。
      */
     public boolean cancelled(String tenantId, String userId, String runId) {
@@ -419,13 +428,26 @@ public class RunControlService {
         return normalized;
     }
 
-    private ChatRunEntity lockExecutable(String tenantId, String userId, String runId) {
-        ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
+    private ChatRunEntity lockExecutableWithSessionFirst(String tenantId, String userId, String runId) {
+        ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
+        if (!run.getStatus().executable()) {
+            throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
+        }
+        return run;
+    }
+
+    private ChatRunEntity lockWithSessionFirst(String tenantId, String userId, String runId) {
+        ChatRunEntity scope = runRepository.query(tenantId, userId, runId);
+        if (scope == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        sessionDomain.lockSessionAccess(scope.getTenantId(), scope.getUserId(), scope.getSessionId(), null);
+        ChatRunEntity run = runRepository.lock(scope.getTenantId(), scope.getUserId(), runId);
         if (run == null) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
-        if (!run.getStatus().executable()) {
-            throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
+        if (!equals(scope.getSessionId(), run.getSessionId())) {
+            throw new AppException("RUN_SCOPE_MISMATCH", "运行与会话归属不一致");
         }
         return run;
     }
