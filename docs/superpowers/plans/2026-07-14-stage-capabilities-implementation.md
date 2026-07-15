@@ -461,3 +461,17 @@
 - `bash -n docs/dev-ops/xxl-job/deploy.sh` 通过；服务器 `docker compose config --quiet` 通过，Admin 为 HTTP 302，XXL MySQL healthy，`9999/19999` 临时端口不存在；
 - 全仓 `git diff --check` 只报告用户既有 4 个运行日志的尾随空格；任务文件排除运行日志后无格式错误，日志与 `data-alloy/`、`docs/design-questions/`、`docs/design-viz-methodology.md`、`skills/` 均未修改/未暂存；
 - 已知 Maven `ai-agent-scaffold-api` parent `relativePath` 坐标告警仍是项目原有基线，不影响本轮 7 模块 package 与 42 项回归，本阶段未扩大修改 Maven 坐标。
+
+### 2026-07-15：XXL-JOB 管理凭据文档化计划
+
+1. 从服务器部署目录的权限受限 `.env` 读取当前 Admin 密码，不使用历史默认值；
+2. 核对 Admin 地址、固定管理员账号和密码实际可登录；
+3. 将 XXL-JOB 地址/账号/密码追加到 `codex.md` 的服务器中间件凭据区；
+4. 将实际变更和验证结果追加到本节；`codex.md` 保持本机排除，仅精确暂存不含密码的执行记录并使用中文提交。
+
+#### 实际执行结果
+
+- 已从服务器 `/opt/ai-agent-scheduler/xxl-job/.env` 读取当前 `XXL_JOB_ADMIN_PASSWORD`，未使用官方默认密码或历史推测值；
+- `codex.md` 已增加 XXL-JOB 中间件条目、`admin` 账号与当前密码，并标注 Admin 仅在服务器 `127.0.0.1:8080/xxl-job-admin` 监听，需通过 SSH 隧道访问；
+- 使用该凭据调用 `/auth/doLogin` 返回 HTTP 200/业务码 200，带登录会话访问任务页返回 HTTP 200；
+- `codex.md` 已由 `.git/info/exclude` 标记为本机文件，符合文件内“凭据禁止提交 Git”的约束；因此仅精确提交不含密码的本执行记录，不暂存 `codex.md` 和用户既有运行日志/未跟踪目录。
