@@ -79,7 +79,7 @@
 
 - 真实 Compose 源复核与 `docker compose config -q` 均通过。服务器原目录备份时间戳为 `20260715-134429`；XXL 机械修改首次区间表达式在修改前失败，额外保留重试前备份 `docker-compose.yml.pre-resource-retry-20260715-134447`。失败发生在任何重建前，无服务中断。
 - 已固化并生效的 memory/PIDs：Loki `384MiB/128`、Grafana `384MiB/128`、MinIO `640MiB/128`、Nacos `1.25GiB/384`、XXL MySQL `1GiB/128`、XXL Admin `768MiB/128`。
-- 上述六个容器均使用 Docker `json-file max-size=20m,max-file=3`。未删除现有日志或数据；XXL Admin 的文件数上限由 5 收紧到 3。
+- 上述六个容器均使用 Docker `json-file max-size=20m,max-file=3`；XXL Admin 的文件数上限由 5 收紧到 3。未主动删除业务数据、挂载卷日志或 Loki 时序数据；但 Compose 重建会随旧容器自然回收其 stdout json 日志，Loki 原约 110.4MB 的容器日志因此回收，重建后当前约 33KB。此处修正早期“未删除现有日志”的不精确表述。
 - 按 Loki、Grafana、MinIO、Nacos、XXL MySQL、XXL Admin 顺序逐个/逐依赖组重建。Grafana 由于启动耗时超过首轮 30 秒探测窗口曾暂时未返回宿主端健康响应，但容器无重启/OOM、内部 API 已为 200；延长观察后宿主端连续 5 次 200，因此未回滚。
 - 最终健康门禁：Loki 200、Grafana 200、MinIO 200、Nacos 200、XXL-JOB 登录跳转 302；XXL 公网地址从本地复核为 302、耗时 0.151s。六个已变更容器全部 `OOMKilled=false`、`RestartCount=0`。
 - 同口径稳定采样：XXL Admin 439→265MiB、XXL MySQL 429→374MiB、Nacos 754→592MiB、MinIO 294→255MiB、Grafana 119→66MiB、Loki 135→48MiB；连同 Kafka 678→448MiB，七个中间件合计约 2848→2048MiB，减少约 800MiB（约 28.1%）。
@@ -94,6 +94,7 @@
 - 新容器由 Compose 正式管理，实测进程参数为 `-Xms256m/-Xmx512m`，memory/PIDs/logging 均与计划一致；`OOMKilled=false`、`RestartCount=0`，稳定内存约 427–430MiB/PIDs 103。
 - KRaft 验证：LeaderId=1、MaxFollowerLag=0；三个上下文压缩 Topic 全部存在。服务器与公网 9094 TCP 均可连接，启动后日志无 ERROR/FATAL/OOM。
 - Kafka 完成后全局复核仍为 Loki/Grafana/MinIO/Nacos 200、XXL-JOB 302；主机 available memory 4,381,487,104 bytes，Swap used=0。
+- 复采曾用 `du -sb` 得到 Kafka 目录 1.50GB apparent size；进一步按实际块占用核对为 58MB，与基线一致。差异来自 10MB Kafka index 稀疏文件的逻辑长度，并非消息积压或重建导致磁盘增长，因此未执行任何 Topic/段文件清理。
 
 ### 回滚与持久性记录
 
@@ -101,3 +102,9 @@
 - Swap 回滚：恢复 fstab 备份，恢复或移除 sysctl 文件并设回 swappiness=60，`swapoff` 后再删除 swapfile。
 - Kafka 堆、memory/PID 与日志边界现已固化到正式 Compose，删除/重建不会再回到镜像 1G/1G 默认堆。
 - D 组尚未执行：未清理历史日志/镜像，未挂载或迁移 70 GB 数据盘，也未上传本地项目。C 组已完成。
+
+### 2026-07-16 最终只读复采
+
+- 宿主总内存 8,057,884,672 bytes，available 4,220,452,864 bytes；2 GiB Swap used=0；根盘使用率 40%，可用 19,494,236,160 bytes。
+- 末次瞬时采样：Kafka 460MiB、XXL Admin 293.8MiB、XXL MySQL 376.9MiB、Nacos 621.5MiB、MinIO 256.3MiB、Grafana 72.21MiB、Loki 62.54MiB；均在固化上限内且 `RestartCount=0`。
+- Loki/Grafana/MinIO/Nacos 为 200，XXL-JOB 为预期 302；资源限制与 `json-file 20m×3` 再次核对生效。本次仅执行 SSH 只读检查，没有上传、清理或重启。

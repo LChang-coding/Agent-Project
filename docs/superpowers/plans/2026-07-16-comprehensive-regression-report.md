@@ -29,3 +29,10 @@
 - 已为两个生产构造器补充 `@Autowired`，保持包级测试构造器不进入生产装配；`MinioObjectStorageServiceTest` 4/4 通过，Java 17 clean `ApiTest` 1/1 通过，证明完整应用上下文可启动并连接当前 Nacos、MySQL、Kafka 后正常关闭。
 - 修复后再次执行 Java 17 reactor clean 全量测试：Types 12 项全部通过，App 126 项中 112 项通过、14 项报错、0 failure、0 skip，合计 138 项中 124 项通过。14 项均已分类：9 项是仓库演示测试没有可执行测试方法而被 JUnit4 判为 `Invalid test class`；2 项旧 `ChatServiceTest` 未设置新增的可信租户上下文；3 项 `AiAgentAutoConfigTest` 依赖本地未装配的 `100001/100002` Agent Bean。完整应用上下文测试已通过，因此不把这些测试夹具/外部配置问题归类为源码启动回归，也不隐瞒全量命令最终为 `BUILD FAILURE`。
 - Maven 仍报告 `ai-agent-scaffold-api` 的 parent `relativePath` 坐标告警，这是既有构建基线问题，本轮不扩大修改范围。
+
+### 2026-07-16：前端、服务器与最终报告
+
+- 前端最终执行 `npm run build` 通过：`vue-tsc --noEmit` 与 Vite 均成功，1914 modules，857ms；主入口 165.19kB/gzip 63.61kB，Chat route 21.48kB/gzip 7.78kB，dist 总量 352,564 bytes。
+- 服务器只读复采确认 available memory 4,220,452,864 bytes、Swap used=0、根盘 40%；七个核心容器均在 memory/PID 上限内、RestartCount=0，Loki/Grafana/MinIO/Nacos 200、XXL-JOB 302。
+- 已生成 `docs/performance/2026-07-16-optimization-before-after.md`，覆盖服务器、中间件、后端、前端的前后指标、未达目标、测试分类、回滚路径和后续建议。
+- 未执行真实浏览器 E2E：本地没有可用登录态/JWT 且项目没有 Playwright；未迁移 70 GB 数据盘、未删除历史业务数据/镜像/Topic/对象，也没有向服务器上传本地项目。
