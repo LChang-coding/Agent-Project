@@ -9,12 +9,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * 配置摘要对账测试。
@@ -48,6 +54,47 @@ public class ScheduleReconcilerTest {
         assertEquals(1, same.getConfigVersion());
         assertEquals(2, changed.getConfigVersion());
         assertNotEquals(first.getConfigHash(), changed.getConfigHash());
+    }
+
+    @Test
+    public void shouldSkipStableConfigAndReconcileDirtyConfigAgain() {
+        IScheduleRepository repository = mock(IScheduleRepository.class);
+        ScheduleConfigEntity config = config("0 0 9 * * *");
+        LocalDateTime originalUpdateTime = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1);
+        config.setUpdateTime(originalUpdateTime);
+        AtomicReference<Long> version = new AtomicReference<>(0L);
+        when(repository.listForReconcile(10)).thenAnswer(invocation -> {
+            boolean dirty = config.getConfigHash() == null || config.getConfigHash().isBlank()
+                    || config.getLastReconciledAt() == null
+                    || config.getUpdateTime().isAfter(config.getLastReconciledAt());
+            return dirty ? List.of(config) : List.of();
+        });
+        when(repository.upsertTask(any())).thenAnswer(invocation -> {
+            ScheduleTaskEntity task = invocation.getArgument(0);
+            task.setConfigVersion(version.updateAndGet(value -> value + 1));
+            return task;
+        });
+        org.mockito.Mockito.doAnswer(invocation -> {
+            config.setConfigHash(invocation.getArgument(1));
+            config.setConfigVersion(invocation.getArgument(2));
+            LocalDateTime reconciledAt = invocation.getArgument(3);
+            config.setLastReconciledAt(reconciledAt);
+            return null;
+        }).when(repository).updateReconciled(any(), any(), anyLong(), any(), any());
+        ScheduleReconciler reconciler = new ScheduleReconciler(repository, new CronScheduleSupport(),
+                new ObjectMapper());
+
+        assertEquals(1, reconciler.reconcileBatch(10));
+        assertEquals(originalUpdateTime, config.getUpdateTime());
+        assertEquals(0, reconciler.reconcileBatch(10));
+        config.setCronExpr("0 30 9 * * *");
+        config.setConfigHash(null);
+        config.setLastReconciledAt(null);
+        config.setUpdateTime(config.getLastReconciledAt() == null
+                ? LocalDateTime.now(ZoneOffset.UTC) : config.getLastReconciledAt().plusSeconds(1));
+        assertEquals(1, reconciler.reconcileBatch(10));
+
+        verify(repository, times(2)).upsertTask(any());
     }
 
     private ScheduleConfigEntity config(String cron) {

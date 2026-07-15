@@ -102,5 +102,6 @@ public interface IAgentScheduleConfigDao {
 
     int updateReconciled(@Param("configId") String configId, @Param("configHash") String configHash,
                          @Param("configVersion") long configVersion,
-                         @Param("reconciledAt") LocalDateTime reconciledAt);
+                         @Param("reconciledAt") LocalDateTime reconciledAt,
+                         @Param("expectedUpdateTime") LocalDateTime expectedUpdateTime);
 }

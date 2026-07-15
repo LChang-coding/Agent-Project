@@ -56,7 +56,8 @@ public class ScheduleReconciler {
                 .maxRetries(config.getMaxRetries()).plannedTime(next).nextFireTime(next)
                 .status(config.isEnabled() && "active".equals(config.getStatus()) ? "ready" : "disabled")
                 .build());
-        repository.updateReconciled(config.getConfigId(), task.getConfigHash(), task.getConfigVersion(), now);
+        repository.updateReconciled(config.getConfigId(), task.getConfigHash(), task.getConfigVersion(), now,
+                config.getUpdateTime());
         return task;
     }
 

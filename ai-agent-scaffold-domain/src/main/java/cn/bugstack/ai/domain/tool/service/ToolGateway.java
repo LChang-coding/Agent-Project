@@ -8,13 +8,13 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
 import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
+import cn.bugstack.ai.domain.tool.service.support.SkillPackageReader;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,8 +24,6 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 /**
  * 工具调用网关。
@@ -39,17 +37,20 @@ public class ToolGateway {
     private final ObjectStorageService objectStorageService;
     private final McpProtocolClientSupport mcpProtocolClientSupport;
     private final ToolDispatchAuthorizationService dispatchAuthorizationService;
+    private final SkillPackageReader skillPackageReader;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
-     * 创建工具网关；参数是对象存储、MCP 客户端和分发授权服务；返回网关实例。
+     * 创建工具网关；参数是对象存储、MCP 客户端、分发授权和 Skill 包读取器；返回网关实例。
      */
     public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
-                       ToolDispatchAuthorizationService dispatchAuthorizationService) {
+                       ToolDispatchAuthorizationService dispatchAuthorizationService,
+                       SkillPackageReader skillPackageReader) {
         this.objectStorageService = objectStorageService;
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
         this.dispatchAuthorizationService = dispatchAuthorizationService;
+        this.skillPackageReader = skillPackageReader;
     }
 
     /**
@@ -136,7 +137,7 @@ public class ToolGateway {
      */
     private String invokeSkill(ToolCatalogEntity tool, Map<String, Object> input) {
         byte[] bytes = objectStorageService.getObject(tool.getBucket(), tool.getObjectKey());
-        String skillMd = readSkillMd(bytes);
+        String skillMd = skillPackageReader.readSkillMd(bytes);
         String task = stringValue(input.get("task"));
         StringBuilder result = new StringBuilder();
         result.append("Skill 名称：").append(tool.getToolName()).append('\n');
@@ -253,23 +254,6 @@ public class ToolGateway {
             }
         }
         return null;
-    }
-
-    /**
-     * 读取 Skill 包内的 SKILL.md；参数是 zip 字节；返回 Markdown 文本。
-     */
-    private String readSkillMd(byte[] bytes) {
-        try (ZipInputStream zipInputStream = new ZipInputStream(new ByteArrayInputStream(bytes))) {
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName().endsWith("SKILL.md")) {
-                    return new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
-                }
-            }
-        } catch (Exception e) {
-            throw new AppException("TOOL_SKILL_PACKAGE_INVALID", "Skill 包读取失败：" + e.getMessage(), e);
-        }
-        throw new AppException("TOOL_SKILL_PACKAGE_INVALID", "Skill 包必须包含 SKILL.md");
     }
 
     /**

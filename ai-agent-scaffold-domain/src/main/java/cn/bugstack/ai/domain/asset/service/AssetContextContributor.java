@@ -33,13 +33,16 @@ public class AssetContextContributor implements ContextContributor {
     @Override
     public List<ContextContribution> contribute(ContextAssembleRequest request, ContextPolicyProperties properties) {
         if (request == null || isBlank(request.getUserId()) || isBlank(request.getSessionId())
-                || properties == null || properties.getAttachmentTokens() <= 0) {
+                || properties == null || properties.getAttachmentTokens() <= 0
+                || properties.getAttachmentCandidateLimit() <= 0
+                || properties.getAttachmentMaxContentChars() <= 0) {
             return List.of();
         }
         Integer attachmentVisibleThrough = request.getAttachmentVisibleThroughSequence() == null
                 ? request.getVisibleThroughSequence() : request.getAttachmentVisibleThroughSequence();
         List<AssetEntity> assets = repository.queryContextAssets(request.getTenantId(), request.getUserId(),
-                request.getSessionId(), request.getCoveredToSequence(), attachmentVisibleThrough);
+                request.getSessionId(), request.getCoveredToSequence(), attachmentVisibleThrough,
+                properties.getAttachmentCandidateLimit(), properties.getAttachmentMaxContentChars());
         List<String> sections = new ArrayList<>();
         Set<String> contentHashes = new HashSet<>();
         CharacterTokenCounter tokenCounter = new CharacterTokenCounter();
@@ -47,6 +50,7 @@ public class AssetContextContributor implements ContextContributor {
         String containerSuffix = "\n</attachments>";
         int remainingTokens = properties.getAttachmentTokens()
                 - tokenCounter.estimate(containerPrefix + containerSuffix);
+        int remainingContentChars = properties.getAttachmentMaxContentChars();
         if (remainingTokens <= 0) return List.of();
         for (AssetEntity asset : assets) {
             if (asset.getExtractedText() == null || asset.getExtractedText().isBlank()) continue;
@@ -58,12 +62,15 @@ public class AssetContextContributor implements ContextContributor {
             String suffix = "\n</attachment>";
             int wrapperTokens = tokenCounter.estimate(prefix + suffix);
             if (remainingTokens <= wrapperTokens) break;
-            String text = truncateToTokens(asset.getExtractedText(), remainingTokens - wrapperTokens, tokenCounter);
+            String boundedText = asset.getExtractedText().substring(0,
+                    Math.min(asset.getExtractedText().length(), remainingContentChars));
+            String text = truncateToTokens(boundedText, remainingTokens - wrapperTokens, tokenCounter);
             if (text.isBlank()) continue;
             String section = prefix + text + suffix;
             sections.add(section);
+            remainingContentChars -= boundedText.length();
             remainingTokens -= tokenCounter.estimate(section);
-            if (remainingTokens <= 0) break;
+            if (remainingTokens <= 0 || remainingContentChars <= 0) break;
         }
         if (sections.isEmpty()) return List.of();
         // 仓储按最近消息优先返回，渲染时恢复时间正序，兼顾预算与可读性。

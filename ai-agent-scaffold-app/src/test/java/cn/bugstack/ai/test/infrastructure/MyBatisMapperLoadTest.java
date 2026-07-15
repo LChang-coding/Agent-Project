@@ -85,6 +85,31 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
         assertContextInsightAggregateScopes(configuration);
+        assertScheduleReconcileScopes(configuration);
+    }
+
+    private void assertScheduleReconcileScopes(Configuration configuration) {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("limit", 50);
+        String querySql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IAgentScheduleConfigDao.queryForReconcile", parameters);
+        Assert.assertTrue(querySql.contains("config_hash IS NULL"));
+        Assert.assertTrue(querySql.contains("config_hash = ''"));
+        Assert.assertTrue(querySql.contains("last_reconciled_at IS NULL"));
+        Assert.assertTrue(querySql.contains("update_time > last_reconciled_at"));
+        Assert.assertTrue(querySql.contains("deleted = 0"));
+
+        parameters.put("configId", "config_1");
+        parameters.put("configHash", "hash_1");
+        parameters.put("configVersion", 2L);
+        parameters.put("reconciledAt", java.time.LocalDateTime.now());
+        parameters.put("expectedUpdateTime", java.time.LocalDateTime.now().minusMinutes(1));
+        String updateSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IAgentScheduleConfigDao.updateReconciled", parameters);
+        Assert.assertTrue(updateSql.contains("last_reconciled_at = ?"));
+        Assert.assertTrue(updateSql.contains("update_time = update_time"));
+        Assert.assertTrue(updateSql.contains("update_time <=> ?"));
+        Assert.assertFalse(updateSql.contains(", update_time = ?"));
     }
 
     private void assertContextInsightAggregateScopes(Configuration configuration) {
@@ -95,6 +120,8 @@ public class MyBatisMapperLoadTest {
         parameters.put("sessionId", "session_1");
         parameters.put("fromSequenceExclusive", 1);
         parameters.put("visibleThroughSequence", 5);
+        parameters.put("candidateLimit", 32);
+        parameters.put("maxContentChars", 131072);
 
         String messageSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo",
                 parameters);
@@ -128,6 +155,14 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(assetSql.contains("m.deleted = 0"));
         Assert.assertTrue(assetSql.contains("a.tenant_id = ?"));
         Assert.assertFalse(assetSql.contains("extracted_text"));
+
+        String attachmentSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.queryContextAssets", parameters);
+        Assert.assertTrue(attachmentSql.contains("LIMIT ?"));
+        Assert.assertTrue(attachmentSql.contains("LEFT(extracted_text"));
+        Assert.assertTrue(attachmentSql.contains("prior_content_chars"));
+        Assert.assertTrue(attachmentSql.contains("ORDER BY sequence_no DESC, id DESC"));
+        Assert.assertFalse(attachmentSql.contains("SELECT a.*"));
 
         parameters.put("tenantId", null);
         Assert.assertTrue(sql(configuration,

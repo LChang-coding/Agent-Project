@@ -106,7 +106,9 @@
         SELECT <include refid="AgentScheduleConfigColumns"/>
         FROM agent_schedule_config
         WHERE deleted = 0
-        ORDER BY COALESCE(last_reconciled_at, '1970-01-01 00:00:00') ASC, id ASC
+          AND (config_hash IS NULL OR config_hash = '' OR last_reconciled_at IS NULL
+            OR update_time &gt; last_reconciled_at)
+        ORDER BY id ASC
         LIMIT #{limit}
     </select>
 
@@ -145,8 +147,8 @@
     <update id="updateReconciled">
         UPDATE agent_schedule_config
         SET config_hash = #{configHash}, config_version = #{configVersion},
-            last_reconciled_at = #{reconciledAt}
-        WHERE config_id = #{configId} AND deleted = 0
+            last_reconciled_at = #{reconciledAt}, update_time = update_time
+        WHERE config_id = #{configId} AND update_time &lt;=&gt; #{expectedUpdateTime} AND deleted = 0
     </update>
 
 </mapper>

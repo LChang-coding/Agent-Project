@@ -34,3 +34,8 @@ logging:
   level:
     root: info
   config: classpath:logback-spring.xml
+
+ai:
+  skill-package:
+    max-entries: ${AI_SKILL_PACKAGE_MAX_ENTRIES:256}
+    max-entry-bytes: ${AI_SKILL_PACKAGE_MAX_ENTRY_BYTES:1048576}

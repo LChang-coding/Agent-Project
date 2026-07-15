@@ -59,8 +59,10 @@ public class AssetRepository implements IAssetRepository {
 
     @Override
     public List<AssetEntity> queryContextAssets(String tenantId, String ownerUserId, String sessionId,
-                                                Integer fromSequenceExclusive, Integer visibleThroughSequence) {
-        return dao.queryContextAssets(tenantId, ownerUserId, sessionId, fromSequenceExclusive, visibleThroughSequence)
+                                                Integer fromSequenceExclusive, Integer visibleThroughSequence,
+                                                int candidateLimit, int maxContentChars) {
+        return dao.queryContextAssets(tenantId, ownerUserId, sessionId, fromSequenceExclusive,
+                        visibleThroughSequence, candidateLimit, maxContentChars)
                 .stream().map(this::toEntity).toList();
     }
 

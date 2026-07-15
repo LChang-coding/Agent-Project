@@ -20,18 +20,17 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolUserContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolVisibility;
 import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
+import cn.bugstack.ai.domain.tool.service.support.SkillPackageReader;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -40,8 +39,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 /**
  * 工具发布领域服务。
@@ -56,15 +53,19 @@ public class ToolPublishService implements IToolPublishService {
     private final IToolRepository toolRepository;
     private final ObjectStorageService objectStorageService;
     private final McpProtocolClientSupport mcpProtocolClientSupport;
+    private final SkillPackageReader skillPackageReader;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 创建工具发布服务；参数是工具仓储和对象存储服务；返回服务实例。
+     * 创建工具发布服务；参数是仓储、协议客户端和 Skill 包读取器；返回服务实例。
      */
-    public ToolPublishService(IToolRepository toolRepository, ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport) {
+    public ToolPublishService(IToolRepository toolRepository, ObjectStorageService objectStorageService,
+                              McpProtocolClientSupport mcpProtocolClientSupport,
+                              SkillPackageReader skillPackageReader) {
         this.toolRepository = toolRepository;
         this.objectStorageService = objectStorageService;
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
+        this.skillPackageReader = skillPackageReader;
     }
 
     /**
@@ -109,7 +110,7 @@ public class ToolPublishService implements IToolPublishService {
         String skillCode = safeToolName(defaultString(command.getSkillCode(), command.getSkillName()));
         byte[] skillBytes = objectStorageService.getObject(asset.getBucket(), asset.getObjectKey());
         fillSha256IfMissing(asset, skillBytes);
-        String skillMd = loadSkillMd(skillBytes);
+        String skillMd = skillPackageReader.readSkillMd(skillBytes);
         SkillVersionEntity skillVersion = SkillVersionEntity.builder()
                 .tenantId(context.getTenantId())
                 .ownerUserId(context.getUserId())
@@ -160,7 +161,7 @@ public class ToolPublishService implements IToolPublishService {
         }
         byte[] skillBytes = objectStorageService.getObject(asset.getBucket(), asset.getObjectKey());
         fillSha256IfMissing(asset, skillBytes);
-        String skillMd = loadSkillMd(skillBytes);
+        String skillMd = skillPackageReader.readSkillMd(skillBytes);
         toolRepository.saveSkillVersion(SkillVersionEntity.builder()
                 .tenantId(context.getTenantId())
                 .ownerUserId(context.getUserId())
@@ -392,7 +393,7 @@ public class ToolPublishService implements IToolPublishService {
         if (command.getBytes().length > MAX_SKILL_PACKAGE_BYTES) {
             throw new AppException("TOOL_SKILL_PACKAGE_TOO_LARGE", "Skill 包不能超过 20MB");
         }
-        loadSkillMd(command.getBytes());
+        skillPackageReader.readSkillMd(command.getBytes());
     }
 
     /**
@@ -546,23 +547,6 @@ public class ToolPublishService implements IToolPublishService {
         } catch (Exception e) {
             throw new AppException("TOOL_SKILL_PACKAGE_INVALID", "Skill 包摘要计算失败：" + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 从 zip 内容读取 SKILL.md；参数是 zip 字节；返回 Skill 文本。
-     */
-    private String loadSkillMd(byte[] bytes) {
-        try (ZipInputStream zipInputStream = new ZipInputStream(new ByteArrayInputStream(bytes))) {
-            ZipEntry entry;
-            while ((entry = zipInputStream.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName().endsWith("SKILL.md")) {
-                    return new String(zipInputStream.readAllBytes(), StandardCharsets.UTF_8);
-                }
-            }
-        } catch (Exception e) {
-            throw new AppException("TOOL_SKILL_PACKAGE_INVALID", "Skill 包读取失败：" + e.getMessage());
-        }
-        throw new AppException("TOOL_SKILL_PACKAGE_INVALID", "Skill 包必须包含 SKILL.md");
     }
 
     /**

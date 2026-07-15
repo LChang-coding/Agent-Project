@@ -73,6 +73,6 @@ public class ContextInsightServiceTest {
         Mockito.verify(sessionDomain, Mockito.never()).queryValidMessages(Mockito.any(), Mockito.any(), Mockito.any());
         Mockito.verify(toolRepository, Mockito.never()).queryToolCallLogs(Mockito.any(), Mockito.any(), Mockito.any());
         Mockito.verify(assetRepository, Mockito.never()).queryContextAssets(Mockito.any(), Mockito.any(), Mockito.any(),
-                Mockito.any(), Mockito.any());
+                Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt());
     }
 }

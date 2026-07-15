@@ -117,6 +117,8 @@ ai:
     recent-conversation-tokens: ${AI_CONTEXT_RECENT_CONVERSATION_TOKENS:8192}
     recent-window-max-messages: ${AI_CONTEXT_RECENT_WINDOW_MAX_MESSAGES:100}
     upstream-tokens: ${AI_CONTEXT_UPSTREAM_TOKENS:4096}
+    attachment-candidate-limit: ${AI_CONTEXT_ATTACHMENT_CANDIDATE_LIMIT:32}
+    attachment-max-content-chars: ${AI_CONTEXT_ATTACHMENT_MAX_CONTENT_CHARS:131072}
     rag-tokens: ${AI_CONTEXT_RAG_TOKENS:0}
     compaction-min-uncovered-tokens: ${AI_CONTEXT_COMPACTION_MIN_UNCOVERED_TOKENS:12000}
     compaction-retain-recent-tokens: ${AI_CONTEXT_COMPACTION_RETAIN_RECENT_TOKENS:4096}
@@ -128,6 +130,9 @@ ai:
       group-id: ${AI_CONTEXT_KAFKA_GROUP_ID:ai-agent-context-compaction}
       retry-attempts: ${AI_CONTEXT_KAFKA_RETRY_ATTEMPTS:3}
       retry-delay-ms: ${AI_CONTEXT_KAFKA_RETRY_DELAY_MS:1000}
+  skill-package:
+    max-entries: ${AI_SKILL_PACKAGE_MAX_ENTRIES:256}
+    max-entry-bytes: ${AI_SKILL_PACKAGE_MAX_ENTRY_BYTES:1048576}
   observability:
     sample:
       enabled: ${AI_OBSERVABILITY_SAMPLE_ENABLED:false}

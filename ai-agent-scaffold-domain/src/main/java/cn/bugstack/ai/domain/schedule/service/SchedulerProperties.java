@@ -14,6 +14,7 @@ public class SchedulerProperties {
 
     private int reconcileBatchSize = 200;
     private int dispatchBatchSize = 50;
+    private int dispatchConcurrency = 2;
     private int leaseSeconds = 120;
     private int heartbeatSeconds = 30;
     private int retryBaseSeconds = 30;

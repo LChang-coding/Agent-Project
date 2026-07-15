@@ -23,6 +23,8 @@ public class ContextPolicyProperties {
     private int recentWindowMaxMessages = 100;
     private int upstreamTokens = 4096;
     private int attachmentTokens = 8192;
+    private int attachmentCandidateLimit = 32;
+    private int attachmentMaxContentChars = 131072;
     private int ragTokens = 0;
     private int compactionMinUncoveredTokens = 12000;
     private int compactionRetainRecentTokens = 4096;

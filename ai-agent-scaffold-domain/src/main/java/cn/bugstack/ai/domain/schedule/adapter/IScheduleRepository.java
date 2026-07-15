@@ -24,7 +24,8 @@ public interface IScheduleRepository {
 
     boolean updateEnabled(String tenantId, String userId, String configId, boolean enabled);
 
-    void updateReconciled(String configId, String configHash, long configVersion, LocalDateTime reconciledAt);
+    void updateReconciled(String configId, String configHash, long configVersion, LocalDateTime reconciledAt,
+                          LocalDateTime expectedUpdateTime);
 
     ScheduleTaskEntity upsertTask(ScheduleTaskEntity task);
 

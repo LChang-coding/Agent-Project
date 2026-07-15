@@ -66,8 +66,8 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     public void updateReconciled(String configId, String configHash, long configVersion,
-                                 LocalDateTime reconciledAt) {
-        configDao.updateReconciled(configId, configHash, configVersion, reconciledAt);
+                                 LocalDateTime reconciledAt, LocalDateTime expectedUpdateTime) {
+        configDao.updateReconciled(configId, configHash, configVersion, reconciledAt, expectedUpdateTime);
     }
 
     @Override

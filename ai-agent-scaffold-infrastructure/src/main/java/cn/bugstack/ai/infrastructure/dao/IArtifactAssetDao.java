@@ -67,12 +67,14 @@ public interface IArtifactAssetDao {
     int softDeleteOwned(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
                         @Param("assetId") String assetId);
 
-    /** 查询有效消息关联附件；参数是可信会话和可选运行；返回可注入附件。 */
+    /** 查询有效消息关联附件；参数是可信会话、序号与读取边界；返回可注入附件。 */
     List<ArtifactAssetPO> queryContextAssets(@Param("tenantId") String tenantId,
                                              @Param("ownerUserId") String ownerUserId,
                                              @Param("sessionId") String sessionId,
                                              @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
-                                             @Param("visibleThroughSequence") Integer visibleThroughSequence);
+                                             @Param("visibleThroughSequence") Integer visibleThroughSequence,
+                                             @Param("candidateLimit") int candidateLimit,
+                                             @Param("maxContentChars") int maxContentChars);
 
     /** 统计有效消息关联附件；参数是可信会话和序号区间；返回附件数。 */
     int countContextAssets(@Param("tenantId") String tenantId,

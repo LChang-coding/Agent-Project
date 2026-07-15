@@ -44,6 +44,7 @@ ai:
   scheduler:
     reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
     dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}
+    dispatch-concurrency: ${AI_SCHEDULER_DISPATCH_CONCURRENCY:2}
     lease-seconds: ${AI_SCHEDULER_LEASE_SECONDS:120}
     heartbeat-seconds: ${AI_SCHEDULER_HEARTBEAT_SECONDS:30}
     retry-base-seconds: ${AI_SCHEDULER_RETRY_BASE_SECONDS:30}

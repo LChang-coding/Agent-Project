@@ -14,13 +14,21 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -37,6 +45,10 @@ public class ScheduleDispatcher {
     private final SchedulerProperties properties;
     private final Map<String, ScheduleTaskHandler> handlers;
     private final ScheduledExecutorService heartbeatExecutor;
+    private final ThreadPoolExecutor dispatchExecutor;
+    private final ReentrantLock batchLock = new ReentrantLock();
+    private final Object submissionMonitor = new Object();
+    private final AtomicBoolean closed = new AtomicBoolean();
     private final String instanceId;
     private final Clock clock = Clock.systemUTC();
 
@@ -52,22 +64,94 @@ public class ScheduleDispatcher {
             thread.setDaemon(true);
             return thread;
         });
+        AtomicInteger workerSequence = new AtomicInteger();
+        int concurrency = dispatchConcurrency();
+        this.dispatchExecutor = new ThreadPoolExecutor(concurrency, concurrency, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(concurrency), runnable -> {
+            Thread thread = new Thread(runnable, "schedule-dispatch-worker-" + workerSequence.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }, new ThreadPoolExecutor.AbortPolicy());
         this.instanceId = hostName() + ":" + UUID.randomUUID();
     }
 
     public int dispatchBatch(int maxTasks) {
-        int processed = 0;
-        int limit = Math.max(1, Math.min(maxTasks, 500));
-        while (processed < limit) {
+        batchLock.lock();
+        try {
+            if (closed.get()) {
+                return 0;
+            }
+            int processed = 0;
+            int limit = Math.max(1, Math.min(maxTasks, 500));
+            int concurrency = dispatchConcurrency();
+            while (processed < limit && !closed.get()) {
+                int waveLimit = Math.min(concurrency, limit - processed);
+                List<ScheduleTaskEntity> claimed;
+                List<Future<?>> futures;
+                synchronized (submissionMonitor) {
+                    if (closed.get()) {
+                        break;
+                    }
+                    claimed = claimWave(waveLimit);
+                    futures = submitWave(claimed);
+                }
+                if (claimed.isEmpty()) {
+                    break;
+                }
+                awaitWave(futures);
+                processed += claimed.size();
+                if (claimed.size() < waveLimit) {
+                    break;
+                }
+            }
+            return processed;
+        } finally {
+            batchLock.unlock();
+        }
+    }
+
+    private List<ScheduleTaskEntity> claimWave(int waveLimit) {
+        List<ScheduleTaskEntity> claimed = new ArrayList<>(waveLimit);
+        for (int i = 0; i < waveLimit; i++) {
             LocalDateTime now = LocalDateTime.now(clock);
             String leaseOwner = instanceId + ":" + UUID.randomUUID();
             ScheduleTaskEntity task = repository.claimDueTask(leaseOwner, now,
                     now.plusSeconds(leaseSeconds()));
-            if (task == null) break;
-            dispatch(task);
-            processed++;
+            if (task == null) {
+                break;
+            }
+            claimed.add(task);
         }
-        return processed;
+        return claimed;
+    }
+
+    private List<Future<?>> submitWave(List<ScheduleTaskEntity> claimed) {
+        List<Future<?>> futures = new ArrayList<>(claimed.size());
+        for (ScheduleTaskEntity task : claimed) {
+            futures.add(dispatchExecutor.submit(() -> dispatch(task)));
+        }
+        return futures;
+    }
+
+    private void awaitWave(List<Future<?>> futures) {
+        boolean interrupted = false;
+        for (Future<?> future : futures) {
+            boolean completed = false;
+            while (!completed) {
+                try {
+                    future.get();
+                    completed = true;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                } catch (ExecutionException e) {
+                    log.warn("定时任务 worker 异常终止", e.getCause());
+                    completed = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void dispatch(ScheduleTaskEntity task) {
@@ -182,8 +266,24 @@ public class ScheduleDispatcher {
         return Math.max(15, properties.getLeaseSeconds());
     }
 
+    private int dispatchConcurrency() {
+        return Math.max(1, Math.min(properties.getDispatchConcurrency(), 16));
+    }
+
     @PreDestroy
     public void shutdown() {
-        heartbeatExecutor.shutdownNow();
+        synchronized (submissionMonitor) {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            dispatchExecutor.shutdownNow();
+            heartbeatExecutor.shutdownNow();
+        }
+        batchLock.lock();
+        try {
+            // 已中断可中断 worker，在此等待本批失败或成功结果完成栅栏提交。
+        } finally {
+            batchLock.unlock();
+        }
     }
 }
