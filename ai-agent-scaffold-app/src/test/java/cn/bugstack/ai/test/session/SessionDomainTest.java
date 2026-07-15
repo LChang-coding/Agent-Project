@@ -32,10 +32,27 @@ public class SessionDomainTest {
         ChatMessageEntity assistantMessage = sessionDomain.appendAssistantMessage("tenant_1", "user_1", "session_1", "你好呀", "trace_1");
 
         Assert.assertEquals("session_1", session.getSessionId());
+        Assert.assertEquals("agent", session.getSourceType());
         Assert.assertEquals(Integer.valueOf(1), userMessage.getSequenceNo());
         Assert.assertEquals(Integer.valueOf(2), assistantMessage.getSequenceNo());
         Assert.assertEquals(2, repository.messages.size());
         Assert.assertEquals(2, repository.touchCount);
+    }
+
+    @Test
+    public void shouldPersistWorkflowRuntimeTargetFacts() {
+        FakeSessionRepository repository = new FakeSessionRepository();
+        CreateSessionCommandEntity command = createSessionCommand();
+        command.setAgentId("wf_1");
+        command.setSourceType("workflow");
+        command.setWorkflowVersion(3);
+        command.setModelCode("gemini-2.5-flash");
+
+        ChatSessionEntity session = new SessionDomain(repository).createSession(command);
+
+        Assert.assertEquals("workflow", session.getSourceType());
+        Assert.assertEquals(Integer.valueOf(3), session.getWorkflowVersion());
+        Assert.assertEquals("gemini-2.5-flash", session.getModelCode());
     }
 
     /**

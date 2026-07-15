@@ -61,6 +61,9 @@ public interface IMcpServerConfigDao {
      */
     List<McpServerConfigPO> queryListByOwnerUserId(@Param("ownerUserId") String ownerUserId);
 
+    List<McpServerConfigPO> queryListByTenantIdAndOwnerUserId(@Param("tenantId") String tenantId,
+                                                               @Param("ownerUserId") String ownerUserId);
+
     /**
      * 按租户和可见范围查询MCP 服务配置列表。
      *

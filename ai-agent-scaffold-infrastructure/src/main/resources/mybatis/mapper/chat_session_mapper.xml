@@ -9,6 +9,9 @@
         <result column="session_id" property="sessionId"/>
         <result column="agent_id" property="agentId"/>
         <result column="agent_name" property="agentName"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="workflow_version" property="workflowVersion"/>
+        <result column="model_code" property="modelCode"/>
         <result column="app_name" property="appName"/>
         <result column="title" property="title"/>
         <result column="status" property="status"/>
@@ -21,17 +24,17 @@
     </resultMap>
 
     <sql id="ChatSessionColumns">
-        id, tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, context_revision, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, last_message_time, context_revision, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, app_name, title, status, last_message_time, context_revision, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{appName}, #{title}, #{status}, #{lastMessageTime}, #{contextRevision}, #{metadata})
+        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, last_message_time, context_revision, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{sourceType}, #{workflowVersion}, #{modelCode}, #{appName}, #{title}, #{status}, #{lastMessageTime}, #{contextRevision}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO">
         UPDATE chat_session
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, app_name = #{appName}, title = #{title}, status = #{status}, last_message_time = #{lastMessageTime}, context_revision = #{contextRevision}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, source_type = #{sourceType}, workflow_version = #{workflowVersion}, model_code = #{modelCode}, app_name = #{appName}, title = #{title}, status = #{status}, last_message_time = #{lastMessageTime}, context_revision = #{contextRevision}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 

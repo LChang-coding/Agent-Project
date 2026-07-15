@@ -104,7 +104,7 @@ public class ChatService implements IChatService {
      */
     @Override
     public String createSession(String agentId, String userId) {
-        AiAgentRegisterVO aiAgentRegisterVO = requireAgent(agentId);
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
         return createSession(agentId, userId, aiAgentRegisterVO);
     }
 
@@ -114,9 +114,10 @@ public class ChatService implements IChatService {
     @Override
     public String createWorkflowSession(String workflowId, Integer workflowVersion, String modelCode, String userId) {
         String tenantId = currentTenantId();
-        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
-        AiAgentRegisterVO aiAgentRegisterVO = requireAgent(runtime.getRuntimeAgentId());
-        return createSession(tenantId, workflowId, userId, aiAgentRegisterVO);
+        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, TenantContextHolder.getRoleCode(),
+                workflowId, workflowVersion, modelCode);
+        AiAgentRegisterVO aiAgentRegisterVO = requireWorkflowRuntimeAgent(runtime.getRuntimeAgentId());
+        return createWorkflowSession(tenantId, workflowId, userId, aiAgentRegisterVO, runtime);
     }
 
     /**
@@ -130,6 +131,20 @@ public class ChatService implements IChatService {
      * 创建平台会话；参数是租户、会话 Agent ID、用户和运行体；返回会话ID。
      */
     private String createSession(String tenantId, String sessionAgentId, String userId, AiAgentRegisterVO aiAgentRegisterVO) {
+        return createSession(tenantId, sessionAgentId, userId, aiAgentRegisterVO, "agent", null, null);
+    }
+
+    /** 创建工作流会话并固化服务端解析后的运行事实。 */
+    private String createWorkflowSession(String tenantId, String workflowId, String userId,
+                                         AiAgentRegisterVO aiAgentRegisterVO, WorkflowRuntimeEntity runtime) {
+        return createSession(tenantId, workflowId, userId, aiAgentRegisterVO, "workflow",
+                runtime.getVersion(), runtime.getEffectiveModelCode());
+    }
+
+    /** 创建平台会话；参数包含服务端解析后的运行目标事实。 */
+    private String createSession(String tenantId, String sessionAgentId, String userId,
+                                 AiAgentRegisterVO aiAgentRegisterVO, String sourceType,
+                                 Integer workflowVersion, String modelCode) {
         String appName = aiAgentRegisterVO.getAppName();
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
@@ -140,6 +155,9 @@ public class ChatService implements IChatService {
         command.setSessionId(session.id());
         command.setAgentId(sessionAgentId);
         command.setAgentName(aiAgentRegisterVO.getAgentName());
+        command.setSourceType(sourceType);
+        command.setWorkflowVersion(workflowVersion);
+        command.setModelCode(modelCode);
         command.setAppName(appName);
         command.setTitle(aiAgentRegisterVO.getAgentName());
         sessionDomain.createSession(command);
@@ -152,7 +170,7 @@ public class ChatService implements IChatService {
     @Override
     public List<String> handleMessage(String agentId, String userId, String message) {
 
-        requireAgent(agentId);
+        requirePublicAgent(agentId);
 
         String sessionId = createSession(agentId, userId);
 
@@ -165,7 +183,7 @@ public class ChatService implements IChatService {
     @Override
     public List<String> handleMessage(String agentId, String userId, String sessionId, String message) {
 
-        AiAgentRegisterVO aiAgentRegisterVO = requireAgent(agentId);
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
 
         return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO);
     }
@@ -200,7 +218,7 @@ public class ChatService implements IChatService {
     @Override
     public RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
                                                      String requestedRunId, List<String> attachmentIds) {
-        AiAgentRegisterVO aiAgentRegisterVO = requireAgent(agentId);
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(agentId, userId, sessionId, aiAgentRegisterVO);
         ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
@@ -249,9 +267,10 @@ public class ChatService implements IChatService {
                                                                    List<String> attachmentIds) {
         String tenantId = currentTenantId();
         String traceId = TraceContext.currentOrNewTraceId();
-        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
-        AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
-        String actualSessionId = ensureSessionId(tenantId, workflowId, userId, sessionId, rootAgent);
+        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, TenantContextHolder.getRoleCode(),
+                workflowId, workflowVersion, modelCode);
+        AiAgentRegisterVO rootAgent = requireWorkflowRuntimeAgent(runtime.getRuntimeAgentId());
+        String actualSessionId = ensureWorkflowSessionId(tenantId, workflowId, userId, sessionId, rootAgent, runtime);
         ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
                 "workflow", workflowId, requestedRunId);
         String effectiveMessage = steerResumeMessage(run, message);
@@ -267,7 +286,7 @@ public class ChatService implements IChatService {
      */
     @Override
     public List<String> handleMessage(ChatCommandEntity chatCommandEntity) {
-        AiAgentRegisterVO aiAgentRegisterVO = requireAgent(chatCommandEntity.getAgentId());
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(chatCommandEntity.getAgentId());
 
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(chatCommandEntity.getAgentId(), chatCommandEntity.getUserId(), chatCommandEntity.getSessionId());
@@ -437,8 +456,8 @@ public class ChatService implements IChatService {
                                               String sessionId, String message, String traceId, ChatRunEntity run,
                                               List<String> attachmentIds) {
         WorkflowDagPlanEntity dagPlan = requireDagPlan(runtime);
-        AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
-        String actualSessionId = ensureSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent);
+        AiAgentRegisterVO rootAgent = requireWorkflowRuntimeAgent(runtime.getRuntimeAgentId());
+        String actualSessionId = ensureWorkflowSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent, runtime);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
         RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId,
@@ -552,7 +571,7 @@ public class ChatService implements IChatService {
                                   String workflowId, String prompt, String traceId, String roleCode,
                                   Integer historyCutoffSequence, String upstreamOutput, ChatRunEntity run) {
         runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
-        AiAgentRegisterVO agent = requireAgent(node.getRuntimeAgentId());
+        AiAgentRegisterVO agent = requireWorkflowRuntimeAgent(node.getRuntimeAgentId());
         InMemoryRunner runner = agent.getRunner();
         String adkSessionId = invocationSessionId(sessionId + ":" + node.getNodeId());
         ensureAdkSession(runner, agent.getAppName(), userId, adkSessionId);
@@ -754,6 +773,9 @@ public class ChatService implements IChatService {
         putStateIfPresent(state, ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT, upstreamOutput);
         if (visibleThroughSequence != null) {
             state.put(ToolRuntimeContextKeys.CONTEXT_VISIBLE_THROUGH_SEQUENCE, visibleThroughSequence);
+            // 历史消息截止到本轮输入之前；附件必须包含刚绑定到本轮用户消息的资产。
+            state.put(ToolRuntimeContextKeys.CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE,
+                    visibleThroughSequence + 1);
         }
         return state;
     }
@@ -814,11 +836,32 @@ public class ChatService implements IChatService {
         return sessionId;
     }
 
+    /** 确保工作流会话存在；新建时固化实际版本和模型。 */
+    private String ensureWorkflowSessionId(String tenantId, String workflowId, String userId, String sessionId,
+                                           AiAgentRegisterVO aiAgentRegisterVO, WorkflowRuntimeEntity runtime) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return createWorkflowSession(tenantId, workflowId, userId, aiAgentRegisterVO, runtime);
+        }
+        return sessionId;
+    }
+
     /**
      * 获取已注册 Agent；参数是 Agent ID；返回运行体。
      */
-    private AiAgentRegisterVO requireAgent(String agentId) {
+    private AiAgentRegisterVO requirePublicAgent(String agentId) {
+        if (!agentAvailabilityService.isStaticAgent(agentId)) {
+            throw new AppException(ResponseCode.E0001.getCode(), ResponseCode.E0001.getInfo());
+        }
         agentAvailabilityService.assertEnabled(currentTenantId(), agentId);
+        return requireRegisteredAgent(agentId);
+    }
+
+    /** 获取已由工作流授权并编译的运行时 Agent；不得用于公共 Agent ID 入口。 */
+    private AiAgentRegisterVO requireWorkflowRuntimeAgent(String agentId) {
+        return requireRegisteredAgent(agentId);
+    }
+
+    private AiAgentRegisterVO requireRegisteredAgent(String agentId) {
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
         if (null == aiAgentRegisterVO) {
             throw new AppException(ResponseCode.E0001.getCode());

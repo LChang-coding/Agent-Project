@@ -157,8 +157,14 @@ public class ConversationMemoryService {
                     renderUpstreamOutput(request.getUpstreamOutput()), properties.getUpstreamTokens()));
         }
 
+        ContextAssembleRequest contributorRequest = ContextAssembleRequest.builder()
+                .tenantId(request.getTenantId()).userId(request.getUserId()).sessionId(request.getSessionId())
+                .visibleThroughSequence(request.getVisibleThroughSequence())
+                .attachmentVisibleThroughSequence(request.getAttachmentVisibleThroughSequence())
+                .coveredToSequence(coveredToSequence).upstreamOutput(request.getUpstreamOutput())
+                .traceId(request.getTraceId()).build();
         for (ContextContributor contributor : contributors) {
-            List<ContextContribution> contributions = contributor.contribute(request, properties);
+            List<ContextContribution> contributions = contributor.contribute(contributorRequest, properties);
             if (contributions == null) {
                 continue;
             }
@@ -257,7 +263,9 @@ public class ConversationMemoryService {
                 .toSequence(toSequence)
                 .expectedMemoryVersion(ConversationMemorySnapshotEntity.versionOf(snapshot))
                 .baseContextRevision(sessionRevision(assistantMessage.getTenantId(), assistantMessage.getUserId(), assistantMessage.getSessionId()))
-                .coverageHash(coverageHash(uncoveredMessages, coveredToSequence + 1, toSequence))
+                .coverageHash(coverageHash(uncoveredMessages, coveredToSequence + 1, toSequence,
+                        attachmentContext(assistantMessage.getTenantId(), assistantMessage.getUserId(),
+                                assistantMessage.getSessionId(), coveredToSequence, toSequence)))
                 .policyVersion(properties.getPolicyVersion())
                 .traceId(assistantMessage.getTraceId())
                 .build());
@@ -310,13 +318,15 @@ public class ConversationMemoryService {
         if (task.getBaseContextRevision() != null && task.getBaseContextRevision() != currentRevision) {
             throw new IllegalStateException("上下文版本已变化，压缩结果禁止激活");
         }
-        String currentHash = coverageHash(messages, task.getFromSequence(), task.getToSequence());
+        String attachmentContext = attachmentContext(task.getTenantId(), task.getUserId(), task.getSessionId(),
+                safe(task.getFromSequence()) - 1, task.getToSequence());
+        String currentHash = coverageHash(messages, task.getFromSequence(), task.getToSequence(), attachmentContext);
         if (!isBlank(task.getCoverageHash()) && !task.getCoverageHash().equals(currentHash)) {
             throw new IllegalStateException("有效消息集合已变化，压缩结果禁止激活");
         }
 
         ChatModel chatModel = resolveChatModel(task);
-        String prompt = buildCompressionPrompt(active, messages, task);
+        String prompt = buildCompressionPrompt(active, messages, attachmentContext, task);
         String json = normalizeSummaryJson(compressionPort.compress(chatModel, prompt), task);
         ContextCompactionTaskEntity latestTask = taskRepository.queryByTaskId(taskId);
         if (latestTask == null || latestTask.getStatus() == ContextCompactionTaskStatus.STALE
@@ -375,7 +385,10 @@ public class ConversationMemoryService {
         }
         List<ChatMessageEntity> effectiveMessages = historyRepository.queryMessages(task.getTenantId(), task.getUserId(),
                 task.getSessionId(), safe(task.getFromSequence()) - 1, task.getToSequence());
-        String lockedHash = coverageHash(effectiveMessages, task.getFromSequence(), task.getToSequence());
+        String lockedAttachmentContext = attachmentContext(task.getTenantId(), task.getUserId(), task.getSessionId(),
+                safe(task.getFromSequence()) - 1, task.getToSequence());
+        String lockedHash = coverageHash(effectiveMessages, task.getFromSequence(), task.getToSequence(),
+                lockedAttachmentContext);
         if (!expectedHash.equals(lockedHash)) {
             throw new IllegalStateException("压缩激活前有效消息集合已变化");
         }
@@ -425,7 +438,8 @@ public class ConversationMemoryService {
                 .toSequence(visibleThroughSequence)
                 .expectedMemoryVersion(ConversationMemorySnapshotEntity.versionOf(snapshot))
                 .baseContextRevision(contextRevision)
-                .coverageHash(coverageHash(messages, coveredToSequence + 1, visibleThroughSequence))
+                .coverageHash(coverageHash(messages, coveredToSequence + 1, visibleThroughSequence,
+                        attachmentContext(tenantId, userId, sessionId, coveredToSequence, visibleThroughSequence)))
                 .policyVersion(properties.getPolicyVersion())
                 .traceId(traceId)
                 .build());
@@ -461,7 +475,8 @@ public class ConversationMemoryService {
                 .fromSequence(covered + 1).toSequence(toSequence)
                 .expectedMemoryVersion(ConversationMemorySnapshotEntity.versionOf(snapshot))
                 .baseContextRevision(revision)
-                .coverageHash(coverageHash(messages, covered + 1, toSequence))
+                .coverageHash(coverageHash(messages, covered + 1, toSequence,
+                        attachmentContext(tenantId, userId, sessionId, covered, toSequence)))
                 .policyVersion(properties.getPolicyVersion()).traceId(traceId).build());
         if (task == null) {
             throw new IllegalStateException("工具调用前无法创建上下文压缩任务");
@@ -595,7 +610,8 @@ public class ConversationMemoryService {
         return session.getContextRevision() == null ? 0L : session.getContextRevision();
     }
 
-    private String coverageHash(List<ChatMessageEntity> messages, Integer fromSequence, Integer toSequence) {
+    private String coverageHash(List<ChatMessageEntity> messages, Integer fromSequence, Integer toSequence,
+                                String attachmentContext) {
         StringBuilder raw = new StringBuilder();
         if (messages != null) {
             messages.stream()
@@ -607,6 +623,7 @@ public class ConversationMemoryService {
                             .append(message.getValidityStatus()).append('|')
                             .append(message.getContent()).append('\n'));
         }
+        raw.append("attachments|").append(attachmentContext == null ? "" : attachmentContext);
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(raw.toString().getBytes(StandardCharsets.UTF_8)));
@@ -668,6 +685,7 @@ public class ConversationMemoryService {
 
     private String buildCompressionPrompt(ConversationMemorySnapshotEntity active,
                                           List<ChatMessageEntity> messages,
+                                          String attachmentContext,
                                           ContextCompactionTaskEntity task) {
         List<String> lines = new ArrayList<>();
         lines.add("你是会话长期记忆压缩器。请把旧摘要和新增原始消息压缩成一个严格 JSON 对象。");
@@ -682,7 +700,30 @@ public class ConversationMemoryService {
             lines.add("[seq=" + message.getSequenceNo() + " role=" + safeRole(message.getRole()) + "]");
             lines.add(message.getContent() == null ? "" : message.getContent());
         }
+        if (!isBlank(attachmentContext)) {
+            lines.add("新增消息关联附件：");
+            lines.add(attachmentContext);
+        }
         return String.join("\n", lines);
+    }
+
+    /** 组装指定消息区间的附件文本；参数是可信会话和序号边界；返回已去重的附件片段。 */
+    private String attachmentContext(String tenantId, String userId, String sessionId,
+                                     Integer fromSequenceExclusive, Integer toSequenceInclusive) {
+        ContextAssembleRequest request = ContextAssembleRequest.builder()
+                .tenantId(tenantId).userId(userId).sessionId(sessionId)
+                .visibleThroughSequence(toSequenceInclusive)
+                .attachmentVisibleThroughSequence(toSequenceInclusive)
+                .coveredToSequence(fromSequenceExclusive).build();
+        List<String> values = new ArrayList<>();
+        for (ContextContributor contributor : contributors) {
+            List<ContextContribution> contributions = contributor.contribute(request, properties);
+            if (contributions == null) continue;
+            contributions.stream().filter(value -> value != null && value.getType() == ContextFragmentType.ATTACHMENT
+                            && !isBlank(value.getContent()))
+                    .map(ContextContribution::getContent).forEach(values::add);
+        }
+        return String.join("\n", values);
     }
 
     private String normalizeSummaryJson(String raw, ContextCompactionTaskEntity task) {

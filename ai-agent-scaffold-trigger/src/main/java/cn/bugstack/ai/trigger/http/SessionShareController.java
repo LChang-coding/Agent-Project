@@ -148,6 +148,7 @@ public class SessionShareController {
                 .appName(result.getSession() == null ? result.getSourceAppName() : result.getSession().getAppName())
                 .formatVersion(Boolean.TRUE.equals(result.getLegacySnapshot()) ? 1 : 2)
                 .sourceType(result.getSourceType()).workflowId(result.getWorkflowId())
+                .workflowVersion(result.getWorkflowVersion()).modelCode(result.getModelCode())
                 .legacySnapshot(result.getLegacySnapshot()).toolDependencies(dependencies).toolPrecheck(precheck)
                 .messages(messages).build();
     }

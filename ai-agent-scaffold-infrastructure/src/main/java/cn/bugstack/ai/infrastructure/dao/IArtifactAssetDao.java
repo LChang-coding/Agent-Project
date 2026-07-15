@@ -71,6 +71,7 @@ public interface IArtifactAssetDao {
     List<ArtifactAssetPO> queryContextAssets(@Param("tenantId") String tenantId,
                                              @Param("ownerUserId") String ownerUserId,
                                              @Param("sessionId") String sessionId,
+                                             @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
                                              @Param("visibleThroughSequence") Integer visibleThroughSequence);
 
     /**

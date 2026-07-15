@@ -13,6 +13,7 @@ public final class ToolRuntimeContextKeys {
     public static final String RUN_ID = "runId";
     public static final String CONTEXT_REVISION = "contextRevision";
     public static final String CONTEXT_VISIBLE_THROUGH_SEQUENCE = "contextVisibleThroughSequence";
+    public static final String CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE = "contextAttachmentVisibleThroughSequence";
     public static final String CONTEXT_UPSTREAM_OUTPUT = "contextUpstreamOutput";
 
     /**

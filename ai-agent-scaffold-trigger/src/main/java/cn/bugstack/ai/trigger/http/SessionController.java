@@ -120,6 +120,7 @@ public class SessionController {
     private SessionSummaryResponseDTO toSummary(ChatSessionEntity session) {
         return SessionSummaryResponseDTO.builder().sessionId(session.getSessionId()).agentId(session.getAgentId())
                 .agentName(session.getAgentName()).appName(session.getAppName()).title(session.getTitle())
+                .sourceType(session.getSourceType()).workflowVersion(session.getWorkflowVersion()).modelCode(session.getModelCode())
                 .status(session.getStatus()).lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision()).build();
     }

@@ -17,7 +17,7 @@ public interface IWorkflowService {
     /**
      * 查询工作流列表；参数是租户ID；返回工作流列表。
      */
-    List<WorkflowEntity> queryWorkflowList(String tenantId);
+    List<WorkflowEntity> queryWorkflowList(String tenantId, String userId, String roleCode);
 
     /**
      * 创建工作流；参数是创建命令；返回工作流摘要。
@@ -27,7 +27,7 @@ public interface IWorkflowService {
     /**
      * 查询工作流详情；参数是租户和工作流ID；返回工作流详情。
      */
-    WorkflowDetailEntity queryWorkflowDetail(String tenantId, String workflowId);
+    WorkflowDetailEntity queryWorkflowDetail(String tenantId, String userId, String roleCode, String workflowId);
 
     /**
      * 保存工作流草稿；参数是保存命令；返回工作流详情。
@@ -50,5 +50,6 @@ public interface IWorkflowService {
     /**
      * 加载运行时；参数是租户、用户、工作流、版本和请求模型；返回运行时信息。
      */
-    WorkflowRuntimeEntity loadRuntime(String tenantId, String userId, String workflowId, Integer workflowVersion, String requestModelCode);
+    WorkflowRuntimeEntity loadRuntime(String tenantId, String userId, String roleCode, String workflowId,
+                                      Integer workflowVersion, String requestModelCode);
 }

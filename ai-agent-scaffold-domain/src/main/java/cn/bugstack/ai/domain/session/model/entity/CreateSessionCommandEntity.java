@@ -15,6 +15,12 @@ public class CreateSessionCommandEntity {
 
     private String agentName;
 
+    private String sourceType;
+
+    private Integer workflowVersion;
+
+    private String modelCode;
+
     private String appName;
 
     private String title;

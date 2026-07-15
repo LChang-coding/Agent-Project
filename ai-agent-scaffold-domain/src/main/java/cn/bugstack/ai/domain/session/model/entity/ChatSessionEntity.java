@@ -19,6 +19,15 @@ public class ChatSessionEntity {
 
     private String agentName;
 
+    /** 运行目标类型：agent/workflow。 */
+    private String sourceType;
+
+    /** 工作流实际运行版本；Agent 会话为空。 */
+    private Integer workflowVersion;
+
+    /** 工作流实际运行模型；Agent 会话为空。 */
+    private String modelCode;
+
     private String appName;
 
     private String title;

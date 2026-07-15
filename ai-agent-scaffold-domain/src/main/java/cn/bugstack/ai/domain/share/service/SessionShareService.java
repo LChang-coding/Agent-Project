@@ -139,7 +139,8 @@ public class SessionShareService {
     /** 复制导入分享；参数是接收者身份、令牌和风险确认；返回独立会话副本。 */
     public SessionShareResultEntity importCopy(String tenantId, String userId, String token,
                                                boolean confirmToolAccessRisk) {
-        SessionShareEntity share = resolveActive(token);
+        // 导入重试必须先定位分享；已完成的接收方导入不应被后续额度耗尽阻断。
+        SessionShareEntity share = resolve(token);
         SessionExportDocument document = readDocument(share);
         return inTransaction(() -> importTransactional(tenantId, userId, share, document, confirmToolAccessRisk));
     }
@@ -161,12 +162,12 @@ public class SessionShareService {
                                                           SessionExportDocument document,
                                                           boolean confirmToolAccessRisk) {
         SessionShareEntity share = shareRepository.lockByShareId(initial.getShareId());
-        assertActive(share);
         String scopeKey = sha256(((tenantId == null ? "" : tenantId) + ':' + userId).getBytes(StandardCharsets.UTF_8));
         SessionImportEntity existing = shareRepository.queryImport(share.getShareId(), scopeKey);
         if (existing != null) {
             return loadImported(tenantId, userId, existing.getNewSessionId(), share, document);
         }
+        assertActive(share);
         SessionToolPrecheckEntity precheck = precheck(tenantId, userId, document);
         if (Boolean.TRUE.equals(precheck.getHasRisk()) && !confirmToolAccessRisk) {
             throw new AppException("SHARE_TOOL_CONFIRM_REQUIRED", "接收方缺少部分会话工具权限，请确认风险后再导入");
@@ -178,6 +179,9 @@ public class SessionShareService {
         CreateSessionCommandEntity command = new CreateSessionCommandEntity();
         command.setTenantId(tenantId); command.setUserId(userId); command.setSessionId(sessionId);
         command.setAgentId(document.getSession().getAgentId()); command.setAgentName(document.getSession().getAgentName());
+        command.setSourceType(normalizeSourceType(document.getSession().getSourceType()));
+        command.setWorkflowVersion(document.getSession().getWorkflowVersion());
+        command.setModelCode(document.getSession().getModelCode());
         command.setAppName(document.getSession().getAppName()); command.setTitle(document.getSession().getTitle());
         ChatSessionEntity session = sessionDomain.createSession(command);
         for (SessionExportDocument.Message message : document.getMessages()) {
@@ -209,21 +213,29 @@ public class SessionShareService {
         List<SessionExportDocument.Message> exports = messages.stream().map(message -> SessionExportDocument.Message.builder()
                 .sequenceNo(message.getSequenceNo()).role(message.getRole()).contentType(message.getContentType())
                 .content(message.getContent()).createdAt(message.getCreateTime()).build()).toList();
-        String sourceType = session.getAgentId() != null && session.getAgentId().startsWith("wf_")
-                ? "workflow" : "agent";
+        String sourceType = normalizeSourceType(session.getSourceType());
         return SessionExportDocument.builder().schemaVersion(SCHEMA_VERSION).exportedAt(LocalDateTime.now())
                 .session(SessionExportDocument.Session.builder().title(session.getTitle()).agentId(session.getAgentId())
                         .agentName(session.getAgentName()).appName(session.getAppName()).sourceType(sourceType)
-                        .workflowId("workflow".equals(sourceType) ? session.getAgentId() : null).build())
+                        .workflowId("workflow".equals(sourceType) ? session.getAgentId() : null)
+                        .workflowVersion(session.getWorkflowVersion()).modelCode(session.getModelCode()).build())
                 .messages(exports).toolDependencies(dependencies == null ? List.of() : dependencies).build();
     }
 
     private SessionShareEntity resolveActive(String token) {
+        SessionShareEntity share = resolve(token);
+        assertActive(share);
+        return share;
+    }
+
+    private SessionShareEntity resolve(String token) {
         if (token == null || token.length() < 32 || token.length() > 256) {
             throw new AppException("CHAT_SHARE_TOKEN_INVALID", "分享令牌不合法");
         }
         SessionShareEntity share = shareRepository.queryByTokenHash(sha256(token.getBytes(StandardCharsets.UTF_8)));
-        assertActive(share);
+        if (share == null) {
+            throw new AppException("CHAT_SHARE_NOT_FOUND", "分享不存在");
+        }
         return share;
     }
 
@@ -278,12 +290,11 @@ public class SessionShareService {
     private SessionShareResultEntity result(SessionShareEntity share, ChatSessionEntity session,
                                             List<ChatMessageEntity> messages, SessionExportDocument document) {
         SessionExportDocument.Session source = document.getSession();
-        String sourceType = blank(source.getSourceType())
-                ? (source.getAgentId() != null && source.getAgentId().startsWith("wf_") ? "workflow" : "agent")
-                : source.getSourceType();
+        String sourceType = normalizeSourceType(source.getSourceType());
         return SessionShareResultEntity.builder().share(share).session(session).messages(messages)
                 .sourceType(sourceType).workflowId(blank(source.getWorkflowId()) && "workflow".equals(sourceType)
                         ? source.getAgentId() : source.getWorkflowId())
+                .workflowVersion(source.getWorkflowVersion()).modelCode(source.getModelCode())
                 .sourceAgentId(source.getAgentId()).sourceAgentName(source.getAgentName())
                 .sourceAppName(source.getAppName())
                 .toolDependencies(dependencies(document))
@@ -324,6 +335,10 @@ public class SessionShareService {
     }
 
     private boolean blank(String value) { return value == null || value.isBlank(); }
+
+    private String normalizeSourceType(String sourceType) {
+        return "workflow".equals(sourceType) ? "workflow" : "agent";
+    }
 
     private byte[] serialize(SessionExportDocument document) {
         try { return objectMapper.writeValueAsBytes(document); }

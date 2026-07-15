@@ -106,6 +106,8 @@
         COUNT(*) AS call_count,
         COALESCE(SUM(CASE WHEN call_status='success' THEN 1 ELSE 0 END), 0) AS success_count,
         COALESCE(SUM(CASE WHEN call_status='failed' THEN 1 ELSE 0 END), 0) AS failed_count,
+        COALESCE(SUM(CASE WHEN call_status='running' THEN 1 ELSE 0 END), 0) AS running_count,
+        COALESCE(SUM(CASE WHEN call_status='cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_count,
         COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
         COALESCE(SUM(candidate_tokens), 0) AS candidate_tokens,
         COALESCE(SUM(total_tokens), 0) AS total_tokens,

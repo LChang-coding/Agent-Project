@@ -10,6 +10,8 @@ public class ModelUsageSummaryPO {
     private Long callCount;
     private Long successCount;
     private Long failedCount;
+    private Long runningCount;
+    private Long cancelledCount;
     private Long promptTokens;
     private Long candidateTokens;
     private Long totalTokens;

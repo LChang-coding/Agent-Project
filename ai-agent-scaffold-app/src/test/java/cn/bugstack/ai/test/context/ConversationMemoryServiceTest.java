@@ -14,6 +14,8 @@ import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
 import cn.bugstack.ai.domain.context.model.ContextCompactionCommand;
 import cn.bugstack.ai.domain.context.model.ContextCompactionTaskEntity;
 import cn.bugstack.ai.domain.context.model.ContextCompactionTaskStatus;
+import cn.bugstack.ai.domain.context.model.ContextContribution;
+import cn.bugstack.ai.domain.context.model.ContextFragmentType;
 import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
 import cn.bugstack.ai.domain.context.model.ContextTaskCreateCommand;
 import cn.bugstack.ai.domain.context.model.ConversationMemorySnapshotEntity;
@@ -190,6 +192,32 @@ public class ConversationMemoryServiceTest {
         Assert.assertEquals(Integer.valueOf(0), command.expectedMemoryVersion());
     }
 
+    @Test
+    public void shouldCompressAttachmentAndExcludeItAfterSummaryCoversRange() {
+        FakeMemoryRepository memory = new FakeMemoryRepository();
+        FakeTaskRepository tasks = new FakeTaskRepository();
+        FakeHistoryRepository history = new FakeHistoryRepository();
+        history.messages.add(message(1, "user", "请阅读附件", 5));
+        history.messages.add(message(2, "assistant", "收到", 5));
+        RecordingAttachmentContributor attachments = new RecordingAttachmentContributor();
+        RecordingCompressionPort compression = new RecordingCompressionPort();
+        FakeArmoryFactory armory = new FakeArmoryFactory();
+        armory.register("agent_1", AiAgentRegisterVO.builder().chatModel(Mockito.mock(ChatModel.class)).build());
+        FixedSessionDomain sessions = new FixedSessionDomain(ChatSessionEntity.builder().tenantId("tenant_1")
+                .userId("user_1").sessionId("session_1").agentId("agent_1").contextRevision(0L).build());
+        ConversationMemoryService service = new ConversationMemoryService(memory, tasks, history,
+                new FakeCacheRepository(), new FakePublisher(), compression, List.of(attachments), properties(),
+                new ObjectMapper(), sessions, new StaticObjectProvider(armory), null);
+
+        Assert.assertTrue(service.compactSynchronously("tenant_1", "user_1", "session_1", 2, "trace_1"));
+        Assert.assertTrue(compression.prompt.contains("附件中的关键约束"));
+        ContextAssemblyResult after = service.assemble(ContextAssembleRequest.builder().tenantId("tenant_1")
+                .userId("user_1").sessionId("session_1").visibleThroughSequence(2)
+                .attachmentVisibleThroughSequence(2).build());
+        Assert.assertFalse(after.getInstruction().contains("<attachments>"));
+        Assert.assertEquals(Integer.valueOf(2), after.getCoveredToSequence());
+    }
+
     private static ChatMessageEntity message(int sequence, String role, String content, int tokens) {
         return ChatMessageEntity.builder()
                 .tenantId("tenant_1")
@@ -257,6 +285,35 @@ public class ConversationMemoryServiceTest {
         @Override
         public ChatSessionEntity lockSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
             return session;
+        }
+
+        @Override
+        public long incrementContextRevision(String tenantId, String userId, String sessionId) {
+            long next = session.getContextRevision() == null ? 1L : session.getContextRevision() + 1L;
+            session.setContextRevision(next);
+            return next;
+        }
+    }
+
+    private static class RecordingAttachmentContributor implements ContextContributor {
+        @Override
+        public List<ContextContribution> contribute(ContextAssembleRequest request, ContextPolicyProperties properties) {
+            int from = request.getCoveredToSequence() == null ? 0 : request.getCoveredToSequence();
+            int to = request.getAttachmentVisibleThroughSequence() == null ? 0 : request.getAttachmentVisibleThroughSequence();
+            return from < 1 && to >= 1
+                    ? List.of(ContextContribution.builder().type(ContextFragmentType.ATTACHMENT)
+                    .content("<attachments>附件中的关键约束</attachments>").source("test").build())
+                    : List.of();
+        }
+    }
+
+    private static class RecordingCompressionPort implements ContextCompressionPort {
+        private String prompt = "";
+
+        @Override
+        public String compress(ChatModel chatModel, String prompt) {
+            this.prompt = prompt;
+            return "{\"conversationSummary\":\"已吸收附件约束\",\"confirmedDecisions\":[],\"constraints\":[],\"openItems\":[],\"keyEntities\":[]}";
         }
     }
 
@@ -343,9 +400,12 @@ public class ConversationMemoryServiceTest {
                     .fromSequence(command.getFromSequence())
                     .toSequence(command.getToSequence())
                     .expectedMemoryVersion(command.getExpectedMemoryVersion())
+                    .baseContextRevision(command.getBaseContextRevision())
+                    .coverageHash(command.getCoverageHash())
                     .policyVersion(command.getPolicyVersion())
                     .status(ContextCompactionTaskStatus.PENDING)
                     .attemptCount(0)
+                    .fencingToken(0L)
                     .traceId(command.getTraceId())
                     .build();
             return task;
@@ -368,11 +428,14 @@ public class ConversationMemoryServiceTest {
 
         @Override
         public boolean claim(String taskId) {
+            task.setStatus(ContextCompactionTaskStatus.PROCESSING);
+            task.setFencingToken(task.getFencingToken() == null ? 1L : task.getFencingToken() + 1L);
             return true;
         }
 
         @Override
         public int complete(String taskId) {
+            task.setStatus(ContextCompactionTaskStatus.SUCCEEDED);
             return 1;
         }
 

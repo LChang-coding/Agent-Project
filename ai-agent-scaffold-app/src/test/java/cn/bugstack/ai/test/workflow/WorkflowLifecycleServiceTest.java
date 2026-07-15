@@ -12,9 +12,60 @@ import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** 工作流写权限、活动运行冲突和软删除测试。 */
 public class WorkflowLifecycleServiceTest {
+
+    @Test
+    public void shouldOnlyExposeReadableWorkflowsToMember() {
+        IWorkflowRepository workflows = Mockito.mock(IWorkflowRepository.class);
+        WorkflowDomainService service = service(workflows, Mockito.mock(IChatRunRepository.class));
+        Mockito.when(workflows.queryWorkflowList("tenant-1")).thenReturn(List.of(
+                workflow("wf-owned", "member-1", "private"),
+                workflow("wf-public", "owner-2", "tenant_public"),
+                workflow("wf-private", "owner-2", "private")));
+
+        List<String> visibleIds = service.queryWorkflowList("tenant-1", "member-1", "member").stream()
+                .map(WorkflowEntity::getWorkflowId)
+                .collect(Collectors.toList());
+
+        Assert.assertEquals(List.of("wf-owned", "wf-public"), visibleIds);
+        Assert.assertEquals(3, service.queryWorkflowList("tenant-1", "admin-1", "admin").size());
+    }
+
+    @Test
+    public void shouldHidePrivateWorkflowFromDetailAndRuntimeBeforeVersionLookup() {
+        IWorkflowRepository workflows = Mockito.mock(IWorkflowRepository.class);
+        WorkflowDomainService service = service(workflows, Mockito.mock(IChatRunRepository.class));
+        Mockito.when(workflows.queryWorkflow("tenant-1", "wf-private"))
+                .thenReturn(workflow("wf-private", "owner-1", "private"));
+
+        assertNotFound(() -> service.queryWorkflowDetail("tenant-1", "other", "member", "wf-private"));
+        assertNotFound(() -> service.loadRuntime("tenant-1", "other", "member", "wf-private", null, null));
+
+        Mockito.verify(workflows, Mockito.never())
+                .queryLatestPublished(Mockito.anyString(), Mockito.anyString());
+        Mockito.verify(workflows, Mockito.never())
+                .queryVersion(Mockito.anyString(), Mockito.anyString(), Mockito.anyInt());
+    }
+
+    @Test
+    public void shouldAllowOwnerAdminAndTenantPublicDetail() {
+        IWorkflowRepository workflows = Mockito.mock(IWorkflowRepository.class);
+        WorkflowDomainService service = service(workflows, Mockito.mock(IChatRunRepository.class));
+        WorkflowEntity privateWorkflow = workflow("wf-private", "owner-1", "private");
+        WorkflowEntity publicWorkflow = workflow("wf-public", "owner-2", "tenant_public");
+        Mockito.when(workflows.queryWorkflow("tenant-1", "wf-private")).thenReturn(privateWorkflow);
+        Mockito.when(workflows.queryWorkflow("tenant-1", "wf-public")).thenReturn(publicWorkflow);
+
+        Assert.assertSame(privateWorkflow,
+                service.queryWorkflowDetail("tenant-1", "owner-1", "member", "wf-private").getWorkflow());
+        Assert.assertSame(privateWorkflow,
+                service.queryWorkflowDetail("tenant-1", "admin-1", "admin", "wf-private").getWorkflow());
+        Assert.assertSame(publicWorkflow,
+                service.queryWorkflowDetail("tenant-1", "member-2", "member", "wf-public").getWorkflow());
+    }
 
     @Test
     public void shouldSoftDeleteOwnedWorkflowAndKeepHistoryOutsideService() {
@@ -62,7 +113,21 @@ public class WorkflowLifecycleServiceTest {
     }
 
     private WorkflowEntity workflow(String owner) {
-        return WorkflowEntity.builder().tenantId("tenant-1").ownerUserId(owner).workflowId("wf-1")
-                .workflowName("测试工作流").status("published").build();
+        return workflow("wf-1", owner, "private");
+    }
+
+    private WorkflowEntity workflow(String workflowId, String owner, String visibility) {
+        return WorkflowEntity.builder().tenantId("tenant-1").ownerUserId(owner).workflowId(workflowId)
+                .visibility(visibility).workflowName("测试工作流").status("published").build();
+    }
+
+    private void assertNotFound(Runnable action) {
+        try {
+            action.run();
+            Assert.fail("私有工作流应对非授权用户隐藏");
+        } catch (AppException e) {
+            Assert.assertEquals("0002", e.getCode());
+            Assert.assertEquals("工作流不存在", e.getInfo());
+        }
     }
 }

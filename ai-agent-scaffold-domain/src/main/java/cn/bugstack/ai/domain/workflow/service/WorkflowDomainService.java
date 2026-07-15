@@ -37,6 +37,7 @@ public class WorkflowDomainService implements IWorkflowService {
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_PUBLISHED = "published";
     private static final String VISIBILITY_PRIVATE = "private";
+    private static final String VISIBILITY_TENANT_PUBLIC = "tenant_public";
 
     @Resource
     private IWorkflowRepository workflowRepository;
@@ -59,9 +60,12 @@ public class WorkflowDomainService implements IWorkflowService {
      * 查询工作流列表；参数是租户ID；返回工作流列表。
      */
     @Override
-    public List<WorkflowEntity> queryWorkflowList(String tenantId) {
+    public List<WorkflowEntity> queryWorkflowList(String tenantId, String userId, String roleCode) {
         checkTenant(tenantId);
-        return workflowRepository.queryWorkflowList(tenantId);
+        checkUser(userId);
+        return workflowRepository.queryWorkflowList(tenantId).stream()
+                .filter(workflow -> isReadable(workflow, userId, roleCode))
+                .toList();
     }
 
     /**
@@ -103,8 +107,9 @@ public class WorkflowDomainService implements IWorkflowService {
      * 查询工作流详情；参数是租户和工作流ID；返回工作流详情。
      */
     @Override
-    public WorkflowDetailEntity queryWorkflowDetail(String tenantId, String workflowId) {
-        WorkflowEntity workflow = requireWorkflow(tenantId, workflowId);
+    public WorkflowDetailEntity queryWorkflowDetail(String tenantId, String userId, String roleCode, String workflowId) {
+        checkUser(userId);
+        WorkflowEntity workflow = requireReadableWorkflow(tenantId, userId, roleCode, workflowId);
         WorkflowVersionEntity version = workflowRepository.queryLatestDraft(tenantId, workflowId);
         if (version == null) {
             version = workflowRepository.queryLatestPublished(tenantId, workflowId);
@@ -146,7 +151,7 @@ public class WorkflowDomainService implements IWorkflowService {
         workflowRepository.updateWorkflow(workflow);
         runtimeCache.keySet().removeIf(key -> key.contains(":" + command.getWorkflowId() + ":"));
         AiLog.info(AiLog.workflow().draftSaved(command.getTenantId(), command.getUserId(), command.getWorkflowId(), draft.getVersion()));
-        return queryWorkflowDetail(command.getTenantId(), command.getWorkflowId());
+        return queryWorkflowDetail(command.getTenantId(), command.getUserId(), command.getRoleCode(), command.getWorkflowId());
     }
 
     /**
@@ -197,10 +202,11 @@ public class WorkflowDomainService implements IWorkflowService {
      * 加载运行时；参数是租户、用户、工作流、版本和请求模型；返回运行时信息。
      */
     @Override
-    public WorkflowRuntimeEntity loadRuntime(String tenantId, String userId, String workflowId, Integer workflowVersion, String requestModelCode) {
+    public WorkflowRuntimeEntity loadRuntime(String tenantId, String userId, String roleCode, String workflowId,
+                                             Integer workflowVersion, String requestModelCode) {
         checkTenant(tenantId);
         checkUser(userId);
-        WorkflowEntity workflow = requireWorkflow(tenantId, workflowId);
+        WorkflowEntity workflow = requireReadableWorkflow(tenantId, userId, roleCode, workflowId);
         if (!STATUS_PUBLISHED.equals(workflow.getStatus())) {
             throw new AppException("WORKFLOW_NOT_RUNNABLE", "工作流未发布或已停用");
         }
@@ -292,6 +298,28 @@ public class WorkflowDomainService implements IWorkflowService {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流不存在");
         }
         return workflow;
+    }
+
+    /** 查询可读工作流；无权访问时与不存在返回相同错误，避免泄露私有工作流。 */
+    private WorkflowEntity requireReadableWorkflow(String tenantId, String userId, String roleCode, String workflowId) {
+        WorkflowEntity workflow = requireWorkflow(tenantId, workflowId);
+        if (!isReadable(workflow, userId, roleCode)) {
+            throw workflowNotFound();
+        }
+        return workflow;
+    }
+
+    /** 判断工作流是否可读：本人、租户 owner/admin 或租户公开。 */
+    private boolean isReadable(WorkflowEntity workflow, String userId, String roleCode) {
+        if (workflow == null) return false;
+        boolean owner = userId != null && userId.equals(workflow.getOwnerUserId());
+        boolean admin = "owner".equalsIgnoreCase(roleCode) || "admin".equalsIgnoreCase(roleCode);
+        boolean tenantPublic = VISIBILITY_TENANT_PUBLIC.equalsIgnoreCase(workflow.getVisibility());
+        return owner || admin || tenantPublic;
+    }
+
+    private AppException workflowNotFound() {
+        return new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流不存在");
     }
 
     private void assertWritable(WorkflowEntity workflow, String userId, String roleCode) {

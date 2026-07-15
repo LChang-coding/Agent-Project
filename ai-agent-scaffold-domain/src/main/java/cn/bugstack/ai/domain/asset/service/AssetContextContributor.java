@@ -11,7 +11,9 @@ import cn.bugstack.ai.domain.context.service.CharacterTokenCounter;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 聊天附件上下文贡献器。
@@ -34,13 +36,23 @@ public class AssetContextContributor implements ContextContributor {
                 || properties == null || properties.getAttachmentTokens() <= 0) {
             return List.of();
         }
+        Integer attachmentVisibleThrough = request.getAttachmentVisibleThroughSequence() == null
+                ? request.getVisibleThroughSequence() : request.getAttachmentVisibleThroughSequence();
         List<AssetEntity> assets = repository.queryContextAssets(request.getTenantId(), request.getUserId(),
-                request.getSessionId(), request.getVisibleThroughSequence());
+                request.getSessionId(), request.getCoveredToSequence(), attachmentVisibleThrough);
         List<String> sections = new ArrayList<>();
+        Set<String> contentHashes = new HashSet<>();
         CharacterTokenCounter tokenCounter = new CharacterTokenCounter();
-        int remainingTokens = properties.getAttachmentTokens();
+        String containerPrefix = "<attachments>\n";
+        String containerSuffix = "\n</attachments>";
+        int remainingTokens = properties.getAttachmentTokens()
+                - tokenCounter.estimate(containerPrefix + containerSuffix);
+        if (remainingTokens <= 0) return List.of();
         for (AssetEntity asset : assets) {
             if (asset.getExtractedText() == null || asset.getExtractedText().isBlank()) continue;
+            String contentKey = isBlank(asset.getSha256()) ? "asset:" + safe(asset.getAssetId()) : "sha256:" + asset.getSha256();
+            // 查询按最近消息优先；相同内容只保留最近一次引用，避免重复注入和计费。
+            if (!contentHashes.add(contentKey)) continue;
             String prefix = "<attachment asset_id=\"" + safe(asset.getAssetId()) + "\" file_name=\""
                     + safe(asset.getFileName()) + "\">\n";
             String suffix = "\n</attachment>";
@@ -57,7 +69,7 @@ public class AssetContextContributor implements ContextContributor {
         // 仓储按最近消息优先返回，渲染时恢复时间正序，兼顾预算与可读性。
         java.util.Collections.reverse(sections);
         return List.of(ContextContribution.builder().type(ContextFragmentType.ATTACHMENT)
-                .content("<attachments>\n" + String.join("\n", sections) + "\n</attachments>")
+                .content(containerPrefix + String.join("\n", sections) + containerSuffix)
                 .source("chat_attachment").build());
     }
 

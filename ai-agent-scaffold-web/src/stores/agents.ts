@@ -78,7 +78,7 @@ export const useAgentManagementStore = defineStore('agent-management', {
       this.mutatingAgentId = agent.agentId;
       this.errorMessage = '';
       try {
-        const result = await deleteAgentConfig(agent.agentId);
+        const result = await deleteAgentConfig(agent.agentId, agent.revision);
         this.applyMutation(agent.agentId, result.status, result.revision);
         return true;
       } catch (error) {

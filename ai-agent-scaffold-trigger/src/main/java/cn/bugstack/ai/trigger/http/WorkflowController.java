@@ -56,7 +56,8 @@ public class WorkflowController implements IWorkflowApiService {
     @GetMapping
     public Response<List<WorkflowResponseDTO>> queryWorkflowList() {
         try {
-            List<WorkflowResponseDTO> data = workflowService.queryWorkflowList(currentTenantId())
+            List<WorkflowResponseDTO> data = workflowService.queryWorkflowList(
+                            currentTenantId(), currentUserId(), TenantContextHolder.getRoleCode())
                     .stream()
                     .map(this::toWorkflowResponse)
                     .collect(Collectors.toList());
@@ -101,7 +102,8 @@ public class WorkflowController implements IWorkflowApiService {
     @GetMapping("/{workflowId}")
     public Response<WorkflowDetailResponseDTO> queryWorkflowDetail(@PathVariable String workflowId) {
         try {
-            return success(toDetailResponse(workflowService.queryWorkflowDetail(currentTenantId(), workflowId)));
+            return success(toDetailResponse(workflowService.queryWorkflowDetail(
+                    currentTenantId(), currentUserId(), TenantContextHolder.getRoleCode(), workflowId)));
         } catch (AppException e) {
             log.error("查询工作流详情异常 workflowId:{}", workflowId, e);
             return fail(e);

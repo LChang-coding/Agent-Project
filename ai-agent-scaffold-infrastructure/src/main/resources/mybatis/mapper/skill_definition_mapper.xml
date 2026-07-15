@@ -65,6 +65,13 @@
         ORDER BY id DESC
     </select>
 
+    <select id="queryListByTenantIdAndOwnerUserId" resultMap="SkillDefinitionMap">
+        SELECT <include refid="SkillDefinitionColumns"/>
+        FROM skill_definition
+        WHERE tenant_id = #{tenantId} AND owner_user_id = #{ownerUserId} AND deleted = 0
+        ORDER BY id DESC
+    </select>
+
     <select id="queryListByTenantIdAndVisibility" resultMap="SkillDefinitionMap">
         SELECT <include refid="SkillDefinitionColumns"/>
         FROM skill_definition

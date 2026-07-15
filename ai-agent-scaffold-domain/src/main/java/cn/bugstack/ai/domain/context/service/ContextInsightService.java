@@ -69,7 +69,7 @@ public class ContextInsightService {
         ContextCompactionTaskEntity latestTask = taskRepository.queryLatest(session.getTenantId(),
                 session.getUserId(), session.getSessionId());
         int attachmentCount = assetRepository.queryContextAssets(session.getTenantId(), session.getUserId(),
-                session.getSessionId(), visibleThrough).size();
+                session.getSessionId(), assembly.getCoveredToSequence(), visibleThrough).size();
         return ContextInsightEntity.builder().sessionId(sessionId).contextRevision(session.getContextRevision())
                 .modelWindowTokens(window).effectiveTokens(effectiveTokens)
                 .utilization(window <= 0 ? 0D : Math.min(1D, (double) effectiveTokens / window))

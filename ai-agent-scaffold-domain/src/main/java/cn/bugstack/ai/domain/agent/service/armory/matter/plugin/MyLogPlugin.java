@@ -80,7 +80,12 @@ public class MyLogPlugin extends LoggingPlugin {
                                 llmResponse.turnComplete().orElse(null))));
                     }
 
-                    if (!llmResponse.partial().orElse(false)) {
+                    if (llmResponse.partial().orElse(false)) {
+                        // 部分响应若携带供应商累计 usage，先单调落库；取消/失败时仍可保留已消耗 Token。
+                        if (usageMetadata != null) {
+                            recordUsage(callbackContext, llmResponse, modelVersion, usageMetadata, "running", null);
+                        }
+                    } else {
                         recordUsage(callbackContext, llmResponse, modelVersion, usageMetadata, "success", null);
                         finishCall(callbackContext);
                     }

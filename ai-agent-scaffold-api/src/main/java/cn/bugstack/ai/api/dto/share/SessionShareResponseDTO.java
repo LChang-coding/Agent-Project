@@ -32,6 +32,8 @@ public class SessionShareResponseDTO {
     private Integer formatVersion;
     private String sourceType;
     private String workflowId;
+    private Integer workflowVersion;
+    private String modelCode;
     private Boolean legacySnapshot;
     private List<ToolDependency> toolDependencies;
     private ToolPrecheck toolPrecheck;

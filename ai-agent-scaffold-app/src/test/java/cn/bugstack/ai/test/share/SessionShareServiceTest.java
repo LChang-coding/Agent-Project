@@ -63,11 +63,37 @@ public class SessionShareServiceTest {
     }
 
     @Test
+    public void shouldExportWorkflowRuntimeTargetFacts() {
+        SessionDomain sessions = mock(SessionDomain.class);
+        ISessionShareRepository repository = mock(ISessionShareRepository.class);
+        ObjectStorageService storage = mock(ObjectStorageService.class);
+        when(storage.assetBucket()).thenReturn("assets");
+        when(repository.insertShare(any())).thenReturn(1);
+        ChatSessionEntity workflowSession = session("session", "owner");
+        workflowSession.setAgentId("wf_1");
+        workflowSession.setSourceType("workflow");
+        workflowSession.setWorkflowVersion(7);
+        workflowSession.setModelCode("gemini-2.5-pro");
+        when(sessions.assertSessionAccess("tenant", "owner", "session", null)).thenReturn(workflowSession);
+        when(sessions.queryValidMessages("tenant", "owner", "session")).thenReturn(List.of());
+
+        service(sessions, repository, storage).create("tenant", "owner", "session", 24, 3);
+
+        ArgumentCaptor<ObjectStorageCommandEntity> captor = ArgumentCaptor.forClass(ObjectStorageCommandEntity.class);
+        verify(storage).putObject(captor.capture());
+        String json = new String(captor.getValue().getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        Assert.assertTrue(json.contains("\"sourceType\":\"workflow\""));
+        Assert.assertTrue(json.contains("\"workflowVersion\":7"));
+        Assert.assertTrue(json.contains("\"modelCode\":\"gemini-2.5-pro\""));
+    }
+
+    @Test
     public void shouldReturnExistingImportWithoutConsumingAgain() throws Exception {
         SessionDomain sessions = mock(SessionDomain.class);
         ISessionShareRepository repository = mock(ISessionShareRepository.class);
         ObjectStorageService storage = mock(ObjectStorageService.class);
         SessionShareEntity share = share();
+        share.setDownloadCount(share.getMaxDownloads());
         byte[] bytes = exportBytes();
         share.setContentSha256(sha256(bytes));
         when(repository.queryByTokenHash(any())).thenReturn(share);

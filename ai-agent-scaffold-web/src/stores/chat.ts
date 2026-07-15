@@ -175,15 +175,7 @@ export const useChatStore = defineStore('chat', {
       const auth = useAuthStore();
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
-      this.messages = [
-        {
-          id: createId(),
-          role: 'system',
-          content: '新会话已创建，后端会按当前 JWT 身份隔离租户和用户。',
-          createdAt: new Date().toISOString(),
-          status: 'done',
-        },
-      ];
+      this.messages = [];
       this.saveCurrentSession('新会话');
       return result.sessionId;
     },
@@ -196,7 +188,6 @@ export const useChatStore = defineStore('chat', {
         return;
       }
       await this.cancelActiveRun('切换会话');
-      const generation = ++sessionSwitchGeneration;
       const session = this.sessions.find((item) => item.sessionId === sessionId);
       if (!session) {
         return;
@@ -210,7 +201,15 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = session.sessionId;
       this.contextRevision = session.contextRevision || 0;
+      await this.reloadSessionMessages(sessionId);
+    },
+
+    /**
+     * 重新读取当前数据库会话的有效消息；参数是会话 ID；不受同会话切换短路影响。
+     */
+    async reloadSessionMessages(sessionId: string) {
       try {
+        const generation = ++sessionSwitchGeneration;
         const pages = [];
         let beforeSequence: number | undefined;
         do {
@@ -230,7 +229,7 @@ export const useChatStore = defineStore('chat', {
         }));
         this.errorMessage = '';
       } catch (error) {
-        if (generation === sessionSwitchGeneration) {
+        if (this.sessionId === sessionId) {
           this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
         }
       }
@@ -248,11 +247,11 @@ export const useChatStore = defineStore('chat', {
       }
       const workflowId = imported.workflowId || (imported.sourceType === 'workflow' ? imported.agentId : undefined);
       const workflow = this.workflows.find((item) => item.workflowId === workflowId);
-      const sourceType: 'agent' | 'workflow' = imported.sourceType || (workflow ? 'workflow' : 'agent');
+      const sourceType: 'agent' | 'workflow' = imported.sourceType || 'agent';
       this.activeSourceType = sourceType;
       if (sourceType === 'workflow') {
         this.activeWorkflowId = workflowId || '';
-        this.activeModelCode = workflow?.defaultModelCode || this.activeModelCode;
+        this.activeModelCode = imported.modelCode || workflow?.defaultModelCode || this.activeModelCode;
       } else {
         this.activeAgentId = imported.agentId || this.activeAgentId;
       }
@@ -263,6 +262,8 @@ export const useChatStore = defineStore('chat', {
         importedSession.agentId = sourceType === 'workflow' ? workflowId || importedSession.agentId : imported.agentId || importedSession.agentId;
         importedSession.workflowId = sourceType === 'workflow' ? workflowId : undefined;
         importedSession.workflowName = sourceType === 'workflow' ? imported.agentName : undefined;
+        importedSession.workflowVersion = sourceType === 'workflow' ? imported.workflowVersion : undefined;
+        importedSession.modelCode = sourceType === 'workflow' ? imported.modelCode : undefined;
       }
       await this.switchSession(imported.sessionId);
     },
@@ -427,6 +428,7 @@ export const useChatStore = defineStore('chat', {
       request.typewriter?.cancel();
       this.cancelling = true;
       cancelPromise = (async () => {
+        let cancelledOnServer = false;
         try {
           if (!request.runId && this.streaming) {
             await Promise.race([request.runReady, wait(1_500)]);
@@ -434,6 +436,7 @@ export const useChatStore = defineStore('chat', {
           if (request.runId) {
             const result = await cancelChatRun(request.runId, reason);
             this.contextRevision = result.contextRevision;
+            cancelledOnServer = true;
           }
         } catch (error) {
           this.errorMessage = error instanceof Error ? `取消请求失败：${error.message}` : '取消请求失败';
@@ -458,6 +461,9 @@ export const useChatStore = defineStore('chat', {
           this.sending = false;
           this.cancelling = false;
           this.currentRunId = '';
+          if (cancelledOnServer && request.sessionId && this.sessionId === request.sessionId) {
+            await this.reloadSessionMessages(request.sessionId);
+          }
         }
       })();
       try {
@@ -519,6 +525,7 @@ export const useChatStore = defineStore('chat', {
           }
           this.sending = false;
           this.cancelling = false;
+          await this.reloadSessionMessages(request.sessionId);
           void this.send(normalizedInstruction, successor.runId);
           return true;
         } catch (error) {
@@ -643,15 +650,19 @@ export const useChatStore = defineStore('chat', {
           cursor = page.hasMore ? page.nextCursor : undefined;
         } while (cursor);
         this.sessions = rows.map((session) => {
-          const workflow = this.workflows.find((item) => item.workflowId === session.agentId);
+          const sourceType: 'agent' | 'workflow' = session.sourceType === 'workflow' ? 'workflow' : 'agent';
+          const workflow = sourceType === 'workflow'
+            ? this.workflows.find((item) => item.workflowId === session.agentId)
+            : undefined;
           return {
             sessionId: session.sessionId,
             agentId: session.agentId,
             agentName: workflow?.workflowName || session.agentName,
-            sourceType: workflow ? 'workflow' : 'agent',
-            workflowId: workflow?.workflowId,
-            workflowName: workflow?.workflowName,
-            modelCode: workflow?.defaultModelCode,
+            sourceType,
+            workflowId: sourceType === 'workflow' ? session.agentId : undefined,
+            workflowName: sourceType === 'workflow' ? workflow?.workflowName : undefined,
+            workflowVersion: sourceType === 'workflow' ? session.workflowVersion : undefined,
+            modelCode: sourceType === 'workflow' ? session.modelCode || workflow?.defaultModelCode : undefined,
             title: session.title,
             updatedAt: session.lastMessageTime,
             contextRevision: session.contextRevision,
@@ -715,12 +726,13 @@ export const useChatStore = defineStore('chat', {
         sourceType: this.activeSourceType,
         workflowId: this.activeSourceType === 'workflow' ? this.activeWorkflowId : undefined,
         workflowName: this.activeSourceType === 'workflow' ? runtimeName : undefined,
+        workflowVersion: this.activeSourceType === 'workflow' ? activeWorkflow?.publishedVersion : undefined,
         modelCode: this.activeSourceType === 'workflow' ? this.activeModelCode : undefined,
         title: compactTitle(title),
         updatedAt: new Date().toISOString(),
         contextRevision: this.contextRevision,
       };
-      const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)].slice(0, 30);
+      const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)];
       this.sessions = nextSessions;
     },
 
@@ -736,9 +748,10 @@ export const useChatStore = defineStore('chat', {
     ): ChatRequest {
       if (this.activeSourceType === 'workflow') {
         const workflow = this.activeWorkflow;
+        const session = this.sessions.find((item) => item.sessionId === this.sessionId);
         return {
           workflowId: this.activeWorkflowId,
-          workflowVersion: workflow?.publishedVersion || undefined,
+          workflowVersion: workflow?.publishedVersion || session?.workflowVersion,
           modelCode: this.activeModelCode,
           userId,
           sessionId: this.sessionId,

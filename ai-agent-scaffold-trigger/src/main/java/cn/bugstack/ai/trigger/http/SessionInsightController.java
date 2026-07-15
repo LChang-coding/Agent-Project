@@ -127,6 +127,7 @@ public class SessionInsightController {
         }
         return ModelUsageResponseDTO.Summary.builder().callCount(value.getCallCount())
                 .successCount(value.getSuccessCount()).failedCount(value.getFailedCount())
+                .runningCount(value.getRunningCount()).cancelledCount(value.getCancelledCount())
                 .promptTokens(value.getPromptTokens()).candidateTokens(value.getCandidateTokens())
                 .totalTokens(value.getTotalTokens()).thoughtsTokens(value.getThoughtsTokens())
                 .toolUsePromptTokens(value.getToolUsePromptTokens()).build();

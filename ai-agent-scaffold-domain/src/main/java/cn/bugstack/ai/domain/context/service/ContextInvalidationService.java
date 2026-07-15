@@ -43,7 +43,7 @@ public class ContextInvalidationService {
         if (runMessages == null || runMessages.isEmpty()) {
             taskRepository.staleOverlapping(tenantId, userId, sessionId, runId,
                     Integer.MAX_VALUE, Integer.MIN_VALUE, reason);
-            cacheRepository.evictSession(tenantId, userId, sessionId);
+            evictAfterCommit(tenantId, userId, sessionId);
             return;
         }
         int minSequence = runMessages.stream().map(ChatMessageEntity::getSequenceNo).filter(value -> value != null)
@@ -54,7 +54,7 @@ public class ContextInvalidationService {
             taskRepository.staleOverlapping(tenantId, userId, sessionId, runId, minSequence, maxSequence, reason);
             memoryRepository.invalidateCoveringAndRestore(tenantId, userId, sessionId, minSequence);
         }
-        cacheRepository.evictSession(tenantId, userId, sessionId);
+        evictAfterCommit(tenantId, userId, sessionId);
     }
 
     /**

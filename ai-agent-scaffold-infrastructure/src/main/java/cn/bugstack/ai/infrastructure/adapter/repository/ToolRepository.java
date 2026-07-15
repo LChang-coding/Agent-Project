@@ -226,7 +226,8 @@ public class ToolRepository implements IToolRepository {
     @Override
     public List<SkillDefinitionEntity> querySkillDefinitions(String tenantId, String userId, String scope) {
         if ("mine".equalsIgnoreCase(scope)) {
-            return skillDefinitionDao.queryListByOwnerUserId(userId).stream().map(this::toSkillEntity).collect(Collectors.toList());
+            return skillDefinitionDao.queryListByTenantIdAndOwnerUserId(tenantId, userId).stream()
+                    .map(this::toSkillEntity).collect(Collectors.toList());
         }
         if ("tenant".equalsIgnoreCase(scope)) {
             return skillDefinitionDao.queryListByTenantIdAndVisibility(tenantId, ToolVisibility.TENANT_PUBLIC).stream().map(this::toSkillEntity).collect(Collectors.toList());
@@ -240,7 +241,8 @@ public class ToolRepository implements IToolRepository {
     @Override
     public List<McpDefinitionEntity> queryMcpDefinitions(String tenantId, String userId, String scope) {
         if ("mine".equalsIgnoreCase(scope)) {
-            return mcpServerConfigDao.queryListByOwnerUserId(userId).stream().map(this::toMcpEntity).collect(Collectors.toList());
+            return mcpServerConfigDao.queryListByTenantIdAndOwnerUserId(tenantId, userId).stream()
+                    .map(this::toMcpEntity).collect(Collectors.toList());
         }
         if ("tenant".equalsIgnoreCase(scope)) {
             return mcpServerConfigDao.queryListByTenantIdAndVisibility(tenantId, ToolVisibility.TENANT_PUBLIC).stream().map(this::toMcpEntity).collect(Collectors.toList());
@@ -330,7 +332,7 @@ public class ToolRepository implements IToolRepository {
      */
     private List<SkillDefinitionEntity> availableSkills(String tenantId, String userId) {
         Map<String, SkillDefinitionEntity> map = new LinkedHashMap<>();
-        skillDefinitionDao.queryListByOwnerUserId(userId).stream()
+        skillDefinitionDao.queryListByTenantIdAndOwnerUserId(tenantId, userId).stream()
                 .filter(item -> ToolStatus.ACTIVE.equals(item.getStatus()))
                 .map(this::toSkillEntity)
                 .forEach(item -> map.put(item.getSkillId(), item));
@@ -346,7 +348,7 @@ public class ToolRepository implements IToolRepository {
      */
     private List<McpDefinitionEntity> availableMcps(String tenantId, String userId) {
         Map<String, McpDefinitionEntity> map = new LinkedHashMap<>();
-        mcpServerConfigDao.queryListByOwnerUserId(userId).stream()
+        mcpServerConfigDao.queryListByTenantIdAndOwnerUserId(tenantId, userId).stream()
                 .filter(item -> ToolStatus.ACTIVE.equals(item.getStatus()))
                 .map(this::toMcpEntity)
                 .forEach(item -> map.put(item.getMcpId(), item));

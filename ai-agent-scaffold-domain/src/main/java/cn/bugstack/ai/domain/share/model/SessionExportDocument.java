@@ -33,6 +33,8 @@ public class SessionExportDocument {
         private String appName;
         private String sourceType;
         private String workflowId;
+        private Integer workflowVersion;
+        private String modelCode;
     }
 
     @Data

@@ -82,7 +82,8 @@ public class ModelUsageRepository implements IModelUsageRepository {
             return null;
         }
         return ModelUsageSummaryEntity.builder().callCount(value.getCallCount()).successCount(value.getSuccessCount())
-                .failedCount(value.getFailedCount()).promptTokens(value.getPromptTokens())
+                .failedCount(value.getFailedCount()).runningCount(value.getRunningCount())
+                .cancelledCount(value.getCancelledCount()).promptTokens(value.getPromptTokens())
                 .candidateTokens(value.getCandidateTokens()).totalTokens(value.getTotalTokens())
                 .thoughtsTokens(value.getThoughtsTokens()).toolUsePromptTokens(value.getToolUsePromptTokens()).build();
     }

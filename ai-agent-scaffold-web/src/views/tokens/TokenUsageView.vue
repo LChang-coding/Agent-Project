@@ -24,10 +24,12 @@
     <section class="page-grid page-grid--two">
       <article class="card">
         <div class="card__body">
-          <SectionHeader title="调用结果" description="最近一天的成功与失败调用数。" :level="2" />
+          <SectionHeader title="调用结果" description="最近一天各运行状态的真实调用数。" :level="2" />
           <div class="usage-split">
             <div><span>成功</span><strong>{{ formatCount(summary?.successCount) }}</strong></div>
             <div><span>失败</span><strong>{{ formatCount(summary?.failedCount) }}</strong></div>
+            <div><span>已取消</span><strong>{{ formatCount(summary?.cancelledCount) }}</strong></div>
+            <div><span>运行中</span><strong>{{ formatCount(summary?.runningCount) }}</strong></div>
           </div>
         </div>
       </article>

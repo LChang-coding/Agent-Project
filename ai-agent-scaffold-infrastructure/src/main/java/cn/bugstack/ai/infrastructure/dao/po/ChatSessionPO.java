@@ -41,6 +41,21 @@ public class ChatSessionPO extends BasePO {
     private String agentName;
 
     /**
+     * 运行目标类型：agent/workflow
+     */
+    private String sourceType;
+
+    /**
+     * 工作流实际运行版本
+     */
+    private Integer workflowVersion;
+
+    /**
+     * 工作流实际运行模型
+     */
+    private String modelCode;
+
+    /**
      * 应用名称
      */
     private String appName;

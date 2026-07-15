@@ -134,6 +134,7 @@ export interface LocalChatSession {
   sourceType?: 'agent' | 'workflow';
   workflowId?: string;
   workflowName?: string;
+  workflowVersion?: number;
   modelCode?: string;
   title: string;
   updatedAt: string;
@@ -145,6 +146,9 @@ export interface SessionListPage {
     sessionId: string;
     agentId: string;
     agentName: string;
+    sourceType?: 'agent' | 'workflow';
+    workflowVersion?: number;
+    modelCode?: string;
     appName?: string;
     title: string;
     status: string;
@@ -240,6 +244,8 @@ export interface ModelUsageSummary {
   callCount: number;
   successCount: number;
   failedCount: number;
+  runningCount: number;
+  cancelledCount: number;
   promptTokens: number;
   candidateTokens: number;
   totalTokens: number;
@@ -301,6 +307,8 @@ export interface SessionShareResponse {
   formatVersion?: number;
   sourceType?: 'agent' | 'workflow';
   workflowId?: string;
+  workflowVersion?: number;
+  modelCode?: string;
   toolDependencies?: ShareToolDependency[];
   toolPrecheck?: ShareToolPrecheck;
   legacySnapshot?: boolean;

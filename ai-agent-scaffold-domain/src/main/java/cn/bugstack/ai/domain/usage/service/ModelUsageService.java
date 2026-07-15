@@ -81,6 +81,8 @@ public class ModelUsageService {
                 .callCount(value == null ? 0L : safe(value.getCallCount()))
                 .successCount(value == null ? 0L : safe(value.getSuccessCount()))
                 .failedCount(value == null ? 0L : safe(value.getFailedCount()))
+                .runningCount(value == null ? 0L : safe(value.getRunningCount()))
+                .cancelledCount(value == null ? 0L : safe(value.getCancelledCount()))
                 .promptTokens(value == null ? 0L : safe(value.getPromptTokens()))
                 .candidateTokens(value == null ? 0L : safe(value.getCandidateTokens()))
                 .totalTokens(value == null ? 0L : safe(value.getTotalTokens()))

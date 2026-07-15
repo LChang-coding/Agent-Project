@@ -38,10 +38,11 @@ export async function updateAgentConfigStatus(agentId: string, payload: AgentSta
 /**
  * 删除 Agent 管理覆盖；参数是 Agent ID；服务端幂等映射为禁用。
  */
-export async function deleteAgentConfig(agentId: string) {
+export async function deleteAgentConfig(agentId: string, expectedRevision: number) {
   return request<AgentMutationResponse>({
     url: `/v1/agent-configs/${encodeURIComponent(agentId)}`,
     method: 'DELETE',
+    params: { revision: expectedRevision },
   });
 }
 

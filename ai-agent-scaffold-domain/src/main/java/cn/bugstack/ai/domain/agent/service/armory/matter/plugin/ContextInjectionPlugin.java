@@ -46,6 +46,8 @@ public class ContextInjectionPlugin extends BasePlugin {
                     .userId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.USER_ID)), callbackContext.userId()))
                     .sessionId(stringValue(state.get(ToolRuntimeContextKeys.SESSION_ID)))
                     .visibleThroughSequence(integerValue(state.get(ToolRuntimeContextKeys.CONTEXT_VISIBLE_THROUGH_SEQUENCE)))
+                    .attachmentVisibleThroughSequence(integerValue(
+                            state.get(ToolRuntimeContextKeys.CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE)))
                     .upstreamOutput(stringValue(state.get(ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT)))
                     .traceId(stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID)))
                     .build());

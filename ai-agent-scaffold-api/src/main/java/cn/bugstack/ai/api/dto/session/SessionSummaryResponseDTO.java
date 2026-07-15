@@ -14,6 +14,9 @@ public class SessionSummaryResponseDTO {
     private String sessionId;
     private String agentId;
     private String agentName;
+    private String sourceType;
+    private Integer workflowVersion;
+    private String modelCode;
     private String appName;
     private String title;
     private String status;

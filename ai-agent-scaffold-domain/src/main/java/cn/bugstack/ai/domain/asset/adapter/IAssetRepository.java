@@ -30,7 +30,7 @@ public interface IAssetRepository {
     /** 软删除资产；参数是可信身份和资产ID；返回更新数量。 */
     int softDelete(String tenantId, String ownerUserId, String assetId);
 
-    /** 查询上下文可用附件；参数是可信身份、会话和可选运行；返回有效消息附件。 */
+    /** 查询上下文可用附件；参数是可信身份、会话和消息序号区间；返回有效消息附件。 */
     List<AssetEntity> queryContextAssets(String tenantId, String ownerUserId, String sessionId,
-                                         Integer visibleThroughSequence);
+                                         Integer fromSequenceExclusive, Integer visibleThroughSequence);
 }

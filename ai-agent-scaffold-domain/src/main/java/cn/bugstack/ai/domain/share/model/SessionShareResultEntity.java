@@ -24,6 +24,8 @@ public class SessionShareResultEntity {
     private byte[] exportBytes;
     private String sourceType;
     private String workflowId;
+    private Integer workflowVersion;
+    private String modelCode;
     private String sourceAgentId;
     private String sourceAgentName;
     private String sourceAppName;
