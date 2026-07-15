@@ -24,6 +24,11 @@ for variable in XXL_JOB_MYSQL_ROOT_PASSWORD XXL_JOB_MYSQL_PASSWORD XXL_JOB_ACCES
   fi
 done
 
+if (( ${#XXL_JOB_ADMIN_PASSWORD} < 4 || ${#XXL_JOB_ADMIN_PASSWORD} > 20 )); then
+  echo "XXL_JOB_ADMIN_PASSWORD 必须为 4~20 个字符，XXL-JOB 3.4.0 登录页最多接收 20 个字符" >&2
+  exit 1
+fi
+
 compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
 "${compose[@]}" up -d xxl-job-mysql
 
