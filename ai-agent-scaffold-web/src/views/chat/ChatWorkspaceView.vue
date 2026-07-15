@@ -171,11 +171,11 @@
 
                 <div v-else class="attachment-panel" @dragover.prevent @drop.prevent="onAttachmentDrop">
                   <input ref="attachmentInputRef" class="visually-hidden" type="file" multiple
-                         accept=".txt,.md,.pdf,.doc,.docx,image/*" @change="onAttachmentInput" />
+                         accept=".txt,.md,.csv,.json,.pdf,.docx,image/*" @change="onAttachmentInput" />
                   <button class="attachment-drop" type="button"
                           :disabled="chatStore.sending || assetStore.uploading" @click="openAttachmentPicker">
-                    {{ assetStore.uploading ? '上传中…' : '选择或拖入 PDF / Word / 图片' }}
-                    <span>单个文件最大 20 MiB，单次最多 10 个；运行期间不可变更附件。</span>
+                    {{ assetStore.uploading ? '上传中…' : '选择或拖入文本 / PDF / DOCX / 图片' }}
+                    <span>单个文件最大 20 MiB，单次最多 10 个；图片仅保存，暂不注入模型。</span>
                   </button>
                   <div v-if="assetStore.assets.length > 0" class="attachment-assets">
                     <button
@@ -183,11 +183,11 @@
                       :key="asset.assetId"
                       :class="['attachment-asset', { 'attachment-asset--selected': assetStore.isSelected(asset.assetId) }]"
                       type="button"
-                      :disabled="chatStore.sending || asset.parseStatus !== 'ready'"
+                      :disabled="chatStore.sending || asset.parseStatus !== 'ready' || Boolean(asset.messageId)"
                       @click="assetStore.toggleSelected(asset)"
                     >
                       <strong>{{ asset.fileName }}</strong>
-                      <span>{{ formatFileSize(asset.sizeBytes) }} · {{ parseStatusLabel(asset.parseStatus) }}</span>
+                      <span>{{ formatFileSize(asset.sizeBytes) }} · {{ attachmentStatusLabel(asset) }}</span>
                     </button>
                   </div>
                   <span v-if="assetStore.errorMessage" class="error-text">{{ assetStore.errorMessage }}</span>
@@ -271,7 +271,7 @@ import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
 import { useToolStore } from '@/stores/tools';
-import type { ChatMessage } from '@/types/api';
+import type { ArtifactAsset, ChatMessage } from '@/types/api';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 
@@ -690,6 +690,13 @@ function formatFileSize(sizeBytes: number) {
  */
 function parseStatusLabel(status: string) {
   return ({ ready: '可发送', pending: '解析中', failed: '解析失败' } as Record<string, string>)[status] || status;
+}
+
+/**
+ * 展示附件发送状态；已绑定引用不可再次用于新消息。
+ */
+function attachmentStatusLabel(asset: ArtifactAsset) {
+  return asset.messageId ? '已用于消息，重新发送请再次上传' : parseStatusLabel(asset.parseStatus);
 }
 
 /**

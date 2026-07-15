@@ -143,24 +143,30 @@ async function readSseStream(stream: ReadableStream<Uint8Array>, handlers: Strea
   const reader = stream.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split(/\n\n|\r\n\r\n/);
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        handleSseBlock(part, handlers);
+      }
     }
 
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split(/\n\n|\r\n\r\n/);
-    buffer = parts.pop() || '';
-
-    for (const part of parts) {
-      handleSseBlock(part, handlers);
+    if (buffer.trim()) {
+      handleSseBlock(buffer, handlers);
     }
-  }
-
-  if (buffer.trim()) {
-    handleSseBlock(buffer, handlers);
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -199,6 +205,17 @@ function handleSseBlock(block: string, handlers: StreamHandlers) {
       throw new Error(message);
     }
     return;
+  }
+  if (eventName === 'error') {
+    let message = data;
+    try {
+      const payload = JSON.parse(data) as { message?: string; code?: string };
+      message = payload.message || payload.code || '流式请求失败';
+    } catch {
+      // 兼容服务端纯文本错误事件。
+    }
+    handlers.onError?.(message);
+    throw new Error(message);
   }
   handlers.onChunk?.(data);
 }

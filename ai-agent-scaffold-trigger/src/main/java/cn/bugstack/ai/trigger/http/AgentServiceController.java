@@ -226,7 +226,7 @@ public class AgentServiceController implements IAgentService {
             emitter.onTimeout(() -> dispose(disposableRef));
         } catch (Exception e) {
             log.error("流式对话失败", e);
-            emitter.completeWithError(e);
+            completeSseWithError(emitter, e);
         }
         return emitter;
     }
@@ -242,7 +242,7 @@ public class AgentServiceController implements IAgentService {
         return chatService.handleWorkflowMessageTextStream(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId, sessionId, requestDTO.getMessage())
                 .subscribe(
                         content -> sendMessage(emitter, disposableRef, content),
-                        emitter::completeWithError,
+                        error -> completeSseWithError(emitter, error),
                         emitter::complete
                 );
     }
@@ -255,7 +255,7 @@ public class AgentServiceController implements IAgentService {
                                                     AtomicReference<Disposable> disposableRef) {
         return stream.subscribe(
                 content -> sendMessage(emitter, disposableRef, content),
-                emitter::completeWithError,
+                error -> completeSseWithError(emitter, error),
                 emitter::complete
         );
     }
@@ -272,7 +272,7 @@ public class AgentServiceController implements IAgentService {
         return chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
                 .subscribe(
                         event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
-                        emitter::completeWithError,
+                        error -> completeSseWithError(emitter, error),
                         emitter::complete
                 );
     }
@@ -286,7 +286,7 @@ public class AgentServiceController implements IAgentService {
         AtomicReference<String> lastContentRef = new AtomicReference<>("");
         return stream.subscribe(
                 event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
-                emitter::completeWithError,
+                error -> completeSseWithError(emitter, error),
                 emitter::complete
         );
     }
@@ -303,6 +303,27 @@ public class AgentServiceController implements IAgentService {
             log.error("流式对话发送失败", e);
             dispose(disposableRef);
             emitter.completeWithError(e);
+        }
+    }
+
+    /**
+     * 将流式业务异常编码成合法 SSE error 事件；参数是响应和异常；无返回值。
+     */
+    private void completeSseWithError(SseEmitter emitter, Throwable error) {
+        String code = ResponseCode.UN_ERROR.getCode();
+        String message = ResponseCode.UN_ERROR.getInfo();
+        if (error instanceof AppException appException) {
+            code = appException.getCode();
+            message = appException.getInfo();
+        }
+        String safeMessage = message == null || message.isBlank() ? ResponseCode.UN_ERROR.getInfo() : message;
+        try {
+            // 使用纯文本数据，保证 SSE 已提交后不再经过普通 JSON Response 转换器。
+            emitter.send(SseEmitter.event().name("error").data(safeMessage));
+        } catch (Exception sendError) {
+            log.debug("SSE 错误事件发送失败 code:{}", code, sendError);
+        } finally {
+            emitter.complete();
         }
     }
 

@@ -139,7 +139,8 @@ public class AssetService {
         sessionDomain.assertSessionAccess(blankToNull(tenantId), ownerUserId, sessionId, null);
         int updated = repository.bindReadyAssets(blankToNull(tenantId), ownerUserId, sessionId, messageId, ids);
         if (updated != ids.size()) {
-            throw new AppException("ASSET_BIND_DENIED", "附件不存在、尚未解析完成或不属于当前会话");
+            throw new AppException("ASSET_BIND_DENIED",
+                    "附件不可发送：可能已用于其他消息、尚未解析完成、已删除或不属于当前会话，请重新选择或重新上传");
         }
     }
 

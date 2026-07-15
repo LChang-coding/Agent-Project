@@ -225,7 +225,7 @@ function validateFiles(files: File[]) {
  * 判断资产是否可发送；参数是资产；返回解析和资产状态是否可用。
  */
 function isReadyAsset(asset: ArtifactAsset) {
-  return asset.parseStatus === 'ready' && asset.status !== 'deleted';
+  return asset.parseStatus === 'ready' && asset.status !== 'deleted' && !asset.messageId;
 }
 
 /**
