@@ -39,13 +39,15 @@ public class ThreadPoolConfig {
                 break;
         }
         // 创建线程池
-        return new TraceableThreadPoolExecutor(properties.getCorePoolSize(),
+        TraceableThreadPoolExecutor executor = new TraceableThreadPoolExecutor(properties.getCorePoolSize(),
                 properties.getMaxPoolSize(),
                 properties.getKeepAliveTime(),
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(properties.getBlockQueueSize()),
                 Executors.defaultThreadFactory(),
                 handler);
+        executor.allowCoreThreadTimeOut(Boolean.TRUE.equals(properties.getAllowCoreThreadTimeout()));
+        return executor;
     }
 
 }

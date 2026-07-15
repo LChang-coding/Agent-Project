@@ -15,7 +15,7 @@ import java.util.StringJoiner;
 
 @Component
 @Profile("dev")
-@ConditionalOnProperty(prefix = "ai.observability.sample", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "ai.observability.sample", name = "enabled", havingValue = "true")
 public class ObservabilitySampleRunner implements ApplicationRunner {
 
     private final Environment environment;

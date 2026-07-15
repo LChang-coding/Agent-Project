@@ -20,6 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * MinIO 对象存储实现。
@@ -32,12 +35,25 @@ public class MinioObjectStorageService implements ObjectStorageService {
     private static final long DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024;
 
     private final ObjectStorageProperties properties;
+    private final Supplier<MinioClient> minioClientFactory;
+    private final Object minioClientMonitor = new Object();
+    private final Object bucketMonitor = new Object();
+    private final Set<String> readyBuckets = ConcurrentHashMap.newKeySet();
+    private volatile MinioClient minioClient;
 
     /**
      * 创建对象存储服务；参数是对象存储配置；返回服务实例。
      */
     public MinioObjectStorageService(ObjectStorageProperties properties) {
+        this(properties, () -> buildMinioClient(properties));
+    }
+
+    /**
+     * 创建可测试的对象存储服务；参数是对象存储配置和客户端工厂；返回服务实例。
+     */
+    MinioObjectStorageService(ObjectStorageProperties properties, Supplier<MinioClient> minioClientFactory) {
         this.properties = properties;
+        this.minioClientFactory = minioClientFactory;
     }
 
     /**
@@ -201,6 +217,22 @@ public class MinioObjectStorageService implements ObjectStorageService {
      * 创建 MinIO 客户端；无参数；返回客户端。
      */
     private MinioClient minioClient() {
+        MinioClient current = minioClient;
+        if (current != null) {
+            return current;
+        }
+        synchronized (minioClientMonitor) {
+            if (minioClient == null) {
+                minioClient = minioClientFactory.get();
+            }
+            return minioClient;
+        }
+    }
+
+    /**
+     * 根据对象存储配置创建 MinIO 客户端；参数是对象存储配置；返回可复用客户端。
+     */
+    private static MinioClient buildMinioClient(ObjectStorageProperties properties) {
         return MinioClient.builder()
                 .endpoint(properties.getMinio().getEndpoint())
                 .credentials(properties.getMinio().getAccessKey(), properties.getMinio().getSecretKey())
@@ -211,9 +243,18 @@ public class MinioObjectStorageService implements ObjectStorageService {
      * 确保存储桶存在；参数是客户端和桶名；无返回值。
      */
     private void ensureBucket(MinioClient client, String bucket) throws Exception {
-        boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
-        if (!exists) {
-            client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        if (readyBuckets.contains(bucket)) {
+            return;
+        }
+        synchronized (bucketMonitor) {
+            if (readyBuckets.contains(bucket)) {
+                return;
+            }
+            boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+            if (!exists) {
+                client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+            }
+            readyBuckets.add(bucket);
         }
     }
 

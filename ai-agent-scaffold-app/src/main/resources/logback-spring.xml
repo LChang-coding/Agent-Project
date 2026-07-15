@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- 日志级别从低到高分为TRACE < DEBUG < INFO < WARN < ERROR < FATAL，如果设置为WARN，则低于WARN的信息都不会输出 -->
-<configuration scan="true" scanPeriod="10 seconds">
+<configuration scan="false">
 
     <contextName>logback</contextName>
     <!-- name的值是变量的名称，value的值时变量定义的值。通过定义的值会被插入到logger上下文中。定义变量后，可以使“${}”来使用变量。 -->
@@ -40,12 +40,18 @@
             <!-- 每天日志归档路径以及格式 -->
             <fileNamePattern>${APP_LOG_DIR}/log-info-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>100MB</maxFileSize>
+                <maxFileSize>50MB</maxFileSize>
             </timeBasedFileNamingAndTriggeringPolicy>
             <!--日志文件保留天数-->
-            <maxHistory>15</maxHistory>
-            <totalSizeCap>10GB</totalSizeCap>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
+        <!-- INFO 与 WARN/ERROR 分流，避免同一条告警重复写盘。 -->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>INFO</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
     </appender>
 
     <!-- 时间滚动输出 level为 ERROR 日志 -->
@@ -61,11 +67,11 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>${APP_LOG_DIR}/log-error-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>100MB</maxFileSize>
+                <maxFileSize>50MB</maxFileSize>
             </timeBasedFileNamingAndTriggeringPolicy>
             <!-- 日志文件保留天数【根据服务器预留，可自行调整】 -->
-            <maxHistory>7</maxHistory>
-            <totalSizeCap>5GB</totalSizeCap>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>512MB</totalSizeCap>
         </rollingPolicy>
         <!-- WARN 级别及以上 -->
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
@@ -76,9 +82,9 @@
     <!-- 异步输出 -->
     <appender name="ASYNC_FILE_INFO" class="ch.qos.logback.classic.AsyncAppender">
         <!-- 队列剩余容量小于discardingThreshold,则会丢弃TRACT、DEBUG、INFO级别的日志;默认值-1,为queueSize的20%;0不丢失日志 -->
-        <discardingThreshold>0</discardingThreshold>
+        <discardingThreshold>205</discardingThreshold>
         <!-- 更改默认的队列的深度,该值会影响性能.默认值为256 -->
-        <queueSize>8192</queueSize>
+        <queueSize>1024</queueSize>
         <!-- neverBlock:true 会丢失日志,但业务性能不受影响 -->
         <neverBlock>true</neverBlock>
         <!--是否提取调用者数据-->
@@ -90,7 +96,7 @@
         <!-- 队列剩余容量小于discardingThreshold,则会丢弃TRACT、DEBUG、INFO级别的日志;默认值-1,为queueSize的20%;0不丢失日志 -->
         <discardingThreshold>0</discardingThreshold>
         <!-- 更改默认的队列的深度,该值会影响性能.默认值为256 -->
-        <queueSize>1024</queueSize>
+        <queueSize>256</queueSize>
         <!-- neverBlock:true 会丢失日志,但业务性能不受影响 -->
         <neverBlock>true</neverBlock>
         <!--是否提取调用者数据-->
@@ -108,11 +114,19 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>${APP_LOG_DIR}/observability-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>50MB</maxFileSize>
+                <maxFileSize>25MB</maxFileSize>
             </timeBasedFileNamingAndTriggeringPolicy>
-            <maxHistory>15</maxHistory>
-            <totalSizeCap>2GB</totalSizeCap>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>512MB</totalSizeCap>
         </rollingPolicy>
+    </appender>
+
+    <appender name="ASYNC_OBSERVABILITY" class="ch.qos.logback.classic.AsyncAppender">
+        <discardingThreshold>0</discardingThreshold>
+        <queueSize>512</queueSize>
+        <neverBlock>true</neverBlock>
+        <includeCallerData>false</includeCallerData>
+        <appender-ref ref="OBSERVABILITY_FILE"/>
     </appender>
 
     <!-- 开发环境：控制台打印 -->
@@ -121,7 +135,7 @@
     </springProfile>
 
     <logger name="observability" level="info" additivity="false">
-        <appender-ref ref="OBSERVABILITY_FILE"/>
+        <appender-ref ref="ASYNC_OBSERVABILITY"/>
     </logger>
 
     <root level="info">

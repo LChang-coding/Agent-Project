@@ -8,19 +8,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ThreadPoolConfigProperties {
 
     /** 核心线程数 */
-    private Integer corePoolSize = 20;
+    private Integer corePoolSize = 4;
     /** 最大线程数 */
-    private Integer maxPoolSize = 200;
-    /** 最大等待时间 */
-    private Long keepAliveTime = 10L;
+    private Integer maxPoolSize = 8;
+    /** 线程空闲存活秒数 */
+    private Long keepAliveTime = 60L;
     /** 最大队列数 */
-    private Integer blockQueueSize = 5000;
+    private Integer blockQueueSize = 256;
+    /** 空闲时是否回收核心线程 */
+    private Boolean allowCoreThreadTimeout = true;
     /*
      * AbortPolicy：丢弃任务并抛出RejectedExecutionException异常。
      * DiscardPolicy：直接丢弃任务，但是不会抛出异常
      * DiscardOldestPolicy：将最早进入队列的任务删除，之后再尝试加入队列的任务被拒绝
      * CallerRunsPolicy：如果任务添加线程池失败，那么主线程自己执行该任务
      * */
-    private String policy = "AbortPolicy";
+    private String policy = "CallerRunsPolicy";
 
 }
