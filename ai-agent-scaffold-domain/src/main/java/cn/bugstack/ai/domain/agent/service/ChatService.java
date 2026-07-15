@@ -32,7 +32,7 @@ import com.google.adk.sessions.Session;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.reactivex.rxjava3.core.BackpressureStrategy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,8 +47,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -77,6 +81,12 @@ public class ChatService implements IChatService {
 
     @Resource
     private AgentAvailabilityService agentAvailabilityService;
+
+    @Resource(name = "workflowCoordinatorExecutor")
+    private ExecutorService workflowCoordinatorExecutor;
+
+    @Resource(name = "workflowNodeExecutor")
+    private ExecutorService workflowNodeExecutor;
 
     /**
      * 查询 Agent 配置；无参数；返回当前可用 Agent 列表。
@@ -276,9 +286,38 @@ public class ChatService implements IChatService {
         String effectiveMessage = steerResumeMessage(run, message);
         return RunStreamEntity.<String>builder()
                 .run(run)
-                .stream(Flowable.fromCallable(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
-                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)).subscribeOn(Schedulers.io()))
+                .stream(scheduleWorkflow(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
+                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)))
                 .build();
+    }
+
+    /**
+     * 在 coordinator 上延迟执行工作流；拒绝和取消分别进入流错误与线程中断语义。
+     */
+    private <T> Flowable<T> scheduleWorkflow(Callable<T> action) {
+        return Flowable.create(emitter -> {
+            Future<?> future;
+            try {
+                future = workflowCoordinatorExecutor.submit(() -> {
+                    if (emitter.isCancelled()) {
+                        return;
+                    }
+                    try {
+                        T result = action.call();
+                        if (!emitter.isCancelled()) {
+                            emitter.onNext(result);
+                            emitter.onComplete();
+                        }
+                    } catch (Throwable throwable) {
+                        emitter.tryOnError(throwable);
+                    }
+                });
+            } catch (RejectedExecutionException exception) {
+                emitter.tryOnError(exception);
+                return;
+            }
+            emitter.setCancellable(() -> future.cancel(true));
+        }, BackpressureStrategy.ERROR);
     }
 
     /**
@@ -510,7 +549,7 @@ public class ChatService implements IChatService {
             List<CompletableFuture<NodeRunResult>> futures = currentLevel.stream()
                     .map(nodeId -> CompletableFuture.supplyAsync(() -> runDagNode(nodeMap.get(nodeId), incoming.getOrDefault(nodeId, Collections.emptyList()),
                             selfLoopNodeIds.contains(nodeId), outputs, tenantId, userId, sessionId, dagPlan.getWorkflowId(),
-                            userMessage, traceId, roleCode, historyCutoffSequence, run)))
+                            userMessage, traceId, roleCode, historyCutoffSequence, run), workflowNodeExecutor))
                     .collect(Collectors.toList());
             for (CompletableFuture<NodeRunResult> future : futures) {
                 NodeRunResult result = joinNodeResult(future);

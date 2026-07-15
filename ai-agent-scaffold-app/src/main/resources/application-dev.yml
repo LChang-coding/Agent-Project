@@ -13,6 +13,21 @@ thread:
         allow-core-thread-timeout: ${APP_EXECUTOR_ALLOW_CORE_TIMEOUT:true}
         policy: ${APP_EXECUTOR_REJECTION_POLICY:CallerRunsPolicy}
 
+workflow:
+  executor:
+    coordinator:
+      core-pool-size: ${WORKFLOW_COORDINATOR_CORE_POOL_SIZE:1}
+      max-pool-size: ${WORKFLOW_COORDINATOR_MAX_POOL_SIZE:2}
+      queue-capacity: ${WORKFLOW_COORDINATOR_QUEUE_CAPACITY:8}
+      keep-alive-seconds: ${WORKFLOW_COORDINATOR_KEEP_ALIVE_SECONDS:30}
+      allow-core-thread-timeout: ${WORKFLOW_COORDINATOR_ALLOW_CORE_TIMEOUT:true}
+    node:
+      core-pool-size: ${WORKFLOW_NODE_CORE_POOL_SIZE:2}
+      max-pool-size: ${WORKFLOW_NODE_MAX_POOL_SIZE:4}
+      queue-capacity: ${WORKFLOW_NODE_QUEUE_CAPACITY:0}
+      keep-alive-seconds: ${WORKFLOW_NODE_KEEP_ALIVE_SECONDS:30}
+      allow-core-thread-timeout: ${WORKFLOW_NODE_ALLOW_CORE_TIMEOUT:true}
+
 # 数据库配置；启动时配置数据库资源信息
 spring:
   config:
