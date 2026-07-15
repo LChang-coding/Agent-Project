@@ -75,6 +75,14 @@ public class SessionRepository implements ISessionRepository {
     }
 
     /**
+     * 查询有效消息最大序号；参数是租户、用户和会话ID；返回有效上下文边界。
+     */
+    @Override
+    public Integer queryMaxValidSequenceNo(String tenantId, String userId, String sessionId) {
+        return chatMessageDao.queryMaxValidSequenceNo(tenantId, userId, sessionId);
+    }
+
+    /**
      * 新增消息；参数是消息实体；返回影响行数。
      */
     @Override

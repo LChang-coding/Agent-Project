@@ -64,6 +64,14 @@ public class AssetRepository implements IAssetRepository {
                 .stream().map(this::toEntity).toList();
     }
 
+    /** 统计上下文可用附件；参数是可信会话和消息序号区间；返回附件数。 */
+    @Override
+    public int countContextAssets(String tenantId, String ownerUserId, String sessionId,
+                                  Integer fromSequenceExclusive, Integer visibleThroughSequence) {
+        return dao.countContextAssets(tenantId, ownerUserId, sessionId, fromSequenceExclusive,
+                visibleThroughSequence);
+    }
+
     private ArtifactAssetPO toPO(AssetEntity value) {
         ArtifactAssetPO po = ArtifactAssetPO.builder().tenantId(value.getTenantId())
                 .ownerUserId(value.getOwnerUserId()).visibility(value.getVisibility()).sessionId(value.getSessionId())

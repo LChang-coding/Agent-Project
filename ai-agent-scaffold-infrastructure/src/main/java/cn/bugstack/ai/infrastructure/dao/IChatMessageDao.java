@@ -83,6 +83,13 @@ public interface IChatMessageDao {
                                @Param("sessionId") String sessionId);
 
     /**
+     * 查询会话有效消息最大序号。
+     */
+    Integer queryMaxValidSequenceNo(@Param("tenantId") String tenantId,
+                                    @Param("userId") String userId,
+                                    @Param("sessionId") String sessionId);
+
+    /**
      * 查询会话消息范围。
      *
      * @param tenantId 租户业务ID

@@ -72,6 +72,20 @@
         LIMIT 100
     </select>
 
+    <select id="summarizeBySessionId" resultType="cn.bugstack.ai.infrastructure.dao.po.ToolCallStatisticsPO">
+        SELECT COUNT(*) AS call_count, COUNT(DISTINCT tool_id) AS tool_count
+        FROM tool_call_log
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </select>
+
     <select id="queryShareDependencies" resultMap="ToolCallLogMap">
         SELECT MIN(t.id) AS id, t.tenant_id, t.user_id, t.session_id,
                MIN(t.run_id) AS run_id, MIN(t.workflow_id) AS workflow_id,

@@ -148,6 +148,17 @@ public class SessionDomainTest {
                     .orElse(0);
         }
 
+        @Override
+        public Integer queryMaxValidSequenceNo(String tenantId, String userId, String sessionId) {
+            return messages.stream()
+                    .filter(message -> key(tenantId, userId, sessionId)
+                            .equals(key(message.getTenantId(), message.getUserId(), message.getSessionId())))
+                    .filter(message -> "active".equals(message.getValidityStatus()))
+                    .map(ChatMessageEntity::getSequenceNo)
+                    .max(Integer::compareTo)
+                    .orElse(0);
+        }
+
         /**
          * 新增消息；参数是消息实体；返回影响行数。
          */

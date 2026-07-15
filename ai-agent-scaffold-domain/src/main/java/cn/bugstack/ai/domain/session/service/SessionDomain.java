@@ -221,6 +221,13 @@ public class SessionDomain {
     }
 
     /**
+     * 查询会话有效消息最大序号；参数是可信身份和会话；返回有效上下文边界。
+     */
+    public Integer queryMaxValidSequenceNo(String tenantId, String userId, String sessionId) {
+        return sessionRepository.queryMaxValidSequenceNo(blankToNull(tenantId), userId, sessionId);
+    }
+
+    /**
      * 游标查询用户会话；参数是可信身份、游标和数量；返回会话列表。
      */
     public List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,

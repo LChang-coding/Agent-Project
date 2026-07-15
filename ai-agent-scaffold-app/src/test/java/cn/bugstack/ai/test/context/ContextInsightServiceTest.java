@@ -10,17 +10,15 @@ import cn.bugstack.ai.domain.context.model.ContextInsightEntity;
 import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
 import cn.bugstack.ai.domain.context.service.ContextInsightService;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
-import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
-import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
+import cn.bugstack.ai.domain.tool.model.entity.ToolCallStatisticsEntity;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -45,29 +43,36 @@ public class ContextInsightServiceTest {
         ChatSessionEntity session = ChatSessionEntity.builder().tenantId("tenant_1").userId("user_1")
                 .sessionId("session_1").contextRevision(3L).build();
         Mockito.when(sessionDomain.assertSessionAccess("tenant_1", "user_1", "session_1", null)).thenReturn(session);
-        Mockito.when(sessionDomain.queryValidMessages("tenant_1", "user_1", "session_1")).thenReturn(List.of(
-                ChatMessageEntity.builder().sequenceNo(2).build(), ChatMessageEntity.builder().sequenceNo(5).build()));
+        Mockito.when(sessionDomain.queryMaxValidSequenceNo("tenant_1", "user_1", "session_1")).thenReturn(5);
         Mockito.when(memoryService.preview(Mockito.any())).thenReturn(ContextAssemblyResult.builder()
                 .estimatedTokenCount(300).summaryTokens(100).historyTokens(160).ragTokens(20).upstreamTokens(20)
-                .effectiveFromSequence(2).effectiveToSequence(5).memoryVersion(2).build());
+                .effectiveFromSequence(2).effectiveToSequence(5).coveredToSequence(1).memoryVersion(2).build());
         Mockito.when(taskRepository.queryLatest("tenant_1", "user_1", "session_1"))
                 .thenReturn(ContextCompactionTaskEntity.builder().status(ContextCompactionTaskStatus.PROCESSING).build());
-        Mockito.when(toolRepository.queryToolCallLogs("tenant_1", "user_1", "session_1")).thenReturn(List.of(
-                ToolCallLogEntity.builder().toolId("tool_a").build(),
-                ToolCallLogEntity.builder().toolId("tool_a").build(),
-                ToolCallLogEntity.builder().toolId("tool_b").build()));
+        Mockito.when(toolRepository.summarizeToolCalls("tenant_1", "user_1", "session_1"))
+                .thenReturn(ToolCallStatisticsEntity.builder().toolCount(9L).callCount(137L).build());
+        Mockito.when(assetRepository.countContextAssets("tenant_1", "user_1", "session_1", 1, 5))
+                .thenReturn(4);
 
         ContextInsightEntity result = new ContextInsightService(sessionDomain, memoryService, taskRepository,
                 toolRepository, properties, agentProperties, assetRepository).query("tenant_1", "user_1", "session_1");
 
         Assert.assertEquals(Integer.valueOf(300), result.getEffectiveTokens());
         Assert.assertEquals(Integer.valueOf(100), result.getSummaryTokens());
-        Assert.assertEquals(Integer.valueOf(2), result.getToolCount());
-        Assert.assertEquals(Integer.valueOf(3), result.getCallCount());
+        Assert.assertEquals(Integer.valueOf(9), result.getToolCount());
+        Assert.assertEquals(Integer.valueOf(137), result.getCallCount());
+        Assert.assertEquals(Integer.valueOf(4), result.getAttachmentCount());
         Assert.assertEquals("processing", result.getCompactionStatus());
         ArgumentCaptor<cn.bugstack.ai.domain.context.model.ContextAssembleRequest> request =
                 ArgumentCaptor.forClass(cn.bugstack.ai.domain.context.model.ContextAssembleRequest.class);
         Mockito.verify(memoryService).preview(request.capture());
         Assert.assertEquals(Integer.valueOf(5), request.getValue().getVisibleThroughSequence());
+        Mockito.verify(sessionDomain).queryMaxValidSequenceNo("tenant_1", "user_1", "session_1");
+        Mockito.verify(toolRepository).summarizeToolCalls("tenant_1", "user_1", "session_1");
+        Mockito.verify(assetRepository).countContextAssets("tenant_1", "user_1", "session_1", 1, 5);
+        Mockito.verify(sessionDomain, Mockito.never()).queryValidMessages(Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.verify(toolRepository, Mockito.never()).queryToolCallLogs(Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.verify(assetRepository, Mockito.never()).queryContextAssets(Mockito.any(), Mockito.any(), Mockito.any(),
+                Mockito.any(), Mockito.any());
     }
 }

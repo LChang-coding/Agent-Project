@@ -114,6 +114,19 @@
         ORDER BY m.sequence_no DESC, a.id DESC
     </select>
 
+    <select id="countContextAssets" resultType="int">
+        SELECT COUNT(*)
+        FROM artifact_asset a
+        INNER JOIN chat_message m ON m.message_id = a.message_id
+          AND m.tenant_id &lt;=&gt; a.tenant_id AND m.user_id = a.owner_user_id AND m.session_id = a.session_id
+        WHERE a.owner_user_id = #{ownerUserId} AND a.session_id = #{sessionId}
+          AND ((#{tenantId} IS NULL AND a.tenant_id IS NULL) OR a.tenant_id = #{tenantId})
+          AND a.status = 'active' AND a.parse_status = 'ready' AND a.deleted = 0
+          AND m.validity_status = 'active' AND m.role = 'user' AND m.deleted = 0
+          <if test="fromSequenceExclusive != null">AND m.sequence_no &gt; #{fromSequenceExclusive}</if>
+          <if test="visibleThroughSequence != null">AND m.sequence_no &lt;= #{visibleThroughSequence}</if>
+    </select>
+
     <select id="queryListByTenantId" resultMap="ArtifactAssetMap">
         SELECT <include refid="ArtifactAssetColumns"/>
         FROM artifact_asset

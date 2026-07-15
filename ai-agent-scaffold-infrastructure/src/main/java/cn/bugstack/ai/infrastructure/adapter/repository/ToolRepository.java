@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.tool.model.entity.SkillDefinitionEntity;
 import cn.bugstack.ai.domain.tool.model.entity.SkillPackageUploadResultEntity;
 import cn.bugstack.ai.domain.tool.model.entity.SkillVersionEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
+import cn.bugstack.ai.domain.tool.model.entity.ToolCallStatisticsEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
@@ -24,6 +25,7 @@ import cn.bugstack.ai.infrastructure.dao.po.McpServerConfigPO;
 import cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO;
 import cn.bugstack.ai.infrastructure.dao.po.SkillVersionPO;
 import cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO;
+import cn.bugstack.ai.infrastructure.dao.po.ToolCallStatisticsPO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Repository;
@@ -315,6 +317,17 @@ public class ToolRepository implements IToolRepository {
     @Override
     public List<ToolCallLogEntity> queryToolCallLogs(String tenantId, String userId, String sessionId) {
         return toolCallLogDao.queryListBySessionId(tenantId, userId, sessionId).stream().map(this::toToolCallLogEntity).collect(Collectors.toList());
+    }
+
+    /**
+     * 汇总会话工具调用；参数是租户、用户和会话；返回总调用数和去重工具数。
+     */
+    @Override
+    public ToolCallStatisticsEntity summarizeToolCalls(String tenantId, String userId, String sessionId) {
+        ToolCallStatisticsPO summary = toolCallLogDao.summarizeBySessionId(tenantId, userId, sessionId);
+        return summary == null ? ToolCallStatisticsEntity.builder().callCount(0L).toolCount(0L).build()
+                : ToolCallStatisticsEntity.builder().callCount(summary.getCallCount())
+                .toolCount(summary.getToolCount()).build();
     }
 
     @Override

@@ -89,6 +89,23 @@
         </choose>
     </select>
 
+    <select id="queryMaxValidSequenceNo" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(sequence_no), 0)
+        FROM chat_message
+        WHERE user_id = #{userId}
+          AND session_id = #{sessionId}
+          AND validity_status = 'active'
+          AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+    </select>
+
     <select id="queryContextRange" resultMap="ChatMessageMap">
         SELECT <include refid="ChatMessageColumns"/>
         FROM chat_message

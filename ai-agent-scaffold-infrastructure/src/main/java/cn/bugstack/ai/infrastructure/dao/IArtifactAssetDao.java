@@ -74,6 +74,13 @@ public interface IArtifactAssetDao {
                                              @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
                                              @Param("visibleThroughSequence") Integer visibleThroughSequence);
 
+    /** 统计有效消息关联附件；参数是可信会话和序号区间；返回附件数。 */
+    int countContextAssets(@Param("tenantId") String tenantId,
+                           @Param("ownerUserId") String ownerUserId,
+                           @Param("sessionId") String sessionId,
+                           @Param("fromSequenceExclusive") Integer fromSequenceExclusive,
+                           @Param("visibleThroughSequence") Integer visibleThroughSequence);
+
     /**
      * 按租户业务ID查询资产列表。
      *

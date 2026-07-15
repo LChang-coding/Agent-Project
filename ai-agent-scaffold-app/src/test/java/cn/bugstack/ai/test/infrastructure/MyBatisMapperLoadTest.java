@@ -1,6 +1,7 @@
 package cn.bugstack.ai.test.infrastructure;
 
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
+import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -9,6 +10,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.Reader;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MyBatisMapperLoadTest {
 
@@ -78,5 +81,65 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IConversationMemorySnapshotDao.queryActive"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.insertIgnore"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.queryLatest"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
+        assertContextInsightAggregateScopes(configuration);
+    }
+
+    private void assertContextInsightAggregateScopes(Configuration configuration) {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("tenantId", "tenant_1");
+        parameters.put("userId", "user_1");
+        parameters.put("ownerUserId", "user_1");
+        parameters.put("sessionId", "session_1");
+        parameters.put("fromSequenceExclusive", 1);
+        parameters.put("visibleThroughSequence", 5);
+
+        String messageSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo",
+                parameters);
+        Assert.assertTrue(messageSql.contains("MAX(sequence_no)"));
+        Assert.assertTrue(messageSql.contains("user_id = ?"));
+        Assert.assertTrue(messageSql.contains("session_id = ?"));
+        Assert.assertTrue(messageSql.contains("validity_status = 'active'"));
+        Assert.assertTrue(messageSql.contains("deleted = 0"));
+        Assert.assertTrue(messageSql.contains("tenant_id = ?"));
+        Assert.assertFalse(messageSql.contains("content"));
+
+        String toolSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId",
+                parameters);
+        Assert.assertTrue(toolSql.contains("COUNT(*)"));
+        Assert.assertTrue(toolSql.contains("COUNT(DISTINCT tool_id)"));
+        Assert.assertTrue(toolSql.contains("user_id = ?"));
+        Assert.assertTrue(toolSql.contains("session_id = ?"));
+        Assert.assertTrue(toolSql.contains("deleted = 0"));
+        Assert.assertTrue(toolSql.contains("tenant_id = ?"));
+        Assert.assertFalse(toolSql.contains("input_json"));
+        Assert.assertFalse(toolSql.contains("output_json"));
+
+        String assetSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets",
+                parameters);
+        Assert.assertTrue(assetSql.contains("COUNT(*)"));
+        Assert.assertTrue(assetSql.contains("a.owner_user_id = ?"));
+        Assert.assertTrue(assetSql.contains("a.session_id = ?"));
+        Assert.assertTrue(assetSql.contains("m.validity_status = 'active'"));
+        Assert.assertTrue(assetSql.contains("m.role = 'user'"));
+        Assert.assertTrue(assetSql.contains("a.deleted = 0"));
+        Assert.assertTrue(assetSql.contains("m.deleted = 0"));
+        Assert.assertTrue(assetSql.contains("a.tenant_id = ?"));
+        Assert.assertFalse(assetSql.contains("extracted_text"));
+
+        parameters.put("tenantId", null);
+        Assert.assertTrue(sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo", parameters)
+                .contains("tenant_id IS NULL OR tenant_id = ''"));
+        Assert.assertTrue(sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId", parameters)
+                .contains("tenant_id IS NULL OR tenant_id = ''"));
+    }
+
+    private String sql(Configuration configuration, String statementId, Map<String, Object> parameters) {
+        BoundSql boundSql = configuration.getMappedStatement(statementId).getBoundSql(parameters);
+        return boundSql.getSql().replaceAll("\\s+", " ").trim();
     }
 }

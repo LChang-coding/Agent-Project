@@ -9,14 +9,11 @@ import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
 import cn.bugstack.ai.domain.context.model.ContextCompactionTaskEntity;
 import cn.bugstack.ai.domain.context.model.ContextInsightEntity;
 import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
-import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
-import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
+import cn.bugstack.ai.domain.tool.model.entity.ToolCallStatisticsEntity;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 /**
  * 上下文洞察服务。
@@ -55,21 +52,20 @@ public class ContextInsightService {
      */
     public ContextInsightEntity query(String tenantId, String userId, String sessionId) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);
-        List<ChatMessageEntity> messages = sessionDomain.queryValidMessages(tenantId, userId, sessionId);
-        int visibleThrough = messages.stream().map(ChatMessageEntity::getSequenceNo).filter(value -> value != null)
-                .max(Integer::compareTo).orElse(0);
+        int visibleThrough = safe(sessionDomain.queryMaxValidSequenceNo(session.getTenantId(), session.getUserId(),
+                session.getSessionId()));
         ContextAssemblyResult assembly = memoryService.preview(ContextAssembleRequest.builder()
                 .tenantId(session.getTenantId()).userId(session.getUserId()).sessionId(session.getSessionId())
                 .visibleThroughSequence(visibleThrough).build());
         int systemTokens = systemTokens(session);
         int effectiveTokens = systemTokens + safe(assembly.getEstimatedTokenCount());
         int window = properties.getModelWindowTokens();
-        List<ToolCallLogEntity> calls = toolRepository.queryToolCallLogs(session.getTenantId(), session.getUserId(),
-                session.getSessionId());
+        ToolCallStatisticsEntity toolStatistics = toolRepository.summarizeToolCalls(session.getTenantId(),
+                session.getUserId(), session.getSessionId());
         ContextCompactionTaskEntity latestTask = taskRepository.queryLatest(session.getTenantId(),
                 session.getUserId(), session.getSessionId());
-        int attachmentCount = assetRepository.queryContextAssets(session.getTenantId(), session.getUserId(),
-                session.getSessionId(), assembly.getCoveredToSequence(), visibleThrough).size();
+        int attachmentCount = assetRepository.countContextAssets(session.getTenantId(), session.getUserId(),
+                session.getSessionId(), assembly.getCoveredToSequence(), visibleThrough);
         return ContextInsightEntity.builder().sessionId(sessionId).contextRevision(session.getContextRevision())
                 .modelWindowTokens(window).effectiveTokens(effectiveTokens)
                 .utilization(window <= 0 ? 0D : Math.min(1D, (double) effectiveTokens / window))
@@ -80,8 +76,9 @@ public class ContextInsightService {
                 .effectiveFromSequence(assembly.getEffectiveFromSequence())
                 .effectiveToSequence(assembly.getEffectiveToSequence()).memoryVersion(assembly.getMemoryVersion())
                 .compactionStatus(latestTask == null ? "idle" : latestTask.getStatus().name().toLowerCase())
-                .toolCount((int) calls.stream().map(ToolCallLogEntity::getToolId).filter(value -> value != null)
-                        .distinct().count()).callCount(calls.size()).attachmentCount(attachmentCount)
+                .toolCount(safeCount(toolStatistics == null ? null : toolStatistics.getToolCount()))
+                .callCount(safeCount(toolStatistics == null ? null : toolStatistics.getCallCount()))
+                .attachmentCount(attachmentCount)
                 .trimReason(assembly.getTrimReason()).build();
     }
 
@@ -98,5 +95,12 @@ public class ContextInsightService {
 
     private int safe(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int safeCount(Long value) {
+        if (value == null || value <= 0) {
+            return 0;
+        }
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : value.intValue();
     }
 }

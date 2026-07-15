@@ -1,6 +1,7 @@
 package cn.bugstack.ai.infrastructure.dao;
 
 import cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO;
+import cn.bugstack.ai.infrastructure.dao.po.ToolCallStatisticsPO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -49,6 +50,11 @@ public interface IToolCallLogDao {
     List<ToolCallLogPO> queryListBySessionId(@Param("tenantId") String tenantId,
                                              @Param("userId") String userId,
                                              @Param("sessionId") String sessionId);
+
+    /** 汇总会话工具调用；参数是可信会话范围；返回聚合统计。 */
+    ToolCallStatisticsPO summarizeBySessionId(@Param("tenantId") String tenantId,
+                                              @Param("userId") String userId,
+                                              @Param("sessionId") String sessionId);
 
     /** 查询有效成功调用的分享工具依赖；参数是可信会话范围；返回去重日志。 */
     List<ToolCallLogPO> queryShareDependencies(@Param("tenantId") String tenantId,

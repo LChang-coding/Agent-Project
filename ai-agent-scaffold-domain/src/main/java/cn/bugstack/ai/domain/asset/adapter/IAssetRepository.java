@@ -33,4 +33,8 @@ public interface IAssetRepository {
     /** 查询上下文可用附件；参数是可信身份、会话和消息序号区间；返回有效消息附件。 */
     List<AssetEntity> queryContextAssets(String tenantId, String ownerUserId, String sessionId,
                                          Integer fromSequenceExclusive, Integer visibleThroughSequence);
+
+    /** 统计上下文可用附件；参数是可信会话和消息序号区间；返回附件数。 */
+    int countContextAssets(String tenantId, String ownerUserId, String sessionId,
+                           Integer fromSequenceExclusive, Integer visibleThroughSequence);
 }
