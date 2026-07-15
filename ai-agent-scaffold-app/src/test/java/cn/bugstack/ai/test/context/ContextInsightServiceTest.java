@@ -1,6 +1,7 @@
 package cn.bugstack.ai.test.context;
 
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
+import cn.bugstack.ai.domain.asset.adapter.IAssetRepository;
 import cn.bugstack.ai.domain.context.adapter.repository.IContextCompactionTaskRepository;
 import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
 import cn.bugstack.ai.domain.context.model.ContextCompactionTaskEntity;
@@ -36,6 +37,7 @@ public class ContextInsightServiceTest {
         ConversationMemoryService memoryService = Mockito.mock(ConversationMemoryService.class);
         IContextCompactionTaskRepository taskRepository = Mockito.mock(IContextCompactionTaskRepository.class);
         IToolRepository toolRepository = Mockito.mock(IToolRepository.class);
+        IAssetRepository assetRepository = Mockito.mock(IAssetRepository.class);
         ContextPolicyProperties properties = new ContextPolicyProperties();
         properties.setModelWindowTokens(1000);
         AiAgentAutoConfigProperties agentProperties = new AiAgentAutoConfigProperties();
@@ -56,7 +58,7 @@ public class ContextInsightServiceTest {
                 ToolCallLogEntity.builder().toolId("tool_b").build()));
 
         ContextInsightEntity result = new ContextInsightService(sessionDomain, memoryService, taskRepository,
-                toolRepository, properties, agentProperties).query("tenant_1", "user_1", "session_1");
+                toolRepository, properties, agentProperties, assetRepository).query("tenant_1", "user_1", "session_1");
 
         Assert.assertEquals(Integer.valueOf(300), result.getEffectiveTokens());
         Assert.assertEquals(Integer.valueOf(100), result.getSummaryTokens());

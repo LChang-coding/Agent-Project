@@ -1,5 +1,6 @@
 package cn.bugstack.ai.domain.run.service;
 
+import cn.bugstack.ai.domain.asset.service.AssetService;
 import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
@@ -33,18 +34,20 @@ public class RunControlService {
     private final ActiveRunRegistry activeRunRegistry;
     private final ContextInvalidationService contextInvalidationService;
     private final ModelUsageService modelUsageService;
+    private final AssetService assetService;
 
     /**
      * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
      */
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
-                             ModelUsageService modelUsageService) {
+                             ModelUsageService modelUsageService, AssetService assetService) {
         this.runRepository = runRepository;
         this.sessionDomain = sessionDomain;
         this.activeRunRegistry = activeRunRegistry;
         this.contextInvalidationService = contextInvalidationService;
         this.modelUsageService = modelUsageService;
+        this.assetService = assetService;
     }
 
     /**
@@ -200,9 +203,20 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
                                                       String content, String traceId) {
+        return appendUserMessage(tenantId, userId, runId, content, traceId, List.of());
+    }
+
+    /**
+     * 在运行锁内原子写入用户消息、绑定运行与附件；参数是运行身份、内容、链路和附件；返回运行与消息。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
+                                                      String content, String traceId, List<String> attachmentIds) {
         ChatRunEntity run = lockExecutableWithSessionFirst(tenantId, userId, runId);
         ChatMessageEntity message = sessionDomain.appendUserMessage(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId, content, traceId);
+        assetService.bindToMessage(run.getTenantId(), run.getUserId(), run.getSessionId(),
+                message.getMessageId(), attachmentIds);
         if (runRepository.bindUserMessage(run.getTenantId(), run.getUserId(), runId, message.getMessageId(),
                 run.getVersion()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "写入用户消息时运行状态已变化");

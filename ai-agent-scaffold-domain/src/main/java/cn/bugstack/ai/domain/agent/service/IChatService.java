@@ -56,6 +56,10 @@ public interface IChatService {
     RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
                                               String requestedRunId);
 
+    /** 创建并启动带附件的流式运行；参数是 Agent、会话、消息、运行和附件；返回运行与事件流。 */
+    RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
+                                              String requestedRunId, List<String> attachmentIds);
+
     /**
      * 流式发送工作流消息；参数是工作流、版本、模型、用户、会话和消息；返回事件流。
      */
@@ -72,6 +76,12 @@ public interface IChatService {
     RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
                                                             String modelCode, String userId, String sessionId,
                                                             String message, String requestedRunId);
+
+    /** 创建并启动带附件的工作流运行；参数是工作流身份、会话、运行和附件；返回运行与文本流。 */
+    RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
+                                                            String modelCode, String userId, String sessionId,
+                                                            String message, String requestedRunId,
+                                                            List<String> attachmentIds);
 
     /**
      * 发送复合消息；参数是聊天命令；返回模型回复列表。

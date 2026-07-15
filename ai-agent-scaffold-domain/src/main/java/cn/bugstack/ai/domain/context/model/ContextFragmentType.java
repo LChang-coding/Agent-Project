@@ -8,6 +8,7 @@ public enum ContextFragmentType {
 
     LONG_TERM_MEMORY(40),
     RECENT_CONVERSATION(30),
+    ATTACHMENT(25),
     WORKFLOW_UPSTREAM(20),
     RAG(10);
 

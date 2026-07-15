@@ -86,6 +86,7 @@ export interface ChatRequest {
   userId?: string;
   sessionId?: string;
   requestedRunId?: string;
+  attachmentIds?: string[];
   message: string;
 }
 
@@ -230,6 +231,27 @@ export interface ModelUsageResponse {
   session?: ModelUsageSummary;
   run?: ModelUsageSummary;
   recent?: ModelUsageSummary;
+}
+
+export interface ArtifactAsset {
+  assetId: string;
+  assetKind: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256?: string;
+  sessionId?: string;
+  messageId?: string;
+  parseStatus: string;
+  status: string;
+  createTime?: string;
+  updateTime?: string;
+}
+
+export interface AssetPage {
+  items: ArtifactAsset[];
+  nextCursor?: string;
+  hasMore: boolean;
 }
 
 export interface SessionShareMessage {

@@ -176,6 +176,7 @@ public class ConversationMemoryService {
         int summaryTokens = selectedTokens(selected, ContextFragmentType.LONG_TERM_MEMORY);
         int historyTokens = selectedTokens(selected, ContextFragmentType.RECENT_CONVERSATION);
         int upstreamTokens = selectedTokens(selected, ContextFragmentType.WORKFLOW_UPSTREAM);
+        int attachmentTokens = selectedTokens(selected, ContextFragmentType.ATTACHMENT);
         int ragTokens = selectedTokens(selected, ContextFragmentType.RAG);
         boolean historySelected = selected.stream().anyMatch(fragment -> fragment.getType() == ContextFragmentType.RECENT_CONVERSATION);
         boolean recentWindowTrimmed = messages.size() > recentMessages.size();
@@ -193,6 +194,7 @@ public class ConversationMemoryService {
                 .trimReason(totalBudgetTrimmed ? "total_context_budget"
                         : (recentWindowTrimmed ? "recent_window_budget" : null))
                 .summaryTokens(summaryTokens).historyTokens(historyTokens).upstreamTokens(upstreamTokens)
+                .attachmentTokens(attachmentTokens)
                 .ragTokens(ragTokens)
                 .effectiveFromSequence(!historySelected ? null : recentMessages.get(0).getSequenceNo())
                 .effectiveToSequence(!historySelected ? coveredToSequence
@@ -658,6 +660,9 @@ public class ConversationMemoryService {
         if (type == ContextFragmentType.WORKFLOW_UPSTREAM) {
             return properties.getUpstreamTokens();
         }
+        if (type == ContextFragmentType.ATTACHMENT) {
+            return properties.getAttachmentTokens();
+        }
         return properties.getRagTokens();
     }
 
@@ -759,7 +764,7 @@ public class ConversationMemoryService {
                 .memoryVersion(0)
                 .coveredToSequence(0)
                 .cacheHit(false)
-                .summaryTokens(0).historyTokens(0).upstreamTokens(0).ragTokens(0)
+                .summaryTokens(0).historyTokens(0).upstreamTokens(0).attachmentTokens(0).ragTokens(0)
                 .build();
     }
 

@@ -20,6 +20,7 @@ public class ContextAssemblyResult {
     private Integer summaryTokens;
     private Integer historyTokens;
     private Integer upstreamTokens;
+    private Integer attachmentTokens;
     private Integer ragTokens;
     private Integer effectiveFromSequence;
     private Integer effectiveToSequence;

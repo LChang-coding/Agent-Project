@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.context.service;
 
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
+import cn.bugstack.ai.domain.asset.adapter.IAssetRepository;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.context.adapter.repository.IContextCompactionTaskRepository;
 import cn.bugstack.ai.domain.context.model.ContextAssembleRequest;
@@ -30,6 +31,7 @@ public class ContextInsightService {
     private final IToolRepository toolRepository;
     private final ContextPolicyProperties properties;
     private final AiAgentAutoConfigProperties agentProperties;
+    private final IAssetRepository assetRepository;
     private final CharacterTokenCounter tokenCounter = new CharacterTokenCounter();
 
     /**
@@ -37,13 +39,15 @@ public class ContextInsightService {
      */
     public ContextInsightService(SessionDomain sessionDomain, ConversationMemoryService memoryService,
                                  IContextCompactionTaskRepository taskRepository, IToolRepository toolRepository,
-                                 ContextPolicyProperties properties, AiAgentAutoConfigProperties agentProperties) {
+                                 ContextPolicyProperties properties, AiAgentAutoConfigProperties agentProperties,
+                                 IAssetRepository assetRepository) {
         this.sessionDomain = sessionDomain;
         this.memoryService = memoryService;
         this.taskRepository = taskRepository;
         this.toolRepository = toolRepository;
         this.properties = properties;
         this.agentProperties = agentProperties;
+        this.assetRepository = assetRepository;
     }
 
     /**
@@ -64,17 +68,20 @@ public class ContextInsightService {
                 session.getSessionId());
         ContextCompactionTaskEntity latestTask = taskRepository.queryLatest(session.getTenantId(),
                 session.getUserId(), session.getSessionId());
+        int attachmentCount = assetRepository.queryContextAssets(session.getTenantId(), session.getUserId(),
+                session.getSessionId(), visibleThrough).size();
         return ContextInsightEntity.builder().sessionId(sessionId).contextRevision(session.getContextRevision())
                 .modelWindowTokens(window).effectiveTokens(effectiveTokens)
                 .utilization(window <= 0 ? 0D : Math.min(1D, (double) effectiveTokens / window))
                 .systemTokens(systemTokens).historyTokens(safe(assembly.getHistoryTokens()))
-                .summaryTokens(safe(assembly.getSummaryTokens())).toolResultTokens(0).attachmentTokens(0)
+                .summaryTokens(safe(assembly.getSummaryTokens())).toolResultTokens(0)
+                .attachmentTokens(safe(assembly.getAttachmentTokens()))
                 .ragTokens(safe(assembly.getRagTokens())).upstreamTokens(safe(assembly.getUpstreamTokens()))
                 .effectiveFromSequence(assembly.getEffectiveFromSequence())
                 .effectiveToSequence(assembly.getEffectiveToSequence()).memoryVersion(assembly.getMemoryVersion())
                 .compactionStatus(latestTask == null ? "idle" : latestTask.getStatus().name().toLowerCase())
                 .toolCount((int) calls.stream().map(ToolCallLogEntity::getToolId).filter(value -> value != null)
-                        .distinct().count()).callCount(calls.size()).attachmentCount(0)
+                        .distinct().count()).callCount(calls.size()).attachmentCount(attachmentCount)
                 .trimReason(assembly.getTrimReason()).build();
     }
 

@@ -22,6 +22,7 @@ public class ContextPolicyProperties {
     private int recentConversationTokens = 8192;
     private int recentWindowMaxMessages = 100;
     private int upstreamTokens = 4096;
+    private int attachmentTokens = 8192;
     private int ragTokens = 0;
     private int compactionMinUncoveredTokens = 12000;
     private int compactionRetainRecentTokens = 4096;
@@ -36,6 +37,7 @@ public class ContextPolicyProperties {
             throw new IllegalStateException("启用上下文管理时必须配置 ai.context.model-window-tokens");
         }
         int available = Math.max(0, modelWindowTokens - reserveOutputTokens - safetyMarginTokens);
-        return new ContextBudget(available, longTermMemoryTokens, recentConversationTokens, upstreamTokens, ragTokens);
+        return new ContextBudget(available, longTermMemoryTokens, recentConversationTokens, attachmentTokens,
+                upstreamTokens, ragTokens);
     }
 }

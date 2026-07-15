@@ -122,7 +122,60 @@
 
 ### 阶段三：聊天附件与资产中心
 
-执行前追加细化计划。
+#### 完成条件
+
+- 后端提供聊天附件上传、会话附件列表、下载和删除接口，上传身份只取 `TenantContextHolder`，对象键必须包含可信 tenant/user 隔离路径。
+- 附件元数据以数据库为事实源，记录原文件名、MIME、大小、SHA-256、对象键、解析状态、会话/消息绑定和拥有者；重复上传按拥有者与哈希复用对象但保留引用语义。
+- 文本、Markdown、PDF、Word 和常见图片有明确处理策略：可解析文本提取后进入附件上下文，不可解析或超限文件仍可作为资产保存但不注入模型。
+- 发送消息时只能引用当前用户、当前会话下处于 ready 状态的附件；后端在保存用户消息后原子绑定 messageId，客户端不能伪造其他租户资产。
+- 附件上下文通过 `ContextContributor` 接入现有预算器，计入 `attachmentTokens/attachmentCount`；取消、引导和压缩只读取有效消息关联，失效消息的附件文本不得污染后续上下文。
+- 前端聊天输入区支持选择/上传/移除附件并在发送时携带 assetId；资产中心展示当前用户资产、来源会话、解析状态、大小、下载和删除入口。
+- 增量迁移、领域测试、租户越权测试、解析限制测试、前端类型检查和生产构建通过。
+
+#### 预定接口
+
+- `POST /api/v1/assets/chat-attachments`（multipart：file、可选 sessionId）
+- `GET /api/v1/assets?cursor=&limit=&sessionId=&kind=chat_attachment`
+- `GET /api/v1/assets/{assetId}/download`
+- `DELETE /api/v1/assets/{assetId}`
+- 聊天请求新增可选 `attachmentIds`，保持旧客户端不传时兼容。
+
+#### 数据与安全策略
+
+- 优先兼容演进现有 `artifact_asset`，通过日期增量迁移补齐 `asset_kind`、`sha256`、`mime_type`、`size_bytes`、`parse_status`、`extracted_text`、`message_id` 等必要字段；不另造与现有基础设施重复的对象表。
+- 默认单文件上限 20 MiB、单次最多 10 个；文件名只作展示，存储对象键由服务端生成；下载使用短时 MinIO 预签名 URL 或受控流式响应，不暴露永久公网对象地址。
+- 提取文本设置字符/Token 上限，不把二进制、对象地址、异常堆栈或解析器内部信息注入模型；失败原因只保存截断后的安全摘要。
+- 资产删除为软删除并解除后续上下文引用；已随历史消息产生的审计关系保留，不立即物理删除对象，后续由独立清理任务处理无引用对象。
+
+#### 主要风险与验证
+
+- 风险：跨租户下载或引用。验证所有查询包含 tenantId + ownerUserId + assetId/sessionId，分享导入不自动复制发送方私有附件权限。
+- 风险：文件炸弹和内存放大。验证上传大小、解析文本上限、PDF/Word 页数或压缩展开限制，解析失败可降级。
+- 风险：取消消息附件污染上下文。验证 contributor 只关联 active 消息，未绑定草稿附件和 invalidated 消息附件不进入组装。
+- 风险：上传成功但数据库失败留下孤儿对象。使用补偿删除或 orphan 状态，并测试异常路径。
+
+#### 执行实录
+
+闭环时间：2026-07-15。
+
+实际操作：
+
+- 在现有 `artifact_asset`、MinIO `ObjectStorageService` 和 Context Manager 扩展点上完成资产领域闭环，没有新建重复对象存储体系；新增可信上传、拥有者游标分页、受控下载、软删除、SHA-256 对象复用与数据库失败补偿删除。
+- 聊天请求增加可选 `attachmentIds`，Agent 与工作流共用同一条附件路径；消息写入、附件绑定和运行消息绑定统一进入 `RunControlService.appendUserMessage` 事务，任一步失败都会整体回滚，不再采用“消息先落库、失败后取消”的非原子补偿。
+- 附件绑定 SQL 同时校验 tenant、owner、session、active、ready、未绑定状态和 assetId 集合；下载、列表、删除均由 `TenantContextHolder` 提供可信用户身份，客户端不能提交 owner/tenant。
+- 文本、Markdown、CSV、JSON、PDF、DOCX 提取安全截断后的文本；单文件限制 20 MiB、PDF 限制 200 页、提取内容限制 60000 字符、错误摘要限制 240 字符。图片、空文本和未知格式明确保存为 `unsupported`，不会伪装为已进入模型。
+- 附件上下文通过 `ContextContributor` 接入现有组装器，独立占用 `attachmentTokens`；仓储只返回 visibleThroughSequence 以内、active 用户消息绑定的 ready 附件，取消/引导失效消息不会进入上下文。预算不足时优先保留最近附件并按 Token 安全截断，渲染时恢复时间顺序。
+- 会话洞察增加真实 `attachmentTokens` 与 `attachmentCount`；资产分页接口统一返回 `items/nextCursor/hasMore`，修复并行实现中前端按分页对象读取、后端却返回裸数组的契约不一致。
+- 前端新增资产 API 与 Pinia Store；聊天区支持点击选择、拖拽/文件选择上传、待发送附件移除与发送快照，会话切换时用 scope 和请求代次隔离附件草稿；资产中心支持分页、上传、状态展示、下载和软删除。
+- 新增 MySQL 8 可重复增量迁移，演进 `artifact_asset` 的 `asset_kind/sha256/parse_status/extracted_text/parse_error` 与拥有者哈希索引；同步更新全量初始化脚本。由于现有聚合 POM 与各模块 parent 坐标不一致，PDFBox 和 POI 暂在基础设施模块显式锁定版本，避免产生无法解析的伪依赖管理。
+
+验证结果：
+
+- Java 17 下执行 `AssetServiceTest`、`AssetContextContributorTest`、`DefaultAssetTextExtractorTest`、`RunControlServiceTest`、`ContextInsightServiceTest`、`MyBatisMapperLoadTest`：共 14 个测试，全部通过；覆盖可信存储路径、对象复用、部分绑定拒绝、可见边界、图片降级、取消竞态、消息/附件事务入口和 Mapper 装载。
+- 前端执行 `npm run build`：`vue-tsc --noEmit` 与 Vite production build 均通过，共转换 1910 个模块。
+- 对本阶段源码、迁移与计划文件执行排除用户日志后的 `git diff --check`：通过。
+- 未向服务器上传本地项目源码或构建产物。迁移前将远端 `artifact_asset` 单表备份到项目目录外的 `/tmp/ai_agent_scaffold_artifact_asset_20260715_2303.sql`，备份 SHA-256 为 `dc71f35c2a0712600348d937d9c69b13926db745e0d30084770a1e481d1458bb`。
+- 增量迁移 SHA-256 为 `297a26ae11827eb2909934b43206979c37d2c798f0961790d2747c3eee83b3b9`；在远端 MySQL 连续执行两次均成功，五个预期列与 `idx_artifact_owner_hash` 均唯一存在，备份与迁移后业务记录数均为 3。
 
 ### 阶段四：Agent、工作流删除与分享工具权限提醒
 

@@ -45,6 +45,34 @@ public interface IArtifactAssetDao {
      */
     ArtifactAssetPO queryByAssetId(@Param("assetId") String assetId);
 
+    /** 按可信拥有者范围查询资产；参数是租户、用户和资产ID；返回资产。 */
+    ArtifactAssetPO queryOwned(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
+                               @Param("assetId") String assetId);
+
+    /** 查询同一拥有者可复用对象；参数是租户、用户和哈希；返回最近资产。 */
+    ArtifactAssetPO queryReusableByHash(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
+                                        @Param("sha256") String sha256);
+
+    /** 分页查询拥有者资产；参数是可信范围和过滤条件；返回资产列表。 */
+    List<ArtifactAssetPO> queryOwnedList(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
+                                         @Param("cursor") Long cursor, @Param("limit") int limit,
+                                         @Param("sessionId") String sessionId, @Param("assetKind") String assetKind);
+
+    /** 批量绑定 ready 附件；参数是可信消息范围和资产ID；返回更新数量。 */
+    int bindReadyAssets(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
+                        @Param("sessionId") String sessionId, @Param("messageId") String messageId,
+                        @Param("assetIds") List<String> assetIds);
+
+    /** 软删除拥有者资产；参数是可信范围和资产ID；返回更新数量。 */
+    int softDeleteOwned(@Param("tenantId") String tenantId, @Param("ownerUserId") String ownerUserId,
+                        @Param("assetId") String assetId);
+
+    /** 查询有效消息关联附件；参数是可信会话和可选运行；返回可注入附件。 */
+    List<ArtifactAssetPO> queryContextAssets(@Param("tenantId") String tenantId,
+                                             @Param("ownerUserId") String ownerUserId,
+                                             @Param("sessionId") String sessionId,
+                                             @Param("visibleThroughSequence") Integer visibleThroughSequence);
+
     /**
      * 按租户业务ID查询资产列表。
      *

@@ -169,11 +169,28 @@
                   <div v-if="toolStore.calls.length === 0" class="insight-empty">当前会话还没有工具调用记录。</div>
                 </div>
 
-                <div v-else class="attachment-panel">
-                  <button class="attachment-drop" type="button" disabled>
-                    上传 PDF / Word / 图片
-                    <span>待后端附件 API 接入，会绑定当前 sessionId 并进入临时上下文或 RAG。</span>
+                <div v-else class="attachment-panel" @dragover.prevent @drop.prevent="onAttachmentDrop">
+                  <input ref="attachmentInputRef" class="visually-hidden" type="file" multiple
+                         accept=".txt,.md,.pdf,.doc,.docx,image/*" @change="onAttachmentInput" />
+                  <button class="attachment-drop" type="button"
+                          :disabled="chatStore.sending || assetStore.uploading" @click="openAttachmentPicker">
+                    {{ assetStore.uploading ? '上传中…' : '选择或拖入 PDF / Word / 图片' }}
+                    <span>单个文件最大 20 MiB，单次最多 10 个；运行期间不可变更附件。</span>
                   </button>
+                  <div v-if="assetStore.assets.length > 0" class="attachment-assets">
+                    <button
+                      v-for="asset in assetStore.assets"
+                      :key="asset.assetId"
+                      :class="['attachment-asset', { 'attachment-asset--selected': assetStore.isSelected(asset.assetId) }]"
+                      type="button"
+                      :disabled="chatStore.sending || asset.parseStatus !== 'ready'"
+                      @click="assetStore.toggleSelected(asset)"
+                    >
+                      <strong>{{ asset.fileName }}</strong>
+                      <span>{{ formatFileSize(asset.sizeBytes) }} · {{ parseStatusLabel(asset.parseStatus) }}</span>
+                    </button>
+                  </div>
+                  <span v-if="assetStore.errorMessage" class="error-text">{{ assetStore.errorMessage }}</span>
                 </div>
               </div>
             </section>
@@ -194,6 +211,14 @@
                 <input v-model="chatStore.streaming" type="checkbox" :disabled="chatStore.sending" />
                 <span>流式</span>
               </label>
+            </div>
+
+            <div v-if="assetStore.readySelectedAssets.length > 0" class="attachment-chips" aria-label="待发送附件">
+              <span v-for="asset in assetStore.readySelectedAssets" :key="asset.assetId" class="attachment-chip">
+                {{ asset.fileName }}
+                <button type="button" :disabled="chatStore.sending" :aria-label="`移除附件 ${asset.fileName}`"
+                        @click="assetStore.toggleSelected(asset)">×</button>
+              </span>
             </div>
 
             <textarea
@@ -242,6 +267,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import { createSessionShare } from '@/api/share';
+import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
 import { useToolStore } from '@/stores/tools';
@@ -250,6 +276,7 @@ import type { ChatMessage } from '@/types/api';
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 
 const chatStore = useChatStore();
+const assetStore = useAssetStore();
 const insightStore = useInsightStore();
 const toolStore = useToolStore();
 const draft = ref('');
@@ -257,9 +284,17 @@ const isComposing = ref(false);
 const insightPanelOpen = ref(false);
 const activeInsightTab = ref<InsightTab>('context');
 const messageListRef = ref<HTMLElement | null>(null);
+const attachmentInputRef = ref<HTMLInputElement | null>(null);
 const sharing = ref(false);
 const shareLink = ref('');
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
+const attachmentScope = computed(() => {
+  if (chatStore.sessionId) {
+    return `session:${chatStore.sessionId}`;
+  }
+  const targetId = chatStore.activeSourceType === 'workflow' ? chatStore.activeWorkflowId : chatStore.activeAgentId;
+  return `draft:${chatStore.activeSourceType}:${targetId}`;
+});
 const visibleSessions = computed(() => {
   return chatStore.sessions.filter((session) => {
     if (chatStore.activeSourceType === 'workflow') {
@@ -314,12 +349,19 @@ const insightTabs = computed<Array<{ value: InsightTab; label: string; count?: n
 ]);
 
 onMounted(async () => {
+  assetStore.setSelectionScope(attachmentScope.value);
   if (chatStore.agents.length === 0) {
     await chatStore.loadAgents();
   }
   await toolStore.loadCatalog();
   if (chatStore.sessionId) {
-    await Promise.all([toolStore.loadCalls(chatStore.sessionId), insightStore.loadSession(chatStore.sessionId)]);
+    await Promise.all([
+      toolStore.loadCalls(chatStore.sessionId),
+      insightStore.loadSession(chatStore.sessionId),
+      refreshSessionAssets(chatStore.sessionId),
+    ]);
+  } else {
+    assetStore.clearList();
   }
   scrollToLatest();
 });
@@ -328,6 +370,18 @@ watch(
   () => chatStore.sessionId,
   async (sessionId) => {
     await Promise.all([toolStore.loadCalls(sessionId), insightStore.loadSession(sessionId)]);
+  },
+);
+
+watch(
+  attachmentScope,
+  async (scope) => {
+    assetStore.setSelectionScope(scope);
+    if (chatStore.sessionId) {
+      await refreshSessionAssets(chatStore.sessionId);
+    } else {
+      assetStore.clearList();
+    }
   },
 );
 
@@ -437,6 +491,60 @@ async function openInsightTab(tab: InsightTab) {
   if (tab === 'context' || tab === 'tokens') {
     await insightStore.loadSession(chatStore.sessionId, chatStore.lastSettledRunId);
   }
+  if (tab === 'assets' && chatStore.sessionId) {
+    await refreshSessionAssets(chatStore.sessionId);
+  }
+}
+
+/**
+ * 打开附件选择器；无参数；运行期间由控件禁用。
+ */
+function openAttachmentPicker() {
+  attachmentInputRef.value?.click();
+}
+
+/**
+ * 处理文件选择；参数是 input 事件；上传后清空选择器。
+ */
+async function onAttachmentInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  await uploadAttachments(Array.from(input.files || []));
+  input.value = '';
+}
+
+/**
+ * 处理附件拖入；参数是拖放事件；运行期间忽略。
+ */
+async function onAttachmentDrop(event: DragEvent) {
+  if (chatStore.sending || assetStore.uploading) {
+    return;
+  }
+  await uploadAttachments(Array.from(event.dataTransfer?.files || []));
+}
+
+/**
+ * 上传待发送附件；参数是文件快照；仅选入 ready 资产。
+ */
+async function uploadAttachments(files: File[]) {
+  if (chatStore.sending) {
+    return;
+  }
+  try {
+    await assetStore.uploadFiles(files, chatStore.sessionId || undefined);
+  } catch (error) {
+    assetStore.errorMessage = error instanceof Error ? error.message : '附件上传失败';
+  }
+}
+
+/**
+ * 刷新当前会话附件；参数是会话ID；错误由 Store 展示。
+ */
+async function refreshSessionAssets(sessionId: string) {
+  try {
+    await assetStore.loadAssets(sessionId);
+  } catch {
+    // Store 已保存可展示的服务端错误。
+  }
 }
 
 /**
@@ -476,8 +584,13 @@ async function send() {
   if (!message || chatStore.sending) {
     return;
   }
+  const attachmentIds = [...assetStore.selectedAssetIds];
   draft.value = '';
-  await chatStore.send(message);
+  await chatStore.send(message, '', attachmentIds);
+  assetStore.clearSelected();
+  if (chatStore.sessionId) {
+    await refreshSessionAssets(chatStore.sessionId);
+  }
   await toolStore.loadCatalog();
   await toolStore.loadCalls(chatStore.sessionId);
   scrollToLatest();
@@ -559,6 +672,26 @@ function scrollToLatest() {
  */
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * 格式化文件大小；参数是字节数；返回人类可读文本。
+ */
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KiB`;
+  }
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+/**
+ * 转换解析状态；参数是状态编码；返回中文展示。
+ */
+function parseStatusLabel(status: string) {
+  return ({ ready: '可发送', pending: '解析中', failed: '解析失败' } as Record<string, string>)[status] || status;
 }
 
 /**
@@ -1030,6 +1163,38 @@ function formatOptionalTokens(value?: number) {
   transform: rotate(45deg);
 }
 
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 4px 7px;
+  color: var(--accent-deep);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip button {
+  padding: 0;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 900;
+}
+
 .composer-input {
   width: 100%;
   min-height: 84px;
@@ -1207,6 +1372,7 @@ function formatOptionalTokens(value?: number) {
 
 .attachment-panel {
   display: grid;
+  gap: 8px;
 }
 
 .attachment-drop {
@@ -1217,7 +1383,65 @@ function formatOptionalTokens(value?: number) {
   border: 1px dashed var(--line-strong);
   border-radius: 10px;
   color: var(--ink);
+  cursor: pointer;
+}
+
+.attachment-drop:disabled {
   cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.attachment-assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px;
+}
+
+.attachment-asset {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.attachment-asset strong,
+.attachment-asset span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-asset span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.attachment-asset--selected {
+  color: var(--accent-deep);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.attachment-asset:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .message-flow-enter-active,

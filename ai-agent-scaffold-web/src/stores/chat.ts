@@ -259,7 +259,7 @@ export const useChatStore = defineStore('chat', {
     /**
      * 发送聊天消息；参数是用户输入；根据开关返回流式或完整回复。
      */
-    async send(message: string, requestedRunId = '') {
+    async send(message: string, requestedRunId = '', attachmentIds: string[] = []) {
       if (!message.trim() || !this.hasActiveTarget() || this.sending) {
         return;
       }
@@ -288,6 +288,7 @@ export const useChatStore = defineStore('chat', {
         resolveRunReady = resolve;
       });
       const effectiveRunId = requestedRunId || createRunId();
+      const effectiveAttachmentIds = [...new Set(attachmentIds.filter(Boolean))];
       const request: ActiveChatRequest = {
         generation: ++requestGeneration,
         sessionId: this.sessionId,
@@ -317,7 +318,7 @@ export const useChatStore = defineStore('chat', {
           request.typewriter = typewriter;
           let streamSnapshot = '';
           await sendChatMessageStream(
-            this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId),
+            this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId, effectiveAttachmentIds),
             {
               onSession: (sessionId) => {
                 if (!this.isRequestCurrent(request) || request.cancelRequested) {
@@ -361,7 +362,7 @@ export const useChatStore = defineStore('chat', {
         }
 
         const response = await sendChatMessage(
-          this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId),
+          this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId, effectiveAttachmentIds),
           controller.signal,
         );
         if (!this.isRequestWritable(request)) {
@@ -715,7 +716,13 @@ export const useChatStore = defineStore('chat', {
     /**
      * 构建聊天请求；参数是用户、消息和可选 Agent；返回后端请求体。
      */
-    buildChatPayload(userId: string, message: string, agentId?: string, requestedRunId?: string): ChatRequest {
+    buildChatPayload(
+      userId: string,
+      message: string,
+      agentId?: string,
+      requestedRunId?: string,
+      attachmentIds: string[] = [],
+    ): ChatRequest {
       if (this.activeSourceType === 'workflow') {
         const workflow = this.activeWorkflow;
         return {
@@ -725,6 +732,7 @@ export const useChatStore = defineStore('chat', {
           userId,
           sessionId: this.sessionId,
           requestedRunId: requestedRunId || undefined,
+          attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           message,
         };
       }
@@ -733,6 +741,7 @@ export const useChatStore = defineStore('chat', {
         userId,
         sessionId: this.sessionId,
         requestedRunId: requestedRunId || undefined,
+        attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
         message,
       };
     },

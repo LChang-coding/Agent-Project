@@ -44,6 +44,11 @@ public class ArtifactAssetPO extends BasePO {
     private String assetId;
 
     /**
+     * 资产业务类型：chat_attachment 等
+     */
+    private String assetKind;
+
+    /**
      * 资产类型：image/file/pdf/excel/audio/video
      */
     private String assetType;
@@ -74,9 +79,29 @@ public class ArtifactAssetPO extends BasePO {
     private Long sizeBytes;
 
     /**
+     * 文件内容 SHA-256
+     */
+    private String sha256;
+
+    /**
      * 资产状态：active/deleted
      */
     private String status;
+
+    /**
+     * 文本解析状态：ready/failed/unsupported
+     */
+    private String parseStatus;
+
+    /**
+     * 安全截断后的附件文本
+     */
+    private String extractedText;
+
+    /**
+     * 安全解析错误摘要
+     */
+    private String parseError;
 
     /**
      * 扩展信息

@@ -193,13 +193,18 @@ CREATE TABLE `artifact_asset` (
   `session_id` VARCHAR(64) NULL COMMENT '关联会话ID',
   `message_id` VARCHAR(64) NULL COMMENT '关联消息ID',
   `asset_id` VARCHAR(64) NOT NULL COMMENT '资产业务ID',
+  `asset_kind` VARCHAR(64) NOT NULL DEFAULT 'artifact' COMMENT '资产业务类型：chat_attachment/artifact',
   `asset_type` VARCHAR(64) NOT NULL COMMENT '资产类型：image/file/pdf/excel/audio/video',
   `bucket` VARCHAR(128) NULL COMMENT '存储桶',
   `object_key` VARCHAR(512) NULL COMMENT '对象存储 Key',
   `file_name` VARCHAR(255) NULL COMMENT '文件名',
   `mime_type` VARCHAR(128) NULL COMMENT 'MIME 类型',
   `size_bytes` BIGINT NULL COMMENT '文件大小，单位字节',
+  `sha256` CHAR(64) NULL COMMENT '文件内容 SHA-256',
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '资产状态：active/deleted',
+  `parse_status` VARCHAR(32) NOT NULL DEFAULT 'unsupported' COMMENT '解析状态：ready/failed/unsupported',
+  `extracted_text` MEDIUMTEXT NULL COMMENT '安全截断后的附件文本',
+  `parse_error` VARCHAR(512) NULL COMMENT '安全解析错误摘要',
   `metadata` JSON NULL COMMENT '扩展信息',
   `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
@@ -209,7 +214,8 @@ CREATE TABLE `artifact_asset` (
   KEY `idx_artifact_owner` (`owner_user_id`, `create_time`),
   KEY `idx_artifact_tenant_visibility` (`tenant_id`, `visibility`, `status`),
   KEY `idx_artifact_session` (`session_id`, `create_time`),
-  KEY `idx_artifact_message` (`message_id`)
+  KEY `idx_artifact_message` (`message_id`),
+  KEY `idx_artifact_owner_hash` (`tenant_id`, `owner_user_id`, `sha256`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='artifact_asset';
 
 CREATE TABLE `rag_knowledge_base` (

@@ -2,6 +2,8 @@ package cn.bugstack.ai.api.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class ChatRequestDTO {
 
@@ -13,5 +15,6 @@ public class ChatRequestDTO {
     private String sessionId;
     private String requestedRunId;
     private String message;
+    private List<String> attachmentIds;
 
 }

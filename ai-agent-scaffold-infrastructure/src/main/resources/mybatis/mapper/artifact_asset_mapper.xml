@@ -10,13 +10,18 @@
         <result column="session_id" property="sessionId"/>
         <result column="message_id" property="messageId"/>
         <result column="asset_id" property="assetId"/>
+        <result column="asset_kind" property="assetKind"/>
         <result column="asset_type" property="assetType"/>
         <result column="bucket" property="bucket"/>
         <result column="object_key" property="objectKey"/>
         <result column="file_name" property="fileName"/>
         <result column="mime_type" property="mimeType"/>
         <result column="size_bytes" property="sizeBytes"/>
+        <result column="sha256" property="sha256"/>
         <result column="status" property="status"/>
+        <result column="parse_status" property="parseStatus"/>
+        <result column="extracted_text" property="extractedText"/>
+        <result column="parse_error" property="parseError"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -24,17 +29,17 @@
     </resultMap>
 
     <sql id="ArtifactAssetColumns">
-        id, tenant_id, owner_user_id, visibility, session_id, message_id, asset_id, asset_type, bucket, object_key, file_name, mime_type, size_bytes, status, metadata, create_time, update_time, deleted
+        id, tenant_id, owner_user_id, visibility, session_id, message_id, asset_id, asset_kind, asset_type, bucket, object_key, file_name, mime_type, size_bytes, sha256, status, parse_status, extracted_text, parse_error, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ArtifactAssetPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO artifact_asset (tenant_id, owner_user_id, visibility, session_id, message_id, asset_id, asset_type, bucket, object_key, file_name, mime_type, size_bytes, status, metadata)
-        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{sessionId}, #{messageId}, #{assetId}, #{assetType}, #{bucket}, #{objectKey}, #{fileName}, #{mimeType}, #{sizeBytes}, #{status}, #{metadata})
+        INSERT INTO artifact_asset (tenant_id, owner_user_id, visibility, session_id, message_id, asset_id, asset_kind, asset_type, bucket, object_key, file_name, mime_type, size_bytes, sha256, status, parse_status, extracted_text, parse_error, metadata)
+        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{sessionId}, #{messageId}, #{assetId}, #{assetKind}, #{assetType}, #{bucket}, #{objectKey}, #{fileName}, #{mimeType}, #{sizeBytes}, #{sha256}, #{status}, #{parseStatus}, #{extractedText}, #{parseError}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ArtifactAssetPO">
         UPDATE artifact_asset
-        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, session_id = #{sessionId}, message_id = #{messageId}, asset_id = #{assetId}, asset_type = #{assetType}, bucket = #{bucket}, object_key = #{objectKey}, file_name = #{fileName}, mime_type = #{mimeType}, size_bytes = #{sizeBytes}, status = #{status}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, session_id = #{sessionId}, message_id = #{messageId}, asset_id = #{assetId}, asset_kind = #{assetKind}, asset_type = #{assetType}, bucket = #{bucket}, object_key = #{objectKey}, file_name = #{fileName}, mime_type = #{mimeType}, size_bytes = #{sizeBytes}, sha256 = #{sha256}, status = #{status}, parse_status = #{parseStatus}, extracted_text = #{extractedText}, parse_error = #{parseError}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
@@ -48,6 +53,64 @@
         SELECT <include refid="ArtifactAssetColumns"/>
         FROM artifact_asset
         WHERE asset_id = #{assetId} AND deleted = 0
+    </select>
+
+    <select id="queryOwned" resultMap="ArtifactAssetMap">
+        SELECT <include refid="ArtifactAssetColumns"/>
+        FROM artifact_asset
+        WHERE asset_id = #{assetId} AND owner_user_id = #{ownerUserId}
+          AND ((#{tenantId} IS NULL AND tenant_id IS NULL) OR tenant_id = #{tenantId})
+          AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <select id="queryReusableByHash" resultMap="ArtifactAssetMap">
+        SELECT <include refid="ArtifactAssetColumns"/>
+        FROM artifact_asset
+        WHERE owner_user_id = #{ownerUserId} AND sha256 = #{sha256} AND status = 'active'
+          AND ((#{tenantId} IS NULL AND tenant_id IS NULL) OR tenant_id = #{tenantId})
+          AND bucket IS NOT NULL AND object_key IS NOT NULL AND deleted = 0
+        ORDER BY id DESC LIMIT 1
+    </select>
+
+    <select id="queryOwnedList" resultMap="ArtifactAssetMap">
+        SELECT <include refid="ArtifactAssetColumns"/>
+        FROM artifact_asset
+        WHERE owner_user_id = #{ownerUserId} AND status = 'active' AND deleted = 0
+          AND ((#{tenantId} IS NULL AND tenant_id IS NULL) OR tenant_id = #{tenantId})
+          <if test="cursor != null">AND id &lt; #{cursor}</if>
+          <if test="sessionId != null and sessionId != ''">AND session_id = #{sessionId}</if>
+          <if test="assetKind != null and assetKind != ''">AND asset_kind = #{assetKind}</if>
+        ORDER BY id DESC LIMIT #{limit}
+    </select>
+
+    <update id="bindReadyAssets">
+        UPDATE artifact_asset
+        SET session_id = #{sessionId}, message_id = #{messageId}
+        WHERE owner_user_id = #{ownerUserId} AND status = 'active' AND parse_status = 'ready'
+          AND ((#{tenantId} IS NULL AND tenant_id IS NULL) OR tenant_id = #{tenantId})
+          AND (session_id IS NULL OR session_id = #{sessionId}) AND message_id IS NULL AND deleted = 0
+          AND asset_id IN
+          <foreach collection="assetIds" item="assetId" open="(" separator="," close=")">#{assetId}</foreach>
+    </update>
+
+    <update id="softDeleteOwned">
+        UPDATE artifact_asset SET status = 'deleted', deleted = 1
+        WHERE asset_id = #{assetId} AND owner_user_id = #{ownerUserId} AND status = 'active' AND deleted = 0
+          AND ((#{tenantId} IS NULL AND tenant_id IS NULL) OR tenant_id = #{tenantId})
+    </update>
+
+    <select id="queryContextAssets" resultMap="ArtifactAssetMap">
+        SELECT a.*
+        FROM artifact_asset a
+        INNER JOIN chat_message m ON m.message_id = a.message_id
+          AND m.tenant_id &lt;=&gt; a.tenant_id AND m.user_id = a.owner_user_id AND m.session_id = a.session_id
+        WHERE a.owner_user_id = #{ownerUserId} AND a.session_id = #{sessionId}
+          AND ((#{tenantId} IS NULL AND a.tenant_id IS NULL) OR a.tenant_id = #{tenantId})
+          AND a.status = 'active' AND a.parse_status = 'ready' AND a.deleted = 0
+          AND m.validity_status = 'active' AND m.role = 'user' AND m.deleted = 0
+          <if test="visibleThroughSequence != null">AND m.sequence_no &lt;= #{visibleThroughSequence}</if>
+        ORDER BY m.sequence_no DESC, a.id DESC
     </select>
 
     <select id="queryListByTenantId" resultMap="ArtifactAssetMap">

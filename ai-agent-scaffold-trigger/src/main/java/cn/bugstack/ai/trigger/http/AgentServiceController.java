@@ -136,12 +136,13 @@ public class AgentServiceController implements IAgentService {
             if (hasWorkflow(requestDTO)) {
                 RunStreamEntity<String> workflowRun = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
-                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
+                        requestDTO.getAttachmentIds());
                 runStream = workflowRun;
                 messages = workflowRun.getStream().toList().blockingGet();
             } else {
                 RunStreamEntity<Event> agentRun = chatService.startMessageStream(requestDTO.getAgentId(), userId,
-                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(), requestDTO.getAttachmentIds());
                 runStream = agentRun;
                 messages = agentRun.getStream().map(Event::stringifyContent).toList().blockingGet();
             }
@@ -195,7 +196,8 @@ public class AgentServiceController implements IAgentService {
             if (hasWorkflow(requestDTO)) {
                 RunStreamEntity<String> runStream = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
-                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                        userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
+                        requestDTO.getAttachmentIds());
                 runId = runStream.getRun().getRunId();
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
@@ -204,7 +206,7 @@ public class AgentServiceController implements IAgentService {
                 disposable = subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef);
             } else {
                 RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
-                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId());
+                        sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(), requestDTO.getAttachmentIds());
                 runId = runStream.getRun().getRunId();
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,

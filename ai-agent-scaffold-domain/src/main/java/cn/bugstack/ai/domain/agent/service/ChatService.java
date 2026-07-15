@@ -187,6 +187,13 @@ public class ChatService implements IChatService {
     @Override
     public RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
                                                      String requestedRunId) {
+        return startMessageStream(agentId, userId, sessionId, message, requestedRunId, List.of());
+    }
+
+    /** 创建并启动带附件的流式运行；参数是 Agent、会话、消息、运行和附件；返回运行与事件流。 */
+    @Override
+    public RunStreamEntity<Event> startMessageStream(String agentId, String userId, String sessionId, String message,
+                                                     String requestedRunId, List<String> attachmentIds) {
         AiAgentRegisterVO aiAgentRegisterVO = requireAgent(agentId);
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(agentId, userId, sessionId, aiAgentRegisterVO);
@@ -195,7 +202,8 @@ public class ChatService implements IChatService {
         String effectiveMessage = steerResumeMessage(run, message);
         return RunStreamEntity.<Event>builder()
                 .run(run)
-                .stream(doHandleMessageStream(agentId, userId, actualSessionId, effectiveMessage, aiAgentRegisterVO, run))
+                .stream(doHandleMessageStream(agentId, userId, actualSessionId, effectiveMessage, aiAgentRegisterVO,
+                        run, attachmentIds))
                 .build();
     }
 
@@ -223,6 +231,16 @@ public class ChatService implements IChatService {
     public RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
                                                                    String modelCode, String userId, String sessionId,
                                                                    String message, String requestedRunId) {
+        return startWorkflowMessageTextStream(workflowId, workflowVersion, modelCode, userId, sessionId,
+                message, requestedRunId, List.of());
+    }
+
+    /** 创建并启动带附件的工作流运行；参数是工作流身份、会话、运行和附件；返回运行与文本流。 */
+    @Override
+    public RunStreamEntity<String> startWorkflowMessageTextStream(String workflowId, Integer workflowVersion,
+                                                                   String modelCode, String userId, String sessionId,
+                                                                   String message, String requestedRunId,
+                                                                   List<String> attachmentIds) {
         String tenantId = currentTenantId();
         String traceId = TraceContext.currentOrNewTraceId();
         WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, workflowId, workflowVersion, modelCode);
@@ -234,7 +252,7 @@ public class ChatService implements IChatService {
         return RunStreamEntity.<String>builder()
                 .run(run)
                 .stream(Flowable.fromCallable(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
-                        actualSessionId, effectiveMessage, traceId, run)).subscribeOn(Schedulers.io()))
+                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)).subscribeOn(Schedulers.io()))
                 .build();
     }
 
@@ -355,14 +373,16 @@ public class ChatService implements IChatService {
      * 执行流式对话；参数是会话 Agent、用户、会话、消息和运行体；返回事件流。
      */
     private Flowable<Event> doHandleMessageStream(String sessionAgentId, String userId, String sessionId, String message,
-                                                  AiAgentRegisterVO aiAgentRegisterVO, ChatRunEntity run) {
+                                                  AiAgentRegisterVO aiAgentRegisterVO, ChatRunEntity run,
+                                                  List<String> attachmentIds) {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         String tenantId = currentTenantId();
         String actualSessionId = ensureSessionId(sessionAgentId, userId, sessionId, aiAgentRegisterVO);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, sessionAgentId);
         String traceId = TraceContext.currentOrNewTraceId();
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId,
+                attachmentIds);
         ChatMessageEntity userMessage = binding.getMessage();
         run = binding.getRun();
         String adkSessionId = invocationSessionId(actualSessionId);
@@ -408,13 +428,15 @@ public class ChatService implements IChatService {
      * 执行 DAG 工作流对话；参数是运行时、用户、会话和消息；返回最终节点输出。
      */
     private String doHandleWorkflowDagMessage(WorkflowRuntimeEntity runtime, String tenantId, String userId,
-                                              String sessionId, String message, String traceId, ChatRunEntity run) {
+                                              String sessionId, String message, String traceId, ChatRunEntity run,
+                                              List<String> attachmentIds) {
         WorkflowDagPlanEntity dagPlan = requireDagPlan(runtime);
         AiAgentRegisterVO rootAgent = requireAgent(runtime.getRuntimeAgentId());
         String actualSessionId = ensureSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent);
         sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId,
+                attachmentIds);
         ChatMessageEntity userMessage = binding.getMessage();
         ChatRunEntity activeRun = binding.getRun();
 
@@ -816,7 +838,14 @@ public class ChatService implements IChatService {
      */
     private RunMessageBindingEntity saveRunUserMessage(String tenantId, String userId, String runId,
                                                         String content, String traceId) {
-        RunMessageBindingEntity binding = runControlService.appendUserMessage(tenantId, userId, runId, content, traceId);
+        return saveRunUserMessage(tenantId, userId, runId, content, traceId, List.of());
+    }
+
+    /** 原子写入运行用户消息并绑定附件；参数是可信身份、运行、内容、链路和附件；返回绑定结果。 */
+    private RunMessageBindingEntity saveRunUserMessage(String tenantId, String userId, String runId,
+                                                        String content, String traceId, List<String> attachmentIds) {
+        RunMessageBindingEntity binding = runControlService.appendUserMessage(
+                tenantId, userId, runId, content, traceId, attachmentIds);
         conversationMemoryService.onMessageSaved(binding.getMessage());
         return binding;
     }
