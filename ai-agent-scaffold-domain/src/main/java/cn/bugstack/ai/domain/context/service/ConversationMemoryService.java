@@ -64,6 +64,8 @@ public class ConversationMemoryService {
     private static final String KEY_OPEN_ITEMS = "openItems";
     private static final String KEY_ENTITIES = "keyEntities";
     private static final String KEY_SOURCE_RANGE = "sourceRange";
+    private static final long COMPACTION_WAIT_INITIAL_INTERVAL_MS = 50L;
+    private static final long COMPACTION_WAIT_MAX_INTERVAL_MS = 1_000L;
 
     private final IConversationMemoryRepository memoryRepository;
     private final IContextCompactionTaskRepository taskRepository;
@@ -490,6 +492,7 @@ public class ConversationMemoryService {
 
     private boolean waitForCompaction(String taskId, long baseRevision, long timeoutMs) {
         long deadline = System.currentTimeMillis() + timeoutMs;
+        long waitIntervalMs = COMPACTION_WAIT_INITIAL_INTERVAL_MS;
         while (System.currentTimeMillis() < deadline) {
             ContextCompactionTaskEntity current = taskRepository.queryByTaskId(taskId);
             if (current == null || current.getStatus() == ContextCompactionTaskStatus.DEAD
@@ -500,12 +503,17 @@ public class ConversationMemoryService {
             if (current.getStatus() == ContextCompactionTaskStatus.SUCCEEDED) {
                 return true;
             }
+            long remainingMs = deadline - System.currentTimeMillis();
+            if (remainingMs <= 0L) {
+                break;
+            }
             try {
-                Thread.sleep(50L);
+                Thread.sleep(Math.min(waitIntervalMs, remainingMs));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("等待上下文压缩被中断", e);
             }
+            waitIntervalMs = Math.min(waitIntervalMs * 2L, COMPACTION_WAIT_MAX_INTERVAL_MS);
         }
         throw new IllegalStateException("工具调用前上下文压缩超时");
     }

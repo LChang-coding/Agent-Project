@@ -32,6 +32,8 @@ import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.mockito.Mockito;
 
 import java.time.Duration;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -192,6 +194,66 @@ public class ConversationMemoryServiceTest {
         Assert.assertEquals(Integer.valueOf(0), command.expectedMemoryVersion());
     }
 
+    /** 校验竞争任务完成等待；验证指数退避期间仍能及时识别成功。 */
+    @Test
+    public void shouldWaitForCompactionSuccessWithBackoff() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.task.task = waitingTask(ContextCompactionTaskStatus.PROCESSING);
+        fixture.task.succeedAfterQueries = 4;
+
+        Assert.assertTrue(invokeWaitForCompaction(fixture.service, 5_000L));
+        Assert.assertEquals(4, fixture.task.queryCount);
+    }
+
+    /** 校验五秒等待窗口；验证退避后数据库查询次数不超过验收上限。 */
+    @Test
+    public void shouldLimitCompactionQueriesWithinFiveSecondTimeout() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.task.task = waitingTask(ContextCompactionTaskStatus.PROCESSING);
+
+        try {
+            invokeWaitForCompaction(fixture.service, 5_000L);
+            Assert.fail("未完成的压缩任务必须在五秒后超时");
+        } catch (InvocationTargetException e) {
+            Assert.assertEquals("工具调用前上下文压缩超时", e.getCause().getMessage());
+        }
+        Assert.assertTrue("五秒窗口查询次数必须不超过15次", fixture.task.queryCount <= 15);
+    }
+
+    /** 校验终止任务状态；验证失败、失效和取消仍然立即关闭工具调用门禁。 */
+    @Test
+    public void shouldRejectTerminalCompactionStatusesWithoutWaiting() throws Exception {
+        for (ContextCompactionTaskStatus status : List.of(ContextCompactionTaskStatus.DEAD,
+                ContextCompactionTaskStatus.STALE, ContextCompactionTaskStatus.CANCEL_REQUESTED)) {
+            Fixture fixture = new Fixture();
+            fixture.task.task = waitingTask(status);
+            try {
+                invokeWaitForCompaction(fixture.service, 5_000L);
+                Assert.fail("终止状态必须立即拒绝工具调用：" + status);
+            } catch (InvocationTargetException e) {
+                Assert.assertEquals("工具调用前上下文压缩失败或已失效", e.getCause().getMessage());
+            }
+            Assert.assertEquals(1, fixture.task.queryCount);
+        }
+    }
+
+    /** 校验等待中断；验证异常语义和线程中断标记保持不变。 */
+    @Test
+    public void shouldPreserveInterruptStatusWhileWaitingForCompaction() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.task.task = waitingTask(ContextCompactionTaskStatus.PROCESSING);
+        Thread.currentThread().interrupt();
+        try {
+            invokeWaitForCompaction(fixture.service, 5_000L);
+            Assert.fail("线程中断后必须停止等待");
+        } catch (InvocationTargetException e) {
+            Assert.assertEquals("等待上下文压缩被中断", e.getCause().getMessage());
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     @Test
     public void shouldCompressAttachmentAndExcludeItAfterSummaryCoversRange() {
         FakeMemoryRepository memory = new FakeMemoryRepository();
@@ -231,6 +293,17 @@ public class ConversationMemoryServiceTest {
                 .sequenceNo(sequence)
                 .traceId("trace_1")
                 .build();
+    }
+
+    private static ContextCompactionTaskEntity waitingTask(ContextCompactionTaskStatus status) {
+        return ContextCompactionTaskEntity.builder().taskId("task_wait").status(status).build();
+    }
+
+    private static boolean invokeWaitForCompaction(ConversationMemoryService service, long timeoutMs) throws Exception {
+        Method method = ConversationMemoryService.class.getDeclaredMethod("waitForCompaction",
+                String.class, long.class, long.class);
+        method.setAccessible(true);
+        return (boolean) method.invoke(service, "task_wait", 0L, timeoutMs);
     }
 
     private static ConversationMemoryService newService(SessionDomain sessionDomain, DefaultArmoryFactory armoryFactory) {
@@ -389,6 +462,8 @@ public class ConversationMemoryServiceTest {
 
     private static class FakeTaskRepository implements IContextCompactionTaskRepository {
         private ContextCompactionTaskEntity task;
+        private int queryCount;
+        private int succeedAfterQueries = Integer.MAX_VALUE;
 
         @Override
         public ContextCompactionTaskEntity createIfAbsent(ContextTaskCreateCommand command) {
@@ -413,6 +488,10 @@ public class ConversationMemoryServiceTest {
 
         @Override
         public ContextCompactionTaskEntity queryByTaskId(String taskId) {
+            queryCount++;
+            if (task != null && queryCount >= succeedAfterQueries) {
+                task.setStatus(ContextCompactionTaskStatus.SUCCEEDED);
+            }
             return task;
         }
 
