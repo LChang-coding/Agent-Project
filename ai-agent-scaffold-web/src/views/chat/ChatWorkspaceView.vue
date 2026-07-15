@@ -28,7 +28,7 @@
         </div>
       </aside>
 
-      <main class="chat-stage">
+      <main class="chat-stage" :aria-busy="chatStore.sending || chatStore.cancelling || chatStore.steering">
         <header class="chat-commandbar">
           <div class="chat-title">
             <span class="status-dot" />
@@ -77,13 +77,22 @@
           </div>
         </header>
 
-        <div v-if="shareLink" class="share-strip">
-          <span>安全分享已生成：{{ shareLink }}</span>
-          <button type="button" class="button button--soft" @click="copyShareLink">复制链接</button>
-          <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
+        <div :class="['chat-statusbar', `chat-statusbar--${operationStatus.tone}`]" role="status" aria-live="polite">
+          <div class="operation-status">
+            <span class="operation-status__dot" aria-hidden="true" />
+            <div>
+              <strong>{{ operationStatus.label }}</strong>
+              <span>{{ operationStatus.detail }}</span>
+            </div>
+          </div>
+          <div v-if="shareLink" class="share-result">
+            <span>安全分享已生成：{{ shareLink }}</span>
+            <button type="button" class="button button--soft" @click="copyShareLink">复制链接</button>
+            <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
+          </div>
         </div>
 
-        <div ref="messageListRef" class="message-list">
+        <div ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
           <div v-if="chatStore.messages.length === 0" class="empty-chat">
             <span class="empty-orb">AI</span>
             <h2>把复杂任务丢进来</h2>
@@ -255,8 +264,6 @@
               </div>
             </div>
           </div>
-
-          <span v-if="chatStore.errorMessage" class="error-text">{{ chatStore.errorMessage }}</span>
         </form>
       </main>
     </section>
@@ -264,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { createSessionShare } from '@/api/share';
 import { useAssetStore } from '@/stores/assets';
@@ -287,6 +294,8 @@ const messageListRef = ref<HTMLElement | null>(null);
 const attachmentInputRef = ref<HTMLInputElement | null>(null);
 const sharing = ref(false);
 const shareLink = ref('');
+const followingLatest = ref(true);
+let scrollFrame: number | null = null;
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const attachmentScope = computed(() => {
   if (chatStore.sessionId) {
@@ -347,28 +356,43 @@ const insightTabs = computed<Array<{ value: InsightTab; label: string; count?: n
   { value: 'calls', label: '调用', count: insightStore.context?.callCount ?? 0 },
   { value: 'assets', label: '附件', count: insightStore.context?.attachmentCount ?? 0 },
 ]);
+const lastMessageRenderKey = computed(() => {
+  const message = chatStore.messages.at(-1);
+  return message ? `${message.id}:${message.content.length}:${message.status}` : '';
+});
+const operationStatus = computed(() => {
+  const error = chatStore.errorMessage || assetStore.errorMessage;
+  if (chatStore.cancelling) return { tone: 'warning', label: '正在取消', detail: '等待服务端中止运行并收口上下文。' };
+  if (chatStore.steering) return { tone: 'working', label: '正在引导', detail: '新指令已提交，正在切换到后继运行。' };
+  if (chatStore.sending) return { tone: 'working', label: '正在生成', detail: '可继续输入引导指令，或取消当前运行。' };
+  if (assetStore.uploading) return { tone: 'working', label: '正在上传附件', detail: '文件解析完成后才能选入消息。' };
+  if (sharing.value) return { tone: 'working', label: '正在生成分享', detail: '正在生成服务器托管的安全快照链接。' };
+  if (chatStore.loadingAgents || chatStore.loadingSessions) return { tone: 'working', label: '正在刷新工作台', detail: '同步运行目标和会话索引。' };
+  if (error) return { tone: 'error', label: '操作失败', detail: error };
+  if (shareLink.value) return { tone: 'success', label: '分享已就绪', detail: '链接已生成，可复制后发送给接收者。' };
+  if (chatStore.lastSettledRunId && chatStore.messages.length > 0) {
+    return { tone: 'success', label: '运行已完成', detail: '消息、上下文和调用记录已收口。' };
+  }
+  return { tone: 'idle', label: '工作台就绪', detail: '选择运行目标并输入指令。' };
+});
 
 onMounted(async () => {
   assetStore.setSelectionScope(attachmentScope.value);
   await chatStore.loadAgents();
   await toolStore.loadCatalog();
-  if (chatStore.sessionId) {
-    await Promise.all([
-      toolStore.loadCalls(chatStore.sessionId),
-      insightStore.loadSession(chatStore.sessionId),
-      refreshSessionAssets(chatStore.sessionId),
-    ]);
-  } else {
-    assetStore.clearList();
+  scrollToLatest(true);
+});
+
+onBeforeUnmount(() => {
+  if (scrollFrame !== null) {
+    window.cancelAnimationFrame(scrollFrame);
   }
-  scrollToLatest();
 });
 
 watch(
   () => chatStore.sessionId,
-  async (sessionId) => {
-    await Promise.all([toolStore.loadCalls(sessionId), insightStore.loadSession(sessionId)]);
-  },
+  (sessionId) => refreshSessionResources(sessionId),
+  { immediate: true },
 );
 
 watch(
@@ -381,6 +405,7 @@ watch(
       assetStore.clearList();
     }
   },
+  { immediate: true },
 );
 
 watch(
@@ -392,28 +417,32 @@ watch(
   },
 );
 
-watch(
-  () => chatStore.messages.map((message) => `${message.id}:${message.content.length}:${message.status}`).join('|'),
-  () => scrollToLatest(),
-  { flush: 'post' },
-);
+watch(lastMessageRenderKey, () => scheduleLatestScroll(), { flush: 'post' });
+
+/** 会话切换的唯一附属资源刷新入口。 */
+async function refreshSessionResources(sessionId: string) {
+  await Promise.allSettled([
+    toolStore.loadCalls(sessionId),
+    insightStore.loadSession(sessionId),
+  ]);
+}
 
 /**
  * 创建新会话；无参数；成功后刷新工具调用并滚动到底部。
  */
 async function createSession() {
+  followingLatest.value = true;
   await chatStore.createSession();
-  await toolStore.loadCalls(chatStore.sessionId);
-  scrollToLatest();
+  scrollToLatest(true);
 }
 
 /**
  * 切换本地会话；参数是会话 ID；恢复消息并刷新调用记录。
  */
 async function switchSession(sessionId: string) {
+  followingLatest.value = true;
   await chatStore.switchSession(sessionId);
-  await toolStore.loadCalls(sessionId);
-  scrollToLatest();
+  scrollToLatest(true);
 }
 
 /**
@@ -425,7 +454,6 @@ async function deleteSession(sessionId: string, title: string) {
   }
   try {
     await chatStore.deleteSession(sessionId);
-    await toolStore.loadCalls(chatStore.sessionId);
   } catch {
     // Store 已保存可展示的服务端错误。
   }
@@ -583,6 +611,7 @@ async function send() {
     return;
   }
   const attachmentIds = [...assetStore.selectedAssetIds];
+  followingLatest.value = true;
   draft.value = '';
   await chatStore.send(message, '', attachmentIds);
   assetStore.clearSelected();
@@ -591,7 +620,7 @@ async function send() {
   }
   await toolStore.loadCatalog();
   await toolStore.loadCalls(chatStore.sessionId);
-  scrollToLatest();
+  scrollToLatest(true);
 }
 
 /**
@@ -600,7 +629,7 @@ async function send() {
 async function cancelRun() {
   await chatStore.cancelActiveRun();
   await toolStore.loadCalls(chatStore.sessionId);
-  scrollToLatest();
+  scrollToLatest(true);
 }
 
 /**
@@ -615,7 +644,7 @@ async function steerRun() {
   if (success) {
     draft.value = '';
   }
-  scrollToLatest();
+  scrollToLatest(true);
 }
 
 /**
@@ -653,15 +682,29 @@ async function copyShareLink() {
 }
 
 /**
- * 滚动到最新消息；无参数；让流式输出始终可见。
+ * 滚动到最新消息；用户离开底部后不再强制跟随流式输出。
  */
-function scrollToLatest() {
+function onMessageScroll() {
+  const element = messageListRef.value;
+  if (!element) return;
+  followingLatest.value = element.scrollHeight - element.scrollTop - element.clientHeight <= 72;
+}
+
+/** 合并高频消息更新；每帧最多执行一次自动滚动。 */
+function scheduleLatestScroll() {
+  if (!followingLatest.value || scrollFrame !== null) return;
+  scrollFrame = window.requestAnimationFrame(() => {
+    scrollFrame = null;
+    scrollToLatest();
+  });
+}
+
+function scrollToLatest(force = false) {
+  if (!force && !followingLatest.value) return;
+  if (force) followingLatest.value = true;
   nextTick(() => {
     const element = messageListRef.value;
-    if (!element) {
-      return;
-    }
-    element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+    if (element) element.scrollTop = element.scrollHeight;
   });
 }
 
@@ -742,26 +785,76 @@ function formatOptionalTokens(value?: number) {
 
 <style scoped>
 .chat-page {
-  height: calc(100vh - 52px);
+  height: calc(100dvh - 52px);
   min-height: 0;
   overflow: hidden;
   padding: 12px;
 }
 
-.share-strip {
+.chat-statusbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
-  padding: 10px 16px;
+  min-height: 42px;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
   color: var(--muted);
   font-size: 12px;
 }
 
-.share-strip span {
+.operation-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   min-width: 0;
-  flex: 1;
+}
+
+.operation-status > div {
+  display: grid;
+  gap: 1px;
+}
+
+.operation-status strong {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.operation-status__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.chat-statusbar--working .operation-status__dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: statusPulse 1.2s ease-in-out infinite;
+}
+
+.chat-statusbar--success .operation-status__dot { background: var(--success); }
+.chat-statusbar--warning .operation-status__dot { background: var(--warning); }
+.chat-statusbar--error .operation-status__dot { background: var(--danger); }
+.chat-statusbar--error .operation-status strong,
+.chat-statusbar--error .operation-status span { color: var(--danger); }
+
+.share-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(420px, 100%);
+  flex: 1 1 420px;
+  justify-content: flex-end;
+}
+
+.share-result > span {
+  min-width: 0;
+  max-width: 540px;
+  flex: 1 1 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -913,10 +1006,20 @@ function formatOptionalTokens(value?: number) {
 
 .chat-stage {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "command"
+    "status"
+    "messages"
+    "composer";
+  grid-template-rows: auto auto minmax(96px, 1fr) minmax(0, auto);
   min-height: 0;
   border-radius: var(--radius-lg);
 }
+
+.chat-commandbar { grid-area: command; }
+.chat-statusbar { grid-area: status; }
+.message-list { grid-area: messages; }
+.composer { grid-area: composer; }
 
 .chat-commandbar {
   display: flex;
@@ -1116,6 +1219,9 @@ function formatOptionalTokens(value?: number) {
   display: grid;
   gap: 8px;
   min-height: 0;
+  max-height: min(46dvh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 14px 14px;
 }
 
@@ -1483,16 +1589,20 @@ function formatOptionalTokens(value?: number) {
   }
 }
 
+@keyframes statusPulse {
+  50% { opacity: 0.48; transform: scale(0.86); }
+}
+
 @media (min-width: 841px) and (max-width: 1100px) {
   .chat-page {
-    height: calc(100vh - 112px);
+    height: calc(100dvh - 112px);
   }
 }
 
 @media (max-width: 840px) {
   .chat-page {
     height: auto;
-    min-height: calc(100vh - 52px);
+    min-height: calc(100dvh - 112px);
     overflow: visible;
   }
 
@@ -1523,8 +1633,10 @@ function formatOptionalTokens(value?: number) {
   }
 
   .chat-stage {
-    min-height: calc(100vh - 246px);
+    min-height: calc(100dvh - 246px);
   }
+
+  .share-result { justify-content: flex-start; }
 }
 
 @media (max-width: 700px) {
@@ -1533,7 +1645,7 @@ function formatOptionalTokens(value?: number) {
   }
 
   .chat-workbench {
-    min-height: calc(100vh - 92px);
+    min-height: calc(100dvh - 156px);
   }
 
   .message-list {
@@ -1551,5 +1663,14 @@ function formatOptionalTokens(value?: number) {
   .composer {
     padding: 0 10px 10px;
   }
+
+  .chat-statusbar { align-items: flex-start; }
+  .share-result { min-width: 0; flex-basis: 100%; flex-wrap: wrap; }
+}
+
+@media (max-height: 700px) and (min-width: 841px) {
+  .composer { max-height: 42dvh; }
+  .composer-input { min-height: 62px; max-height: 112px; }
+  .insight-body { max-height: 132px; }
 }
 </style>

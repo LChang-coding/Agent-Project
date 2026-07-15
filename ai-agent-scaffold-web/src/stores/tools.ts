@@ -26,6 +26,8 @@ import type {
   ToolCatalogItem,
 } from '@/types/api';
 
+let callsRequestGeneration = 0;
+
 interface ToolState {
   skills: SkillDefinition[];
   mcps: McpDefinition[];
@@ -225,11 +227,15 @@ export const useToolStore = defineStore('tools', {
      * 加载工具调用日志；参数是会话ID；返回调用日志。
      */
     async loadCalls(sessionId: string) {
+      const generation = ++callsRequestGeneration;
       if (!sessionId) {
         this.calls = [];
         return this.calls;
       }
-      this.calls = await queryToolCalls(sessionId);
+      const calls = await queryToolCalls(sessionId);
+      if (generation === callsRequestGeneration) {
+        this.calls = calls;
+      }
       return this.calls;
     },
   },
