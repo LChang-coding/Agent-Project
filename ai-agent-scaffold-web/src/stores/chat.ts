@@ -17,6 +17,7 @@ import type {
   ChatRequest,
   LocalChatSession,
   RunStreamEvent,
+  SessionMessagePage,
   SessionShareResponse,
   WorkflowOption,
   WorkflowSummary,
@@ -49,6 +50,7 @@ let activeRequest: ActiveChatRequest | null = null;
 let cancelPromise: Promise<void> | null = null;
 let steerPromise: Promise<boolean> | null = null;
 let sessionSwitchGeneration = 0;
+const SESSION_MESSAGE_PAGE_SIZE = 50;
 
 interface ChatState {
   agents: AiAgentConfig[];
@@ -74,6 +76,12 @@ interface ChatState {
   errorMessage: string;
   loadingSessions: boolean;
   deletingSessionId: string;
+  nextBeforeSequence: number | null;
+  hasMoreMessages: boolean;
+  loadingEarlierMessages: boolean;
+  loadingMessages: boolean;
+  historyMessage: string;
+  historyErrorMessage: string;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -101,6 +109,12 @@ export const useChatStore = defineStore('chat', {
     errorMessage: '',
     loadingSessions: false,
     deletingSessionId: '',
+    nextBeforeSequence: null,
+    hasMoreMessages: false,
+    loadingEarlierMessages: false,
+    loadingMessages: false,
+    historyMessage: '',
+    historyErrorMessage: '',
   }),
   getters: {
     activeAgent: (state) => state.agents.find((agent) => agent.agentId === state.activeAgentId),
@@ -148,6 +162,7 @@ export const useChatStore = defineStore('chat', {
       this.activeAgentId = agentId;
       this.sessionId = '';
       this.messages = [];
+      this.resetMessageHistoryState();
       this.errorMessage = '';
     },
 
@@ -164,6 +179,7 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = '';
       this.messages = [];
+      this.resetMessageHistoryState();
       this.errorMessage = '';
     },
 
@@ -176,6 +192,7 @@ export const useChatStore = defineStore('chat', {
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
       this.messages = [];
+      this.resetMessageHistoryState();
       this.saveCurrentSession('新会话');
       return result.sessionId;
     },
@@ -201,6 +218,8 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = session.sessionId;
       this.contextRevision = session.contextRevision || 0;
+      this.messages = [];
+      this.resetMessageHistoryState(false);
       await this.reloadSessionMessages(sessionId);
     },
 
@@ -208,31 +227,83 @@ export const useChatStore = defineStore('chat', {
      * 重新读取当前数据库会话的有效消息；参数是会话 ID；不受同会话切换短路影响。
      */
     async reloadSessionMessages(sessionId: string) {
+      const generation = ++sessionSwitchGeneration;
+      this.loadingMessages = true;
+      this.loadingEarlierMessages = false;
+      this.nextBeforeSequence = null;
+      this.hasMoreMessages = false;
+      this.historyMessage = '';
+      this.historyErrorMessage = '';
       try {
-        const generation = ++sessionSwitchGeneration;
-        const pages = [];
-        let beforeSequence: number | undefined;
-        do {
-          const page = await queryChatSessionMessages(sessionId, beforeSequence);
-          pages.unshift(...page.items);
-          beforeSequence = page.hasMore ? page.nextBeforeSequence : undefined;
-        } while (beforeSequence !== undefined);
+        const page = await queryChatSessionMessages(sessionId, undefined, SESSION_MESSAGE_PAGE_SIZE);
         if (generation !== sessionSwitchGeneration || this.sessionId !== sessionId) {
           return;
         }
-        this.messages = pages.map((message) => ({
-          id: message.messageId,
-          role: message.role,
-          content: message.content,
-          createdAt: message.createTime,
-          status: 'done',
-        }));
+        this.messages = page.items.map(toChatMessage);
+        this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
+        this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         this.errorMessage = '';
       } catch (error) {
-        if (this.sessionId === sessionId) {
+        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
           this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
         }
+      } finally {
+        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
+          this.loadingMessages = false;
+        }
       }
+    },
+
+    /**
+     * 加载当前会话更早一页消息；无重复请求，旧会话响应不会回写。
+     */
+    async loadEarlierMessages() {
+      const sessionId = this.sessionId;
+      const beforeSequence = this.nextBeforeSequence;
+      if (!sessionId || !this.hasMoreMessages || beforeSequence === null || this.loadingEarlierMessages) {
+        return 0;
+      }
+      const generation = sessionSwitchGeneration;
+      this.loadingEarlierMessages = true;
+      this.historyMessage = '';
+      this.historyErrorMessage = '';
+      try {
+        const page = await queryChatSessionMessages(sessionId, beforeSequence, SESSION_MESSAGE_PAGE_SIZE);
+        if (generation !== sessionSwitchGeneration || this.sessionId !== sessionId) {
+          return 0;
+        }
+        const existingIds = new Set(this.messages.map((message) => message.id));
+        const earlierMessages = page.items.map(toChatMessage).filter((message) => !existingIds.has(message.id));
+        this.messages = [...earlierMessages, ...this.messages];
+        this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
+        this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
+        this.historyMessage = earlierMessages.length > 0
+          ? `已加载 ${earlierMessages.length} 条更早消息。`
+          : '这一页没有新的有效消息。';
+        return earlierMessages.length;
+      } catch (error) {
+        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
+          this.historyErrorMessage = error instanceof Error ? error.message : '更早消息加载失败';
+        }
+        throw error;
+      } finally {
+        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
+          this.loadingEarlierMessages = false;
+        }
+      }
+    },
+
+    /** 清空消息分页游标和反馈；用于新会话或运行目标切换。 */
+    resetMessageHistoryState(invalidateRequests = true) {
+      if (invalidateRequests) {
+        sessionSwitchGeneration += 1;
+      }
+      this.nextBeforeSequence = null;
+      this.hasMoreMessages = false;
+      this.loadingEarlierMessages = false;
+      this.loadingMessages = false;
+      this.historyMessage = '';
+      this.historyErrorMessage = '';
     },
 
     /**
@@ -692,6 +763,7 @@ export const useChatStore = defineStore('chat', {
         if (sessionId === this.sessionId) {
           this.sessionId = '';
           this.messages = [];
+          this.resetMessageHistoryState();
           this.currentRunId = '';
           const next = remaining.find((item) => item.sourceType === this.activeSourceType);
           if (next) {
@@ -715,10 +787,14 @@ export const useChatStore = defineStore('chat', {
       }
       const activeAgent = this.activeAgent;
       const activeWorkflow = this.activeWorkflow;
+      const existingSession = this.sessions.find((item) => item.sessionId === this.sessionId);
       const runtimeName = this.activeSourceType === 'workflow'
         ? activeWorkflow?.workflowName || this.activeWorkflowId
         : activeAgent?.agentName || this.activeAgentId;
-      const title = firstUserMessage(this.messages) || defaultTitle || runtimeName || '新会话';
+      const stableTitle = existingSession?.title && existingSession.title !== '新会话'
+        ? existingSession.title
+        : '';
+      const title = stableTitle || firstUserMessage(this.messages) || defaultTitle || runtimeName || '新会话';
       const session: LocalChatSession = {
         sessionId: this.sessionId,
         agentId: this.activeSourceType === 'workflow' ? this.activeWorkflowId : this.activeAgentId,
@@ -784,6 +860,17 @@ export const useChatStore = defineStore('chat', {
  */
 function createId() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
+/** 将服务端有效消息转换为聊天视图模型。 */
+function toChatMessage(message: SessionMessagePage['items'][number]): ChatMessage {
+  return {
+    id: message.messageId,
+    role: message.role,
+    content: message.content,
+    createdAt: message.createTime,
+    status: 'done',
+  };
 }
 
 /**

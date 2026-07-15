@@ -28,7 +28,7 @@
         </div>
       </aside>
 
-      <main class="chat-stage" :aria-busy="chatStore.sending || chatStore.cancelling || chatStore.steering">
+      <main class="chat-stage" :aria-busy="chatStore.sending || chatStore.cancelling || chatStore.steering || chatStore.loadingMessages || chatStore.loadingEarlierMessages">
         <header class="chat-commandbar">
           <div class="chat-title">
             <span class="status-dot" />
@@ -93,16 +93,39 @@
         </div>
 
         <div ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
-          <div v-if="chatStore.messages.length === 0" class="empty-chat">
+          <div v-if="chatStore.loadingMessages" class="empty-chat" role="status" aria-live="polite">
+            <span class="empty-orb">···</span>
+            <h2>正在载入最近消息</h2>
+            <p>先恢复最近 50 条，较早历史可在载入后按需读取。</p>
+          </div>
+
+          <div v-else-if="chatStore.messages.length === 0" class="empty-chat">
             <span class="empty-orb">AI</span>
             <h2>把复杂任务丢进来</h2>
             <p>保持聊天界面干净，工具、上下文、Token 和附件都收进下方的 + 面板。</p>
           </div>
 
-          <TransitionGroup v-else name="message-flow" tag="div" class="message-stack">
+          <template v-else>
+          <div class="history-loader">
+            <button
+              v-if="canShowEarlierMessages"
+              class="button button--soft"
+              type="button"
+              :disabled="chatStore.loadingEarlierMessages || chatStore.sending"
+              @click="showEarlierMessages"
+            >
+              {{ earlierMessagesLabel }}
+            </button>
+            <span :class="['history-feedback', { 'history-feedback--error': chatStore.historyErrorMessage }]" role="status" aria-live="polite">
+              {{ historyFeedback }}
+            </span>
+          </div>
+
+          <div class="message-stack">
             <article
-              v-for="message in chatStore.messages"
+              v-for="message in visibleMessages"
               :key="message.id"
+              :data-message-id="message.id"
               :class="['message', `message--${message.role}`, { 'message--streaming': message.status === 'streaming' }]"
             >
               <div class="message__meta">
@@ -115,7 +138,12 @@
               </div>
               <p>{{ message.content || '...' }}</p>
             </article>
-          </TransitionGroup>
+          </div>
+
+          <div v-if="!isViewingLatestWindow" class="latest-window-action">
+            <button class="button button--soft" type="button" @click="showLatestMessages">返回最新消息</button>
+          </div>
+          </template>
         </div>
 
         <form class="composer" @submit.prevent="send">
@@ -281,6 +309,10 @@ import { useToolStore } from '@/stores/tools';
 import type { ArtifactAsset, ChatMessage } from '@/types/api';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
+interface MessageScrollAnchor {
+  messageId: string;
+  viewportTop: number;
+}
 
 const chatStore = useChatStore();
 const assetStore = useAssetStore();
@@ -295,7 +327,11 @@ const attachmentInputRef = ref<HTMLInputElement | null>(null);
 const sharing = ref(false);
 const shareLink = ref('');
 const followingLatest = ref(true);
+const messageWindowStart = ref(0);
+const windowFeedback = ref('');
 let scrollFrame: number | null = null;
+const MESSAGE_WINDOW_SIZE = 100;
+const MESSAGE_WINDOW_STEP = 50;
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const attachmentScope = computed(() => {
   if (chatStore.sessionId) {
@@ -360,11 +396,36 @@ const lastMessageRenderKey = computed(() => {
   const message = chatStore.messages.at(-1);
   return message ? `${message.id}:${message.content.length}:${message.status}` : '';
 });
+const latestWindowStart = computed(() => Math.max(0, chatStore.messages.length - MESSAGE_WINDOW_SIZE));
+const boundedWindowStart = computed(() => Math.min(messageWindowStart.value, latestWindowStart.value));
+const visibleMessages = computed(() => chatStore.messages.slice(
+  boundedWindowStart.value,
+  boundedWindowStart.value + MESSAGE_WINDOW_SIZE,
+));
+const isViewingLatestWindow = computed(() => boundedWindowStart.value === latestWindowStart.value);
+const canShowEarlierMessages = computed(() => boundedWindowStart.value > 0
+  || chatStore.hasMoreMessages
+  || chatStore.loadingEarlierMessages
+  || Boolean(chatStore.historyErrorMessage));
+const earlierMessagesLabel = computed(() => {
+  if (chatStore.loadingEarlierMessages) return '加载中…';
+  if (boundedWindowStart.value > 0) return '查看上一段';
+  return chatStore.historyErrorMessage ? '重试加载更早消息' : '加载更早消息';
+});
+const historyFeedback = computed(() => {
+  if (chatStore.loadingEarlierMessages) return '正在读取更早一页消息，请稍候。';
+  if (chatStore.historyErrorMessage) return chatStore.historyErrorMessage;
+  if (windowFeedback.value) return windowFeedback.value;
+  if (chatStore.historyMessage) return chatStore.historyMessage;
+  return chatStore.hasMoreMessages ? '当前仅载入最近一页，可按需向前读取。' : '已到达当前会话起点。';
+});
 const operationStatus = computed(() => {
   const error = chatStore.errorMessage || assetStore.errorMessage;
   if (chatStore.cancelling) return { tone: 'warning', label: '正在取消', detail: '等待服务端中止运行并收口上下文。' };
   if (chatStore.steering) return { tone: 'working', label: '正在引导', detail: '新指令已提交，正在切换到后继运行。' };
   if (chatStore.sending) return { tone: 'working', label: '正在生成', detail: '可继续输入引导指令，或取消当前运行。' };
+  if (chatStore.loadingMessages) return { tone: 'working', label: '正在载入会话', detail: '仅读取最近一页消息。' };
+  if (chatStore.loadingEarlierMessages) return { tone: 'working', label: '正在读取历史', detail: '加载完成后会保持当前阅读位置。' };
   if (assetStore.uploading) return { tone: 'working', label: '正在上传附件', detail: '文件解析完成后才能选入消息。' };
   if (sharing.value) return { tone: 'working', label: '正在生成分享', detail: '正在生成服务器托管的安全快照链接。' };
   if (chatStore.loadingAgents || chatStore.loadingSessions) return { tone: 'working', label: '正在刷新工作台', detail: '同步运行目标和会话索引。' };
@@ -391,7 +452,14 @@ onBeforeUnmount(() => {
 
 watch(
   () => chatStore.sessionId,
-  (sessionId) => refreshSessionResources(sessionId),
+  (sessionId, previousSessionId) => {
+    if (sessionId !== previousSessionId) {
+      messageWindowStart.value = 0;
+      windowFeedback.value = '';
+      followingLatest.value = true;
+    }
+    void refreshSessionResources(sessionId);
+  },
   { immediate: true },
 );
 
@@ -417,7 +485,10 @@ watch(
   },
 );
 
-watch(lastMessageRenderKey, () => scheduleLatestScroll(), { flush: 'post' });
+watch(lastMessageRenderKey, () => {
+  if (followingLatest.value) ensureLatestWindow();
+  scheduleLatestScroll();
+}, { flush: 'post' });
 
 /** 会话切换的唯一附属资源刷新入口。 */
 async function refreshSessionResources(sessionId: string) {
@@ -432,6 +503,8 @@ async function refreshSessionResources(sessionId: string) {
  */
 async function createSession() {
   followingLatest.value = true;
+  messageWindowStart.value = 0;
+  windowFeedback.value = '';
   await chatStore.createSession();
   scrollToLatest(true);
 }
@@ -441,7 +514,10 @@ async function createSession() {
  */
 async function switchSession(sessionId: string) {
   followingLatest.value = true;
+  messageWindowStart.value = 0;
+  windowFeedback.value = '';
   await chatStore.switchSession(sessionId);
+  ensureLatestWindow();
   scrollToLatest(true);
 }
 
@@ -682,12 +758,80 @@ async function copyShareLink() {
 }
 
 /**
+ * 查看前一段已加载消息，或在最早窗口按需请求一页历史；保持首条可见消息锚点。
+ */
+async function showEarlierMessages() {
+  if (chatStore.loadingEarlierMessages || chatStore.sending) return;
+  followingLatest.value = false;
+  const anchor = captureMessageAnchor();
+  if (boundedWindowStart.value > 0) {
+    messageWindowStart.value = Math.max(0, boundedWindowStart.value - MESSAGE_WINDOW_STEP);
+    windowFeedback.value = '已显示前一段已加载消息。';
+    await nextTick();
+    restoreMessageAnchor(anchor);
+    return;
+  }
+  windowFeedback.value = '';
+  try {
+    const loadedCount = await chatStore.loadEarlierMessages();
+    if (loadedCount > 0) {
+      if (followingLatest.value || chatStore.sending) {
+        ensureLatestWindow();
+        scrollToLatest(true);
+        return;
+      }
+      messageWindowStart.value = 0;
+      await nextTick();
+      restoreMessageAnchor(anchor);
+    }
+  } catch {
+    // Store 保留失败反馈，按钮解除锁定后可重试。
+  }
+}
+
+/** 返回当前已加载消息的最新窗口并滚动到底部。 */
+function showLatestMessages() {
+  windowFeedback.value = '已返回最新消息。';
+  followingLatest.value = true;
+  ensureLatestWindow();
+  scrollToLatest(true);
+}
+
+/** 记录首条已渲染消息相对滚动容器的位置。 */
+function captureMessageAnchor(): MessageScrollAnchor | null {
+  const container = messageListRef.value;
+  const message = container?.querySelector<HTMLElement>('[data-message-id]');
+  if (!container || !message || !message.dataset.messageId) return null;
+  return {
+    messageId: message.dataset.messageId,
+    viewportTop: message.getBoundingClientRect().top - container.getBoundingClientRect().top,
+  };
+}
+
+/** 历史前插或窗口移动后恢复消息锚点。 */
+function restoreMessageAnchor(anchor: MessageScrollAnchor | null) {
+  const container = messageListRef.value;
+  if (!container || !anchor) return;
+  const message = Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]'))
+    .find((item) => item.dataset.messageId === anchor.messageId);
+  if (!message) return;
+  const nextViewportTop = message.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  container.scrollTop += nextViewportTop - anchor.viewportTop;
+}
+
+/** 把渲染窗口切到最新 100 条。 */
+function ensureLatestWindow() {
+  messageWindowStart.value = latestWindowStart.value;
+}
+
+/**
  * 滚动到最新消息；用户离开底部后不再强制跟随流式输出。
  */
 function onMessageScroll() {
   const element = messageListRef.value;
   if (!element) return;
-  followingLatest.value = element.scrollHeight - element.scrollTop - element.clientHeight <= 72;
+  followingLatest.value = isViewingLatestWindow.value
+    && element.scrollHeight - element.scrollTop - element.clientHeight <= 72;
 }
 
 /** 合并高频消息更新；每帧最多执行一次自动滚动。 */
@@ -701,7 +845,10 @@ function scheduleLatestScroll() {
 
 function scrollToLatest(force = false) {
   if (!force && !followingLatest.value) return;
-  if (force) followingLatest.value = true;
+  if (force) {
+    followingLatest.value = true;
+    ensureLatestWindow();
+  }
   nextTick(() => {
     const element = messageListRef.value;
     if (element) element.scrollTop = element.scrollHeight;
@@ -1099,13 +1246,51 @@ function formatOptionalTokens(value?: number) {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 24px clamp(18px, 5vw, 88px);
-  scroll-behavior: smooth;
 }
 
 .message-stack {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.history-loader {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-height: 48px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.history-loader .button {
+  min-width: 150px;
+}
+
+.history-feedback {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.history-feedback--error {
+  color: var(--danger);
+}
+
+.latest-window-action {
+  position: sticky;
+  bottom: 6px;
+  z-index: var(--z-sticky);
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+  pointer-events: none;
+}
+
+.latest-window-action .button {
+  pointer-events: auto;
+  box-shadow: var(--shadow-sm);
 }
 
 .empty-chat {
@@ -1553,18 +1738,6 @@ function formatOptionalTokens(value?: number) {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.message-flow-enter-active,
-.message-flow-leave-active,
-.message-flow-move {
-  transition: opacity var(--motion-med), transform var(--motion-med);
-}
-
-.message-flow-enter-from,
-.message-flow-leave-to {
-  opacity: 0;
-  transform: translateY(10px) scale(0.99);
 }
 
 .insight-drawer-enter-active,
