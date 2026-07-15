@@ -35,6 +35,7 @@ public class RunControlService {
     private final ContextInvalidationService contextInvalidationService;
     private final ModelUsageService modelUsageService;
     private final AssetService assetService;
+    private final RunStateSnapshotCache runStateSnapshots;
 
     /**
      * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
@@ -42,12 +43,21 @@ public class RunControlService {
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                              ModelUsageService modelUsageService, AssetService assetService) {
+        this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
+                assetService, new RunStateSnapshotCache());
+    }
+
+    RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
+                      ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
+                      ModelUsageService modelUsageService, AssetService assetService,
+                      RunStateSnapshotCache runStateSnapshots) {
         this.runRepository = runRepository;
         this.sessionDomain = sessionDomain;
         this.activeRunRegistry = activeRunRegistry;
         this.contextInvalidationService = contextInvalidationService;
         this.modelUsageService = modelUsageService;
         this.assetService = assetService;
+        this.runStateSnapshots = runStateSnapshots;
     }
 
     /**
@@ -75,6 +85,7 @@ public class RunControlService {
                 .startedAt(now)
                 .build();
         runRepository.insert(run);
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), run.getRunId());
         return run;
     }
 
@@ -115,6 +126,7 @@ public class RunControlService {
                 RunStatus.RUNNING, run.getVersion(), null, null, null) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "后继运行已被启动或状态已变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         return require(run.getTenantId(), run.getUserId(), runId);
     }
 
@@ -179,6 +191,8 @@ public class RunControlService {
                 RunStatus.SUPERSEDED, version, "已由引导后继运行替代", now, now) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中旧运行终结失败");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
+        invalidateSnapshotAfterCommit(successor.getTenantId(), successor.getUserId(), successor.getRunId());
         modelUsageService.cancelRunning(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
                 "用户引导替代");
         interruptAfterCommit(runId);
@@ -194,6 +208,7 @@ public class RunControlService {
                 run.getVersion()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "运行状态已变化，无法绑定用户消息");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), run.getRunId());
         return require(run.getTenantId(), run.getUserId(), run.getRunId());
     }
 
@@ -221,6 +236,7 @@ public class RunControlService {
                 run.getVersion()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "写入用户消息时运行状态已变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         return RunMessageBindingEntity.builder()
                 .run(require(run.getTenantId(), run.getUserId(), runId)).message(message).build();
     }
@@ -241,6 +257,7 @@ public class RunControlService {
                 run.getVersion(), null, null, LocalDateTime.now()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "完成运行时状态已变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         removeAfterCommit(runId);
         return message;
     }
@@ -261,6 +278,7 @@ public class RunControlService {
                 run.getVersion(), reason, null, LocalDateTime.now()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "标记运行失败时状态已变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         removeAfterCommit(runId);
         return message;
     }
@@ -303,6 +321,7 @@ public class RunControlService {
                 RunStatus.CANCELLED, version, reason, now, now) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "取消过程中运行状态发生变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         modelUsageService.cancelRunning(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
                 blank(reason) ? "用户取消" : reason);
         interruptAfterCommit(runId);
@@ -322,6 +341,9 @@ public class RunControlService {
         }
         int affected = runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(),
                 RunStatus.COMPLETED, run.getVersion(), null, null, LocalDateTime.now());
+        if (affected == 1) {
+            invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
+        }
         activeRunRegistry.remove(runId);
         return affected == 1 ? require(run.getTenantId(), run.getUserId(), runId)
                 : require(run.getTenantId(), run.getUserId(), runId);
@@ -336,6 +358,7 @@ public class RunControlService {
         if (!run.getStatus().terminal()) {
             runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(), RunStatus.FAILED,
                     run.getVersion(), reason, null, LocalDateTime.now());
+            invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         }
         activeRunRegistry.remove(runId);
         return require(run.getTenantId(), run.getUserId(), runId);
@@ -345,15 +368,18 @@ public class RunControlService {
      * 校验运行可继续；参数是可信身份、运行ID和预期上下文版本；返回当前运行。
      */
     public ChatRunEntity requireExecutable(String tenantId, String userId, String runId, Long expectedRevision) {
-        ChatRunEntity run = require(tenantId, userId, runId);
-        if (!run.getStatus().executable()) {
+        RunStateSnapshotCache.Snapshot snapshot = readSnapshot(tenantId, userId, runId);
+        if (snapshot.run() == null) {
+            throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (!snapshot.status().executable()) {
             throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
         }
-        if (expectedRevision != null && run.getCurrentContextRevision() != null
-                && !expectedRevision.equals(run.getCurrentContextRevision())) {
+        if (expectedRevision != null && snapshot.contextRevision() != null
+                && !expectedRevision.equals(snapshot.contextRevision())) {
             throw new AppException("RUN_CONTEXT_STALE", "运行上下文版本已变化，需要重新推理");
         }
-        return run;
+        return runStateSnapshots.materialize(snapshot);
     }
 
     /**
@@ -386,6 +412,7 @@ public class RunControlService {
         if (runRepository.updateContextRevision(run.getTenantId(), run.getUserId(), runId, revision, run.getVersion()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "刷新运行上下文版本时状态已变化");
         }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         return require(run.getTenantId(), run.getUserId(), runId);
     }
 
@@ -411,10 +438,15 @@ public class RunControlService {
      * 判断运行已取消；参数是可信身份和运行ID；返回是否取消。
      */
     public boolean cancelled(String tenantId, String userId, String runId) {
-        ChatRunEntity run = runRepository.query(tenantId, userId, runId);
-        return run != null && (run.getStatus() == RunStatus.CANCEL_REQUESTED
-                || run.getStatus() == RunStatus.CANCELLING || run.getStatus() == RunStatus.CANCELLED
-                || run.getStatus() == RunStatus.SUPERSEDED || run.getStatus() == RunStatus.STEER_REQUESTED);
+        RunStatus status = readSnapshot(tenantId, userId, runId).status();
+        return status == RunStatus.CANCEL_REQUESTED || status == RunStatus.CANCELLING
+                || status == RunStatus.CANCELLED || status == RunStatus.SUPERSEDED
+                || status == RunStatus.STEER_REQUESTED;
+    }
+
+    private RunStateSnapshotCache.Snapshot readSnapshot(String tenantId, String userId, String runId) {
+        return runStateSnapshots.get(tenantId, userId, runId,
+                () -> runRepository.query(tenantId, userId, runId));
     }
 
     private boolean blank(String value) {
@@ -472,6 +504,19 @@ public class RunControlService {
             throw new AppException("RUN_SCOPE_MISMATCH", "运行与会话归属不一致");
         }
         return run;
+    }
+
+    private void invalidateSnapshotAfterCommit(String tenantId, String userId, String runId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            runStateSnapshots.invalidate(tenantId, userId, runId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                runStateSnapshots.invalidate(tenantId, userId, runId);
+            }
+        });
     }
 
     private void removeAfterCommit(String runId) {
