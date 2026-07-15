@@ -29,6 +29,14 @@
 2. 为每个容器设置 `json-file max-size/max-file`，先处理日志增长最快的 Loki。
 3. 逐个重建，每个服务健康后再继续，不同时重建整套中间件。
 
+#### C 组执行前精确矩阵（2026-07-16 复核后落盘）
+
+- 已找到可持久化的 Compose 源：XXL-JOB `/opt/ai-agent-scheduler/xxl-job/docker-compose.yml`、MinIO `/root/middleware/minio/docker-compose.yml`、Nacos `/opt/middleware/nacos/docker-compose.yml`、Loki/Grafana `/root/observability/hz/docker-compose.yml`。
+- 按当前实测内存与 PID 755MiB/282、298MiB/10、123MiB/14、119MiB/14、439MiB/58、434MiB/52，拟设置：Nacos `1280m/384`、MinIO `640m/128`、Loki `384m/128`、Grafana `384m/128`、XXL Admin `768m/128`、XXL MySQL `1024m/128`（格式为 memory/PIDs）。
+- 上述容器的 Docker `json-file` 统一为 `max-size=20m`、`max-file=3`；XXL Admin 由原 5 个文件收紧为 3 个。本组仅限制未来增长，不删除现有日志。
+- 每个源文件在服务器原目录生成带时间戳备份并校验 Compose config；按 Loki → Grafana → MinIO → Nacos → XXL MySQL/Admin 的最小影响窗口逐组重建。任一组健康/端口/OOM/restart 门禁失败即恢复对应备份并停止后续。
+- Kafka 仅找到数据、配置与密钥目录，未找到 Compose/systemd/启动脚本创建源。在新建并验证服务器本地可回滚创建源前，不重建 Kafka，不把一次性 `docker update`/容器可写层当作持久化闭环。
+
 ### D 组：延后的高风险工作
 
 - 70 GB 数据盘的挂载点、已有数据鉴别、Docker data-root/中间件迁移需单独停机、校验与回滚计划，不与 A/B/C 组混做。
@@ -60,9 +68,20 @@
 - `context.compaction.request.v1`、`context.compaction.request.v1-retry-1000`、`context.compaction.request.v1-dlt` 三个 Topic 全部存在，均为 6 分区/副本 1。
 - 全局回归后内存 available 3,952,197,632 bytes，Swap used=0；Nacos/MinIO/Grafana/Loki/XXL-JOB 仍健康。所有门禁通过，未触发回滚。
 
+### C 组：容器上限与日志轮转已完成（Kafka 持久化除外）
+
+- 真实 Compose 源复核与 `docker compose config -q` 均通过。服务器原目录备份时间戳为 `20260715-134429`；XXL 机械修改首次区间表达式在修改前失败，额外保留重试前备份 `docker-compose.yml.pre-resource-retry-20260715-134447`。失败发生在任何重建前，无服务中断。
+- 已固化并生效的 memory/PIDs：Loki `384MiB/128`、Grafana `384MiB/128`、MinIO `640MiB/128`、Nacos `1.25GiB/384`、XXL MySQL `1GiB/128`、XXL Admin `768MiB/128`。
+- 上述六个容器均使用 Docker `json-file max-size=20m,max-file=3`。未删除现有日志或数据；XXL Admin 的文件数上限由 5 收紧到 3。
+- 按 Loki、Grafana、MinIO、Nacos、XXL MySQL、XXL Admin 顺序逐个/逐依赖组重建。Grafana 由于启动耗时超过首轮 30 秒探测窗口曾暂时未返回宿主端健康响应，但容器无重启/OOM、内部 API 已为 200；延长观察后宿主端连续 5 次 200，因此未回滚。
+- 最终健康门禁：Loki 200、Grafana 200、MinIO 200、Nacos 200、XXL-JOB 登录跳转 302；XXL 公网地址从本地复核为 302、耗时 0.151s。六个已变更容器全部 `OOMKilled=false`、`RestartCount=0`。
+- 同口径稳定采样：XXL Admin 439→265MiB、XXL MySQL 429→374MiB、Nacos 754→592MiB、MinIO 294→255MiB、Grafana 119→66MiB、Loki 135→48MiB；连同 Kafka 678→448MiB，七个中间件合计约 2848→2048MiB，减少约 800MiB（约 28.1%）。
+- 主机最终 available memory 4,356,726,784 bytes，Swap used=0，swappiness=10。Kafka 9094 仍可连接，近 15 分钟无 ERROR/FATAL/OOM，业务未随 C 组重建。
+- Kafka 当前仍为 `1GiB` memory limit、无 PID/日志轮转设置；由于没有找到真实创建源，未重建。该项不是已完成的持久化闭环，必须在后续先建立服务器本地、可回滚且含现有端口/挂载/安全参数的创建源。
+
 ### 回滚与持久性记录
 
 - Kafka 回滚：从上述备份目录恢复 `kafka-server-start.sh` 到容器原路径，校验备份 SHA-256 后仅重启 Kafka，重复 9094/KRaft/Topic/OOM 门禁。
 - Swap 回滚：恢复 fstab 备份，恢复或移除 sysctl 文件并设回 swappiness=60，`swapoff` 后再删除 swapfile。
 - Kafka 堆变更当前位于容器可写层，`docker restart` 可保留，但未来删除/重建容器会回到镜像 1G/1G 默认值。C 组必须将 `KAFKA_HEAP_OPTS=-Xms256m -Xmx512m` 固化到正式容器创建源。
-- C/D 组尚未执行：本轮未重建容器、未清理日志/镜像、未挂载或迁移 70 GB 数据盘，也未上传本地项目。
+- D 组尚未执行：未清理历史日志/镜像，未挂载或迁移 70 GB 数据盘，也未上传本地项目。C 组除 Kafka 创建源外已完成。
