@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentTenantOverrideDao">
+    <resultMap id="OverrideMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentTenantOverridePO">
+        <id column="id" property="id"/><result column="tenant_id" property="tenantId"/>
+        <result column="agent_id" property="agentId"/><result column="status" property="status"/>
+        <result column="reason" property="reason"/><result column="updated_by" property="updatedBy"/>
+        <result column="revision" property="revision"/><result column="disabled_at" property="disabledAt"/>
+        <result column="create_time" property="createTime"/><result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+    <sql id="Columns">id, tenant_id, agent_id, status, reason, updated_by, revision, disabled_at, create_time, update_time, deleted</sql>
+    <select id="query" resultMap="OverrideMap">
+        SELECT <include refid="Columns"/> FROM agent_tenant_override
+        WHERE tenant_id=#{tenantId} AND agent_id=#{agentId} AND deleted=0 LIMIT 1
+    </select>
+    <select id="queryList" resultMap="OverrideMap">
+        SELECT <include refid="Columns"/> FROM agent_tenant_override
+        WHERE tenant_id=#{tenantId} AND deleted=0 ORDER BY id ASC
+    </select>
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentTenantOverridePO">
+        INSERT INTO agent_tenant_override (tenant_id, agent_id, status, reason, updated_by, revision, disabled_at)
+        VALUES (#{tenantId}, #{agentId}, #{status}, #{reason}, #{updatedBy}, #{revision}, #{disabledAt})
+    </insert>
+    <update id="update">
+        UPDATE agent_tenant_override SET status=#{value.status}, reason=#{value.reason}, updated_by=#{value.updatedBy},
+            revision=revision+1, disabled_at=#{value.disabledAt}
+        WHERE tenant_id=#{value.tenantId} AND agent_id=#{value.agentId}
+          AND revision=#{expectedRevision} AND deleted=0
+    </update>
+</mapper>

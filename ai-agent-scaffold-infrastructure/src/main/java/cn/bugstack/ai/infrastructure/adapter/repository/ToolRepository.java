@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.tool.model.entity.SkillPackageUploadResultEntity;
 import cn.bugstack.ai.domain.tool.model.entity.SkillVersionEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolVisibility;
@@ -312,6 +313,16 @@ public class ToolRepository implements IToolRepository {
     @Override
     public List<ToolCallLogEntity> queryToolCallLogs(String tenantId, String userId, String sessionId) {
         return toolCallLogDao.queryListBySessionId(tenantId, userId, sessionId).stream().map(this::toToolCallLogEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<SessionToolDependencyEntity> queryShareToolDependencies(String tenantId, String userId,
+                                                                        String sessionId) {
+        return toolCallLogDao.queryShareDependencies(tenantId, userId, sessionId).stream()
+                .map(item -> SessionToolDependencyEntity.builder().toolType(item.getToolType())
+                        .toolId(item.getToolId()).toolName(item.getToolName()).version(item.getVersion())
+                        .source("tool_call_log").build())
+                .toList();
     }
 
     /**

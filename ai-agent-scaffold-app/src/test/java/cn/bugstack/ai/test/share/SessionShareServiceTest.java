@@ -7,9 +7,12 @@ import cn.bugstack.ai.domain.share.adapter.ISessionShareRepository;
 import cn.bugstack.ai.domain.share.model.SessionImportEntity;
 import cn.bugstack.ai.domain.share.model.SessionShareEntity;
 import cn.bugstack.ai.domain.share.model.SessionShareResultEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
 import cn.bugstack.ai.domain.share.service.SessionShareService;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
+import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
+import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Assert;
 import org.junit.Test;
@@ -83,13 +86,61 @@ public class SessionShareServiceTest {
         verify(repository, never()).consumeAccess(any());
     }
 
+    @Test
+    public void shouldSnapshotServerToolDependenciesAndRequireRiskConfirmation() throws Exception {
+        SessionDomain sessions = mock(SessionDomain.class);
+        ISessionShareRepository repository = mock(ISessionShareRepository.class);
+        ObjectStorageService storage = mock(ObjectStorageService.class);
+        IToolRepository tools = mock(IToolRepository.class);
+        when(storage.assetBucket()).thenReturn("assets");
+        when(repository.insertShare(any())).thenReturn(1);
+        when(sessions.assertSessionAccess("tenant", "owner", "session", null)).thenReturn(session("session", "owner"));
+        when(sessions.queryValidMessages("tenant", "owner", "session")).thenReturn(List.of(
+                ChatMessageEntity.builder().role("user").contentType("text").content("安全内容").sequenceNo(1).build()));
+        when(tools.queryShareToolDependencies("tenant", "owner", "session")).thenReturn(List.of(
+                SessionToolDependencyEntity.builder().toolType("mcp").toolId("mcp-private")
+                        .toolName("私有检索").version("1.0.0").source("tool_call_log").build()));
+        SessionShareService service = service(sessions, repository, storage, tools);
+
+        service.create("tenant", "owner", "session", 24, 3);
+
+        ArgumentCaptor<ObjectStorageCommandEntity> captor = ArgumentCaptor.forClass(ObjectStorageCommandEntity.class);
+        verify(storage).putObject(captor.capture());
+        String json = new String(captor.getValue().getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        Assert.assertTrue(json.contains("chat-session-export/v2"));
+        Assert.assertTrue(json.contains("mcp-private"));
+
+        SessionShareEntity share = share();
+        byte[] bytes = captor.getValue().getBytes();
+        share.setContentSha256(sha256(bytes));
+        when(repository.queryByTokenHash(any())).thenReturn(share);
+        when(repository.lockByShareId("share-1")).thenReturn(share);
+        when(storage.getObject("assets", "chat-shares/share.json", 8L * 1024 * 1024)).thenReturn(bytes);
+
+        SessionShareResultEntity preview = service.preview("tenant", "recipient", "abcdefghijklmnopqrstuvwxyz1234567890");
+        Assert.assertTrue(preview.getToolPrecheck().getHasRisk());
+        Assert.assertEquals(Integer.valueOf(1), preview.getToolPrecheck().getMissingCount());
+        try {
+            service.importCopy("tenant", "recipient", "abcdefghijklmnopqrstuvwxyz1234567890", false);
+            Assert.fail("缺少工具权限时必须要求显式确认");
+        } catch (AppException e) {
+            Assert.assertEquals("SHARE_TOOL_CONFIRM_REQUIRED", e.getCode());
+        }
+        verify(repository, never()).consumeAccess("share-1");
+    }
+
     private SessionShareService service(SessionDomain sessions, ISessionShareRepository repository,
                                         ObjectStorageService storage) {
+        return service(sessions, repository, storage, mock(IToolRepository.class));
+    }
+
+    private SessionShareService service(SessionDomain sessions, ISessionShareRepository repository,
+                                        ObjectStorageService storage, IToolRepository tools) {
         @SuppressWarnings("unchecked")
         ObjectProvider<PlatformTransactionManager> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(null);
         return new SessionShareService(sessions, repository, storage,
-                new ObjectMapper().findAndRegisterModules(), provider);
+                new ObjectMapper().findAndRegisterModules(), provider, tools);
     }
 
     private ChatSessionEntity session(String sessionId, String userId) {

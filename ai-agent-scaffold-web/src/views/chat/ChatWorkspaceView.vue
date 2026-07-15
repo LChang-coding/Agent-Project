@@ -350,9 +350,7 @@ const insightTabs = computed<Array<{ value: InsightTab; label: string; count?: n
 
 onMounted(async () => {
   assetStore.setSelectionScope(attachmentScope.value);
-  if (chatStore.agents.length === 0) {
-    await chatStore.loadAgents();
-  }
+  await chatStore.loadAgents();
   await toolStore.loadCatalog();
   if (chatStore.sessionId) {
     await Promise.all([

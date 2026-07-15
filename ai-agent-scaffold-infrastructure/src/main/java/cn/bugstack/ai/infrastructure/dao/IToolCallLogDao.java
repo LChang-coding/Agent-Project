@@ -49,4 +49,9 @@ public interface IToolCallLogDao {
     List<ToolCallLogPO> queryListBySessionId(@Param("tenantId") String tenantId,
                                              @Param("userId") String userId,
                                              @Param("sessionId") String sessionId);
+
+    /** 查询有效成功调用的分享工具依赖；参数是可信会话范围；返回去重日志。 */
+    List<ToolCallLogPO> queryShareDependencies(@Param("tenantId") String tenantId,
+                                               @Param("userId") String userId,
+                                               @Param("sessionId") String sessionId);
 }

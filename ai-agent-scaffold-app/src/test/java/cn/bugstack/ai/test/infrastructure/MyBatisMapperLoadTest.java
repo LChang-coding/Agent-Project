@@ -41,6 +41,7 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/tool_call_log_mapper.xml",
                 "mybatis/mapper/agent_workflow_mapper.xml",
                 "mybatis/mapper/agent_workflow_version_mapper.xml",
+                "mybatis/mapper/agent_tenant_override_mapper.xml",
                 "mybatis/mapper/agent_schedule_config_mapper.xml",
                 "mybatis/mapper/agent_schedule_task_mapper.xml",
                 "mybatis/mapper/agent_schedule_execution_mapper.xml",

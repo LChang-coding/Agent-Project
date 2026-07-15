@@ -2,6 +2,7 @@ package cn.bugstack.ai.api;
 
 import cn.bugstack.ai.api.dto.workflow.WorkflowCreateRequestDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowDetailResponseDTO;
+import cn.bugstack.ai.api.dto.workflow.WorkflowDeleteResponseDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowNodeOptionsResponseDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowResponseDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowSaveDraftRequestDTO;
@@ -38,6 +39,9 @@ public interface IWorkflowApiService {
      * 发布工作流；参数是工作流ID；返回已发布详情。
      */
     Response<WorkflowDetailResponseDTO> publishWorkflow(String workflowId);
+
+    /** 删除工作流；参数是工作流ID；返回幂等删除结果。 */
+    Response<WorkflowDeleteResponseDTO> deleteWorkflow(String workflowId);
 
     /**
      * 查询节点选项；无参数；返回节点类型、模型、MCP 和 Skill 下拉数据。

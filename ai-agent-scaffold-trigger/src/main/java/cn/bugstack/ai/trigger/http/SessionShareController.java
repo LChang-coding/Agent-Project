@@ -1,10 +1,13 @@
 package cn.bugstack.ai.trigger.http;
 
 import cn.bugstack.ai.api.dto.share.CreateSessionShareRequestDTO;
+import cn.bugstack.ai.api.dto.share.ImportSessionShareRequestDTO;
 import cn.bugstack.ai.api.dto.share.SessionShareResponseDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.share.model.SessionShareResultEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolAccessEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
 import cn.bugstack.ai.domain.share.service.SessionShareService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
@@ -62,7 +65,8 @@ public class SessionShareController {
     @GetMapping("/{token}/preview")
     public Response<SessionShareResponseDTO> preview(@PathVariable String token) {
         try {
-            return success(toResponse(shareService.preview(token), null));
+            return success(toResponse(shareService.preview(TenantContextHolder.getTenantId(),
+                    TenantContextHolder.getUserId(), token), null));
         } catch (AppException e) {
             return fail(e);
         } catch (Exception e) {
@@ -88,10 +92,12 @@ public class SessionShareController {
      * 复制导入分享；参数是原分享令牌；返回接收者独立会话。
      */
     @PostMapping("/{token}/import")
-    public Response<SessionShareResponseDTO> importCopy(@PathVariable String token) {
+    public Response<SessionShareResponseDTO> importCopy(@PathVariable String token,
+                                                        @RequestBody(required = false) ImportSessionShareRequestDTO request) {
         try {
             SessionShareResultEntity result = shareService.importCopy(TenantContextHolder.getTenantId(),
-                    TenantContextHolder.getUserId(), token);
+                    TenantContextHolder.getUserId(), token,
+                    request != null && Boolean.TRUE.equals(request.getConfirmToolAccessRisk()));
             return success(toResponse(result, null));
         } catch (AppException e) {
             return fail(e);
@@ -124,14 +130,37 @@ public class SessionShareController {
                 : result.getMessages().stream().map(this::toMessage).toList();
         String shareUrl = token == null ? null : "/share/" + token;
         String downloadUrl = token == null ? null : "/api/v1/session-shares/" + token + "/download";
+        List<SessionShareResponseDTO.ToolDependency> dependencies = result.getToolDependencies() == null ? List.of()
+                : result.getToolDependencies().stream().map(this::toToolDependency).toList();
+        SessionShareResponseDTO.ToolPrecheck precheck = result.getToolPrecheck() == null ? null
+                : SessionShareResponseDTO.ToolPrecheck.builder().hasRisk(result.getToolPrecheck().getHasRisk())
+                .availableCount(result.getToolPrecheck().getAvailableCount())
+                .missingCount(result.getToolPrecheck().getMissingCount())
+                .deniedCount(result.getToolPrecheck().getDeniedCount())
+                .items(result.getToolPrecheck().getItems().stream().map(this::toToolAccess).toList()).build();
         return SessionShareResponseDTO.builder().shareId(result.getShare().getShareId()).shareUrl(shareUrl)
                 .downloadUrl(downloadUrl).status(result.getShare().getStatus())
                 .expiresAt(result.getShare().getExpiresAt()).maxDownloads(result.getShare().getMaxDownloads())
                 .downloadCount(result.getShare().getDownloadCount()).messageCount(result.getShare().getMessageCount())
                 .title(result.getShare().getTitle()).sessionId(result.getSession() == null ? null : result.getSession().getSessionId())
-                .agentId(result.getSession() == null ? null : result.getSession().getAgentId())
-                .agentName(result.getSession() == null ? null : result.getSession().getAgentName())
-                .appName(result.getSession() == null ? null : result.getSession().getAppName()).messages(messages).build();
+                .agentId(result.getSession() == null ? result.getSourceAgentId() : result.getSession().getAgentId())
+                .agentName(result.getSession() == null ? result.getSourceAgentName() : result.getSession().getAgentName())
+                .appName(result.getSession() == null ? result.getSourceAppName() : result.getSession().getAppName())
+                .formatVersion(Boolean.TRUE.equals(result.getLegacySnapshot()) ? 1 : 2)
+                .sourceType(result.getSourceType()).workflowId(result.getWorkflowId())
+                .legacySnapshot(result.getLegacySnapshot()).toolDependencies(dependencies).toolPrecheck(precheck)
+                .messages(messages).build();
+    }
+
+    private SessionShareResponseDTO.ToolDependency toToolDependency(SessionToolDependencyEntity item) {
+        return SessionShareResponseDTO.ToolDependency.builder().toolType(item.getToolType()).toolId(item.getToolId())
+                .toolName(item.getToolName()).version(item.getVersion()).source(item.getSource()).build();
+    }
+
+    private SessionShareResponseDTO.ToolAccess toToolAccess(SessionToolAccessEntity item) {
+        return SessionShareResponseDTO.ToolAccess.builder().toolType(item.getToolType()).toolId(item.getToolId())
+                .toolName(item.getToolName()).version(item.getVersion()).source(item.getSource())
+                .access(item.getAccess()).reason(item.getReason()).build();
     }
 
     private SessionShareResponseDTO.Message toMessage(ChatMessageEntity message) {

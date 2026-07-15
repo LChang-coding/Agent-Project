@@ -37,4 +37,8 @@ public interface IAgentWorkflowDao {
      * 按拥有者查询工作流列表；参数是用户ID；返回工作流列表。
      */
     List<AgentWorkflowPO> queryListByOwnerUserId(@Param("ownerUserId") String ownerUserId);
+
+    /** 软删除工作流；参数是租户、工作流和删除人；返回影响行数。 */
+    int softDelete(@Param("tenantId") String tenantId, @Param("workflowId") String workflowId,
+                   @Param("deletedBy") String deletedBy);
 }

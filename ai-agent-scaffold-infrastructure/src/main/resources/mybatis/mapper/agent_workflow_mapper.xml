@@ -70,4 +70,10 @@
         ORDER BY id DESC
     </select>
 
+    <update id="softDelete">
+        UPDATE agent_workflow SET status='archived', deleted=1, deleted_by=#{deletedBy},
+            deleted_at=CURRENT_TIMESTAMP(3)
+        WHERE tenant_id=#{tenantId} AND workflow_id=#{workflowId} AND deleted=0
+    </update>
+
 </mapper>

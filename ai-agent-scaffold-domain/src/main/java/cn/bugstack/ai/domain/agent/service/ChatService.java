@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.agent.service.IChatService;
+import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
@@ -74,6 +75,9 @@ public class ChatService implements IChatService {
     @Resource
     private RunControlService runControlService;
 
+    @Resource
+    private AgentAvailabilityService agentAvailabilityService;
+
     /**
      * 查询 Agent 配置；无参数；返回当前可用 Agent 列表。
      */
@@ -85,7 +89,9 @@ public class ChatService implements IChatService {
         if (null != tables) {
             for (AiAgentConfigTableVO vo : tables.values()) {
                 if (null != vo.getAgent()) {
-                    agentList.add(vo.getAgent());
+                    if (agentAvailabilityService.isEnabled(currentTenantId(), vo.getAgent().getAgentId())) {
+                        agentList.add(vo.getAgent());
+                    }
                 }
             }
         }
@@ -812,6 +818,7 @@ public class ChatService implements IChatService {
      * 获取已注册 Agent；参数是 Agent ID；返回运行体。
      */
     private AiAgentRegisterVO requireAgent(String agentId) {
+        agentAvailabilityService.assertEnabled(currentTenantId(), agentId);
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
         if (null == aiAgentRegisterVO) {
             throw new AppException(ResponseCode.E0001.getCode());

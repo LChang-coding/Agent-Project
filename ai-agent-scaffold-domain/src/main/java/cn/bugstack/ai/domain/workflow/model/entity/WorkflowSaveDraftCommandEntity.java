@@ -18,6 +18,9 @@ public class WorkflowSaveDraftCommandEntity {
      */
     private String userId;
 
+    /** 可信身份角色。 */
+    private String roleCode;
+
     /**
      * 工作流业务ID。
      */

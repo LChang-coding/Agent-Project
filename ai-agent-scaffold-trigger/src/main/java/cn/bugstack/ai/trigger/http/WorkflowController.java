@@ -3,6 +3,7 @@ package cn.bugstack.ai.trigger.http;
 import cn.bugstack.ai.api.IWorkflowApiService;
 import cn.bugstack.ai.api.dto.workflow.WorkflowCreateRequestDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowDetailResponseDTO;
+import cn.bugstack.ai.api.dto.workflow.WorkflowDeleteResponseDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowGraphDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowNodeOptionsResponseDTO;
 import cn.bugstack.ai.api.dto.workflow.WorkflowOptionDTO;
@@ -24,6 +25,7 @@ import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -120,6 +122,7 @@ public class WorkflowController implements IWorkflowApiService {
             WorkflowSaveDraftCommandEntity command = new WorkflowSaveDraftCommandEntity();
             command.setTenantId(currentTenantId());
             command.setUserId(currentUserId());
+            command.setRoleCode(TenantContextHolder.getRoleCode());
             command.setWorkflowId(workflowId);
             command.setWorkflowName(requestDTO.getWorkflowName());
             command.setDescription(requestDTO.getDescription());
@@ -143,13 +146,28 @@ public class WorkflowController implements IWorkflowApiService {
     @PostMapping("/{workflowId}/publish")
     public Response<WorkflowDetailResponseDTO> publishWorkflow(@PathVariable String workflowId) {
         try {
-            return success(toDetailResponse(workflowService.publishWorkflow(currentTenantId(), currentUserId(), workflowId)));
+            return success(toDetailResponse(workflowService.publishWorkflow(currentTenantId(), currentUserId(), TenantContextHolder.getRoleCode(), workflowId)));
         } catch (AppException e) {
             log.error("发布工作流异常 workflowId:{}", workflowId, e);
             return fail(e);
         } catch (Exception e) {
             log.error("发布工作流失败 workflowId:{}", workflowId, e);
             return fail();
+        }
+    }
+
+    /** 删除工作流；参数是工作流ID；返回幂等软删除结果。 */
+    @Override
+    @DeleteMapping("/{workflowId}")
+    public Response<WorkflowDeleteResponseDTO> deleteWorkflow(@PathVariable String workflowId) {
+        try {
+            workflowService.deleteWorkflow(currentTenantId(), currentUserId(), TenantContextHolder.getRoleCode(), workflowId);
+            return success(WorkflowDeleteResponseDTO.builder().workflowId(workflowId).status("deleted").build());
+        } catch (AppException e) {
+            return Response.<WorkflowDeleteResponseDTO>builder().code(e.getCode()).info(e.getInfo()).build();
+        } catch (Exception e) {
+            log.error("删除工作流失败 workflowId:{}", workflowId, e);
+            return Response.<WorkflowDeleteResponseDTO>builder().code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
         }
     }
 

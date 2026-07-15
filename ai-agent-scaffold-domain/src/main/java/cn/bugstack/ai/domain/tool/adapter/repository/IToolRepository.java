@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.tool.model.entity.SkillPackageUploadResultEntity;
 import cn.bugstack.ai.domain.tool.model.entity.SkillVersionEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
 
 import java.util.List;
 
@@ -135,4 +136,7 @@ public interface IToolRepository {
      * 查询会话工具调用日志；参数是租户、用户和会话；返回调用日志。
      */
     List<ToolCallLogEntity> queryToolCallLogs(String tenantId, String userId, String sessionId);
+
+    /** 查询会话有效成功调用形成的分享工具依赖；参数是可信会话范围；返回去重依赖。 */
+    List<SessionToolDependencyEntity> queryShareToolDependencies(String tenantId, String userId, String sessionId);
 }

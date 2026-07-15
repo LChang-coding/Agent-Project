@@ -20,6 +20,7 @@ public class SessionExportDocument {
     private LocalDateTime exportedAt;
     private Session session;
     private List<Message> messages;
+    private List<SessionToolDependencyEntity> toolDependencies;
 
     @Data
     @Builder
@@ -30,6 +31,8 @@ public class SessionExportDocument {
         private String agentId;
         private String agentName;
         private String appName;
+        private String sourceType;
+        private String workflowId;
     }
 
     @Data

@@ -37,7 +37,10 @@ public interface IWorkflowService {
     /**
      * 发布工作流；参数是租户、用户和工作流ID；返回工作流详情。
      */
-    WorkflowDetailEntity publishWorkflow(String tenantId, String userId, String workflowId);
+    WorkflowDetailEntity publishWorkflow(String tenantId, String userId, String roleCode, String workflowId);
+
+    /** 软删除工作流；参数是可信租户、用户和工作流；无返回值。 */
+    void deleteWorkflow(String tenantId, String userId, String roleCode, String workflowId);
 
     /**
      * 查询节点选项；参数是租户ID；返回节点、模型和工具选项。

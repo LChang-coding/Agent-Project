@@ -1,5 +1,5 @@
 import { httpClient, request } from '@/api/http';
-import type { SessionShareResponse } from '@/types/api';
+import type { SessionShareImportRequest, SessionShareResponse } from '@/types/api';
 
 /**
  * 创建会话分享；参数是会话ID和可选生命周期；返回一次性分享链接。
@@ -25,10 +25,11 @@ export function previewSessionShare(token: string) {
 /**
  * 复制导入分享；参数是原令牌；返回独立会话副本。
  */
-export function importSessionShare(token: string) {
+export function importSessionShare(token: string, payload: SessionShareImportRequest) {
   return request<SessionShareResponse>({
     url: `/v1/session-shares/${encodeURIComponent(token)}/import`,
     method: 'POST',
+    data: payload,
   });
 }
 

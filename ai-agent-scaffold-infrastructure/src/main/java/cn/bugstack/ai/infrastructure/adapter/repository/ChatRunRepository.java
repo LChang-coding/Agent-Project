@@ -49,6 +49,12 @@ public class ChatRunRepository implements IChatRunRepository {
     }
 
     @Override
+    public List<ChatRunEntity> queryExecutableBySource(String tenantId, String sourceType, String sourceId) {
+        return dao.queryExecutableBySource(blankToNull(tenantId), sourceType, sourceId).stream()
+                .map(this::toEntity).collect(Collectors.toList());
+    }
+
+    @Override
     public int transition(String tenantId, String userId, String runId, RunStatus expectedStatus, RunStatus targetStatus,
                           int expectedVersion, String reason, LocalDateTime cancelRequestedAt, LocalDateTime finishedAt) {
         return dao.transition(blankToNull(tenantId), userId, runId, value(expectedStatus), value(targetStatus),

@@ -9,8 +9,13 @@ import cn.bugstack.ai.domain.share.model.SessionExportDocument;
 import cn.bugstack.ai.domain.share.model.SessionImportEntity;
 import cn.bugstack.ai.domain.share.model.SessionShareEntity;
 import cn.bugstack.ai.domain.share.model.SessionShareResultEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolAccessEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolDependencyEntity;
+import cn.bugstack.ai.domain.share.model.SessionToolPrecheckEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
+import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
+import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
@@ -27,6 +32,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 
 /**
@@ -35,26 +42,31 @@ import java.util.UUID;
 @Service
 public class SessionShareService {
 
-    public static final String SCHEMA_VERSION = "chat-session-export/v1";
+    public static final String SCHEMA_VERSION = "chat-session-export/v2";
+    public static final String LEGACY_SCHEMA_VERSION = "chat-session-export/v1";
     public static final String CONTENT_TYPE = "application/vnd.ai-agent.chat-session+json";
     private static final long MAX_EXPORT_BYTES = 8L * 1024 * 1024;
     private static final int MAX_MESSAGES = 10_000;
     private static final int MAX_MESSAGE_CHARS = 256 * 1024;
+    private static final int MAX_TOOL_DEPENDENCIES = 1_000;
 
     private final SessionDomain sessionDomain;
     private final ISessionShareRepository shareRepository;
     private final ObjectStorageService storageService;
     private final ObjectMapper objectMapper;
+    private final IToolRepository toolRepository;
     private final TransactionTemplate transactionTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public SessionShareService(SessionDomain sessionDomain, ISessionShareRepository shareRepository,
                                ObjectStorageService storageService, ObjectMapper objectMapper,
-                               ObjectProvider<PlatformTransactionManager> transactionManagerProvider) {
+                               ObjectProvider<PlatformTransactionManager> transactionManagerProvider,
+                               IToolRepository toolRepository) {
         this.sessionDomain = sessionDomain;
         this.shareRepository = shareRepository;
         this.storageService = storageService;
         this.objectMapper = objectMapper;
+        this.toolRepository = toolRepository;
         PlatformTransactionManager manager = transactionManagerProvider.getIfAvailable();
         this.transactionTemplate = manager == null ? null : new TransactionTemplate(manager);
     }
@@ -66,7 +78,9 @@ public class SessionShareService {
                                            Integer validHours, Integer maxDownloads) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);
         List<ChatMessageEntity> messages = sessionDomain.queryValidMessages(tenantId, userId, sessionId);
-        SessionExportDocument document = buildDocument(session, messages);
+        List<SessionToolDependencyEntity> dependencies = toolRepository.queryShareToolDependencies(
+                session.getTenantId(), session.getUserId(), session.getSessionId());
+        SessionExportDocument document = buildDocument(session, messages, dependencies);
         byte[] bytes = serialize(document);
         checkDocument(document, bytes);
         String shareId = "share_" + UUID.randomUUID();
@@ -90,16 +104,17 @@ public class SessionShareService {
             deleteQuietly(bucket, objectKey);
             throw e;
         }
-        return SessionShareResultEntity.builder().share(share).token(token).session(session)
-                .messages(messages).build();
+        return result(share, session, messages, document).toBuilder().token(token).build();
     }
 
     /**
      * 查询分享预览；参数是原分享令牌；返回不含敏感字段的元数据。
      */
-    public SessionShareResultEntity preview(String token) {
+    public SessionShareResultEntity preview(String tenantId, String userId, String token) {
         SessionShareEntity share = resolveActive(token);
-        return SessionShareResultEntity.builder().share(share).build();
+        SessionExportDocument document = readDocument(share);
+        return result(share, null, null, document).toBuilder()
+                .toolPrecheck(precheck(tenantId, userId, document)).build();
     }
 
     /**
@@ -118,11 +133,15 @@ public class SessionShareService {
      * 复制导入分享；参数是接收者可信身份和分享令牌；返回独立会话副本。
      */
     public SessionShareResultEntity importCopy(String tenantId, String userId, String token) {
+        return importCopy(tenantId, userId, token, false);
+    }
+
+    /** 复制导入分享；参数是接收者身份、令牌和风险确认；返回独立会话副本。 */
+    public SessionShareResultEntity importCopy(String tenantId, String userId, String token,
+                                               boolean confirmToolAccessRisk) {
         SessionShareEntity share = resolveActive(token);
-        byte[] bytes = readVerified(share);
-        SessionExportDocument document = deserialize(bytes);
-        checkDocument(document, bytes);
-        return inTransaction(() -> importTransactional(tenantId, userId, share, document));
+        SessionExportDocument document = readDocument(share);
+        return inTransaction(() -> importTransactional(tenantId, userId, share, document, confirmToolAccessRisk));
     }
 
     /**
@@ -139,13 +158,18 @@ public class SessionShareService {
     }
 
     private SessionShareResultEntity importTransactional(String tenantId, String userId, SessionShareEntity initial,
-                                                          SessionExportDocument document) {
+                                                          SessionExportDocument document,
+                                                          boolean confirmToolAccessRisk) {
         SessionShareEntity share = shareRepository.lockByShareId(initial.getShareId());
         assertActive(share);
         String scopeKey = sha256(((tenantId == null ? "" : tenantId) + ':' + userId).getBytes(StandardCharsets.UTF_8));
         SessionImportEntity existing = shareRepository.queryImport(share.getShareId(), scopeKey);
         if (existing != null) {
-            return loadImported(tenantId, userId, existing.getNewSessionId(), share);
+            return loadImported(tenantId, userId, existing.getNewSessionId(), share, document);
+        }
+        SessionToolPrecheckEntity precheck = precheck(tenantId, userId, document);
+        if (Boolean.TRUE.equals(precheck.getHasRisk()) && !confirmToolAccessRisk) {
+            throw new AppException("SHARE_TOOL_CONFIRM_REQUIRED", "接收方缺少部分会话工具权限，请确认风险后再导入");
         }
         if (shareRepository.consumeAccess(share.getShareId()) != 1) {
             throw new AppException("CHAT_SHARE_LIMIT_REACHED", "分享已失效或读取次数已用完");
@@ -169,25 +193,29 @@ public class SessionShareService {
         if (shareRepository.insertImport(sessionImport) != 1) {
             throw new AppException("CHAT_SHARE_IMPORT_SAVE_FAILED", "会话导入记录保存失败");
         }
-        return SessionShareResultEntity.builder().share(share).session(session)
-                .messages(sessionDomain.queryValidMessages(tenantId, userId, sessionId)).build();
+        return result(share, session, sessionDomain.queryValidMessages(tenantId, userId, sessionId), document)
+                .toBuilder().toolPrecheck(precheck(tenantId, userId, document)).build();
     }
 
     private SessionShareResultEntity loadImported(String tenantId, String userId, String sessionId,
-                                                  SessionShareEntity share) {
+                                                  SessionShareEntity share, SessionExportDocument document) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);
-        return SessionShareResultEntity.builder().share(share).session(session)
-                .messages(sessionDomain.queryValidMessages(tenantId, userId, sessionId)).build();
+        return result(share, session, sessionDomain.queryValidMessages(tenantId, userId, sessionId), document)
+                .toBuilder().toolPrecheck(precheck(tenantId, userId, document)).build();
     }
 
-    private SessionExportDocument buildDocument(ChatSessionEntity session, List<ChatMessageEntity> messages) {
+    private SessionExportDocument buildDocument(ChatSessionEntity session, List<ChatMessageEntity> messages,
+                                                List<SessionToolDependencyEntity> dependencies) {
         List<SessionExportDocument.Message> exports = messages.stream().map(message -> SessionExportDocument.Message.builder()
                 .sequenceNo(message.getSequenceNo()).role(message.getRole()).contentType(message.getContentType())
                 .content(message.getContent()).createdAt(message.getCreateTime()).build()).toList();
+        String sourceType = session.getAgentId() != null && session.getAgentId().startsWith("wf_")
+                ? "workflow" : "agent";
         return SessionExportDocument.builder().schemaVersion(SCHEMA_VERSION).exportedAt(LocalDateTime.now())
                 .session(SessionExportDocument.Session.builder().title(session.getTitle()).agentId(session.getAgentId())
-                        .agentName(session.getAgentName()).appName(session.getAppName()).build())
-                .messages(exports).build();
+                        .agentName(session.getAgentName()).appName(session.getAppName()).sourceType(sourceType)
+                        .workflowId("workflow".equals(sourceType) ? session.getAgentId() : null).build())
+                .messages(exports).toolDependencies(dependencies == null ? List.of() : dependencies).build();
     }
 
     private SessionShareEntity resolveActive(String token) {
@@ -216,7 +244,8 @@ public class SessionShareService {
     }
 
     private void checkDocument(SessionExportDocument document, byte[] bytes) {
-        if (document == null || !SCHEMA_VERSION.equals(document.getSchemaVersion()) || document.getSession() == null
+        if (document == null || (!SCHEMA_VERSION.equals(document.getSchemaVersion())
+                && !LEGACY_SCHEMA_VERSION.equals(document.getSchemaVersion())) || document.getSession() == null
                 || document.getMessages() == null) throw new AppException("CHAT_SHARE_SCHEMA_INVALID", "分享文件协议不兼容");
         if (bytes.length > MAX_EXPORT_BYTES || document.getMessages().size() > MAX_MESSAGES)
             throw new AppException("CHAT_SHARE_TOO_LARGE", "分享文件超过限制");
@@ -227,7 +256,74 @@ public class SessionShareService {
                     || message.getContent().length() > MAX_MESSAGE_CHARS)
                 throw new AppException("CHAT_SHARE_MESSAGE_INVALID", "分享文件包含不支持的消息");
         }
+        List<SessionToolDependencyEntity> dependencies = dependencies(document);
+        if (dependencies.size() > MAX_TOOL_DEPENDENCIES) {
+            throw new AppException("CHAT_SHARE_TOOL_LIMIT", "分享文件工具依赖超过限制");
+        }
+        for (SessionToolDependencyEntity dependency : dependencies) {
+            if (dependency == null || blank(dependency.getToolType()) || blank(dependency.getToolId())
+                    || dependency.getToolId().length() > 128 || dependency.getToolType().length() > 32) {
+                throw new AppException("CHAT_SHARE_TOOL_INVALID", "分享文件包含不合法工具依赖");
+            }
+        }
     }
+
+    private SessionExportDocument readDocument(SessionShareEntity share) {
+        byte[] bytes = readVerified(share);
+        SessionExportDocument document = deserialize(bytes);
+        checkDocument(document, bytes);
+        return document;
+    }
+
+    private SessionShareResultEntity result(SessionShareEntity share, ChatSessionEntity session,
+                                            List<ChatMessageEntity> messages, SessionExportDocument document) {
+        SessionExportDocument.Session source = document.getSession();
+        String sourceType = blank(source.getSourceType())
+                ? (source.getAgentId() != null && source.getAgentId().startsWith("wf_") ? "workflow" : "agent")
+                : source.getSourceType();
+        return SessionShareResultEntity.builder().share(share).session(session).messages(messages)
+                .sourceType(sourceType).workflowId(blank(source.getWorkflowId()) && "workflow".equals(sourceType)
+                        ? source.getAgentId() : source.getWorkflowId())
+                .sourceAgentId(source.getAgentId()).sourceAgentName(source.getAgentName())
+                .sourceAppName(source.getAppName())
+                .toolDependencies(dependencies(document))
+                .legacySnapshot(LEGACY_SCHEMA_VERSION.equals(document.getSchemaVersion())).build();
+    }
+
+    private SessionToolPrecheckEntity precheck(String tenantId, String userId, SessionExportDocument document) {
+        List<SessionToolDependencyEntity> dependencies = dependencies(document);
+        Map<String, ToolCatalogEntity> available = new LinkedHashMap<>();
+        if (!blank(tenantId) && !blank(userId)) {
+            for (ToolCatalogEntity item : toolRepository.queryAvailableTools(tenantId, userId)) {
+                available.put(toolKey(item.getToolType(), item.getToolId()), item);
+            }
+        }
+        List<SessionToolAccessEntity> items = dependencies.stream().map(dependency -> {
+            ToolCatalogEntity catalog = available.get(toolKey(dependency.getToolType(), dependency.getToolId()));
+            boolean versionMatch = catalog != null && (blank(dependency.getVersion())
+                    || dependency.getVersion().equals(catalog.getVersion()));
+            String access = versionMatch ? "available" : "missing";
+            String reason = catalog == null ? "接收方无此工具权限或工具未发布"
+                    : (versionMatch ? null : "接收方缺少分享所用工具版本");
+            return SessionToolAccessEntity.builder().toolType(dependency.getToolType()).toolId(dependency.getToolId())
+                    .toolName(dependency.getToolName()).version(dependency.getVersion()).source(dependency.getSource())
+                    .access(access).reason(reason).build();
+        }).toList();
+        int availableCount = (int) items.stream().filter(item -> "available".equals(item.getAccess())).count();
+        int missingCount = items.size() - availableCount;
+        return SessionToolPrecheckEntity.builder().hasRisk(missingCount > 0).availableCount(availableCount)
+                .missingCount(missingCount).deniedCount(0).items(items).build();
+    }
+
+    private List<SessionToolDependencyEntity> dependencies(SessionExportDocument document) {
+        return document.getToolDependencies() == null ? List.of() : List.copyOf(document.getToolDependencies());
+    }
+
+    private String toolKey(String toolType, String toolId) {
+        return (toolType == null ? "" : toolType.toLowerCase()) + ':' + toolId;
+    }
+
+    private boolean blank(String value) { return value == null || value.isBlank(); }
 
     private byte[] serialize(SessionExportDocument document) {
         try { return objectMapper.writeValueAsBytes(document); }

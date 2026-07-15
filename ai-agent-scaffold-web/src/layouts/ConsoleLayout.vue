@@ -76,6 +76,7 @@ const authStore = useAuthStore();
 const navItems: NavItem[] = [
   { path: '/dashboard', label: '总览', icon: Gauge },
   { path: '/chat', label: '智能体会话', icon: MessageSquareText },
+  { path: '/agents', label: 'Agent 管理', icon: Bot },
   { path: '/workflow', label: '工作流编排', icon: GitBranch },
   { path: '/schedules', label: '定时任务', icon: CalendarClock },
   { path: '/mcp', label: 'MCP 中心', icon: Blocks },

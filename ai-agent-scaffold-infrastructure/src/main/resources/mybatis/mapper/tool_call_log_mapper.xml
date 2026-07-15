@@ -72,4 +72,23 @@
         LIMIT 100
     </select>
 
+    <select id="queryShareDependencies" resultMap="ToolCallLogMap">
+        SELECT MIN(t.id) AS id, t.tenant_id, t.user_id, t.session_id,
+               MIN(t.run_id) AS run_id, MIN(t.workflow_id) AS workflow_id,
+               t.tool_type, t.tool_id, MAX(t.tool_name) AS tool_name, t.version,
+               NULL AS invocation_id, NULL AS function_call_id, NULL AS idempotency_key, NULL AS trace_id,
+               NULL AS input_json, NULL AS output_json, 'success' AS status,
+               MIN(t.started_at) AS started_at, NULL AS error_type, NULL AS error_message,
+               NULL AS cost_ms, NULL AS metadata, MIN(t.create_time) AS create_time,
+               MAX(t.update_time) AS update_time, 0 AS deleted
+        FROM tool_call_log t
+        INNER JOIN chat_message m ON m.tenant_id &lt;=&gt; t.tenant_id
+          AND m.user_id = t.user_id AND m.session_id = t.session_id AND m.run_id = t.run_id
+          AND m.validity_status = 'active' AND m.deleted = 0
+        WHERE t.tenant_id = #{tenantId} AND t.user_id = #{userId} AND t.session_id = #{sessionId}
+          AND t.status = 'success' AND t.tool_id IS NOT NULL AND t.tool_id != '' AND t.deleted = 0
+        GROUP BY t.tenant_id, t.user_id, t.session_id, t.tool_type, t.tool_id, t.version
+        ORDER BY MIN(t.id) ASC
+    </select>
+
 </mapper>

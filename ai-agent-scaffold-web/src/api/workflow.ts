@@ -1,6 +1,7 @@
 import { request } from '@/api/http';
 import type {
   WorkflowCreateRequest,
+  WorkflowDeleteResponse,
   WorkflowDetail,
   WorkflowNodeOptions,
   WorkflowSaveDraftRequest,
@@ -56,6 +57,16 @@ export async function publishWorkflow(workflowId: string) {
   return request<WorkflowDetail>({
     url: `/v1/workflows/${workflowId}/publish`,
     method: 'POST',
+  });
+}
+
+/**
+ * 软删除工作流；参数是工作流 ID；返回可审计删除结果。
+ */
+export async function deleteWorkflow(workflowId: string) {
+  return request<WorkflowDeleteResponse>({
+    url: `/v1/workflows/${encodeURIComponent(workflowId)}`,
+    method: 'DELETE',
   });
 }
 

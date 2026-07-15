@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 
 import {
   createWorkflow,
+  deleteWorkflow,
   publishWorkflow,
   queryWorkflowDetail,
   queryWorkflowNodeOptions,
@@ -26,6 +27,7 @@ interface WorkflowState {
   loading: boolean;
   saving: boolean;
   publishing: boolean;
+  deletingWorkflowId: string;
   errorMessage: string;
 }
 
@@ -43,6 +45,7 @@ export const useWorkflowStore = defineStore('workflow', {
     loading: false,
     saving: false,
     publishing: false,
+    deletingWorkflowId: '',
     errorMessage: '',
   }),
   getters: {
@@ -58,8 +61,11 @@ export const useWorkflowStore = defineStore('workflow', {
       this.errorMessage = '';
       try {
         this.workflows = await queryWorkflows();
-        if (!this.activeWorkflowId && this.workflows.length > 0) {
-          this.activeWorkflowId = this.workflows[0].workflowId;
+        if (!this.workflows.some((workflow) => workflow.workflowId === this.activeWorkflowId)) {
+          this.activeWorkflowId = this.workflows[0]?.workflowId || '';
+          if (!this.activeWorkflowId) {
+            this.detail = null;
+          }
         }
       } catch (error) {
         this.errorMessage = error instanceof Error ? error.message : '工作流列表加载失败';
@@ -159,6 +165,37 @@ export const useWorkflowStore = defineStore('workflow', {
         return null;
       } finally {
         this.publishing = false;
+      }
+    },
+
+    /**
+     * 软删除工作流；参数是工作流ID；请求成功后才收口本地列表。
+     */
+    async remove(workflowId?: string) {
+      const id = workflowId || this.activeWorkflowId;
+      if (!id || this.deletingWorkflowId || this.saving || this.publishing) {
+        return false;
+      }
+      this.deletingWorkflowId = id;
+      this.errorMessage = '';
+      try {
+        await deleteWorkflow(id);
+        const removedIndex = this.workflows.findIndex((workflow) => workflow.workflowId === id);
+        this.workflows = this.workflows.filter((workflow) => workflow.workflowId !== id);
+        if (this.activeWorkflowId === id) {
+          const nextIndex = Math.min(Math.max(removedIndex, 0), Math.max(0, this.workflows.length - 1));
+          this.activeWorkflowId = this.workflows[nextIndex]?.workflowId || '';
+          this.detail = null;
+          if (this.activeWorkflowId) {
+            await this.loadDetail(this.activeWorkflowId);
+          }
+        }
+        return true;
+      } catch (error) {
+        this.errorMessage = error instanceof Error ? error.message : '工作流删除失败';
+        return false;
+      } finally {
+        this.deletingWorkflowId = '';
       }
     },
   },

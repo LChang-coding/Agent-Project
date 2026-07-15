@@ -33,6 +33,9 @@ public interface IWorkflowRepository {
      */
     List<WorkflowEntity> queryWorkflowList(String tenantId);
 
+    /** 软删除工作流；参数是租户、工作流和删除人；返回影响行数。 */
+    int softDeleteWorkflow(String tenantId, String workflowId, String deletedBy);
+
     /**
      * 新增版本；参数是版本实体；返回影响行数。
      */

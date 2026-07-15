@@ -31,6 +31,7 @@
               :key="workflow.workflowId"
               :class="['workflow-item', { 'workflow-item--active': workflow.workflowId === workflowStore.activeWorkflowId }]"
               type="button"
+              :disabled="Boolean(workflowStore.deletingWorkflowId)"
               @click="selectWorkflow(workflow.workflowId)"
             >
               <strong>{{ workflow.workflowName }}</strong>
@@ -73,10 +74,15 @@
             </button>
             <button class="button" type="button" @click="autoLayout">自动排布</button>
             <button class="button" type="button" :disabled="!activeNode || graph.nodes.length <= 1" @click="removeActiveNode">删除节点</button>
-            <button class="button button--primary" type="button" :disabled="workflowStore.saving || !workflowStore.activeWorkflowId" @click="saveDraft">
+            <button class="button button--danger" type="button"
+                    :disabled="!workflowStore.activeWorkflowId || Boolean(workflowStore.deletingWorkflowId) || workflowStore.saving || workflowStore.publishing"
+                    @click="removeWorkflow">
+              {{ workflowStore.deletingWorkflowId ? '删除中...' : '删除工作流' }}
+            </button>
+            <button class="button button--primary" type="button" :disabled="workflowStore.saving || Boolean(workflowStore.deletingWorkflowId) || !workflowStore.activeWorkflowId" @click="saveDraft">
               {{ workflowStore.saving ? '保存中...' : '保存草稿' }}
             </button>
-            <button class="button button--dark" type="button" :disabled="workflowStore.publishing || !workflowStore.activeWorkflowId" @click="publish">
+            <button class="button button--dark" type="button" :disabled="workflowStore.publishing || Boolean(workflowStore.deletingWorkflowId) || !workflowStore.activeWorkflowId" @click="publish">
               {{ workflowStore.publishing ? '发布中...' : '发布运行' }}
             </button>
           </div>
@@ -214,6 +220,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
+import { useChatStore } from '@/stores/chat';
 import {
   createDefaultLlmNode,
   createDefaultWorkflowGraph,
@@ -241,6 +248,7 @@ const NODE_HEIGHT = 150;
 const CANVAS_WIDTH = 1160;
 const CANVAS_HEIGHT = 660;
 const workflowStore = useWorkflowStore();
+const chatStore = useChatStore();
 const toolStore = useToolStore();
 const canvasRef = ref<HTMLElement | null>(null);
 const newWorkflowName = ref('企业智能体工作流');
@@ -322,7 +330,37 @@ async function createNewWorkflow() {
  * 选择工作流；参数是工作流 ID；加载对应详情。
  */
 async function selectWorkflow(workflowId: string) {
+  if (workflowStore.deletingWorkflowId) {
+    return;
+  }
   await workflowStore.loadDetail(workflowId);
+}
+
+/**
+ * 软删除当前工作流；无参数；确认成功后切换到下一项并刷新运行列表。
+ */
+async function removeWorkflow() {
+  const workflow = workflowStore.activeWorkflow;
+  if (!workflow || !window.confirm(`确定删除工作流“${workflow.workflowName}”吗？这是可审计软删除，历史会话和运行记录会保留。`)) {
+    return;
+  }
+  const removed = await workflowStore.remove(workflow.workflowId);
+  if (!removed) {
+    return;
+  }
+  if (workflowStore.detail) {
+    syncFromDetail();
+  } else {
+    workflowName.value = '';
+    workflowDescription.value = '';
+    graph.value = createDefaultWorkflowGraph(defaultModelCode.value);
+    selectedNodeId.value = graph.value.nodes[0]?.nodeId || '';
+  }
+  try {
+    await chatStore.loadAgents();
+  } catch {
+    workflowStore.errorMessage = '工作流已删除，但运行目标缓存刷新失败，进入聊天页后请手动刷新';
+  }
 }
 
 /**

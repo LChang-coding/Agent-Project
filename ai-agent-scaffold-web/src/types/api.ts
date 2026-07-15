@@ -66,6 +66,27 @@ export interface AiAgentConfig {
   agentDesc?: string;
 }
 
+export interface AgentConfigItem extends AiAgentConfig {
+  sourceType: 'static_config' | 'database';
+  status: 'enabled' | 'disabled';
+  manageable: boolean;
+  revision: number;
+  disabledAt?: string;
+}
+
+export interface AgentStatusUpdateRequest {
+  enabled: boolean;
+  reason?: string;
+  expectedRevision?: number;
+}
+
+export interface AgentMutationResponse {
+  agentId: string;
+  status: 'enabled' | 'disabled';
+  revision: number;
+  updatedAt?: string;
+}
+
 export interface CreateSessionRequest {
   agentId?: string;
   workflowId?: string;
@@ -277,7 +298,39 @@ export interface SessionShareResponse {
   agentId?: string;
   agentName?: string;
   appName?: string;
+  formatVersion?: number;
+  sourceType?: 'agent' | 'workflow';
+  workflowId?: string;
+  toolDependencies?: ShareToolDependency[];
+  toolPrecheck?: ShareToolPrecheck;
+  legacySnapshot?: boolean;
   messages?: SessionShareMessage[];
+}
+
+export interface ShareToolDependency {
+  toolType: 'skill' | 'mcp';
+  toolId: string;
+  toolName: string;
+  version?: string;
+  source: string;
+  requiredPermission?: string;
+}
+
+export interface ShareToolAccessItem extends ShareToolDependency {
+  access: 'available' | 'missing' | 'denied';
+  reason?: string;
+}
+
+export interface ShareToolPrecheck {
+  hasRisk: boolean;
+  availableCount: number;
+  missingCount: number;
+  deniedCount: number;
+  items: ShareToolAccessItem[];
+}
+
+export interface SessionShareImportRequest {
+  confirmToolAccessRisk: boolean;
 }
 
 export type ScheduleMisfirePolicy = 'fire_once_now' | 'skip' | 'catch_up';
@@ -331,6 +384,13 @@ export interface WorkflowSummary {
   defaultModelCode: string;
   currentVersion: number;
   publishedVersion: number;
+}
+
+export interface WorkflowDeleteResponse {
+  workflowId: string;
+  status: 'deleted';
+  deletedAt?: string;
+  conflictReason?: string;
 }
 
 export interface WorkflowGraph {

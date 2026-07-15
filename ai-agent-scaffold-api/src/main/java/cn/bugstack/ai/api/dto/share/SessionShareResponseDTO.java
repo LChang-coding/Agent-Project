@@ -29,7 +29,51 @@ public class SessionShareResponseDTO {
     private String agentId;
     private String agentName;
     private String appName;
+    private Integer formatVersion;
+    private String sourceType;
+    private String workflowId;
+    private Boolean legacySnapshot;
+    private List<ToolDependency> toolDependencies;
+    private ToolPrecheck toolPrecheck;
     private List<Message> messages;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ToolDependency {
+        private String toolType;
+        private String toolId;
+        private String toolName;
+        private String version;
+        private String source;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ToolAccess {
+        private String toolType;
+        private String toolId;
+        private String toolName;
+        private String version;
+        private String source;
+        private String access;
+        private String reason;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ToolPrecheck {
+        private Boolean hasRisk;
+        private Integer availableCount;
+        private Integer missingCount;
+        private Integer deniedCount;
+        private List<ToolAccess> items;
+    }
 
     @Data
     @Builder

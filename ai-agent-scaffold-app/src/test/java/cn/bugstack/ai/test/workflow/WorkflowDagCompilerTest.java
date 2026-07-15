@@ -222,6 +222,11 @@ public class WorkflowDagCompilerTest {
             return Collections.emptyList();
         }
 
+        @Override
+        public int softDeleteWorkflow(String tenantId, String workflowId, String deletedBy) {
+            return 0;
+        }
+
         /**
          * 新增版本；参数是版本实体；返回影响行数。
          */

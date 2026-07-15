@@ -4,6 +4,7 @@ USE `ai_agent_scaffold`;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+DROP TABLE IF EXISTS `agent_tenant_override`;
 DROP TABLE IF EXISTS `agent_schedule_execution`;
 DROP TABLE IF EXISTS `agent_schedule_task`;
 DROP TABLE IF EXISTS `agent_schedule_config`;
@@ -424,6 +425,23 @@ CREATE TABLE `tool_call_log` (
   KEY `idx_tool_call_trace` (`trace_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='tool_call_log';
 
+CREATE TABLE `agent_tenant_override` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `tenant_id` VARCHAR(64) NOT NULL COMMENT '租户业务ID',
+  `agent_id` VARCHAR(64) NOT NULL COMMENT '静态 Agent ID',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '租户覆盖状态：active/disabled',
+  `reason` VARCHAR(256) NULL COMMENT '状态变更原因',
+  `updated_by` VARCHAR(64) NOT NULL COMMENT '最后操作用户',
+  `revision` BIGINT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
+  `disabled_at` DATETIME(3) NULL COMMENT '禁用时间',
+  `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_tenant_override` (`tenant_id`, `agent_id`),
+  KEY `idx_agent_override_status` (`tenant_id`, `status`, `update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='租户静态 Agent 状态覆盖';
+
 CREATE TABLE `agent_workflow` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `tenant_id` VARCHAR(64) NOT NULL COMMENT '租户业务ID',
@@ -436,6 +454,8 @@ CREATE TABLE `agent_workflow` (
   `default_model_code` VARCHAR(128) NOT NULL DEFAULT 'deepseek-v4-flash' COMMENT '默认模型编码',
   `current_version` INT NOT NULL DEFAULT 1 COMMENT '当前草稿版本',
   `published_version` INT NOT NULL DEFAULT 0 COMMENT '当前发布版本，0表示未发布',
+  `deleted_by` VARCHAR(64) NULL COMMENT '删除操作用户',
+  `deleted_at` DATETIME(3) NULL COMMENT '删除时间',
   `metadata` JSON NULL COMMENT '扩展信息',
   `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',

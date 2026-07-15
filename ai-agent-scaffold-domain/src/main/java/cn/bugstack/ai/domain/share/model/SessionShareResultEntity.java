@@ -13,7 +13,7 @@ import java.util.List;
  * 会话分享操作结果。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class SessionShareResultEntity {
@@ -22,4 +22,12 @@ public class SessionShareResultEntity {
     private ChatSessionEntity session;
     private List<ChatMessageEntity> messages;
     private byte[] exportBytes;
+    private String sourceType;
+    private String workflowId;
+    private String sourceAgentId;
+    private String sourceAgentName;
+    private String sourceAppName;
+    private List<SessionToolDependencyEntity> toolDependencies;
+    private SessionToolPrecheckEntity toolPrecheck;
+    private Boolean legacySnapshot;
 }

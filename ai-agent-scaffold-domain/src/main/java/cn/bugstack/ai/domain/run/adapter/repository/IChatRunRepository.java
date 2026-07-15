@@ -31,6 +31,9 @@ public interface IChatRunRepository {
      */
     List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId);
 
+    /** 查询来源上的可执行运行；参数是租户、来源类型和来源ID；返回活动运行。 */
+    List<ChatRunEntity> queryExecutableBySource(String tenantId, String sourceType, String sourceId);
+
     /**
      * 按版本迁移状态；参数是运行、原状态、目标状态和终态信息；返回影响行数。
      */

@@ -25,4 +25,22 @@ public class AiAgentConfigResponseDTO {
      */
     private String agentDesc;
 
+    /** 当前租户状态。 */
+    private String status;
+
+    /** 配置事实源。 */
+    private String sourceType;
+
+    /** 当前身份是否可管理。 */
+    private Boolean manageable;
+
+    /** 当前租户是否可运行。 */
+    private Boolean enabled;
+
+    /** 状态覆盖乐观锁版本。 */
+    private Long revision;
+
+    /** 禁用时间。 */
+    private String disabledAt;
+
 }

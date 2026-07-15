@@ -88,6 +88,11 @@ public class WorkflowRepository implements IWorkflowRepository {
         return list.stream().map(this::toWorkflowEntity).collect(Collectors.toList());
     }
 
+    @Override
+    public int softDeleteWorkflow(String tenantId, String workflowId, String deletedBy) {
+        return agentWorkflowDao.softDelete(tenantId, workflowId, deletedBy);
+    }
+
     /**
      * 新增版本；参数是版本实体；返回影响行数。
      */

@@ -2,6 +2,7 @@ package cn.bugstack.ai.domain.workflow.service;
 
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.service.IArmoryService;
+import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagCompileResultEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowCreateCommandEntity;
@@ -48,6 +49,9 @@ public class WorkflowDomainService implements IWorkflowService {
 
     @Resource
     private IArmoryService armoryService;
+
+    @Resource
+    private IChatRunRepository chatRunRepository;
 
     private final ConcurrentMap<String, WorkflowRuntimeEntity> runtimeCache = new ConcurrentHashMap<>();
 
@@ -116,6 +120,7 @@ public class WorkflowDomainService implements IWorkflowService {
     public WorkflowDetailEntity saveDraft(WorkflowSaveDraftCommandEntity command) {
         checkSaveCommand(command);
         WorkflowEntity workflow = requireWorkflow(command.getTenantId(), command.getWorkflowId());
+        assertWritable(workflow, command.getUserId(), command.getRoleCode());
         String modelCode = modelRouter.route(null, null, command.getDefaultModelCode());
         WorkflowVersionEntity draft = workflowRepository.queryLatestDraft(command.getTenantId(), command.getWorkflowId());
         if (draft == null) {
@@ -149,10 +154,11 @@ public class WorkflowDomainService implements IWorkflowService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public WorkflowDetailEntity publishWorkflow(String tenantId, String userId, String workflowId) {
+    public WorkflowDetailEntity publishWorkflow(String tenantId, String userId, String roleCode, String workflowId) {
         checkTenant(tenantId);
         checkUser(userId);
         WorkflowEntity workflow = requireWorkflow(tenantId, workflowId);
+        assertWritable(workflow, userId, roleCode);
         WorkflowVersionEntity draft = workflowRepository.queryLatestDraft(tenantId, workflowId);
         if (draft == null) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "没有可发布的草稿版本");
@@ -195,11 +201,29 @@ public class WorkflowDomainService implements IWorkflowService {
         checkTenant(tenantId);
         checkUser(userId);
         WorkflowEntity workflow = requireWorkflow(tenantId, workflowId);
+        if (!STATUS_PUBLISHED.equals(workflow.getStatus())) {
+            throw new AppException("WORKFLOW_NOT_RUNNABLE", "工作流未发布或已停用");
+        }
         WorkflowVersionEntity version = resolveRuntimeVersion(tenantId, workflowId, workflowVersion);
         String effectiveModelCode = modelRouter.route(requestModelCode, null, version.getDefaultModelCode());
         String cacheKey = tenantId + ":" + workflowId + ":" + version.getVersion() + ":" + (isBlank(requestModelCode) ? "configured" : effectiveModelCode);
         AiLog.info(AiLog.workflow().modelRouted(tenantId, userId, workflowId, effectiveModelCode));
         return runtimeCache.computeIfAbsent(cacheKey, key -> compileRuntime(tenantId, userId, workflow, version, requestModelCode, effectiveModelCode));
+    }
+
+    /** 软删除工作流；参数是可信租户、用户和工作流；无返回值。 */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteWorkflow(String tenantId, String userId, String roleCode, String workflowId) {
+        checkTenant(tenantId); checkUser(userId);
+        WorkflowEntity workflow = workflowRepository.queryWorkflow(tenantId, workflowId);
+        if (workflow == null) return;
+        assertWritable(workflow, userId, roleCode);
+        if (!chatRunRepository.queryExecutableBySource(tenantId, "workflow", workflowId).isEmpty()) {
+            throw new AppException("WORKFLOW_ACTIVE_RUN_CONFLICT", "工作流仍有未完成运行，暂时不能删除");
+        }
+        workflowRepository.softDeleteWorkflow(tenantId, workflowId, userId);
+        runtimeCache.keySet().removeIf(key -> key.contains(":" + workflowId + ":"));
     }
 
     /**
@@ -268,6 +292,14 @@ public class WorkflowDomainService implements IWorkflowService {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流不存在");
         }
         return workflow;
+    }
+
+    private void assertWritable(WorkflowEntity workflow, String userId, String roleCode) {
+        boolean owner = workflow != null && userId != null && userId.equals(workflow.getOwnerUserId());
+        boolean admin = "owner".equalsIgnoreCase(roleCode) || "admin".equalsIgnoreCase(roleCode);
+        if (!owner && !admin) {
+            throw new AppException("WORKFLOW_WRITE_PERMISSION_DENIED", "只有工作流拥有者或租户管理员可以操作");
+        }
     }
 
     /**

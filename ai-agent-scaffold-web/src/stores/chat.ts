@@ -124,11 +124,11 @@ export const useChatStore = defineStore('chat', {
         this.workflows = workflows.filter((workflow) => workflow.publishedVersion > 0 && workflow.status === 'published');
         this.models = options.models;
         await this.loadSessions();
-        if (!this.activeAgentId && this.agents.length > 0) {
-          this.activeAgentId = this.agents[0].agentId;
+        if (!this.agents.some((agent) => agent.agentId === this.activeAgentId)) {
+          this.activeAgentId = this.agents[0]?.agentId || '';
         }
-        if (!this.activeWorkflowId && this.workflows.length > 0) {
-          this.activeWorkflowId = this.workflows[0].workflowId;
+        if (!this.workflows.some((workflow) => workflow.workflowId === this.activeWorkflowId)) {
+          this.activeWorkflowId = this.workflows[0]?.workflowId || '';
         }
         if (this.activeSourceType === 'workflow' && !this.activeWorkflowId && this.agents.length > 0) {
           this.activeSourceType = 'agent';
@@ -243,16 +243,27 @@ export const useChatStore = defineStore('chat', {
       if (!imported.sessionId) {
         throw new Error('导入结果缺少会话ID');
       }
-      const workflow = this.workflows.find((item) => item.workflowId === imported.agentId);
-      const sourceType: 'agent' | 'workflow' = workflow ? 'workflow' : 'agent';
+      if (this.agents.length === 0 && this.workflows.length === 0) {
+        await this.loadAgents();
+      }
+      const workflowId = imported.workflowId || (imported.sourceType === 'workflow' ? imported.agentId : undefined);
+      const workflow = this.workflows.find((item) => item.workflowId === workflowId);
+      const sourceType: 'agent' | 'workflow' = imported.sourceType || (workflow ? 'workflow' : 'agent');
       this.activeSourceType = sourceType;
       if (sourceType === 'workflow') {
-        this.activeWorkflowId = workflow!.workflowId;
-        this.activeModelCode = workflow!.defaultModelCode || this.activeModelCode;
+        this.activeWorkflowId = workflowId || '';
+        this.activeModelCode = workflow?.defaultModelCode || this.activeModelCode;
       } else {
         this.activeAgentId = imported.agentId || this.activeAgentId;
       }
       await this.loadSessions();
+      const importedSession = this.sessions.find((session) => session.sessionId === imported.sessionId);
+      if (importedSession) {
+        importedSession.sourceType = sourceType;
+        importedSession.agentId = sourceType === 'workflow' ? workflowId || importedSession.agentId : imported.agentId || importedSession.agentId;
+        importedSession.workflowId = sourceType === 'workflow' ? workflowId : undefined;
+        importedSession.workflowName = sourceType === 'workflow' ? imported.agentName : undefined;
+      }
       await this.switchSession(imported.sessionId);
     },
 

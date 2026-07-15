@@ -1,5 +1,8 @@
 import { getAccessToken, refreshAccessToken, request } from '@/api/http';
 import type {
+  AgentConfigItem,
+  AgentMutationResponse,
+  AgentStatusUpdateRequest,
   AiAgentConfig,
   ChatRequest,
   ChatResponse,
@@ -9,6 +12,38 @@ import type {
   RunStreamEvent,
   StreamHandlers,
 } from '@/types/api';
+
+/**
+ * 查询 Agent 管理列表；参数控制是否包含禁用项；返回当前身份可管理状态。
+ */
+export async function queryAgentConfigManagement(includeDisabled = true) {
+  return request<AgentConfigItem[]>({
+    url: '/v1/agent-configs',
+    method: 'GET',
+    params: { includeDisabled },
+  });
+}
+
+/**
+ * 更新 Agent 有效状态；参数是 Agent ID 和幂等状态请求；返回最新修订。
+ */
+export async function updateAgentConfigStatus(agentId: string, payload: AgentStatusUpdateRequest) {
+  return request<AgentMutationResponse>({
+    url: `/v1/agent-configs/${encodeURIComponent(agentId)}/status`,
+    method: 'PUT',
+    data: payload,
+  });
+}
+
+/**
+ * 删除 Agent 管理覆盖；参数是 Agent ID；服务端幂等映射为禁用。
+ */
+export async function deleteAgentConfig(agentId: string) {
+  return request<AgentMutationResponse>({
+    url: `/v1/agent-configs/${encodeURIComponent(agentId)}`,
+    method: 'DELETE',
+  });
+}
 
 /**
  * 查询可用智能体；无需参数；返回后端已装配的智能体列表。
