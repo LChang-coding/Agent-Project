@@ -7,6 +7,8 @@
         <result column="tenant_id" property="tenantId"/>
         <result column="user_id" property="userId"/>
         <result column="session_id" property="sessionId"/>
+        <result column="run_id" property="runId"/>
+        <result column="call_id" property="callId"/>
         <result column="message_id" property="messageId"/>
         <result column="agent_id" property="agentId"/>
         <result column="agent_name" property="agentName"/>
@@ -14,6 +16,9 @@
         <result column="invocation_id" property="invocationId"/>
         <result column="provider" property="provider"/>
         <result column="model_version" property="modelVersion"/>
+        <result column="usage_type" property="usageType"/>
+        <result column="call_status" property="callStatus"/>
+        <result column="finish_reason" property="finishReason"/>
         <result column="prompt_tokens" property="promptTokens"/>
         <result column="candidate_tokens" property="candidateTokens"/>
         <result column="total_tokens" property="totalTokens"/>
@@ -27,12 +32,34 @@
     </resultMap>
 
     <sql id="ModelUsageColumns">
-        id, tenant_id, user_id, session_id, message_id, agent_id, agent_name, app_name, invocation_id, provider, model_version, prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens, tool_use_prompt_tokens, trace_id, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, run_id, call_id, message_id, agent_id, agent_name, app_name, invocation_id, provider, model_version, usage_type, call_status, finish_reason, prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens, tool_use_prompt_tokens, trace_id, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO model_usage (tenant_id, user_id, session_id, message_id, agent_id, agent_name, app_name, invocation_id, provider, model_version, prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens, tool_use_prompt_tokens, trace_id, metadata)
         VALUES (#{tenantId}, #{userId}, #{sessionId}, #{messageId}, #{agentId}, #{agentName}, #{appName}, #{invocationId}, #{provider}, #{modelVersion}, #{promptTokens}, #{candidateTokens}, #{totalTokens}, #{thoughtsTokens}, #{toolUsePromptTokens}, #{traceId}, #{metadata})
+    </insert>
+
+    <insert id="upsert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO">
+        INSERT INTO model_usage (tenant_id, user_id, session_id, run_id, call_id, message_id, agent_id, agent_name,
+                                 app_name, invocation_id, provider, model_version, usage_type, call_status, finish_reason,
+                                 prompt_tokens, candidate_tokens, total_tokens, thoughts_tokens,
+                                 tool_use_prompt_tokens, trace_id, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{runId}, #{callId}, #{messageId}, #{agentId}, #{agentName},
+                #{appName}, #{invocationId}, #{provider}, #{modelVersion}, #{usageType}, #{callStatus}, #{finishReason},
+                #{promptTokens}, #{candidateTokens}, COALESCE(#{totalTokens}, 0), #{thoughtsTokens},
+                #{toolUsePromptTokens}, #{traceId}, #{metadata})
+        ON DUPLICATE KEY UPDATE
+            call_status = IF(call_status IN ('success', 'failed', 'cancelled'), call_status, VALUES(call_status)),
+            finish_reason = COALESCE(finish_reason, VALUES(finish_reason)),
+            prompt_tokens = GREATEST(COALESCE(prompt_tokens, 0), COALESCE(VALUES(prompt_tokens), 0)),
+            candidate_tokens = GREATEST(COALESCE(candidate_tokens, 0), COALESCE(VALUES(candidate_tokens), 0)),
+            total_tokens = GREATEST(total_tokens, VALUES(total_tokens)),
+            thoughts_tokens = GREATEST(COALESCE(thoughts_tokens, 0), COALESCE(VALUES(thoughts_tokens), 0)),
+            tool_use_prompt_tokens = GREATEST(COALESCE(tool_use_prompt_tokens, 0), COALESCE(VALUES(tool_use_prompt_tokens), 0)),
+            model_version = IF(VALUES(model_version) IS NULL OR VALUES(model_version) IN ('', 'unknown'),
+                               model_version, VALUES(model_version)),
+            trace_id = COALESCE(trace_id, VALUES(trace_id))
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO">
@@ -67,5 +94,44 @@
         WHERE session_id = #{sessionId} AND deleted = 0
         ORDER BY id DESC
     </select>
+
+    <select id="queryLatest" resultMap="ModelUsageMap">
+        SELECT <include refid="ModelUsageColumns"/> FROM model_usage
+        WHERE user_id=#{userId} AND session_id=#{sessionId} AND deleted=0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id='')</when><otherwise>AND tenant_id=#{tenantId}</otherwise></choose>
+        ORDER BY create_time DESC, id DESC LIMIT 1
+    </select>
+
+    <sql id="UsageSummaryColumns">
+        COUNT(*) AS call_count,
+        COALESCE(SUM(CASE WHEN call_status='success' THEN 1 ELSE 0 END), 0) AS success_count,
+        COALESCE(SUM(CASE WHEN call_status='failed' THEN 1 ELSE 0 END), 0) AS failed_count,
+        COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+        COALESCE(SUM(candidate_tokens), 0) AS candidate_tokens,
+        COALESCE(SUM(total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(thoughts_tokens), 0) AS thoughts_tokens,
+        COALESCE(SUM(tool_use_prompt_tokens), 0) AS tool_use_prompt_tokens
+    </sql>
+
+    <select id="summarizeSession" resultType="cn.bugstack.ai.infrastructure.dao.po.ModelUsageSummaryPO">
+        SELECT <include refid="UsageSummaryColumns"/> FROM model_usage
+        WHERE user_id=#{userId} AND session_id=#{sessionId} AND deleted=0
+        <if test="runId != null and runId != ''">AND run_id=#{runId}</if>
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id='')</when><otherwise>AND tenant_id=#{tenantId}</otherwise></choose>
+    </select>
+
+    <select id="summarizeRecent" resultType="cn.bugstack.ai.infrastructure.dao.po.ModelUsageSummaryPO">
+        SELECT <include refid="UsageSummaryColumns"/> FROM model_usage
+        WHERE user_id=#{userId} AND create_time &gt;= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL #{days} DAY) AND deleted=0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id='')</when><otherwise>AND tenant_id=#{tenantId}</otherwise></choose>
+    </select>
+
+    <update id="cancelRunning">
+        UPDATE model_usage
+        SET call_status = 'cancelled', finish_reason = #{reason}
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND run_id = #{runId}
+          AND call_status = 'running' AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id='')</when><otherwise>AND tenant_id=#{tenantId}</otherwise></choose>
+    </update>
 
 </mapper>

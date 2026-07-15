@@ -15,6 +15,9 @@ public interface IContextCompactionTaskDao {
     List<ContextCompactionTaskPO> queryUnfinished(@Param("tenantId") String tenantId,
                                                   @Param("userId") String userId,
                                                   @Param("sessionId") String sessionId);
+    ContextCompactionTaskPO queryLatest(@Param("tenantId") String tenantId,
+                                        @Param("userId") String userId,
+                                        @Param("sessionId") String sessionId);
     int claim(@Param("taskId") String taskId);
     int complete(@Param("taskId") String taskId);
     int retry(@Param("taskId") String taskId, @Param("errorMessage") String errorMessage);

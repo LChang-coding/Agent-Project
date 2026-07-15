@@ -38,8 +38,8 @@ public class ContextAssembler {
                 .sorted(Comparator.comparingInt((ContextFragment fragment) -> fragment.getType().getPriority()).reversed())
                 .toList();
         for (ContextFragment fragment : candidates) {
-            int tokens = Math.min(tokenCounter.estimate(fragment.getContent()), fragment.getMaxTokens());
-            if (tokens <= remaining) {
+            int tokens = tokenCounter.estimate(fragment.getContent());
+            if (tokens <= fragment.getMaxTokens() && tokens <= remaining) {
                 result.add(fragment);
                 remaining -= tokens;
             }

@@ -58,6 +58,11 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IUserSecretDao.upsertByUserIdAndType"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatSessionDao.queryBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.insert"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.upsert"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.queryLatest"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.summarizeSession"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.summarizeRecent"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IModelUsageDao.cancelRunning"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.ISkillDefinitionDao.insert"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.ISkillVersionDao.queryActiveBySkillId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IMcpServerConfigDao.insert"));
@@ -71,5 +76,6 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IAgentScheduleExecutionDao.queryOwnedByConfig"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IConversationMemorySnapshotDao.queryActive"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.insertIgnore"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.queryLatest"));
     }
 }

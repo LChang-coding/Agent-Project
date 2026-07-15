@@ -72,7 +72,53 @@
 
 ### 阶段二：Context Manager 与模型 Token 用量
 
-执行前追加细化计划。
+#### 完成条件
+
+- 提供 `GET /api/v1/sessions/{sessionId}/context-insight`，统计必须复用真实上下文组装器和同一 Token Counter，不产生压缩、缓存写入或模型调用副作用。
+- 响应包含模型窗口、有效 Token、占用率，以及 system/history/summary/toolResult/attachment/rag 的构成，包含有效消息范围、压缩状态、工具/调用/附件数量。
+- 模型每次真实调用完成后按唯一 `callId` 持久化 provider 返回的 prompt/candidate/total Token；成功、失败、取消和重试可区分且保持幂等。
+- 提供会话最新调用、运行汇总和会话汇总用量查询；现有报表 API 复用同一事实表。
+- 聊天洞察面板、Context 页面和 Token 页面去除占位值，发送、工具、附件、取消、引导和压缩后可刷新真实统计。
+- 后端领域、仓储、Mapper、流式终态和租户隔离测试通过；前端类型检查和生产构建通过。
+
+#### 数据与兼容策略
+
+- 以现有 `model_usage` 为基础做增量迁移，新增 `call_id`、`run_id`、`usage_type`、`call_status`、`finish_reason` 与唯一幂等约束；旧字段和已有查询保持兼容。
+- Token 以模型供应商返回 usage 为最终事实；供应商没有返回时记录状态但不伪造精确用量，上下文预估与账单用量分开展示。
+- RAG 尚未接入，本阶段 `ragTokens=0`；附件统计在阶段三接入后自动使用预留字段。
+- 不在前端硬编码模型价格；本阶段只闭环 Token，不把估算价格冒充真实账单。
+
+#### 主要风险与验证
+
+- 风险：为了统计再次执行上下文装配副作用。验证只读预览不发布压缩、不写缓存、不推进版本。
+- 风险：流式多次回调重复入库。验证同一 `callId` 只有一条最终事实，重试使用新 `callId`。
+- 风险：取消/失败丢失已产生用量。验证终态记录 status 与可用的 provider usage。
+- 风险：跨租户读取。验证所有查询使用 `TenantContextHolder` 的 tenant/user/session 范围。
+
+#### 执行实录
+
+闭环时间：2026-07-15。
+
+实际操作：
+
+- 新增会话上下文洞察、会话/运行模型用量和用户近期用量接口；所有查询身份均来自 `TenantContextHolder`，并按 tenant/user/session 范围校验。
+- `ConversationMemoryService` 增加只读 `preview`，直接读取数据库有效摘要和消息，不读写 Redis、不发布压缩任务、不推进版本；返回摘要、历史、上游、RAG 与实际选中序号范围。
+- 修正 `ContextAssembler` 的预算扣减：按完整片段实际估算 Token 扣减，超出片段上限或总预算的片段不注入，避免“只扣上限但注入全文”；最终序号和裁剪原因按实际选中片段返回。
+- 增加最近压缩任务查询，使洞察能够显示 processing/succeeded/stale 等真实最近状态，而不是把有效租约内的 processing 误报为 idle。
+- 建立 `ModelUsageService` 与独立仓储，模型调用前先以唯一 `callId` 写入 running，流式完成后补发唯一 `partial=false` 终态并以供应商 usage 幂等更新；失败写 failed，运行取消或引导替代时将 running 调用更新为 cancelled。
+- `model_usage` 聚合支持最新调用、会话、运行和近 N 天范围；空聚合逐字段归零，Token 分项只允许单调增加，调用终态不可被晚到回调倒退。
+- 新增可重复执行的增量迁移，使用 `information_schema + 动态 DDL` 兼容 MySQL 8，新增调用/运行/终态列、唯一调用键和运行范围索引；同步更新全量初始化脚本。
+- 前端新增 insight API 与 Pinia Store，包含请求代次隔离；聊天洞察、Context 页面和 Token 页面移除硬编码示例值。存在供应商最新 usage 时展示最近一次实际 Prompt Token，否则明确展示 Context Manager 当前估算；工具、调用、附件徽标改用会话真实统计。
+- 运行正常结束、异常、取消、引导收口和会话切换后触发洞察刷新；没有最新模型调用时 prompt/candidate/total 严格显示 `--`。
+
+验证结果：
+
+- Java 17 下执行 `ObservabilitySpringAITest`、`ContextAssemblerTest`、`ConversationMemoryServiceTest`、`ContextInsightServiceTest`、`SessionInsightControllerTest`、`ModelUsageServiceTest`、`RunControlServiceTest`、`SessionLifecycleServiceTest`、`MyBatisMapperLoadTest`：共 22 个测试，全部通过。
+- 流式专项测试验证两个 partial 片段之后只生成一个完整终态响应，终态 `partial=false`、`turnComplete=true`，模型用量成功落库路径可达。
+- 前端执行 `npm run build`：`vue-tsc --noEmit` 和 Vite production build 均通过，共转换 1907 个模块。
+- 对本阶段源码、迁移和计划文件执行 `git diff --check`：通过。
+- 未上传本地项目源码或构建产物。迁移前将远端 `model_usage` 单表备份到本机项目目录之外的 `/tmp/ai_agent_scaffold_model_usage_20260715_2238.sql`，备份 SHA-256 为 `4f5c7d7d822db354aa24346c60f90653603285ec6af7a39432a0c91637b6a5ec`，大小 3637 字节。
+- 增量迁移 SHA-256 为 `01ffb21a559ad7ce690c9e0aa692da1a0f2f54ba2c790e54c75ff78162d63c72`；在远端 MySQL 8.0.46 连续执行两次均成功，确认五个新增列、`uk_model_usage_call` 和 `idx_model_usage_run` 已存在，迁移前后表内业务记录数均为 0。
 
 ### 阶段三：聊天附件与资产中心
 

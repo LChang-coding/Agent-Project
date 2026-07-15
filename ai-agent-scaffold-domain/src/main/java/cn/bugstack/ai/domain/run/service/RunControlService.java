@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
+import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,16 +32,19 @@ public class RunControlService {
     private final SessionDomain sessionDomain;
     private final ActiveRunRegistry activeRunRegistry;
     private final ContextInvalidationService contextInvalidationService;
+    private final ModelUsageService modelUsageService;
 
     /**
      * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
      */
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
-                             ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService) {
+                             ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
+                             ModelUsageService modelUsageService) {
         this.runRepository = runRepository;
         this.sessionDomain = sessionDomain;
         this.activeRunRegistry = activeRunRegistry;
         this.contextInvalidationService = contextInvalidationService;
+        this.modelUsageService = modelUsageService;
     }
 
     /**
@@ -172,6 +176,8 @@ public class RunControlService {
                 RunStatus.SUPERSEDED, version, "已由引导后继运行替代", now, now) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中旧运行终结失败");
         }
+        modelUsageService.cancelRunning(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                "用户引导替代");
         interruptAfterCommit(runId);
         return successor;
     }
@@ -283,6 +289,8 @@ public class RunControlService {
                 RunStatus.CANCELLED, version, reason, now, now) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "取消过程中运行状态发生变化");
         }
+        modelUsageService.cancelRunning(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                blank(reason) ? "用户取消" : reason);
         interruptAfterCommit(runId);
         log.info("会话运行已取消 tenantId:{} userId:{} sessionId:{} runId:{} revision:{}",
                 run.getTenantId(), run.getUserId(), run.getSessionId(), runId, revision);

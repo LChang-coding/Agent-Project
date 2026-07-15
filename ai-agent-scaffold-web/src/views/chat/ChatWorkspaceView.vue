@@ -128,24 +128,24 @@
               <div class="insight-body">
                 <div v-if="activeInsightTab === 'context'" class="context-card">
                   <div>
-                    <strong>18.4K / 128K</strong>
-                    <span>示例上下文占用，等待后端 Context Manager 接入真实统计。</span>
+                    <strong>{{ contextUsageText }}</strong>
+                    <span>{{ contextHint }}</span>
                   </div>
-                  <div class="progress"><span style="width: 14.4%" /></div>
+                  <div class="progress"><span :style="contextProgressStyle" /></div>
                 </div>
 
                 <div v-else-if="activeInsightTab === 'tokens'" class="token-grid">
                   <div>
                     <span>promptTokens</span>
-                    <strong>--</strong>
+                    <strong>{{ formatOptionalTokens(insightStore.usage?.latest?.promptTokens) }}</strong>
                   </div>
                   <div>
                     <span>candidateTokens</span>
-                    <strong>--</strong>
+                    <strong>{{ formatOptionalTokens(insightStore.usage?.latest?.candidateTokens) }}</strong>
                   </div>
                   <div>
                     <span>totalTokens</span>
-                    <strong>--</strong>
+                    <strong>{{ formatOptionalTokens(insightStore.usage?.latest?.totalTokens) }}</strong>
                   </div>
                 </div>
 
@@ -243,12 +243,14 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import { createSessionShare } from '@/api/share';
 import { useChatStore } from '@/stores/chat';
+import { useInsightStore } from '@/stores/insight';
 import { useToolStore } from '@/stores/tools';
 import type { ChatMessage } from '@/types/api';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 
 const chatStore = useChatStore();
+const insightStore = useInsightStore();
 const toolStore = useToolStore();
 const draft = ref('');
 const isComposing = ref(false);
@@ -276,12 +278,39 @@ const currentTargetText = computed(() => {
 const sessionText = computed(() => {
   return chatStore.sessionId ? `session ${chatStore.sessionId.slice(0, 8)}` : '首条消息自动创建会话';
 });
+const contextUsageText = computed(() => {
+  const context = insightStore.context;
+  return context ? `${formatTokens(displayContextTokens.value)} / ${formatTokens(context.modelWindowTokens)}` : '-- / --';
+});
+const displayContextTokens = computed(() => insightStore.usage?.latest?.promptTokens
+  ?? insightStore.context?.effectiveTokens
+  ?? 0);
+const contextHint = computed(() => {
+  if (!chatStore.sessionId) {
+    return '请先选择会话。';
+  }
+  if (insightStore.loadingSession) {
+    return '正在读取真实上下文统计...';
+  }
+  if (insightStore.sessionError) {
+    return insightStore.sessionError;
+  }
+  const context = insightStore.context;
+  return context
+    ? `${insightStore.usage?.latest ? '最近模型实际 Prompt' : 'Context Manager 当前估算'} · 系统 ${formatTokens(context.systemTokens)} · 历史 ${formatTokens(context.historyTokens)} · 摘要 ${formatTokens(context.summaryTokens)}`
+    : '暂无上下文统计。';
+});
+const contextProgressStyle = computed(() => ({
+  width: `${Math.min(100, Math.max(0, insightStore.context?.modelWindowTokens
+    ? (displayContextTokens.value / insightStore.context.modelWindowTokens) * 100
+    : 0))}%`,
+}));
 const insightTabs = computed<Array<{ value: InsightTab; label: string; count?: number }>>(() => [
   { value: 'context', label: '上下文' },
   { value: 'tokens', label: 'Token' },
-  { value: 'tools', label: '工具', count: toolStore.catalog.length },
-  { value: 'calls', label: '调用', count: toolStore.calls.length },
-  { value: 'assets', label: '附件' },
+  { value: 'tools', label: '工具', count: insightStore.context?.toolCount ?? 0 },
+  { value: 'calls', label: '调用', count: insightStore.context?.callCount ?? 0 },
+  { value: 'assets', label: '附件', count: insightStore.context?.attachmentCount ?? 0 },
 ]);
 
 onMounted(async () => {
@@ -290,7 +319,7 @@ onMounted(async () => {
   }
   await toolStore.loadCatalog();
   if (chatStore.sessionId) {
-    await toolStore.loadCalls(chatStore.sessionId);
+    await Promise.all([toolStore.loadCalls(chatStore.sessionId), insightStore.loadSession(chatStore.sessionId)]);
   }
   scrollToLatest();
 });
@@ -298,7 +327,16 @@ onMounted(async () => {
 watch(
   () => chatStore.sessionId,
   async (sessionId) => {
-    await toolStore.loadCalls(sessionId);
+    await Promise.all([toolStore.loadCalls(sessionId), insightStore.loadSession(sessionId)]);
+  },
+);
+
+watch(
+  () => chatStore.insightRefreshVersion,
+  async () => {
+    if (chatStore.sessionId) {
+      await insightStore.loadSession(chatStore.sessionId, chatStore.lastSettledRunId);
+    }
   },
 );
 
@@ -395,6 +433,9 @@ async function openInsightTab(tab: InsightTab) {
   }
   if (tab === 'calls') {
     await toolStore.loadCalls(chatStore.sessionId);
+  }
+  if (tab === 'context' || tab === 'tokens') {
+    await insightStore.loadSession(chatStore.sessionId, chatStore.lastSettledRunId);
   }
 }
 
@@ -544,6 +585,20 @@ function visibilityLabel(value: string) {
  */
 function modelLabel(modelCode: string) {
   return chatStore.models.find((model) => model.value === modelCode)?.label || modelCode;
+}
+
+/**
+ * 格式化 Token 数；参数是数量；返回紧凑展示文本。
+ */
+function formatTokens(value: number) {
+  return value >= 1000 ? `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}K` : String(value);
+}
+
+/**
+ * 格式化可选 Token 数；参数是可选数量；缺少最新用量时返回占位符。
+ */
+function formatOptionalTokens(value?: number) {
+  return value === undefined || value === null ? '--' : value.toLocaleString('zh-CN');
 }
 </script>
 

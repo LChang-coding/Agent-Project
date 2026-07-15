@@ -1,6 +1,7 @@
 package cn.bugstack.ai.test.run;
 
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
+import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
@@ -39,7 +40,7 @@ public class RunControlServiceTest {
                         .sessionId("session-1").contextRevision(4L).build());
         when(runRepository.insert(any())).thenReturn(1);
         RunControlService service = new RunControlService(runRepository, sessionDomain,
-                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class));
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class));
 
         ChatRunEntity run = service.startOrResume("tenant-1", "user-1", "session-1",
                 "agent", "agent-1", "run_client-1");
@@ -56,8 +57,9 @@ public class RunControlServiceTest {
         SessionDomain sessionDomain = mock(SessionDomain.class);
         ActiveRunRegistry activeRunRegistry = mock(ActiveRunRegistry.class);
         ContextInvalidationService contextInvalidationService = mock(ContextInvalidationService.class);
+        ModelUsageService modelUsageService = mock(ModelUsageService.class);
         RunControlService service = new RunControlService(runRepository, sessionDomain, activeRunRegistry,
-                contextInvalidationService);
+                contextInvalidationService, modelUsageService);
         ChatRunEntity running = ChatRunEntity.builder()
                 .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .status(RunStatus.RUNNING).version(0).currentContextRevision(7L).build();
@@ -84,6 +86,7 @@ public class RunControlServiceTest {
         verify(sessionDomain).invalidateRunMessages("tenant-1", "user-1", "session-1", "run-1", "用户取消");
         verify(contextInvalidationService).invalidateRun("tenant-1", "user-1", "session-1", "run-1",
                 messages, "用户取消");
+        verify(modelUsageService).cancelRunning("tenant-1", "user-1", "session-1", "run-1", "用户取消");
         verify(activeRunRegistry).interrupt("run-1");
     }
 
@@ -94,7 +97,7 @@ public class RunControlServiceTest {
         ActiveRunRegistry activeRunRegistry = mock(ActiveRunRegistry.class);
         ContextInvalidationService contextInvalidationService = mock(ContextInvalidationService.class);
         RunControlService service = new RunControlService(runRepository, sessionDomain, activeRunRegistry,
-                contextInvalidationService);
+                contextInvalidationService, mock(ModelUsageService.class));
         ChatRunEntity running = ChatRunEntity.builder()
                 .runId("run-old").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .sourceType("agent").sourceId("agent-1")
@@ -134,7 +137,7 @@ public class RunControlServiceTest {
         IChatRunRepository runRepository = mock(IChatRunRepository.class);
         SessionDomain sessionDomain = mock(SessionDomain.class);
         RunControlService service = new RunControlService(runRepository, sessionDomain,
-                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class));
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class));
         when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
                 .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .status(RunStatus.CANCELLED).version(3).build());
@@ -156,7 +159,7 @@ public class RunControlServiceTest {
         IChatRunRepository runRepository = mock(IChatRunRepository.class);
         SessionDomain sessionDomain = mock(SessionDomain.class);
         RunControlService service = new RunControlService(runRepository, sessionDomain,
-                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class));
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class));
         when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(ChatRunEntity.builder()
                 .runId("run-1").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .status(RunStatus.CANCELLED).version(3).build());

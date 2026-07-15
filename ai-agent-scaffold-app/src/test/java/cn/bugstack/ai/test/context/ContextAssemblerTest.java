@@ -33,4 +33,22 @@ public class ContextAssemblerTest {
         Assert.assertEquals(ContextFragmentType.LONG_TERM_MEMORY, result.get(0).getType());
         Assert.assertEquals(ContextFragmentType.RECENT_CONVERSATION, result.get(1).getType());
     }
+
+    /**
+     * 校验片段上限按实际注入量执行；无参数；验证超出片段预算的完整内容不会穿透总预算。
+     */
+    @Test
+    public void shouldDropOversizedFragmentInsteadOfChargingOnlyDeclaredMaximum() {
+        CharacterTokenCounter counter = new CharacterTokenCounter();
+        ContextAssembler assembler = new ContextAssembler(counter);
+        String oversized = "超长上下文".repeat(100);
+
+        List<ContextFragment> result = assembler.assemble(new ContextBudget(100, 0, 0, 0, 0), List.of(
+                ContextFragment.of(ContextFragmentType.LONG_TERM_MEMORY, oversized, 20),
+                ContextFragment.of(ContextFragmentType.RECENT_CONVERSATION, "短消息", 20)));
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(ContextFragmentType.RECENT_CONVERSATION, result.get(0).getType());
+        Assert.assertTrue(result.stream().mapToInt(fragment -> counter.estimate(fragment.getContent())).sum() <= 100);
+    }
 }

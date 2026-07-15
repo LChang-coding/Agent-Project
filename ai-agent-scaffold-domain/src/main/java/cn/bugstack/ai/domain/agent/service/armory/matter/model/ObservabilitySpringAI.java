@@ -19,6 +19,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import reactor.core.Disposable;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Spring AI adapter that preserves token usage/model metadata inside ADK LlmResponse.
@@ -77,21 +78,43 @@ public class ObservabilitySpringAI extends SpringAI {
             ModelObservabilityContext.clear();
             Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
             StreamingResponseAggregator aggregator = new StreamingResponseAggregator();
+            AtomicReference<LlmResponse> latestResponse = new AtomicReference<>();
 
             Disposable disposable = streamingChatModel.stream(prompt)
                     .map(chatResponse -> {
                         LlmResponse partial = messageConverter.toLlmResponse(chatResponse, true);
                         LlmResponse aggregated = aggregator.processStreamingResponse(partial);
-                        return enrich(aggregated, chatResponse, llmRequest);
+                        LlmResponse enriched = enrich(aggregated, chatResponse, llmRequest);
+                        latestResponse.set(enriched);
+                        return enriched;
                     })
                     .subscribe(
                             emitter::onNext,
                             emitter::onError,
-                            emitter::onComplete
+                            () -> {
+                                if (!aggregator.isEmpty()) {
+                                    emitter.onNext(copyTerminalMetadata(aggregator.getFinalResponse(), latestResponse.get()));
+                                }
+                                emitter.onComplete();
+                            }
                     );
 
             emitter.setCancellable(disposable::dispose);
         }, BackpressureStrategy.BUFFER);
+    }
+
+    private LlmResponse copyTerminalMetadata(LlmResponse terminal, LlmResponse latest) {
+        if (latest == null) {
+            return terminal;
+        }
+        LlmResponse.Builder builder = terminal.toBuilder();
+        latest.modelVersion().ifPresent(builder::modelVersion);
+        latest.usageMetadata().ifPresent(builder::usageMetadata);
+        latest.finishReason().ifPresent(builder::finishReason);
+        latest.errorCode().ifPresent(builder::errorCode);
+        latest.errorMessage().ifPresent(builder::errorMessage);
+        latest.interrupted().ifPresent(builder::interrupted);
+        return builder.build();
     }
 
     private LlmResponse enrich(LlmResponse llmResponse, ChatResponse chatResponse, LlmRequest llmRequest) {

@@ -81,6 +81,22 @@
         LIMIT 20
     </select>
 
+    <select id="queryLatest" resultMap="TaskMap">
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        <choose>
+            <when test="tenantId == null or tenantId == ''">
+                AND (tenant_id IS NULL OR tenant_id = '')
+            </when>
+            <otherwise>
+                AND tenant_id = #{tenantId}
+            </otherwise>
+        </choose>
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
     <update id="claim">
         UPDATE context_compaction_task
         SET status = 'processing',

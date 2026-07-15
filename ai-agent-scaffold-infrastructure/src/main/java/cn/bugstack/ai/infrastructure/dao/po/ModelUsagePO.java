@@ -29,6 +29,16 @@ public class ModelUsagePO extends BasePO {
     private String sessionId;
 
     /**
+     * 业务运行ID。
+     */
+    private String runId;
+
+    /**
+     * 单次模型调用幂等ID。
+     */
+    private String callId;
+
+    /**
      * 消息业务ID
      */
     private String messageId;
@@ -62,6 +72,12 @@ public class ModelUsagePO extends BasePO {
      * 模型版本
      */
     private String modelVersion;
+
+    private String usageType;
+
+    private String callStatus;
+
+    private String finishReason;
 
     /**
      * 输入 token 数

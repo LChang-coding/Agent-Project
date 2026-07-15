@@ -127,6 +127,48 @@ public class ConversationMemoryServiceTest {
     }
 
     /**
+     * 校验上下文预览是只读操作；无参数；验证预览直接读取数据库且不改写短期缓存。
+     */
+    @Test
+    public void shouldPreviewFromDatabaseWithoutMutatingCache() {
+        Fixture fixture = new Fixture();
+        fixture.cache.appendRecentMessage(message(1, "assistant", "缓存中的旧内容", 4), 20, Duration.ofSeconds(10));
+        fixture.history.messages.add(message(1, "assistant", "数据库中的真实内容", 4));
+
+        ContextAssemblyResult result = fixture.service.preview(ContextAssembleRequest.builder()
+                .tenantId("tenant_1")
+                .userId("user_1")
+                .sessionId("session_1")
+                .visibleThroughSequence(1)
+                .build());
+
+        Assert.assertTrue(result.getInstruction().contains("数据库中的真实内容"));
+        Assert.assertFalse(result.getInstruction().contains("缓存中的旧内容"));
+        Assert.assertEquals(1, fixture.cache.recentMessages.size());
+        Assert.assertEquals("缓存中的旧内容", fixture.cache.recentMessages.get(0).getContent());
+        Assert.assertTrue(result.getHistoryTokens() > 0);
+    }
+
+    /**
+     * 校验总预算丢弃历史片段后的有效范围；无参数；验证接口不报告未实际注入的消息序号。
+     */
+    @Test
+    public void shouldNotReportSequenceRangeWhenHistoryIsDroppedByTotalBudget() {
+        Fixture fixture = new Fixture();
+        fixture.properties.setModelWindowTokens(10);
+        fixture.properties.setReserveOutputTokens(5);
+        fixture.properties.setSafetyMarginTokens(5);
+        fixture.history.messages.add(message(1, "assistant", "不会进入模型的历史消息", 20));
+
+        ContextAssemblyResult result = fixture.service.preview(ContextAssembleRequest.builder()
+                .tenantId("tenant_1").userId("user_1").sessionId("session_1").visibleThroughSequence(1).build());
+
+        Assert.assertEquals(Integer.valueOf(0), result.getHistoryTokens());
+        Assert.assertNull(result.getEffectiveFromSequence());
+        Assert.assertEquals("total_context_budget", result.getTrimReason());
+    }
+
+    /**
      * 校验压缩任务创建；无参数；验证达到阈值后发布 Kafka 命令。
      */
     @Test
@@ -317,6 +359,11 @@ public class ConversationMemoryServiceTest {
         @Override
         public List<ContextCompactionTaskEntity> queryUnfinished(String tenantId, String userId, String sessionId) {
             return List.of();
+        }
+
+        @Override
+        public ContextCompactionTaskEntity queryLatest(String tenantId, String userId, String sessionId) {
+            return task;
         }
 
         @Override

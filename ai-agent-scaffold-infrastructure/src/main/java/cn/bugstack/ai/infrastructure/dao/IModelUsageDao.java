@@ -1,6 +1,7 @@
 package cn.bugstack.ai.infrastructure.dao;
 
 import cn.bugstack.ai.infrastructure.dao.po.ModelUsagePO;
+import cn.bugstack.ai.infrastructure.dao.po.ModelUsageSummaryPO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -20,6 +21,11 @@ public interface IModelUsageDao {
      * @return 影响行数
      */
     int insert(ModelUsagePO modelUsage);
+
+    /**
+     * 幂等写入模型用量终态。
+     */
+    int upsert(ModelUsagePO modelUsage);
 
     /**
      * 按主键更新模型用量记录。
@@ -60,4 +66,17 @@ public interface IModelUsageDao {
      * @return 模型用量持久化对象列表
      */
     List<ModelUsagePO> queryListBySessionId(@Param("sessionId") String sessionId);
+
+    ModelUsagePO queryLatest(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                             @Param("sessionId") String sessionId);
+
+    ModelUsageSummaryPO summarizeSession(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                         @Param("sessionId") String sessionId, @Param("runId") String runId);
+
+    ModelUsageSummaryPO summarizeRecent(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                        @Param("days") int days);
+
+    int cancelRunning(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                      @Param("sessionId") String sessionId, @Param("runId") String runId,
+                      @Param("reason") String reason);
 }

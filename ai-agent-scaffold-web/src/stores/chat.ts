@@ -69,6 +69,8 @@ interface ChatState {
   streaming: boolean;
   currentRunId: string;
   contextRevision: number;
+  lastSettledRunId: string;
+  insightRefreshVersion: number;
   errorMessage: string;
   loadingSessions: boolean;
   deletingSessionId: string;
@@ -94,6 +96,8 @@ export const useChatStore = defineStore('chat', {
     streaming: true,
     currentRunId: '',
     contextRevision: 0,
+    lastSettledRunId: '',
+    insightRefreshVersion: 0,
     errorMessage: '',
     loadingSessions: false,
     deletingSessionId: '',
@@ -382,6 +386,7 @@ export const useChatStore = defineStore('chat', {
       } finally {
         request.streamSettled = true;
         if (this.isRequestCurrent(request) && !request.cancelRequested) {
+          this.markInsightRefresh(request.runId);
           request.typewriter?.cancel();
           activeRequest = null;
           this.sending = false;
@@ -421,6 +426,7 @@ export const useChatStore = defineStore('chat', {
         } catch (error) {
           this.errorMessage = error instanceof Error ? `取消请求失败：${error.message}` : '取消请求失败';
         } finally {
+          this.markInsightRefresh(request.runId);
           request.controller.abort();
           request.typewriter?.cancel();
           requestGeneration += 1;
@@ -509,6 +515,7 @@ export const useChatStore = defineStore('chat', {
             request.cancelRequested = false;
             const previousAssistant = this.messages.find((item) => item.id === request.assistantMessageId);
             if (request.streamSettled) {
+              this.markInsightRefresh(request.runId);
               request.typewriter?.cancel();
               activeRequest = null;
               this.sending = false;
@@ -600,6 +607,14 @@ export const useChatStore = defineStore('chat', {
       if (message) {
         message.status = status;
       }
+    },
+
+    /**
+     * 标记运行统计可刷新；参数是已收口运行ID；通知页面重新拉取洞察。
+     */
+    markInsightRefresh(runId: string) {
+      this.lastSettledRunId = runId;
+      this.insightRefreshVersion += 1;
     },
 
     /**

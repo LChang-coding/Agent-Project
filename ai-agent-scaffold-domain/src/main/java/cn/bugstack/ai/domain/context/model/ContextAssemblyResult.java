@@ -17,4 +17,10 @@ public class ContextAssemblyResult {
     private Integer coveredToSequence;
     private Boolean cacheHit;
     private String trimReason;
+    private Integer summaryTokens;
+    private Integer historyTokens;
+    private Integer upstreamTokens;
+    private Integer ragTokens;
+    private Integer effectiveFromSequence;
+    private Integer effectiveToSequence;
 }

@@ -2,71 +2,108 @@
   <div class="page page-grid">
     <SectionHeader
       title="Token 用量"
-      description="第一阶段 token_usage 已经进入 Loki；当前页面先保留产品形态，后续可从数据库报表或日志查询服务读取。"
+      description="展示当前登录用户过去 24 小时的模型调用与 Token 真实聚合。"
     >
       <template #actions>
+        <button class="button button--soft" type="button" :disabled="insightStore.loadingRecent" @click="refresh">
+          {{ insightStore.loadingRecent ? '刷新中' : '刷新' }}
+        </button>
         <a class="button button--primary" href="http://69.165.65.123:13000" target="_blank" rel="noreferrer">打开 Grafana</a>
       </template>
     </SectionHeader>
 
+    <span v-if="insightStore.recentError" class="error-text">{{ insightStore.recentError }}</span>
+
     <section class="stat-grid">
-      <StatCard label="今日总量" value="--" hint="等待 model_usage 或 Loki 查询 API" />
-      <StatCard label="Prompt" value="--" hint="promptTokens" />
-      <StatCard label="Completion" value="--" hint="candidateTokens" />
-      <StatCard label="模型错误" value="--" hint="model_error" />
+      <StatCard label="24h 总量" :value="formatTokens(summary?.totalTokens)" :hint="`${formatCount(summary?.callCount)} 次模型调用`" />
+      <StatCard label="Prompt" :value="formatTokens(summary?.promptTokens)" hint="promptTokens" />
+      <StatCard label="Completion" :value="formatTokens(summary?.candidateTokens)" hint="candidateTokens" />
+      <StatCard label="模型错误" :value="formatCount(summary?.failedCount)" hint="failed calls" />
     </section>
 
-    <div class="card">
-      <div class="card__body">
-        <SectionHeader title="用量趋势" description="这里会展示按用户、模型、Agent 聚合的 token 趋势。" :level="2" />
-        <div class="usage-bars">
-          <span style="height: 42%" />
-          <span style="height: 68%" />
-          <span style="height: 52%" />
-          <span style="height: 78%" />
-          <span style="height: 61%" />
-          <span style="height: 86%" />
-          <span style="height: 74%" />
+    <section class="page-grid page-grid--two">
+      <article class="card">
+        <div class="card__body">
+          <SectionHeader title="调用结果" description="最近一天的成功与失败调用数。" :level="2" />
+          <div class="usage-split">
+            <div><span>成功</span><strong>{{ formatCount(summary?.successCount) }}</strong></div>
+            <div><span>失败</span><strong>{{ formatCount(summary?.failedCount) }}</strong></div>
+          </div>
         </div>
-      </div>
-    </div>
+      </article>
 
-    <FeaturePlaceholder
-      title="按用户 / 模型聚合"
-      description="后续会拉取 model_usage 表或日志聚合服务，展示 userId、modelVersion、agentName 维度。"
-      status="待接报表 API"
-      :items="['按 tenantId 限定数据边界', '按 userId 统计总 token', '按 modelVersion 统计模型消耗']"
-    />
+      <article class="card">
+        <div class="card__body">
+          <SectionHeader title="扩展 Token" description="模型思考与工具使用提示的独立计数。" :level="2" />
+          <div class="usage-split">
+            <div><span>Thoughts</span><strong>{{ formatTokens(summary?.thoughtsTokens) }}</strong></div>
+            <div><span>Tool Use Prompt</span><strong>{{ formatTokens(summary?.toolUsePromptTokens) }}</strong></div>
+          </div>
+        </div>
+      </article>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import FeaturePlaceholder from '@/components/common/FeaturePlaceholder.vue';
+import { computed, onMounted } from 'vue';
+
 import SectionHeader from '@/components/common/SectionHeader.vue';
 import StatCard from '@/components/common/StatCard.vue';
+import { useInsightStore } from '@/stores/insight';
+
+const insightStore = useInsightStore();
+const summary = computed(() => insightStore.recent);
+
+onMounted(() => refresh());
+
+/**
+ * 刷新 24 小时用量；无参数；从服务端读取当前用户聚合。
+ */
+async function refresh() {
+  await insightStore.loadRecent(1);
+}
+
+/**
+ * 格式化 Token 数；参数是可选数量；无统计时返回占位符。
+ */
+function formatTokens(value?: number) {
+  return value === undefined || value === null ? '--' : value.toLocaleString('zh-CN');
+}
+
+/**
+ * 格式化调用数；参数是可选数量；无统计时返回占位符。
+ */
+function formatCount(value?: number) {
+  return value === undefined || value === null ? '--' : value.toLocaleString('zh-CN');
+}
 </script>
 
 <style scoped>
-.usage-bars {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-  height: 200px;
-  margin-top: 16px;
-  padding: 16px;
+.usage-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 18px;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-muted);
+  border-radius: 12px;
+  background: var(--line);
 }
 
-.usage-bars span {
-  flex: 1;
-  min-width: 14px;
-  border-radius: 5px 5px 2px 2px;
-  background: var(--accent);
+.usage-split div {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  background: var(--surface);
 }
 
-.usage-bars span:nth-child(2n) {
-  background: #4f7b84;
+.usage-split span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.usage-split strong {
+  font-size: 24px;
 }
 </style>

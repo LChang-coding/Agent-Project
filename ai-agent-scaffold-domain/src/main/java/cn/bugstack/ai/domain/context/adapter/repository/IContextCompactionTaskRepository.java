@@ -26,6 +26,11 @@ public interface IContextCompactionTaskRepository {
     List<ContextCompactionTaskEntity> queryUnfinished(String tenantId, String userId, String sessionId);
 
     /**
+     * 查询会话最近一次压缩任务；参数是会话身份；返回最近任务或空。
+     */
+    ContextCompactionTaskEntity queryLatest(String tenantId, String userId, String sessionId);
+
+    /**
      * 领取任务；参数是任务ID；成功返回 true。
      */
     boolean claim(String taskId);

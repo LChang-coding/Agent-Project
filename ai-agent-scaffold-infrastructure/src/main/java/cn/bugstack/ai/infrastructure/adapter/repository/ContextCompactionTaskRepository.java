@@ -77,6 +77,14 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
     }
 
     /**
+     * 查询会话最近一次压缩任务；参数是会话身份；返回最近任务或空。
+     */
+    @Override
+    public ContextCompactionTaskEntity queryLatest(String tenantId, String userId, String sessionId) {
+        return toEntity(dao.queryLatest(blankToNull(tenantId), userId, sessionId));
+    }
+
+    /**
      * 领取任务；参数是任务ID；成功返回 true。
      */
     @Override

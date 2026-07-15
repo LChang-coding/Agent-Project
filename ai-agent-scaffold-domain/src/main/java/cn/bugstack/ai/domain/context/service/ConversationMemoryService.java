@@ -113,16 +113,31 @@ public class ConversationMemoryService {
      * 组装模型调用上下文；参数是组装请求；返回可注入系统指令。
      */
     public ContextAssemblyResult assemble(ContextAssembleRequest request) {
+        return assembleInternal(request, false);
+    }
+
+    /**
+     * 只读预览模型上下文；参数是组装请求；返回与真实组装同口径且不写缓存的结果。
+     */
+    public ContextAssemblyResult preview(ContextAssembleRequest request) {
+        return assembleInternal(request, true);
+    }
+
+    private ContextAssemblyResult assembleInternal(ContextAssembleRequest request, boolean readOnly) {
         if (!properties.isEnabled() || request == null || isBlank(request.getUserId()) || isBlank(request.getSessionId())) {
             return emptyResult();
         }
 
         ContextBudget budget = properties.toBudget();
-        ConversationMemorySnapshotEntity snapshot = queryActiveSnapshot(request.getTenantId(), request.getUserId(), request.getSessionId());
+        ConversationMemorySnapshotEntity snapshot = readOnly
+                ? memoryRepository.queryActive(request.getTenantId(), request.getUserId(), request.getSessionId())
+                : queryActiveSnapshot(request.getTenantId(), request.getUserId(), request.getSessionId());
         int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
         int visibleThrough = request.getVisibleThroughSequence() == null ? coveredToSequence : request.getVisibleThroughSequence();
         List<ChatMessageEntity> messages = visibleThrough > coveredToSequence
-                ? queryMessages(request.getTenantId(), request.getUserId(), request.getSessionId(), coveredToSequence, visibleThrough)
+                ? (readOnly ? historyRepository.queryMessages(request.getTenantId(), request.getUserId(),
+                        request.getSessionId(), coveredToSequence, visibleThrough)
+                        : queryMessages(request.getTenantId(), request.getUserId(), request.getSessionId(), coveredToSequence, visibleThrough))
                 : List.of();
 
         List<ContextFragment> fragments = new ArrayList<>();
@@ -158,7 +173,14 @@ public class ConversationMemoryService {
         List<ContextFragment> selected = new ContextAssembler(tokenCounter).assemble(budget, fragments);
         String instruction = renderInstruction(selected);
         int estimatedTokens = tokenCounter.estimate(instruction);
-        boolean trimmed = messages.size() > recentMessages.size();
+        int summaryTokens = selectedTokens(selected, ContextFragmentType.LONG_TERM_MEMORY);
+        int historyTokens = selectedTokens(selected, ContextFragmentType.RECENT_CONVERSATION);
+        int upstreamTokens = selectedTokens(selected, ContextFragmentType.WORKFLOW_UPSTREAM);
+        int ragTokens = selectedTokens(selected, ContextFragmentType.RAG);
+        boolean historySelected = selected.stream().anyMatch(fragment -> fragment.getType() == ContextFragmentType.RECENT_CONVERSATION);
+        boolean recentWindowTrimmed = messages.size() > recentMessages.size();
+        boolean totalBudgetTrimmed = !recentMessages.isEmpty() && !historySelected;
+        boolean trimmed = recentWindowTrimmed || totalBudgetTrimmed;
         log.info("上下文组装完成 tenantId:{} userId:{} sessionId:{} visibleThrough:{} memoryVersion:{} injectedTokens:{} trimmed:{}",
                 request.getTenantId(), request.getUserId(), request.getSessionId(), visibleThrough,
                 snapshot == null ? 0 : snapshot.getMemoryVersion(), estimatedTokens, trimmed);
@@ -168,8 +190,19 @@ public class ConversationMemoryService {
                 .memoryVersion(snapshot == null ? 0 : snapshot.getMemoryVersion())
                 .coveredToSequence(coveredToSequence)
                 .cacheHit(false)
-                .trimReason(trimmed ? "recent_window_budget" : null)
+                .trimReason(totalBudgetTrimmed ? "total_context_budget"
+                        : (recentWindowTrimmed ? "recent_window_budget" : null))
+                .summaryTokens(summaryTokens).historyTokens(historyTokens).upstreamTokens(upstreamTokens)
+                .ragTokens(ragTokens)
+                .effectiveFromSequence(!historySelected ? null : recentMessages.get(0).getSequenceNo())
+                .effectiveToSequence(!historySelected ? coveredToSequence
+                        : recentMessages.get(recentMessages.size() - 1).getSequenceNo())
                 .build();
+    }
+
+    private int selectedTokens(List<ContextFragment> fragments, ContextFragmentType type) {
+        return fragments.stream().filter(fragment -> fragment.getType() == type)
+                .mapToInt(fragment -> tokenCounter.estimate(fragment.getContent())).sum();
     }
 
     /**
@@ -726,6 +759,7 @@ public class ConversationMemoryService {
                 .memoryVersion(0)
                 .coveredToSequence(0)
                 .cacheHit(false)
+                .summaryTokens(0).historyTokens(0).upstreamTokens(0).ragTokens(0)
                 .build();
     }
 

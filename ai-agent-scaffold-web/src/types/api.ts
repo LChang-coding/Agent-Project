@@ -176,6 +176,62 @@ export interface RunControlResponse {
   successorRunId?: string;
 }
 
+export interface ContextInsight {
+  sessionId: string;
+  contextRevision: number;
+  modelWindowTokens: number;
+  effectiveTokens: number;
+  utilization: number;
+  systemTokens: number;
+  historyTokens: number;
+  summaryTokens: number;
+  toolResultTokens: number;
+  attachmentTokens: number;
+  ragTokens: number;
+  upstreamTokens: number;
+  effectiveFromSequence?: number;
+  effectiveToSequence?: number;
+  memoryVersion?: number;
+  compactionStatus: string;
+  toolCount: number;
+  callCount: number;
+  attachmentCount: number;
+  trimReason?: string;
+}
+
+export interface ModelUsageLatestCall {
+  callId: string;
+  runId?: string;
+  invocationId?: string;
+  modelVersion?: string;
+  callStatus: string;
+  finishReason?: string;
+  promptTokens: number;
+  candidateTokens: number;
+  totalTokens: number;
+  thoughtsTokens: number;
+  toolUsePromptTokens: number;
+  createTime?: string;
+}
+
+export interface ModelUsageSummary {
+  callCount: number;
+  successCount: number;
+  failedCount: number;
+  promptTokens: number;
+  candidateTokens: number;
+  totalTokens: number;
+  thoughtsTokens: number;
+  toolUsePromptTokens: number;
+}
+
+export interface ModelUsageResponse {
+  latest?: ModelUsageLatestCall;
+  session?: ModelUsageSummary;
+  run?: ModelUsageSummary;
+  recent?: ModelUsageSummary;
+}
+
 export interface SessionShareMessage {
   id: string;
   role: 'user' | 'assistant';
