@@ -222,4 +222,58 @@
 
 ### 阶段五：综合回归与验收
 
-执行前追加细化计划。
+#### 执行计划（执行前落盘）
+
+1. 以 `codex.md`、本计划四个阶段的完成条件和三次阶段提交为基线，做一次只读全链路审计：核对 API → Trigger → Domain → Infrastructure → MyBatis → MySQL 与 Web API → Store → View 的契约，重点检查租户可信身份、软删除/失效过滤、游标分页、幂等和旧数据兼容。
+2. 复查 Context Manager 与附件的生命周期边界：确认压缩覆盖区间、附件可见区间、取消/引导失效消息、压缩摘要和工具调用前预检之间不存在重复注入或已失效内容回流；发现会污染上下文或造成 Token 重复计费的缺口时，先补领域测试再做最小修复。
+3. 复查会话数据库读取、Token 用量、资产、Agent/工作流生命周期及分享工具权限的前后端字段一致性和运行入口强制性；对仅由前端隐藏、后端可绕过，或仅写库未被运行时消费的问题做阻断级修复。
+4. 运行 Java 17 全量可执行测试（优先聚合模块；若仓库既有无关测试依赖外部服务，则记录阻塞并以全部相关定向测试补足）、Mapper 装载、前端 `vue-tsc` 与 production build；检查 SQL 迁移幂等结论、Git 空白错误、敏感信息和保护目录。
+5. 若本地依赖允许启动，执行关键 HTTP 链路的端到端冒烟；若外部中间件或既有启动配置阻止 E2E，不中断闭环，必须记录精确阻塞证据、已完成的替代验证和上线前人工检查项。
+6. 将本阶段发现、实际修复、测试结果、未解决限制和最终提交号追加到本节；任何代码修复形成独立中文本地提交。最终确认工作树只剩用户原有日志与资料目录变更，不覆盖、不提交这些内容。
+
+#### 验收门槛
+
+- 数据库会话历史、Context Manager 真实统计、模型 Token 用量、附件资产、Agent/工作流删除及分享权限提醒均有服务端事实源，前端刷新后不依赖浏览器缓存维持正确性。
+- 取消、引导、压缩、附件和工具调用共享一致的有效消息边界；已取消/失效消息不能进入摘要、附件上下文、工具依赖或后续模型请求，工具调用前的取消与压缩预检不能绕过。
+- 相关 Java 测试、Mapper 装载和前端生产构建全部通过；无法执行的全量/E2E 项必须有明确证据且不掩盖产品逻辑缺口。
+- 阶段提交均为中文，本地源码和构建产物未上传服务器，远端数据库变更均已有项目目录外备份和幂等验证记录。
+
+#### 执行实录
+
+闭环时间：2026-07-15。
+
+实际操作：
+
+- 以四个阶段提交为基线完成 API → Trigger → Domain → Infrastructure → MyBatis → Web 全链路审计，并使用三个并行 Agent 分别审查上下文/附件、会话/Token、Agent/工作流/分享。审计确认数据库会话分页本身正确、前端聊天记录不再写 localStorage、工具真实分发由 `ToolGateway.claim` 在外部副作用前锁定运行并二次校验取消。
+- 修复本轮附件不可见：历史消息仍以当前用户消息序号 `N-1` 为上界，附件新增独立上界 `N`，避免重复注入当前用户文本的同时保证本轮上传附件立即进入模型。
+- 完成附件与压缩承接：Contributor 增加摘要覆盖下界，仅注入 `(coveredToSequence, attachmentVisibleThrough]`；压缩提示和 `coverageHash` 纳入覆盖区间内 active/ready 附件文本，执行及激活前均重验；摘要激活后旧附件由摘要承接，不再全文重复注入。同次上下文按 SHA-256 去重并修正容器标签 Token 预算。
+- 修复取消/引导缓存提交竞态：运行失效不再在数据库事务提交前清 Redis，而是注册 `afterCommit` 二次清理；前端取消或引导成功后强制重新分页读取当前会话的数据库有效消息，不把已 invalidated/superseded 的临时消息继续作为历史事实展示。
+- 为 `chat_session` 新增 `source_type/workflow_version/model_code` 服务端事实字段，Agent 会话固化 `agent`，工作流会话固化服务端实际解析版本和模型；实体、命令、PO、Mapper、会话 DTO、分享 v2、前端 Store 和请求恢复全部贯通，旧会话/旧分享缺失字段时兼容为 Agent，不再根据 `wf_` 前缀或当前工作流目录猜测。
+- 阻断动态工作流 Agent 绕过：普通 Agent 公共创建、非流式、流式和富内容入口只接受静态配置 Agent；动态 Runtime Agent 只能在 `loadRuntime` 授权后由工作流内部路径解析。工作流 list/detail/loadRuntime 统一实施拥有者本人、owner/admin 或 `tenant_public` 可读规则，私有越权与不存在返回同口径，且鉴权先于版本解析和 runtime cache。
+- 加固分享和工具隔离：分享导入先查询接收方既有 import，再判断当前额度，首次成功但响应丢失后即使额度耗尽也能返回同一会话且不重复计次；私有 Skill/MCP 查询改为 tenantId + ownerUserId 双条件；Agent 删除前端传递 revision，不再绕过乐观锁。
+- 补全模型用量状态口径：partial 响应携带供应商累计 usage 时以 running 状态单调 upsert，取消/失败保留已消耗 Token；聚合增加 running/cancelled 数量并在前端展示，使 callCount 与各状态合计可解释。
+- 清理会话前端瞬态偏差：新建会话不再插入数据库不存在的 system 消息，内存会话列表不再发送一次消息后截断到 30 条。
+
+验证结果：
+
+- Java 17 下执行干净构建与综合定向回归：`SessionDomainTest`、`SessionLifecycleServiceTest`、`SessionControllerTest`、`ContextAssemblerTest`、`ConversationMemoryServiceTest`、`ContextInsightServiceTest`、`ContextInvalidationServiceTest`、`SessionInsightControllerTest`、`ModelUsageServiceTest`、`AssetServiceTest`、`AssetContextContributorTest`、`DefaultAssetTextExtractorTest`、`AgentAvailabilityServiceTest`、`ChatServiceAuthorizationTest`、`WorkflowLifecycleServiceTest`、`WorkflowDagCompilerTest`、`SessionShareServiceTest`、`RunControlServiceTest`、`RunExecutionGateTest`、`ToolDispatchAuthorizationServiceTest`、`MyBatisMapperLoadTest`，共 55 项，0 失败、0 错误。
+- 前端执行 `npm run build`，`vue-tsc --noEmit` 和 Vite production build 均通过，共转换 1914 个模块。
+- 全量仓库测试曾执行 83 项，其中 69 项通过、14 项错误；错误均来自仓库既有演示测试没有可运行 `@Test` 方法，或旧 `ChatServiceTest` 未设置新增的可信租户上下文。干净构建已证明 Spring Bean 冲突只是旧 target 残留，综合相关测试全部通过；按照约定没有因这些既有测试夹具问题中断功能闭环。
+- 未启动独立本地 Web 服务，因此未执行带真实 JWT 的浏览器 HTTP E2E；以 Controller 测试、Spring 上下文启动、领域竞态测试、Mapper 装载、远端数据库契约验证和前端生产构建替代。上线前仍建议用测试租户补一次浏览器取消/引导、附件、私有工作流和分享导入冒烟。
+- 对远端 `chat_session` 迁移前备份到项目目录外 `/tmp/ai_agent_scaffold_chat_session_20260715_2341.sql`，备份 SHA-256 为 `0f4e6308e733a7e281fc7eaddab5a3df711007193c6206acc6e4a334d4e6535d`；迁移 SHA-256 为 `f7cf8b674ae40ed8bf6e5c0e67ef966d731954f36e1755d38a5f1363022c98da`。
+- 增量迁移通过标准输入连续执行两次，没有向服务器上传本地项目、SQL 文件或构建产物；迁移前后会话均为 33 条，三个运行目标字段唯一存在，非法 `source_type` 为 0。
+- 最终代码修复提交：`cfdfd24 修复综合验收中的上下文与权限闭环缺口`。本阶段未覆盖或提交用户原有日志、`data-alloy/`、设计资料和 `skills/`。
+
+已知非阻断项：
+
+- Maven 聚合模型仍提示 `ai-agent-scaffold-api` 的 parent 坐标/relativePath 与根 POM 坐标不一致，当前可编译但应在独立基建任务中统一。
+- Context Insight 中 system/tool 细分仍属于可解释估算，不等同供应商最终完整 LLM Request；真实 prompt/candidate/total Token 已以 `model_usage` 为事实源。
+- 模型回调的 invocation 内存映射在极端“流直接取消且供应商无终态回调”时仍依赖后续清理，数据库终态和 Token 不受影响；建议后续增加活动调用指标和统一 `doFinally` 清理。
+
+阶段提交链：
+
+- `31a3765 实现数据库会话读取与会话删除闭环`
+- `8392e7b 实现上下文统计与模型Token用量闭环`
+- `2d82cc0 实现聊天附件与资产中心闭环`
+- `2e6744d 实现Agent工作流生命周期与分享权限预检闭环`
+- `cfdfd24 修复综合验收中的上下文与权限闭环缺口`
