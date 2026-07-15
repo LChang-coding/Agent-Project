@@ -102,7 +102,8 @@
         </div>
         <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
-      <table class="table">
+      <div class="resource-table-scroll" tabindex="0" aria-label="MCP 资源列表，可横向滚动">
+      <table class="table resource-table">
         <thead>
           <tr>
             <th>名称</th>
@@ -116,24 +117,36 @@
         </thead>
         <tbody>
           <tr v-for="mcp in toolStore.mcps" :key="mcp.mcpId">
-            <td>
+            <td data-label="名称">
               <strong>{{ mcp.mcpName }}</strong>
               <small>{{ mcp.endpoint || mcp.description || '已配置服务端 stdio 命令' }}</small>
             </td>
-            <td>{{ mcp.transportType }}</td>
-            <td>{{ visibilityLabel(mcp.visibility) }}</td>
-            <td>{{ mcp.currentVersion || '--' }} / {{ mcp.publishedVersion || '--' }}</td>
-            <td>
+            <td data-label="类型">{{ mcp.transportType }}</td>
+            <td data-label="范围">{{ visibilityLabel(mcp.visibility) }}</td>
+            <td data-label="版本">{{ mcp.currentVersion || '--' }} / {{ mcp.publishedVersion || '--' }}</td>
+            <td data-label="测试">
               <span :class="['badge', testStatusClass(mcp.testStatus)]">{{ testStatusLabel(mcp.testStatus) }}</span>
               <small v-if="mcp.testMessage">{{ mcp.testMessage }}</small>
             </td>
-            <td><span :class="['badge', statusClass(mcp.status)]">{{ statusLabel(mcp.status) }}</span></td>
-            <td>
-              <div class="button-row">
-                <button class="button" type="button" @click="toolStore.testMcp(mcp.mcpId)">测试</button>
-                <button class="button" type="button" :disabled="mcp.testStatus !== 'success' || toolStore.saving" @click="toolStore.publishMcp(mcp.mcpId, mcp.currentVersion)">发布</button>
-                <button class="button" type="button" @click="toolStore.disableMcp(mcp.mcpId)">禁用</button>
+            <td data-label="状态"><span :class="['badge', statusClass(mcp.status)]">{{ statusLabel(mcp.status) }}</span></td>
+            <td class="resource-actions-cell" data-label="操作">
+              <div class="button-row resource-actions">
+                <button class="button" type="button" :disabled="isMcpPending(mcp.mcpId)" @click="runMcpAction('test', mcp.mcpId)">
+                  {{ mcpOperationLabel(mcp.mcpId, 'test', '测试') }}
+                </button>
+                <button class="button" type="button" :disabled="mcp.testStatus !== 'success' || isMcpPending(mcp.mcpId)" @click="runMcpAction('publish', mcp.mcpId, mcp.currentVersion)">
+                  {{ mcpOperationLabel(mcp.mcpId, 'publish', '发布') }}
+                </button>
+                <button class="button" type="button" :disabled="isMcpPending(mcp.mcpId)" @click="runMcpAction('disable', mcp.mcpId)">
+                  {{ mcpOperationLabel(mcp.mcpId, 'disable', '禁用') }}
+                </button>
               </div>
+              <small
+                v-if="mcpOperation(mcp.mcpId)?.errorMessage || mcpOperation(mcp.mcpId)?.successMessage"
+                :class="['row-feedback', { 'row-feedback--error': mcpOperation(mcp.mcpId)?.errorMessage }]"
+                role="status"
+                aria-live="polite"
+              >{{ mcpOperation(mcp.mcpId)?.errorMessage || mcpOperation(mcp.mcpId)?.successMessage }}</small>
             </td>
           </tr>
           <tr v-if="toolStore.mcps.length === 0">
@@ -141,6 +154,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </template>
@@ -187,6 +201,33 @@ async function submitMcp() {
     args: cleanText(form.args),
     env: cleanText(form.env),
   });
+}
+
+function mcpOperation(mcpId: string) {
+  return toolStore.resourceOperation('mcp', mcpId);
+}
+
+function isMcpPending(mcpId: string) {
+  return Boolean(mcpOperation(mcpId)?.pending);
+}
+
+function mcpOperationLabel(mcpId: string, type: 'test' | 'publish' | 'disable', fallback: string) {
+  const operation = mcpOperation(mcpId);
+  return operation?.pending && operation.type === type ? `${fallback}中…` : fallback;
+}
+
+async function runMcpAction(type: 'test' | 'publish' | 'disable', mcpId: string, version?: string) {
+  try {
+    if (type === 'test') {
+      await toolStore.testMcp(mcpId);
+    } else if (type === 'publish') {
+      await toolStore.publishMcp(mcpId, version);
+    } else {
+      await toolStore.disableMcp(mcpId);
+    }
+  } catch {
+    // Store 已保留行级错误，按钮解除锁定后可直接重试。
+  }
 }
 
 /**
@@ -304,5 +345,119 @@ function testStatusClass(value?: string) {
 .field-hint strong {
   color: var(--ink);
   font-size: 13px;
+}
+
+.resource-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.resource-table {
+  min-width: 920px;
+}
+
+.resource-actions-cell,
+.resource-table th:last-child {
+  position: sticky;
+  right: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface);
+  box-shadow: -1px 0 0 var(--line);
+}
+
+.resource-actions {
+  flex-wrap: nowrap;
+}
+
+.row-feedback {
+  display: block;
+  margin-top: 7px;
+  color: var(--success);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.row-feedback--error {
+  color: var(--danger);
+}
+
+@media (max-width: 768px) {
+  .two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-table-scroll {
+    overflow: visible;
+  }
+
+  .resource-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .resource-table thead {
+    display: none;
+  }
+
+  .resource-table tbody,
+  .resource-table tr {
+    display: grid;
+  }
+
+  .resource-table tbody {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .resource-table tr {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+
+  .resource-table td {
+    display: grid;
+    grid-template-columns: minmax(82px, 0.34fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 9px 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .resource-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+
+  .resource-actions-cell {
+    position: static;
+    z-index: auto;
+    box-shadow: none;
+  }
+
+  .resource-actions-cell::before {
+    align-self: center;
+  }
+
+  .resource-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .resource-actions .button {
+    flex: 1 1 72px;
+  }
+
+  .row-feedback {
+    grid-column: 2;
+  }
 }
 </style>

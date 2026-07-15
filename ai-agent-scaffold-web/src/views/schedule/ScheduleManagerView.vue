@@ -15,7 +15,7 @@
       </template>
     </SectionHeader>
 
-    <div v-if="message" :class="['notice', messageType === 'error' ? 'notice--error' : 'notice--success']">
+    <div v-if="message" :class="['notice', messageType === 'error' ? 'notice--error' : 'notice--success']" role="status" aria-live="polite">
       {{ message }}
     </div>
 
@@ -106,7 +106,7 @@
         <strong>我的配置</strong>
         <span>{{ schedules.length }} 项</span>
       </div>
-      <div class="table-scroll">
+      <div class="table-scroll" tabindex="0" aria-label="定时任务配置列表，可横向滚动">
         <table class="table">
           <thead>
             <tr>
@@ -130,11 +130,23 @@
               <td><span :class="['badge', schedule.enabled ? 'badge--green' : 'badge--red']">{{ schedule.enabled ? '已启用' : '已停用' }}</span></td>
               <td>
                 <div class="button-row actions">
-                  <button class="button" type="button" @click="edit(schedule)">编辑</button>
-                  <button class="button" type="button" @click="showExecutions(schedule)">历史</button>
-                  <button class="button" type="button" :disabled="!schedule.enabled" @click="trigger(schedule, false)">立即执行</button>
-                  <button class="button" type="button" @click="toggleEnabled(schedule)">{{ schedule.enabled ? '停用' : '启用' }}</button>
+                  <button class="button" type="button" :disabled="isSchedulePending(schedule.configId)" @click="edit(schedule)">编辑</button>
+                  <button class="button" type="button" :disabled="isSchedulePending(schedule.configId)" @click="showExecutions(schedule)">
+                    {{ scheduleOperationLabel(schedule.configId, 'history', '历史') }}
+                  </button>
+                  <button class="button" type="button" :disabled="!schedule.enabled || isSchedulePending(schedule.configId)" @click="trigger(schedule, false)">
+                    {{ scheduleOperationLabel(schedule.configId, 'trigger', '立即执行') }}
+                  </button>
+                  <button class="button" type="button" :disabled="isSchedulePending(schedule.configId)" @click="toggleEnabled(schedule)">
+                    {{ scheduleOperationLabel(schedule.configId, 'toggle', schedule.enabled ? '停用' : '启用') }}
+                  </button>
                 </div>
+                <small
+                  v-if="scheduleOperation(schedule.configId)?.errorMessage || scheduleOperation(schedule.configId)?.successMessage"
+                  :class="['row-feedback', { 'row-feedback--error': scheduleOperation(schedule.configId)?.errorMessage }]"
+                  role="status"
+                  aria-live="polite"
+                >{{ scheduleOperation(schedule.configId)?.errorMessage || scheduleOperation(schedule.configId)?.successMessage }}</small>
               </td>
             </tr>
             <tr v-if="!loading && schedules.length === 0"><td colspan="6">暂无定时任务，先创建一项配置。</td></tr>
@@ -147,9 +159,11 @@
     <div v-if="historyConfig" class="table-card">
       <div class="table-toolbar">
         <div><strong>执行历史</strong><span>{{ historyConfig.agentName || historyConfig.agentId }}</span></div>
-        <button class="button" type="button" @click="showExecutions(historyConfig)">刷新历史</button>
+        <button class="button" type="button" :disabled="isSchedulePending(historyConfig.configId)" @click="showExecutions(historyConfig)">
+          {{ scheduleOperationLabel(historyConfig.configId, 'history', '刷新历史') }}
+        </button>
       </div>
-      <div class="table-scroll">
+      <div class="table-scroll" tabindex="0" aria-label="定时任务执行历史，可横向滚动">
         <table class="table">
           <thead><tr><th>计划时间</th><th>状态</th><th>尝试</th><th>耗时</th><th>错误</th><th>操作</th></tr></thead>
           <tbody>
@@ -159,7 +173,9 @@
               <td>{{ execution.attemptNo }}</td>
               <td>{{ execution.durationMs == null ? '--' : `${execution.durationMs} ms` }}</td>
               <td><span class="error-cell">{{ execution.errorMessage || '--' }}</span></td>
-              <td><button v-if="['failed', 'dead'].includes(execution.status)" class="button" type="button" @click="trigger(historyConfig, true)">重新触发</button></td>
+              <td><button v-if="['failed', 'dead'].includes(execution.status)" class="button" type="button" :disabled="isSchedulePending(historyConfig.configId)" @click="trigger(historyConfig, true)">
+                {{ scheduleOperationLabel(historyConfig.configId, 'retry', '重新触发') }}
+              </button></td>
             </tr>
             <tr v-if="executions.length === 0"><td colspan="6">暂无执行记录。</td></tr>
           </tbody>
@@ -203,6 +219,16 @@ const saving = ref(false);
 const previewing = ref(false);
 const message = ref('');
 const messageType = ref<'success' | 'error'>('success');
+type ScheduleOperationType = 'toggle' | 'trigger' | 'retry' | 'history';
+interface ScheduleOperationState {
+  operationKey: string;
+  type: ScheduleOperationType;
+  pending: boolean;
+  errorMessage: string;
+  successMessage: string;
+}
+const scheduleOperations = reactive<Record<string, ScheduleOperationState>>({});
+let historyRequestGeneration = 0;
 
 const form = reactive<ScheduleSaveRequest>({
   agentId: '',
@@ -302,30 +328,80 @@ function syncAgentName() {
 
 async function toggleEnabled(schedule: ScheduleConfig) {
   try {
-    await setScheduleEnabled(schedule.configId, !schedule.enabled);
-    setMessage(`任务已${schedule.enabled ? '停用' : '启用'}。`, 'success');
-    await loadSchedules();
-  } catch (error) {
-    showError(error);
+    await runScheduleOperation(schedule.configId, 'toggle', async () => {
+      await setScheduleEnabled(schedule.configId, !schedule.enabled);
+      await loadSchedules();
+    }, `任务已${schedule.enabled ? '停用' : '启用'}。`);
+  } catch {
+    // 行级错误已保留，解除锁定后可直接重试。
   }
 }
 
 async function trigger(schedule: ScheduleConfig, retry: boolean) {
   try {
-    await triggerSchedule(schedule.configId, retry);
-    setMessage(retry ? '失败任务已重新排入派发。' : '任务已标记为立即到期。', 'success');
+    const type = retry ? 'retry' : 'trigger';
+    await runScheduleOperation(schedule.configId, type, async () => {
+      await triggerSchedule(schedule.configId, retry);
+    }, retry ? '失败任务已重新排入派发。' : '任务已标记为立即到期。');
     if (historyConfig.value?.configId === schedule.configId) await showExecutions(schedule);
-  } catch (error) {
-    showError(error);
+  } catch {
+    // 行级错误已保留，解除锁定后可直接重试。
   }
 }
 
 async function showExecutions(schedule: ScheduleConfig) {
+  if (isSchedulePending(schedule.configId)) return;
+  const generation = ++historyRequestGeneration;
   historyConfig.value = schedule;
   try {
-    executions.value = (await queryScheduleExecutions(schedule.configId, 50)) || [];
+    await runScheduleOperation(schedule.configId, 'history', async () => {
+      const items = (await queryScheduleExecutions(schedule.configId, 50)) || [];
+      if (generation === historyRequestGeneration && historyConfig.value?.configId === schedule.configId) {
+        executions.value = items;
+      }
+    }, '执行历史已刷新。');
+  } catch {
+    // 行级错误已保留，解除锁定后可直接重试。
+  }
+}
+
+function scheduleOperation(configId: string) {
+  return scheduleOperations[configId];
+}
+
+function isSchedulePending(configId: string) {
+  return Boolean(scheduleOperation(configId)?.pending);
+}
+
+function scheduleOperationLabel(configId: string, type: ScheduleOperationType, fallback: string) {
+  const operation = scheduleOperation(configId);
+  return operation?.pending && operation.type === type ? `${fallback}中…` : fallback;
+}
+
+async function runScheduleOperation<T>(
+  configId: string,
+  type: ScheduleOperationType,
+  action: () => Promise<T>,
+  successMessage: string,
+) {
+  if (scheduleOperations[configId]?.pending) return null;
+  scheduleOperations[configId] = {
+    operationKey: `${type}:${configId}`,
+    type,
+    pending: true,
+    errorMessage: '',
+    successMessage: '',
+  };
+  try {
+    const result = await action();
+    scheduleOperations[configId] = { ...scheduleOperations[configId], pending: false, successMessage };
+    setMessage(successMessage, 'success');
+    return result;
   } catch (error) {
-    showError(error);
+    const errorMessage = error instanceof Error ? error.message : '定时任务操作失败';
+    scheduleOperations[configId] = { ...scheduleOperations[configId], pending: false, errorMessage };
+    setMessage(errorMessage, 'error');
+    throw error;
   }
 }
 
@@ -385,9 +461,12 @@ function showError(error: unknown) {
 .table-toolbar span { color: var(--muted); font-size: 12px; }
 .table-scroll { overflow-x: auto; }
 .table { min-width: 940px; }
+.table th:last-child, .table td:last-child { position: sticky; right: 0; z-index: var(--z-sticky); background: var(--surface); box-shadow: -1px 0 0 var(--line); }
 .table td:first-child { max-width: 300px; }
 .table td:first-child small { overflow: hidden; max-width: 300px; text-overflow: ellipsis; white-space: nowrap; }
 .actions { min-width: 285px; }
+.row-feedback { color: var(--success) !important; }
+.row-feedback--error { color: var(--danger) !important; }
 .error-cell { display: block; max-width: 280px; color: var(--danger); font-size: 12px; white-space: normal; }
 @media (max-width: 980px) { .schedule-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .two-cols, .cron-row { grid-template-columns: 1fr; } }

@@ -6,8 +6,8 @@
     >
       <template #actions>
         <div class="button-row">
-          <button class="button" type="button" @click="reload">刷新</button>
-          <button class="button button--primary" type="button" @click="createNewWorkflow">新建工作流</button>
+          <button class="button" type="button" :disabled="workflowStore.writing || workflowStore.loading" @click="reload">刷新</button>
+          <button class="button button--primary" type="button" :disabled="workflowStore.writing || workflowStore.loading" @click="createNewWorkflow">新建工作流</button>
         </div>
       </template>
     </SectionHeader>
@@ -21,7 +21,7 @@
           </div>
           <div class="create-box">
             <input v-model="newWorkflowName" class="input" placeholder="工作流名称" />
-            <button class="button button--primary" type="button" :disabled="workflowStore.loading" @click="createNewWorkflow">
+            <button class="button button--primary" type="button" :disabled="workflowStore.loading || workflowStore.writing" @click="createNewWorkflow">
               创建并刷新
             </button>
           </div>
@@ -31,7 +31,7 @@
               :key="workflow.workflowId"
               :class="['workflow-item', { 'workflow-item--active': workflow.workflowId === workflowStore.activeWorkflowId }]"
               type="button"
-              :disabled="Boolean(workflowStore.deletingWorkflowId)"
+              :disabled="workflowStore.writing"
               @click="selectWorkflow(workflow.workflowId)"
             >
               <strong>{{ workflow.workflowName }}</strong>
@@ -75,14 +75,14 @@
             <button class="button" type="button" @click="autoLayout">自动排布</button>
             <button class="button" type="button" :disabled="!activeNode || graph.nodes.length <= 1" @click="removeActiveNode">删除节点</button>
             <button class="button button--danger" type="button"
-                    :disabled="!workflowStore.activeWorkflowId || Boolean(workflowStore.deletingWorkflowId) || workflowStore.saving || workflowStore.publishing"
+                    :disabled="!workflowStore.activeWorkflowId || workflowStore.writing || workflowStore.loading"
                     @click="removeWorkflow">
               {{ workflowStore.deletingWorkflowId ? '删除中...' : '删除工作流' }}
             </button>
-            <button class="button button--primary" type="button" :disabled="workflowStore.saving || Boolean(workflowStore.deletingWorkflowId) || !workflowStore.activeWorkflowId" @click="saveDraft">
+            <button class="button button--primary" type="button" :disabled="workflowStore.writing || workflowStore.loading || !workflowStore.activeWorkflowId" @click="saveDraft">
               {{ workflowStore.saving ? '保存中...' : '保存草稿' }}
             </button>
-            <button class="button button--dark" type="button" :disabled="workflowStore.publishing || Boolean(workflowStore.deletingWorkflowId) || !workflowStore.activeWorkflowId" @click="publish">
+            <button class="button button--dark" type="button" :disabled="workflowStore.writing || workflowStore.loading || !workflowStore.activeWorkflowId" @click="publish">
               {{ workflowStore.publishing ? '发布中...' : '发布运行' }}
             </button>
           </div>
@@ -212,7 +212,14 @@
       </aside>
     </section>
 
-    <p v-if="workflowStore.errorMessage" class="error-text">{{ workflowStore.errorMessage }}</p>
+    <p
+      v-if="workflowStore.errorMessage || workflowStore.operationMessage"
+      :class="['operation-notice', { 'operation-notice--error': workflowStore.errorMessage }]"
+      role="status"
+      aria-live="polite"
+    >
+      {{ workflowStore.errorMessage || workflowStore.operationMessage }}
+    </p>
   </div>
 </template>
 
@@ -330,7 +337,7 @@ async function createNewWorkflow() {
  * 选择工作流；参数是工作流 ID；加载对应详情。
  */
 async function selectWorkflow(workflowId: string) {
-  if (workflowStore.deletingWorkflowId) {
+  if (workflowStore.writing) {
     return;
   }
   await workflowStore.loadDetail(workflowId);
@@ -412,7 +419,7 @@ function removeActiveNode() {
  */
 async function saveDraft() {
   applyGraphShape();
-  await workflowStore.saveDraft({
+  return workflowStore.saveDraft({
     workflowName: workflowName.value.trim() || '未命名工作流',
     description: workflowDescription.value,
     defaultModelCode: defaultModelCode.value,
@@ -425,8 +432,10 @@ async function saveDraft() {
  * 发布工作流；无参数；先保存草稿再发布。
  */
 async function publish() {
-  await saveDraft();
-  await workflowStore.publish();
+  const saved = await saveDraft();
+  if (saved) {
+    await workflowStore.publish();
+  }
 }
 
 /**
@@ -802,6 +811,22 @@ function clamp(value: number, min: number, max: number) {
 .workflow-page {
   display: grid;
   gap: 16px;
+}
+
+.operation-notice {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--success);
+  border: 1px solid rgba(45, 107, 79, 0.18);
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  font-size: 13px;
+}
+
+.operation-notice--error {
+  color: var(--danger);
+  border-color: rgba(155, 62, 62, 0.18);
+  background: var(--danger-soft);
 }
 
 .workflow-shell {

@@ -28,6 +28,17 @@ import type {
 
 let callsRequestGeneration = 0;
 
+type ToolResourceType = 'skill' | 'mcp';
+type ToolOperationType = 'publish' | 'disable' | 'test';
+
+interface ToolResourceOperation {
+  operationKey: string;
+  type: ToolOperationType;
+  pending: boolean;
+  errorMessage: string;
+  successMessage: string;
+}
+
 interface ToolState {
   skills: SkillDefinition[];
   mcps: McpDefinition[];
@@ -38,6 +49,7 @@ interface ToolState {
   loading: boolean;
   saving: boolean;
   errorMessage: string;
+  resourceOperations: Record<string, ToolResourceOperation>;
   lastUploadedSkillPackage: SkillPackageUploadResponse | null;
 }
 
@@ -52,9 +64,59 @@ export const useToolStore = defineStore('tools', {
     loading: false,
     saving: false,
     errorMessage: '',
+    resourceOperations: {},
     lastUploadedSkillPackage: null,
   }),
   actions: {
+    /**
+     * 查询资源行操作状态；参数是资源类型和 ID；返回最近一次操作反馈。
+     */
+    resourceOperation(resourceType: ToolResourceType, resourceId: string) {
+      return this.resourceOperations[`${resourceType}:${resourceId}`];
+    },
+
+    /**
+     * 执行资源行操作；同一资源任一写操作进行中时拒绝重复或冲突请求。
+     */
+    async runResourceOperation<T>(
+      resourceType: ToolResourceType,
+      resourceId: string,
+      operationType: ToolOperationType,
+      action: () => Promise<T>,
+      successMessage: string,
+    ) {
+      const resourceKey = `${resourceType}:${resourceId}`;
+      if (this.resourceOperations[resourceKey]?.pending) {
+        return null;
+      }
+      this.resourceOperations[resourceKey] = {
+        operationKey: `${operationType}:${resourceId}`,
+        type: operationType,
+        pending: true,
+        errorMessage: '',
+        successMessage: '',
+      };
+      this.errorMessage = '';
+      try {
+        const result = await action();
+        this.resourceOperations[resourceKey] = {
+          ...this.resourceOperations[resourceKey],
+          pending: false,
+          successMessage,
+        };
+        return result;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '工具资源操作失败';
+        this.errorMessage = errorMessage;
+        this.resourceOperations[resourceKey] = {
+          ...this.resourceOperations[resourceKey],
+          pending: false,
+          errorMessage,
+        };
+        throw error;
+      }
+    },
+
     /**
      * 上传 Skill 包；参数是文件；返回上传资产。
      */
@@ -133,20 +195,24 @@ export const useToolStore = defineStore('tools', {
      * 发布 Skill；参数是 Skill ID 和版本；返回 Skill 定义。
      */
     async publishSkill(skillId: string, version?: string) {
-      const result = await publishSkill(skillId, { version });
-      await this.loadSkills(this.skillScope);
-      await this.loadCatalog();
-      return result;
+      return this.runResourceOperation('skill', skillId, 'publish', async () => {
+        const result = await publishSkill(skillId, { version });
+        await this.loadSkills(this.skillScope);
+        await this.loadCatalog();
+        return result;
+      }, 'Skill 已发布。');
     },
 
     /**
      * 禁用 Skill；参数是 Skill ID；返回 Skill 定义。
      */
     async disableSkill(skillId: string) {
-      const result = await disableSkill(skillId);
-      await this.loadSkills(this.skillScope);
-      await this.loadCatalog();
-      return result;
+      return this.runResourceOperation('skill', skillId, 'disable', async () => {
+        const result = await disableSkill(skillId);
+        await this.loadSkills(this.skillScope);
+        await this.loadCatalog();
+        return result;
+      }, 'Skill 已禁用。');
     },
 
     /**
@@ -190,29 +256,35 @@ export const useToolStore = defineStore('tools', {
      * 测试 MCP；参数是 MCP ID；返回 MCP 定义。
      */
     async testMcp(mcpId: string) {
-      const result = await testMcp(mcpId);
-      await this.loadMcps(this.mcpScope);
-      return result;
+      return this.runResourceOperation('mcp', mcpId, 'test', async () => {
+        const result = await testMcp(mcpId);
+        await this.loadMcps(this.mcpScope);
+        return result;
+      }, 'MCP 测试完成。');
     },
 
     /**
      * 发布 MCP；参数是 MCP ID 和版本；返回 MCP 定义。
      */
     async publishMcp(mcpId: string, version?: string) {
-      const result = await publishMcp(mcpId, { version });
-      await this.loadMcps(this.mcpScope);
-      await this.loadCatalog();
-      return result;
+      return this.runResourceOperation('mcp', mcpId, 'publish', async () => {
+        const result = await publishMcp(mcpId, { version });
+        await this.loadMcps(this.mcpScope);
+        await this.loadCatalog();
+        return result;
+      }, 'MCP 已发布。');
     },
 
     /**
      * 禁用 MCP；参数是 MCP ID；返回 MCP 定义。
      */
     async disableMcp(mcpId: string) {
-      const result = await disableMcp(mcpId);
-      await this.loadMcps(this.mcpScope);
-      await this.loadCatalog();
-      return result;
+      return this.runResourceOperation('mcp', mcpId, 'disable', async () => {
+        const result = await disableMcp(mcpId);
+        await this.loadMcps(this.mcpScope);
+        await this.loadCatalog();
+        return result;
+      }, 'MCP 已禁用。');
     },
 
     /**

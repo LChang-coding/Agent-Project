@@ -29,6 +29,12 @@
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
+  --z-content: 1;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-popover: 30;
+  --z-modal: 40;
+  --z-toast: 50;
   font-family: "IBM Plex Sans", "Aptos", "PingFang SC", "Noto Sans SC", sans-serif;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -105,7 +111,7 @@ a {
 
 .auth-hero__brand {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-content);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -126,7 +132,7 @@ a {
 
 .auth-hero__copy {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-content);
   max-width: 720px;
 }
 
@@ -149,7 +155,7 @@ a {
 
 .auth-hero__metrics {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-content);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
@@ -393,7 +399,7 @@ a {
 .nav-link::after {
   position: absolute;
   left: calc(100% + 10px);
-  z-index: 30;
+  z-index: var(--z-popover);
   min-width: max-content;
   padding: 7px 9px;
   color: #fffaf0;
@@ -453,7 +459,7 @@ a {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -774,7 +780,7 @@ a {
 
   .sidebar {
     position: sticky;
-    z-index: 20;
+    z-index: var(--z-nav);
     align-items: center;
     flex-direction: row;
     height: auto;

@@ -25,11 +25,13 @@ interface WorkflowState {
   detail: WorkflowDetail | null;
   options: WorkflowNodeOptions;
   loading: boolean;
-  saving: boolean;
-  publishing: boolean;
+  writeOperation: '' | 'save' | 'publish' | 'delete';
   deletingWorkflowId: string;
   errorMessage: string;
+  operationMessage: string;
 }
+
+let detailRequestGeneration = 0;
 
 export const useWorkflowStore = defineStore('workflow', {
   state: (): WorkflowState => ({
@@ -43,14 +45,17 @@ export const useWorkflowStore = defineStore('workflow', {
       skills: [],
     },
     loading: false,
-    saving: false,
-    publishing: false,
+    writeOperation: '',
     deletingWorkflowId: '',
     errorMessage: '',
+    operationMessage: '',
   }),
   getters: {
     activeWorkflow: (state) => state.workflows.find((item) => item.workflowId === state.activeWorkflowId),
     publishedWorkflows: (state) => state.workflows.filter((item) => item.publishedVersion > 0 && item.status === 'published'),
+    saving: (state) => state.writeOperation === 'save',
+    publishing: (state) => state.writeOperation === 'publish',
+    writing: (state) => Boolean(state.writeOperation),
   },
   actions: {
     /**
@@ -62,6 +67,7 @@ export const useWorkflowStore = defineStore('workflow', {
       try {
         this.workflows = await queryWorkflows();
         if (!this.workflows.some((workflow) => workflow.workflowId === this.activeWorkflowId)) {
+          detailRequestGeneration += 1;
           this.activeWorkflowId = this.workflows[0]?.workflowId || '';
           if (!this.activeWorkflowId) {
             this.detail = null;
@@ -85,6 +91,9 @@ export const useWorkflowStore = defineStore('workflow', {
      * 创建工作流；参数是创建请求；返回新工作流详情。
      */
     async create(payload: WorkflowCreateRequest) {
+      if (this.writeOperation || this.loading) {
+        return null;
+      }
       this.loading = true;
       this.errorMessage = '';
       try {
@@ -110,17 +119,26 @@ export const useWorkflowStore = defineStore('workflow', {
       if (!id) {
         return null;
       }
+      const generation = ++detailRequestGeneration;
+      this.activeWorkflowId = id;
       this.loading = true;
       this.errorMessage = '';
       try {
-        this.detail = await queryWorkflowDetail(id);
-        this.activeWorkflowId = id;
-        return this.detail;
+        const detail = await queryWorkflowDetail(id);
+        if (generation === detailRequestGeneration && this.activeWorkflowId === id) {
+          this.detail = detail;
+          return detail;
+        }
+        return null;
       } catch (error) {
-        this.errorMessage = error instanceof Error ? error.message : '工作流详情加载失败';
+        if (generation === detailRequestGeneration) {
+          this.errorMessage = error instanceof Error ? error.message : '工作流详情加载失败';
+        }
         return null;
       } finally {
-        this.loading = false;
+        if (generation === detailRequestGeneration) {
+          this.loading = false;
+        }
       }
     },
 
@@ -128,21 +146,24 @@ export const useWorkflowStore = defineStore('workflow', {
      * 保存草稿；参数是保存请求；返回保存后的详情。
      */
     async saveDraft(payload: WorkflowSaveDraftRequest) {
-      if (!this.activeWorkflowId) {
+      if (!this.activeWorkflowId || this.writeOperation || this.loading) {
         return null;
       }
-      this.saving = true;
+      const workflowId = this.activeWorkflowId;
+      this.writeOperation = 'save';
       this.errorMessage = '';
+      this.operationMessage = '';
       try {
-        this.detail = await saveWorkflowDraft(this.activeWorkflowId, payload);
+        this.detail = await saveWorkflowDraft(workflowId, payload);
         await this.loadWorkflows();
         this.activeWorkflowId = this.detail.workflow.workflowId;
+        this.operationMessage = `草稿 v${this.detail.workflow.currentVersion} 已保存。`;
         return this.detail;
       } catch (error) {
         this.errorMessage = error instanceof Error ? error.message : '工作流草稿保存失败';
         return null;
       } finally {
-        this.saving = false;
+        this.writeOperation = '';
       }
     },
 
@@ -150,21 +171,24 @@ export const useWorkflowStore = defineStore('workflow', {
      * 发布当前工作流；无参数；返回发布后的详情。
      */
     async publish() {
-      if (!this.activeWorkflowId) {
+      if (!this.activeWorkflowId || this.writeOperation || this.loading) {
         return null;
       }
-      this.publishing = true;
+      const workflowId = this.activeWorkflowId;
+      this.writeOperation = 'publish';
       this.errorMessage = '';
+      this.operationMessage = '';
       try {
-        this.detail = await publishWorkflow(this.activeWorkflowId);
+        this.detail = await publishWorkflow(workflowId);
         await this.loadWorkflows();
         this.activeWorkflowId = this.detail.workflow.workflowId;
+        this.operationMessage = `工作流 v${this.detail.workflow.publishedVersion} 已发布。`;
         return this.detail;
       } catch (error) {
         this.errorMessage = error instanceof Error ? error.message : '工作流发布失败';
         return null;
       } finally {
-        this.publishing = false;
+        this.writeOperation = '';
       }
     },
 
@@ -173,11 +197,14 @@ export const useWorkflowStore = defineStore('workflow', {
      */
     async remove(workflowId?: string) {
       const id = workflowId || this.activeWorkflowId;
-      if (!id || this.deletingWorkflowId || this.saving || this.publishing) {
+      if (!id || this.writeOperation || this.loading) {
         return false;
       }
+      detailRequestGeneration += 1;
+      this.writeOperation = 'delete';
       this.deletingWorkflowId = id;
       this.errorMessage = '';
+      this.operationMessage = '';
       try {
         await deleteWorkflow(id);
         const removedIndex = this.workflows.findIndex((workflow) => workflow.workflowId === id);
@@ -190,12 +217,14 @@ export const useWorkflowStore = defineStore('workflow', {
             await this.loadDetail(this.activeWorkflowId);
           }
         }
+        this.operationMessage = '工作流已删除，历史运行记录仍保留。';
         return true;
       } catch (error) {
         this.errorMessage = error instanceof Error ? error.message : '工作流删除失败';
         return false;
       } finally {
         this.deletingWorkflowId = '';
+        this.writeOperation = '';
       }
     },
   },

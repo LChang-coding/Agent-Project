@@ -77,7 +77,8 @@
         </div>
         <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
-      <table class="table">
+      <div class="resource-table-scroll" tabindex="0" aria-label="Skill 资源列表，可横向滚动">
+      <table class="table resource-table">
         <thead>
           <tr>
             <th>名称</th>
@@ -91,20 +92,30 @@
         </thead>
         <tbody>
           <tr v-for="skill in toolStore.skills" :key="skill.skillId">
-            <td>
+            <td data-label="名称">
               <strong>{{ skill.skillName }}</strong>
               <small>{{ skill.description || '暂无描述' }}</small>
             </td>
-            <td>{{ skill.skillCode }}</td>
-            <td>{{ visibilityLabel(skill.visibility) }}</td>
-            <td>{{ skill.currentVersion || '--' }}</td>
-            <td>{{ skill.publishedVersion || '--' }}</td>
-            <td><span :class="['badge', statusClass(skill.status)]">{{ statusLabel(skill.status) }}</span></td>
-            <td>
-              <div class="button-row">
-                <button class="button" type="button" @click="toolStore.publishSkill(skill.skillId, skill.currentVersion)">发布</button>
-                <button class="button" type="button" @click="toolStore.disableSkill(skill.skillId)">禁用</button>
+            <td data-label="编码">{{ skill.skillCode }}</td>
+            <td data-label="范围">{{ visibilityLabel(skill.visibility) }}</td>
+            <td data-label="当前版本">{{ skill.currentVersion || '--' }}</td>
+            <td data-label="发布版本">{{ skill.publishedVersion || '--' }}</td>
+            <td data-label="状态"><span :class="['badge', statusClass(skill.status)]">{{ statusLabel(skill.status) }}</span></td>
+            <td class="resource-actions-cell" data-label="操作">
+              <div class="button-row resource-actions">
+                <button class="button" type="button" :disabled="isSkillPending(skill.skillId)" @click="runSkillAction('publish', skill.skillId, skill.currentVersion)">
+                  {{ skillOperationLabel(skill.skillId, 'publish', '发布') }}
+                </button>
+                <button class="button" type="button" :disabled="isSkillPending(skill.skillId)" @click="runSkillAction('disable', skill.skillId)">
+                  {{ skillOperationLabel(skill.skillId, 'disable', '禁用') }}
+                </button>
               </div>
+              <small
+                v-if="skillOperation(skill.skillId)?.errorMessage || skillOperation(skill.skillId)?.successMessage"
+                :class="['row-feedback', { 'row-feedback--error': skillOperation(skill.skillId)?.errorMessage }]"
+                role="status"
+                aria-live="polite"
+              >{{ skillOperation(skill.skillId)?.errorMessage || skillOperation(skill.skillId)?.successMessage }}</small>
             </td>
           </tr>
           <tr v-if="toolStore.skills.length === 0">
@@ -112,6 +123,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </template>
@@ -176,6 +188,31 @@ async function submitSkill() {
  */
 async function loadSkills(scope: string) {
   await toolStore.loadSkills(scope);
+}
+
+function skillOperation(skillId: string) {
+  return toolStore.resourceOperation('skill', skillId);
+}
+
+function isSkillPending(skillId: string) {
+  return Boolean(skillOperation(skillId)?.pending);
+}
+
+function skillOperationLabel(skillId: string, type: 'publish' | 'disable', fallback: string) {
+  const operation = skillOperation(skillId);
+  return operation?.pending && operation.type === type ? `${fallback}中…` : fallback;
+}
+
+async function runSkillAction(type: 'publish' | 'disable', skillId: string, version?: string) {
+  try {
+    if (type === 'publish') {
+      await toolStore.publishSkill(skillId, version);
+    } else {
+      await toolStore.disableSkill(skillId);
+    }
+  } catch {
+    // Store 已保留行级错误，按钮解除锁定后可直接重试。
+  }
 }
 
 /**
@@ -254,5 +291,119 @@ function statusClass(value: string) {
 
 .textarea--compact {
   min-height: 78px;
+}
+
+.resource-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.resource-table {
+  min-width: 850px;
+}
+
+.resource-actions-cell,
+.resource-table th:last-child {
+  position: sticky;
+  right: 0;
+  z-index: var(--z-sticky);
+  background: var(--surface);
+  box-shadow: -1px 0 0 var(--line);
+}
+
+.resource-actions {
+  flex-wrap: nowrap;
+}
+
+.row-feedback {
+  display: block;
+  margin-top: 7px;
+  color: var(--success);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.row-feedback--error {
+  color: var(--danger);
+}
+
+@media (max-width: 768px) {
+  .two-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .resource-table-scroll {
+    overflow: visible;
+  }
+
+  .resource-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .resource-table thead {
+    display: none;
+  }
+
+  .resource-table tbody,
+  .resource-table tr {
+    display: grid;
+  }
+
+  .resource-table tbody {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .resource-table tr {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+
+  .resource-table td {
+    display: grid;
+    grid-template-columns: minmax(82px, 0.34fr) minmax(0, 1fr);
+    gap: 12px;
+    padding: 9px 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .resource-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+  }
+
+  .resource-actions-cell {
+    position: static;
+    z-index: auto;
+    box-shadow: none;
+  }
+
+  .resource-actions-cell::before {
+    align-self: center;
+  }
+
+  .resource-actions {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .resource-actions .button {
+    flex: 1 1 72px;
+  }
+
+  .row-feedback {
+    grid-column: 2;
+  }
 }
 </style>
