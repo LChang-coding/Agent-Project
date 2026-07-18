@@ -735,3 +735,15 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 四组在所有并发级别下，`wall-total` 均值约600–782 ms，且是当前报告中最大的非汇总分量。源码核对表明 `RagRetrievalService.totalMs` 从 domain retrieve 开始计时，但在同步 `recordAudit` 之前就已固定；而审计随后开启 MySQL 事务，执行主记录 insert、引用 batch insert 及事务提交。
 - 因此现有 `clientAndQueueMs` 名称过度简化：它实际包含审计写入、controller/JSON、HTTP/本机网络和客户端排队，不能将全部 600–782 ms 归因于队列。下一切片必须将其改名为边界外差值，并在生产返回中单独暴露 audit 和完整 service 耗时，再决定是优化审计写路径、配置查询还是网络。
 - 产物 SHA-256：`load.jsonl`=`206d146e12d4bdf4b07842cd0b69ae024d6911d0b354bacf309e04bd7d81e05e`，`load-report.json`=`5a5c31893e6209dfeb81911a6551082858e6a4c98760d0aaf091eaaeee8165f0`，`load-manifest.json`=`148592533db1bc19da8e8c06bcf37798d36bd903666ec97af87ece7947915164`，`warmup.jsonl`=`1efac7d9da3dedc2352a062e0facc23db633900e78e9138de4c4ae767d3bdf41`。原始目录为 `/tmp/rag-benchmark-mini-load-b3c1698`，服务器采样下载副本为 `/tmp/rag-load-docker-stats-b3c1698.tsv`。
+
+### 阶段 6 第二切片前置计划：RAG 服务器凭据再确认
+
+1. 以用户最新提供的 RAG 服务器密码为准，核对 `codex.md` 的唯一凭据表记录；若内容一致则不制造无意义改动，也不在日志、测试产物或提交信息中重复输出密码。
+2. 使用 `codex.md` 中的凭据进行一次只读、脱敏 SSH 连通检查，只读取主机名和 RAG 容器运行状态；不上传本地 Java/Vue 项目，不修改服务器配置。
+3. 将实际连通结果、容器健康状态和失败项追加到本文档。该前置检查完成后，再进入检索配置、数据装载、组装、审计和完整服务耗时的分段计时实现。
+
+#### 2026-07-19 前置检查执行结果
+
+- `codex.md` 的 `RAG 专用服务器` 唯一凭据记录与用户最新提供值一致，因此未重复修改凭据，也未在命令输出和提交信息中输出密码。
+- 使用该记录完成只读 SSH 检查，远端主机名为 `ser570412309881`。检查期间只执行 `hostname` 和 `docker ps`，未上传本地 Java/Vue 项目，未修改服务器文件或配置。
+- `rag-qdrant`、`rag-embedding`、`rag-reranker`、`rag-docling`、`rag-model-gateway`、`rag-prometheus` 均为 `Up 6 hours (healthy)`；`rag-node-exporter` 为 `Up 6 hours`。本次凭据与 RAG 环境连通性前置检查通过，无失败项。
