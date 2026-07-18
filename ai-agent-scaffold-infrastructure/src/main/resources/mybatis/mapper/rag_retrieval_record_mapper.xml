@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalRecordDao">
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagRetrievalRecordPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_retrieval_record (
+            retrieval_id, tenant_id, user_id, session_id, run_id, agent_id, profile_id, profile_revision,
+            query_hash, query_text, dense_enabled, sparse_enabled, rerank_enabled,
+            dense_candidate_count, sparse_candidate_count, fusion_candidate_count, final_count,
+            embedding_ms, dense_ms, sparse_ms, fusion_ms, rerank_ms, assemble_ms, total_ms,
+            status, error_code, error_message, trace_id, request_snapshot, stage_metrics
+        ) VALUES (
+            #{retrievalId}, #{tenantId}, #{userId}, #{sessionId}, #{runId}, #{agentId}, #{profileId},
+            #{profileRevision}, #{queryHash}, #{queryText}, #{denseEnabled}, #{sparseEnabled},
+            #{rerankEnabled}, #{denseCandidateCount}, #{sparseCandidateCount}, #{fusionCandidateCount},
+            #{finalCount}, #{embeddingMs}, #{denseMs}, #{sparseMs}, #{fusionMs}, #{rerankMs},
+            #{assembleMs}, #{totalMs}, #{status}, #{errorCode}, #{errorMessage}, #{traceId},
+            #{requestSnapshot}, #{stageMetrics}
+        )
+    </insert>
+</mapper>

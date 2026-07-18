@@ -3,6 +3,7 @@ package cn.bugstack.ai.domain.rag.service;
 import cn.bugstack.ai.domain.context.service.CharacterTokenCounter;
 import cn.bugstack.ai.domain.rag.adapter.port.EmbeddingPort;
 import cn.bugstack.ai.domain.rag.adapter.port.RerankerPort;
+import cn.bugstack.ai.domain.rag.adapter.port.RagRetrievalAuditPort;
 import cn.bugstack.ai.domain.rag.adapter.port.SparseEncoderPort;
 import cn.bugstack.ai.domain.rag.adapter.port.VectorStorePort;
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
@@ -11,6 +12,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagChunkEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalAuditCommand;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalRequest;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalResult;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
@@ -24,6 +26,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -46,6 +49,7 @@ public class RagRetrievalServiceTest {
     private SparseEncoderPort sparse;
     private VectorStorePort vectorStore;
     private RerankerPort reranker;
+    private RagRetrievalAuditPort audit;
     private RagRetrievalService service;
 
     @Before
@@ -55,7 +59,8 @@ public class RagRetrievalServiceTest {
         sparse = Mockito.mock(SparseEncoderPort.class);
         vectorStore = Mockito.mock(VectorStorePort.class);
         reranker = Mockito.mock(RerankerPort.class);
-        service = new RagRetrievalService(repository, embedding, sparse, vectorStore, reranker,
+        audit = Mockito.mock(RagRetrievalAuditPort.class);
+        service = new RagRetrievalService(repository, embedding, sparse, vectorStore, reranker, audit,
                 new CharacterTokenCounter());
     }
 
@@ -69,6 +74,11 @@ public class RagRetrievalServiceTest {
         verify(embedding, never()).embed(any());
         verify(sparse, never()).encode(any());
         verify(vectorStore, never()).search(anyString(), any());
+        ArgumentCaptor<RagRetrievalAuditCommand> captor = ArgumentCaptor.forClass(RagRetrievalAuditCommand.class);
+        verify(audit).record(captor.capture());
+        Assert.assertEquals("empty", captor.getValue().status());
+        Assert.assertEquals("none", captor.getValue().profileId());
+        Assert.assertEquals("如何 使用 Alpha？", captor.getValue().normalizedQuery());
     }
 
     @Test
@@ -128,6 +138,10 @@ public class RagRetrievalServiceTest {
 
         Assert.assertEquals("RAG_REQUIRED_BINDING_UNAVAILABLE", error.getCode());
         verify(embedding, never()).embed(any());
+        ArgumentCaptor<RagRetrievalAuditCommand> captor = ArgumentCaptor.forClass(RagRetrievalAuditCommand.class);
+        verify(audit).record(captor.capture());
+        Assert.assertEquals("failed", captor.getValue().status());
+        Assert.assertEquals("RAG_REQUIRED_BINDING_UNAVAILABLE", captor.getValue().errorCode());
     }
 
     @Test
@@ -196,6 +210,16 @@ public class RagRetrievalServiceTest {
         Assert.assertEquals(1, result.metrics().sparseCandidateCount());
         verify(embedding, never()).embed(any());
         verify(vectorStore, times(1)).search(anyString(), any());
+    }
+
+    @Test
+    public void shouldNotOverrideRetrievalResultWhenAuditWriteFails() {
+        when(repository.listBindings("tenant-a", RagBindingTargetType.AGENT, "agent-a")).thenReturn(List.of());
+        Mockito.doThrow(new IllegalStateException("audit unavailable")).when(audit).record(any());
+
+        RagRetrievalResult result = service.retrieve(request(1000));
+
+        Assert.assertTrue(result.citations().isEmpty());
     }
 
     private void fixtures(RagRetrievalProfileEntity profile, boolean required) {

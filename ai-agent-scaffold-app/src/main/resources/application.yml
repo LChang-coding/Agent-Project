@@ -104,6 +104,9 @@ ai:
       parent-max-chars: ${AI_RAG_WORKER_PARENT_MAX_CHARS:6000}
       parent-max-tokens: ${AI_RAG_WORKER_PARENT_MAX_TOKENS:1400}
       overlap-chars: ${AI_RAG_WORKER_OVERLAP_CHARS:160}
+    audit:
+      store-query-text: ${AI_RAG_AUDIT_STORE_QUERY_TEXT:false}
+      store-citation-content: ${AI_RAG_AUDIT_STORE_CITATION_CONTENT:false}
   scheduler:
     reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
     dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}

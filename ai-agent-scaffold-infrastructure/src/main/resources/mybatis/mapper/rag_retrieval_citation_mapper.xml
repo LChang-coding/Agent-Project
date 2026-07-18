@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalCitationDao">
+    <insert id="insertBatch">
+        INSERT INTO rag_retrieval_citation (
+            tenant_id, retrieval_id, citation_id, rank_no, kb_id, document_id, document_version,
+            generation, chunk_id, vector_point_id, dense_score, sparse_score, fusion_score,
+            rerank_score, page_from, page_to, section_path, content_hash, content_snapshot, metadata
+        ) VALUES
+        <foreach collection="citations" item="citation" separator=",">
+            (#{tenantId}, #{retrievalId}, #{citation.citationId}, #{citation.rankNo},
+             #{citation.knowledgeBaseId}, #{citation.documentId}, #{citation.documentVersion},
+             #{citation.generation}, #{citation.chunkId}, #{citation.vectorPointId},
+             #{citation.denseScore}, #{citation.sparseScore}, #{citation.fusionScore},
+             #{citation.rerankScore}, #{citation.pageFrom}, #{citation.pageTo},
+             #{citation.sectionPath}, #{citation.contentHash}, #{citation.contentSnapshot},
+             #{citation.metadata})
+        </foreach>
+    </insert>
+</mapper>

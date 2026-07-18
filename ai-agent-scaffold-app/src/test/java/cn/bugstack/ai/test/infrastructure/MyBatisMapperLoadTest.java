@@ -41,6 +41,8 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/rag_ingest_task_mapper.xml",
                 "mybatis/mapper/rag_retrieval_profile_mapper.xml",
                 "mybatis/mapper/rag_agent_binding_mapper.xml",
+                "mybatis/mapper/rag_retrieval_record_mapper.xml",
+                "mybatis/mapper/rag_retrieval_citation_mapper.xml",
                 "mybatis/mapper/skill_definition_mapper.xml",
                 "mybatis/mapper/skill_version_mapper.xml",
                 "mybatis/mapper/mcp_server_config_mapper.xml",
@@ -97,6 +99,8 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.markReadyByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.queryByTenantAndProfileId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.queryActiveByTenantAndTarget"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalRecordDao.insert"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalCitationDao.insertBatch"));
         assertContextInsightAggregateScopes(configuration);
         assertScheduleReconcileScopes(configuration);
         assertRagTenantAndClaimScopes(configuration);

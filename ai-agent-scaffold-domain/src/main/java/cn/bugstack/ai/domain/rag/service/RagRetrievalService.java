@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.context.service.CharacterTokenCounter;
 import cn.bugstack.ai.domain.context.service.TokenCounter;
 import cn.bugstack.ai.domain.rag.adapter.port.EmbeddingPort;
 import cn.bugstack.ai.domain.rag.adapter.port.RerankerPort;
+import cn.bugstack.ai.domain.rag.adapter.port.RagRetrievalAuditPort;
 import cn.bugstack.ai.domain.rag.adapter.port.SparseEncoderPort;
 import cn.bugstack.ai.domain.rag.adapter.port.VectorStorePort;
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
@@ -12,6 +13,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagChunkEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalAuditCommand;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalRequest;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalResult;
 import cn.bugstack.ai.domain.rag.model.valobj.RagFusionStrategy;
@@ -54,6 +56,7 @@ public class RagRetrievalService {
     private final SparseEncoderPort sparseEncoderPort;
     private final VectorStorePort vectorStorePort;
     private final RerankerPort rerankerPort;
+    private final RagRetrievalAuditPort auditPort;
     private final TokenCounter tokenCounter;
 
     @Autowired
@@ -61,8 +64,9 @@ public class RagRetrievalService {
                                EmbeddingPort embeddingPort,
                                SparseEncoderPort sparseEncoderPort,
                                VectorStorePort vectorStorePort,
-                               RerankerPort rerankerPort) {
-        this(repository, embeddingPort, sparseEncoderPort, vectorStorePort, rerankerPort,
+                               RerankerPort rerankerPort,
+                               RagRetrievalAuditPort auditPort) {
+        this(repository, embeddingPort, sparseEncoderPort, vectorStorePort, rerankerPort, auditPort,
                 new CharacterTokenCounter());
     }
 
@@ -71,12 +75,14 @@ public class RagRetrievalService {
                         SparseEncoderPort sparseEncoderPort,
                         VectorStorePort vectorStorePort,
                         RerankerPort rerankerPort,
+                        RagRetrievalAuditPort auditPort,
                         TokenCounter tokenCounter) {
         this.repository = repository;
         this.embeddingPort = embeddingPort;
         this.sparseEncoderPort = sparseEncoderPort;
         this.vectorStorePort = vectorStorePort;
         this.rerankerPort = rerankerPort;
+        this.auditPort = auditPort;
         this.tokenCounter = tokenCounter;
     }
 
@@ -85,6 +91,20 @@ public class RagRetrievalService {
         long started = System.nanoTime();
         String retrievalId = "ret_" + UUID.randomUUID().toString().replace("-", "");
         String query = normalizeQuery(request.query());
+        AuditState audit = new AuditState();
+        try {
+            RagRetrievalResult result = retrieveInternal(request, retrievalId, query, started, audit);
+            recordAudit(request, query, result, result.citations().isEmpty() ? "empty" : "success", null, audit);
+            return result;
+        } catch (RuntimeException exception) {
+            RagRetrievalResult failed = RagRetrievalResult.empty(retrievalId, elapsedMs(started));
+            recordAudit(request, query, failed, "failed", exception, audit);
+            throw exception;
+        }
+    }
+
+    private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
+                                                long started, AuditState audit) {
         List<RagAgentBindingEntity> bindings = repository.listBindings(request.tenantId(), request.targetType(),
                 request.targetId());
         if (bindings.isEmpty()) {
@@ -95,6 +115,7 @@ public class RagRetrievalService {
         }
 
         List<ResolvedBinding> resolved = resolveBindings(request, bindings);
+        audit.capture(resolved);
         if (resolved.isEmpty()) {
             return RagRetrievalResult.empty(retrievalId, elapsedMs(started));
         }
@@ -164,6 +185,23 @@ public class RagRetrievalService {
                 !aggregate.degradationReasons.isEmpty(), totalMs);
         return new RagRetrievalResult(retrievalId, citations, tokens, !aggregate.degradationReasons.isEmpty(),
                 aggregate.degradationReasons, metrics);
+    }
+
+    private void recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
+                             String status, RuntimeException exception, AuditState state) {
+        try {
+            String errorCode = exception instanceof AppException appException
+                    ? appException.getCode() : (exception == null ? null : "RAG_RETRIEVAL_FAILED");
+            auditPort.record(new RagRetrievalAuditCommand(result.retrievalId(), request.tenantId(), request.userId(),
+                    request.sessionId(), request.runId(), request.targetId(), state.profileId(),
+                    state.profileRevision, query, state.denseEnabled, state.sparseEnabled, state.rerankEnabled,
+                    result, status, errorCode, exception == null ? null : exception.getClass().getSimpleName(),
+                    request.traceId(), state.snapshot(request)));
+        } catch (RuntimeException auditException) {
+            log.error("RAG检索审计写入失败 tenantId:{} targetId:{} retrievalId:{} traceId:{} errorType:{}",
+                    request.tenantId(), request.targetId(), result.retrievalId(), request.traceId(),
+                    auditException.getClass().getSimpleName());
+        }
     }
 
     private void failIfRequired(List<ResolvedBinding> bindings, RagRetrievalMode unaffectedMode,
@@ -484,6 +522,40 @@ public class RagRetrievalService {
         private long fusionMs;
         private long rerankMs;
         private final List<String> degradationReasons = new ArrayList<>();
+    }
+
+    private final class AuditState {
+        private List<String> profileIds = List.of();
+        private long profileRevision;
+        private boolean denseEnabled;
+        private boolean sparseEnabled;
+        private boolean rerankEnabled;
+
+        private void capture(List<ResolvedBinding> bindings) {
+            profileIds = bindings.stream().map(value -> value.profile().profileId()).distinct().sorted().toList();
+            profileRevision = bindings.stream().mapToLong(value -> value.profile().revision()).max().orElse(0L);
+            denseEnabled = bindings.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.SPARSE);
+            sparseEnabled = bindings.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.DENSE);
+            rerankEnabled = bindings.stream().anyMatch(value -> value.profile().rerankEnabled());
+        }
+
+        private String profileId() {
+            if (profileIds.isEmpty()) return "none";
+            if (profileIds.size() == 1) return profileIds.get(0);
+            return "multi_" + sha256(String.join("|", profileIds)).substring(0, 24);
+        }
+
+        private Map<String, Object> snapshot(RagRetrievalRequest request) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("targetType", request.targetType().name().toLowerCase());
+            values.put("targetId", request.targetId());
+            values.put("profileIds", profileIds);
+            values.put("maxContextTokens", request.maxContextTokens());
+            values.put("denseEnabled", denseEnabled);
+            values.put("sparseEnabled", sparseEnabled);
+            values.put("rerankEnabled", rerankEnabled);
+            return Map.copyOf(values);
+        }
     }
 
     private static final class MutableScore {

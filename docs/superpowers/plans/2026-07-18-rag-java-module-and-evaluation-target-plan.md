@@ -419,3 +419,23 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `query_rewrite_enabled=true` 当前只记录 `query_rewrite_unavailable:<profile>` 降级，尚未接入可信生成模型，因此没有把查询规范化冒充语义改写。
 - Hybrid 两路 Qdrant 查询当前顺序执行，以避免为资源紧张服务器直接引入额外并发；真实压测后再决定是否以受控并发换取尾延迟。
 - `rag_retrieval_record`/`rag_retrieval_citation` 真实落库、管理员调试 API、绑定/profile 管理 API 和真实 Embedding+Qdrant+Reranker smoke 尚未完成；本节是检索与 Agent 注入的阶段性闭环，不是阶段 3A 全部完成。
+
+### 阶段 3A 第二切片执行计划：检索留痕、策略绑定与调试入口
+
+1. 对齐既有 Controller/DTO/管理员鉴权和 `rag_retrieval_record`/`rag_retrieval_citation` 表结构；补充领域留痕模型、PO/DAO/XML 和单事务写入端口。默认只存 query SHA-256、参数快照、候选数、阶段耗时、错误码和引用元数据，查询正文/引用正文默认关闭并可配置保留策略。
+2. 调整检索服务为每次调用在 success/empty/failed 都生成唯一 retrievalId 并尽力写入脱敏留痕；required/scope 等原始业务异常必须保持原错误返回，审计写入失败不得覆盖检索结果，但需产生可定位日志。引用与主记录必须同事务成功或回滚。
+3. 增加租户 owner/admin 的 retrieval profile 创建/更新/列表、Agent/Workflow 绑定创建/删除/列表用例和 API；所有 tenant/user/role 来自 `TenantContextHolder`，ID 由服务端生成，revision CAS 防止覆盖并发修改，删除采用软删除。
+4. 增加管理员检索调试 API：请求只能选择当前租户可管理的 Agent/Workflow 目标和问题，不能直接传知识库 scope、generation 或 tenant；响应返回引用、阶段指标、降级原因和 retrievalId，不返回 query 原文留痕、对象 Key、向量或中间件错误体。
+5. 用单元测试覆盖 profile 参数/并发 CAS/跨租户、绑定唯一性/删除、三种检索状态留痕、审计失败不覆盖主结果、调试鉴权/响应脱敏；用临时 MySQL 验证记录+引用事务和关键查询索引。把命令、接口、留存开关、测试数和未完成项追加后中文提交。
+
+### 2026-07-19 阶段 3A 第二切片阶段性结果（一）：脱敏检索审计
+
+- 新增 `RagRetrievalAuditPort`、审计命令、两类 PO/DAO/MyBatis 和 `RagRetrievalAuditRepository`。主记录和引用由一个 `@Transactional(rollbackFor=Exception.class)` 方法写入；主记录未写成时不会尝试引用，引用批量写失败会抛错触发整笔回滚。
+- 检索服务现在对 success、empty、failed 都生成同一个 retrievalId 并尽力留痕；审计异常只记录 tenant/target/retrieval/trace/errorType，不覆盖原检索结果或 required/scope 业务异常。多 profile 不伪装成任一单 profile：单 profile 原 ID，多 profile 使用 `multi_<profile集合SHA-256前24位>`，实际 profileIds、模式和预算保留在 request_snapshot。
+- 默认 `AI_RAG_AUDIT_STORE_QUERY_TEXT=false`、`AI_RAG_AUDIT_STORE_CITATION_CONTENT=false`。默认数据库只保存规范化查询 SHA-256、参数快照、候选数、阶段耗时、稳定错误码/异常类型和引用定位元数据；只有两个开关分别显式开启才保存相应正文。
+- Java 17 组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=RagRetrievalServiceTest,RagRetrievalAuditRepositoryTest,RagContextContributorTest,RagPropertiesTest,MyBatisMapperLoadTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 25/25 通过，0 failure/error/skipped，六模块 BUILD SUCCESS，总耗时 3.949 秒。审计仓储 4 项覆盖默认正文关闭、显式正文开启、失败稳定摘要和主记录失败不写引用；检索服务增至 10 项，覆盖 empty/failed 审计与审计失败不覆盖主结果。两个新增 XML 均通过 `xmllint --noout`。
+- 临时 MySQL 真事务验证未完成：公网连接返回 `Access denied for user 'root'@当前出口`，本机没有注入 MYSQL/SPRING_DATASOURCE 应用凭证，Docker daemon 也不可用；临时库未创建、正式库未写入。本结果不能被表述为 MySQL 事务集成通过，获得可用受限账号或 SSH 可执行通道后必须补测提交/引用冲突回滚。
+
+#### 本切片剩余项
+
+- Profile/绑定管理 API、管理员检索调试 API 尚未实现；真实 MySQL 事务验证亦未通过，本次只封板脱敏审计的代码和本地契约测试。

@@ -32,6 +32,8 @@ public class RagPropertiesTest {
         Assert.assertEquals("rag.ingest.request.v1", properties.getKafka().getTopic());
         Assert.assertFalse(properties.getWorker().isEnabled());
         Assert.assertEquals(10, properties.getWorker().getScanBatchSize());
+        Assert.assertFalse(properties.getAudit().isStoreQueryText());
+        Assert.assertFalse(properties.getAudit().isStoreCitationContent());
         Assert.assertTrue(properties.getWorker().getLeaseDurationMs()
                 > properties.getDocling().getTimeout().toMillis());
         Assert.assertTrue(validator.validate(properties).isEmpty());

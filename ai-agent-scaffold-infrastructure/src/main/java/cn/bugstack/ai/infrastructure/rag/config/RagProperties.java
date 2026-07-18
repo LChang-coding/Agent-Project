@@ -63,6 +63,11 @@ public class RagProperties {
     @NotNull
     private Worker worker = new Worker();
 
+    /** 检索审计正文留存策略；默认只留摘要和指标。 */
+    @Valid
+    @NotNull
+    private Audit audit = new Audit();
+
     /**
      * 校验启用时的认证边界；无参数；返回是否可以安全连接全部 RAG 服务。
      */
@@ -88,6 +93,7 @@ public class RagProperties {
                 ", kafka=" + kafka +
                 ", outbox=" + outbox +
                 ", worker=" + worker +
+                ", audit=" + audit +
                 '}';
     }
 
@@ -377,6 +383,21 @@ public class RagProperties {
             return "Worker{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
                     + ", scanBatchSize=" + scanBatchSize + ", concurrency=1, leaseDurationMs="
                     + leaseDurationMs + ", heartbeatIntervalMs=" + heartbeatIntervalMs + '}';
+        }
+    }
+
+    /** RAG 检索审计留存配置。 */
+    @Getter
+    @Setter
+    public static class Audit {
+        /** 默认关闭查询正文和引用正文持久化，降低敏感数据扩散。 */
+        private boolean storeQueryText;
+        private boolean storeCitationContent;
+
+        @Override
+        public String toString() {
+            return "Audit{storeQueryText=" + storeQueryText
+                    + ", storeCitationContent=" + storeCitationContent + '}';
         }
     }
 
