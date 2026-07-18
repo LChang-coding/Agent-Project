@@ -38,6 +38,196 @@ services:
         max-size: "20m"
         max-file: "3"
 
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+    container_name: rag-embedding
+    restart: unless-stopped
+    user: "65532:65532"
+    environment:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+    command:
+      - --model-id
+      - intfloat/multilingual-e5-base
+      - --revision
+      - d128750597153bb5987e10b1c3493a34e5a4502a
+      - --port
+      - "80"
+      - --huggingface-hub-cache
+      - /data
+      - --tokenization-workers
+      - "2"
+      - --max-concurrent-requests
+      - "8"
+      - --max-batch-tokens
+      - "8192"
+      - --max-client-batch-size
+      - "16"
+    expose:
+      - "80"
+    volumes:
+      - /opt/ai-agent-rag/models/embedding:/data
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 3g
+    cpus: 4.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30m
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+    container_name: rag-reranker
+    restart: unless-stopped
+    user: "65532:65532"
+    environment:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+    command:
+      - --model-id
+      - BAAI/bge-reranker-base
+      - --revision
+      - 2cfc18c9415c912f9d8155881c133215df768a70
+      - --port
+      - "80"
+      - --huggingface-hub-cache
+      - /data
+      - --tokenization-workers
+      - "2"
+      - --max-concurrent-requests
+      - "8"
+      - --max-batch-tokens
+      - "8192"
+      - --max-client-batch-size
+      - "16"
+    expose:
+      - "80"
+    volumes:
+      - /opt/ai-agent-rag/models/reranker:/data
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 3g
+    cpus: 4.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30m
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu:v1.26.0
+    container_name: rag-docling
+    restart: unless-stopped
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "false"
+      DOCLING_SERVE_ENG_KIND: local
+      DOCLING_SERVE_ENG_LOC_NUM_WORKERS: "1"
+      DOCLING_SERVE_ENG_LOC_SHARE_MODELS: "true"
+      DOCLING_SERVE_MAX_FILE_SIZE: "52428800"
+      DOCLING_SERVE_MAX_NUM_PAGES: "500"
+      DOCLING_DEVICE: cpu
+      DOCLING_NUM_THREADS: "4"
+      OMP_NUM_THREADS: "4"
+      UVICORN_WORKERS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+    expose:
+      - "5001"
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    shm_size: 512m
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    mem_limit: 4g
+    cpus: 4.0
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/readyz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  rag-gateway:
+    image: nginx:1.28.0-alpine
+    container_name: rag-model-gateway
+    restart: unless-stopped
+    user: "101:101"
+    command: ["nginx", "-g", "daemon off;"]
+    ports:
+      - "0.0.0.0:8081:8081"
+      - "0.0.0.0:8082:8082"
+      - "0.0.0.0:5001:5001"
+    volumes:
+      - ./model-gateway-http-settings.conf:/etc/nginx/conf.d/00-http-settings.conf:ro
+      - /opt/ai-agent-rag/secrets/model-gateway-api-keys.conf:/etc/nginx/conf.d/10-api-keys.conf:ro
+      - ./model-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,uid=101,gid=101
+      - /var/run:size=16m,uid=101,gid=101
+      - /var/cache/nginx:size=32m,uid=101,gid=101
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    depends_on:
+      embedding:
+        condition: service_started
+      reranker:
+        condition: service_started
+      docling:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8081/gateway-health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   prometheus:
     image: prom/prometheus:v3.12.0-distroless
     container_name: rag-prometheus

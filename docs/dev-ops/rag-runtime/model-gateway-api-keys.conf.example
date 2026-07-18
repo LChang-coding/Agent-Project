@@ -1,0 +1,15 @@
+# 仅作为 Nginx map 结构示例，真实文件只保存在服务器 secrets 目录。
+map $http_authorization $embedding_api_authorized {
+    default 0;
+    "Bearer replace-with-embedding-api-key" 1;
+}
+
+map $http_authorization $reranker_api_authorized {
+    default 0;
+    "Bearer replace-with-reranker-api-key" 1;
+}
+
+map $http_x_api_key $docling_api_authorized {
+    default 0;
+    "replace-with-docling-api-key" 1;
+}
