@@ -284,6 +284,19 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    public List<RagChunkEntity> listChunksByIds(String tenantId, List<String> chunkIds) {
+        requireText(tenantId, "tenantId");
+        if (chunkIds == null || chunkIds.isEmpty()) return List.of();
+        List<String> normalized = chunkIds.stream().map(value -> requireText(value, "chunkId"))
+                .distinct().toList();
+        if (normalized.size() > 500) {
+            throw new IllegalArgumentException("RAG分块批量查询不能超过500条");
+        }
+        return chunkDao.queryListByTenantAndChunkIds(tenantId, normalized).stream()
+                .map(mapper::toChunk).toList();
+    }
+
+    @Override
     public int upsertChunks(String tenantId, String versionId, List<RagChunkEntity> chunks) {
         requireText(tenantId, "tenantId");
         requireText(versionId, "versionId");

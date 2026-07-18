@@ -164,7 +164,9 @@ public class ConversationMemoryService {
                 .visibleThroughSequence(request.getVisibleThroughSequence())
                 .attachmentVisibleThroughSequence(request.getAttachmentVisibleThroughSequence())
                 .coveredToSequence(coveredToSequence).upstreamOutput(request.getUpstreamOutput())
-                .traceId(request.getTraceId()).build();
+                .traceId(request.getTraceId()).ragTargetType(request.getRagTargetType())
+                .ragTargetId(request.getRagTargetId()).ragQuery(request.getRagQuery())
+                .runId(request.getRunId()).build();
         for (ContextContributor contributor : contributors) {
             List<ContextContribution> contributions = contributor.contribute(contributorRequest, properties);
             if (contributions == null) {

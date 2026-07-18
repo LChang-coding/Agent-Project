@@ -105,6 +105,16 @@
         ORDER BY chunk_index ASC, id ASC
     </select>
 
+    <select id="queryListByTenantAndChunkIds" resultMap="RagChunkMap">
+        SELECT <include refid="Columns"/> FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND deleted = 0 AND status = 'active'
+          AND chunk_id IN
+          <foreach collection="chunkIds" item="chunkId" open="(" separator="," close=")">
+              #{chunkId}
+          </foreach>
+        ORDER BY chunk_index ASC, id ASC
+    </select>
+
     <select id="queryByTenantAndChunkId" resultMap="RagChunkMap">
         SELECT <include refid="Columns"/> FROM rag_chunk
         WHERE tenant_id = #{tenantId} AND chunk_id = #{chunkId} AND deleted = 0 LIMIT 1

@@ -15,6 +15,9 @@ public final class ToolRuntimeContextKeys {
     public static final String CONTEXT_VISIBLE_THROUGH_SEQUENCE = "contextVisibleThroughSequence";
     public static final String CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE = "contextAttachmentVisibleThroughSequence";
     public static final String CONTEXT_UPSTREAM_OUTPUT = "contextUpstreamOutput";
+    public static final String RAG_TARGET_TYPE = "ragTargetType";
+    public static final String RAG_TARGET_ID = "ragTargetId";
+    public static final String RAG_QUERY = "ragQuery";
 
     /**
      * 禁止创建常量类；无参数；无返回值。

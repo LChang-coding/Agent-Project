@@ -21,6 +21,10 @@ public interface IRagChunkDao {
     List<RagChunkPO> queryListByTenantAndVersionId(@Param("tenantId") String tenantId,
                                                    @Param("versionId") String versionId);
 
+    /** 按租户批量查询有效分块。 */
+    List<RagChunkPO> queryListByTenantAndChunkIds(@Param("tenantId") String tenantId,
+                                                  @Param("chunkIds") List<String> chunkIds);
+
     /** 软删除租户文档版本的分块。 */
     int softDeleteByTenantAndVersionId(@Param("tenantId") String tenantId,
                                        @Param("versionId") String versionId);

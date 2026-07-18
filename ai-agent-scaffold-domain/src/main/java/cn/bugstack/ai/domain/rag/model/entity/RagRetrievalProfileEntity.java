@@ -45,6 +45,12 @@ public record RagRetrievalProfileEntity(String tenantId,
                 || (mode == RagRetrievalMode.HYBRID && (denseTopK == 0 || sparseTopK == 0))) {
             throw new IllegalArgumentException("检索模式缺少必要候选数");
         }
+        if (mode == RagRetrievalMode.HYBRID && fusionStrategy == RagFusionStrategy.NONE) {
+            throw new IllegalArgumentException("混合检索必须配置融合策略");
+        }
+        if (scoreThreshold != null && (scoreThreshold.signum() < 0 || scoreThreshold.doubleValue() > 1D)) {
+            throw new IllegalArgumentException("检索分数阈值必须位于0到1之间");
+        }
     }
 
     private static void requireText(String value, String name) {

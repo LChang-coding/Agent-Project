@@ -113,6 +113,9 @@ public interface IRagRepository {
     /** 查询租户文档版本的分块。 */
     List<RagChunkEntity> listChunks(String tenantId, String versionId);
 
+    /** 按租户批量读取主命中、父块和相邻块；实现必须限制批次并保持输入范围。 */
+    List<RagChunkEntity> listChunksByIds(String tenantId, List<String> chunkIds);
+
     /** 幂等批量保存租户分块。 */
     int upsertChunks(String tenantId, String versionId, List<RagChunkEntity> chunks);
 

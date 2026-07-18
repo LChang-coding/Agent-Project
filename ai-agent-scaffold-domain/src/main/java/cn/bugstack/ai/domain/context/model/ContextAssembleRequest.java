@@ -1,5 +1,6 @@
 package cn.bugstack.ai.domain.context.model;
 
+import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import lombok.Builder;
 import lombok.Data;
 
@@ -20,4 +21,10 @@ public class ContextAssembleRequest {
     private Integer coveredToSequence;
     private String upstreamOutput;
     private String traceId;
+    /** 当前模型调用对应的可信 RAG 绑定目标。 */
+    private RagBindingTargetType ragTargetType;
+    private String ragTargetId;
+    /** 本轮真实用户问题；RAG 不使用历史摘要或浏览器自报字段代替。 */
+    private String ragQuery;
+    private String runId;
 }

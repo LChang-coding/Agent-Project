@@ -3,7 +3,9 @@ package cn.bugstack.ai.domain.agent.service.armory.matter.plugin;
 import cn.bugstack.ai.domain.context.model.ContextAssembleRequest;
 import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
+import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolRuntimeContextKeys;
+import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.TraceContext;
 import com.google.adk.agents.CallbackContext;
 import com.google.adk.models.LlmRequest;
@@ -50,15 +52,39 @@ public class ContextInjectionPlugin extends BasePlugin {
                             state.get(ToolRuntimeContextKeys.CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE)))
                     .upstreamOutput(stringValue(state.get(ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT)))
                     .traceId(stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID)))
+                    .ragTargetType(enumValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
+                    .ragTargetId(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_ID)))
+                    .ragQuery(stringValue(state.get(ToolRuntimeContextKeys.RAG_QUERY)))
+                    .runId(stringValue(state.get(ToolRuntimeContextKeys.RUN_ID)))
                     .build());
             if (result.getInstruction() != null && !result.getInstruction().isBlank()) {
                 llmRequest.appendInstructions(List.of(result.getInstruction()));
             }
             return Maybe.empty();
         } catch (Exception e) {
+            if (mustFailClosed(e)) {
+                throw (RuntimeException) e;
+            }
             log.warn("上下文注入失败 traceId:{} invocationId:{} sessionId:{}",
                     extractTraceId(callbackContext), callbackContext.invocationId(), callbackContext.sessionId(), e);
             return Maybe.empty();
+        }
+    }
+
+    private boolean mustFailClosed(Exception exception) {
+        if (!(exception instanceof AppException appException) || appException.getCode() == null) {
+            return false;
+        }
+        return appException.getCode().startsWith("RAG_REQUIRED_")
+                || appException.getCode().contains("SCOPE_VIOLATION");
+    }
+
+    private RagBindingTargetType enumValue(Object value) {
+        if (value == null) return null;
+        try {
+            return RagBindingTargetType.valueOf(String.valueOf(value).trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return null;
         }
     }
 

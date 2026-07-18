@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
+import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
 import cn.bugstack.ai.domain.run.model.RunMessageBindingEntity;
@@ -371,7 +372,8 @@ public class ChatService implements IChatService {
         Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
-                        activeRun.getRunId(), activeRun.getCurrentContextRevision()));
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision(), RagBindingTargetType.AGENT,
+                        describeContent(chatCommandEntity)));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -414,7 +416,7 @@ public class ChatService implements IChatService {
         Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
-                        activeRun.getRunId(), activeRun.getCurrentContextRevision()));
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision(), RagBindingTargetType.AGENT, message));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -462,7 +464,8 @@ public class ChatService implements IChatService {
         return runner.runAsync(userId, adkSessionId, userMsg, runConfig,
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
-                                activeRun.getRunId(), activeRun.getCurrentContextRevision()))
+                                activeRun.getRunId(), activeRun.getCurrentContextRevision(),
+                                RagBindingTargetType.AGENT, message))
                 .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
                         .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
                 .doOnNext(event -> {
@@ -618,7 +621,8 @@ public class ChatService implements IChatService {
         StringBuilder output = new StringBuilder();
         runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
                         runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
-                                historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision()))
+                                historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision(),
+                                RagBindingTargetType.WORKFLOW, prompt))
                 .blockingForEach(event -> {
                     runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
                     appendContent(output, event.stringifyContent());
@@ -788,7 +792,7 @@ public class ChatService implements IChatService {
     private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput) {
         return runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
-                visibleThroughSequence, upstreamOutput, null, null);
+                visibleThroughSequence, upstreamOutput, null, null, null, null);
     }
 
     /**
@@ -796,7 +800,8 @@ public class ChatService implements IChatService {
      */
     private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput,
-                                                  String runId, Long contextRevision) {
+                                                  String runId, Long contextRevision,
+                                                  RagBindingTargetType ragTargetType, String ragQuery) {
         Map<String, Object> state = new HashMap<>();
         putStateIfPresent(state, TraceContext.TRACE_ID_STATE_KEY, traceId);
         putStateIfPresent(state, ToolRuntimeContextKeys.TRACE_ID, traceId);
@@ -810,6 +815,11 @@ public class ChatService implements IChatService {
         }
         putStateIfPresent(state, "roleCode", roleCode);
         putStateIfPresent(state, ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT, upstreamOutput);
+        if (ragTargetType != null) {
+            state.put(ToolRuntimeContextKeys.RAG_TARGET_TYPE, ragTargetType.name());
+            putStateIfPresent(state, ToolRuntimeContextKeys.RAG_TARGET_ID, workflowId);
+            putStateIfPresent(state, ToolRuntimeContextKeys.RAG_QUERY, ragQuery);
+        }
         if (visibleThroughSequence != null) {
             state.put(ToolRuntimeContextKeys.CONTEXT_VISIBLE_THROUGH_SEQUENCE, visibleThroughSequence);
             // 历史消息截止到本轮输入之前；附件必须包含刚绑定到本轮用户消息的资产。
