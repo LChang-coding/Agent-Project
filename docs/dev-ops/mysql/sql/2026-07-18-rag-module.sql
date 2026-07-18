@@ -9,8 +9,8 @@
 -- 4. 新列采用 expand-contract：业务上线前允许对象位置等列为空，待应用双写、回填并核验后，
 --    再使用新的前向迁移收紧约束，禁止直接修改本文件。
 -- 5. 所有 DATETIME(3) 均由应用按 UTC 写入。
+-- 6. 本文件不内置 USE；执行方必须显式选定目标数据库，避免测试或发布误写其他库。
 
-USE `ai_agent_scaffold`;
 SET NAMES utf8mb4;
 
 -- -----------------------------------------------------------------------------
@@ -31,6 +31,12 @@ FROM (
     SELECT tenant_id, kb_id FROM rag_knowledge_base
     GROUP BY tenant_id, kb_id HAVING COUNT(*) > 1
 ) duplicate_kb
+UNION ALL
+SELECT 'rag_knowledge_base.tenant_name_duplicate', COUNT(*)
+FROM (
+    SELECT tenant_id, kb_name FROM rag_knowledge_base
+    GROUP BY tenant_id, kb_name HAVING COUNT(*) > 1
+) duplicate_kb_name
 UNION ALL
 SELECT 'rag_document.tenant_document_duplicate', COUNT(*)
 FROM (
@@ -97,6 +103,14 @@ BEGIN
     ) duplicate_kb;
     IF issue_count > 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RAG迁移终止：知识库租户联合键重复';
+    END IF;
+
+    SELECT COUNT(*) INTO issue_count FROM (
+        SELECT tenant_id, kb_name FROM rag_knowledge_base
+        GROUP BY tenant_id, kb_name HAVING COUNT(*) > 1
+    ) duplicate_kb_name;
+    IF issue_count > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'RAG迁移终止：同租户知识库名称重复';
     END IF;
 
     SELECT COUNT(*) INTO issue_count FROM (
@@ -334,6 +348,8 @@ CALL `sp_rag_make_not_null_20260718`('rag_chunk', 'tenant_id',
 -- 先建立联合唯一键，再移除历史全局唯一键；任何一步失败都可安全重跑。
 CALL `sp_rag_add_index_20260718`('rag_knowledge_base', 'uk_rag_kb_tenant_id',
     'UNIQUE KEY `uk_rag_kb_tenant_id` (`tenant_id`, `kb_id`)');
+CALL `sp_rag_add_index_20260718`('rag_knowledge_base', 'uk_rag_kb_tenant_name',
+    'UNIQUE KEY `uk_rag_kb_tenant_name` (`tenant_id`, `kb_name`)');
 CALL `sp_rag_add_index_20260718`('rag_document', 'uk_rag_document_tenant_id',
     'UNIQUE KEY `uk_rag_document_tenant_id` (`tenant_id`, `document_id`)');
 CALL `sp_rag_add_index_20260718`('rag_chunk', 'uk_rag_chunk_tenant_id',
@@ -454,10 +470,13 @@ CREATE TABLE IF NOT EXISTS `rag_outbox` (
   `payload` JSON NOT NULL COMMENT '不含密钥和文档正文的事件载荷',
   `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/publishing/published/retrying/dead',
   `attempt_count` INT NOT NULL DEFAULT 0 COMMENT '发布尝试次数',
+  `max_attempts` INT NOT NULL DEFAULT 10 COMMENT '最大发布尝试次数',
   `next_retry_at` DATETIME(3) NULL COMMENT '下一次重试时间UTC',
   `lease_owner` VARCHAR(160) NULL COMMENT '发布租约持有者',
   `lease_until` DATETIME(3) NULL COMMENT '发布租约截止时间UTC',
+  `heartbeat_at` DATETIME(3) NULL COMMENT '最近一次发布租约心跳时间UTC',
   `fencing_token` BIGINT NOT NULL DEFAULT 0 COMMENT '发布栅栏令牌',
+  `row_version` BIGINT NOT NULL DEFAULT 0 COMMENT '行乐观锁版本',
   `error_message` VARCHAR(1000) NULL COMMENT '脱敏错误摘要',
   `published_at` DATETIME(3) NULL COMMENT '确认发布时间UTC',
   `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间UTC',
@@ -640,7 +659,7 @@ WHERE TABLE_SCHEMA = DATABASE()
   AND IS_NULLABLE = 'YES';
 
 -- 预期 0；验证关键新增列均存在。
-SELECT 25 - COUNT(*) AS missing_critical_column_count
+SELECT 28 - COUNT(*) AS missing_critical_column_count
 FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = DATABASE()
   AND (TABLE_NAME, COLUMN_NAME) IN (
@@ -668,6 +687,9 @@ WHERE TABLE_SCHEMA = DATABASE()
       ('rag_ingest_task', 'fencing_token'),
       ('rag_ingest_task', 'checkpoint'),
       ('rag_ingest_task', 'cancel_reason'),
+      ('rag_outbox', 'max_attempts'),
+      ('rag_outbox', 'heartbeat_at'),
+      ('rag_outbox', 'row_version'),
       ('rag_outbox', 'published_at')
   );
 

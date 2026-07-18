@@ -30,6 +30,11 @@ workflow:
 
 # 数据库配置；启动时配置数据库资源信息
 spring:
+  servlet:
+    multipart:
+      file-size-threshold: 0
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:50MB}
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:52MB}
   config:
     import:
             - optional:nacos:ai-agent-scaffold-app-dev.yml?group=DEFAULT_GROUP&refreshEnabled=true
@@ -145,3 +150,4 @@ ai:
       secret-key: ${MINIO_SECRET_KEY:}
       skill-bucket: ${MINIO_SKILL_BUCKET:ai-agent-skills}
       asset-bucket: ${MINIO_ASSET_BUCKET:ai-agent-assets}
+      rag-bucket: ${MINIO_RAG_BUCKET:ai-agent-rag}

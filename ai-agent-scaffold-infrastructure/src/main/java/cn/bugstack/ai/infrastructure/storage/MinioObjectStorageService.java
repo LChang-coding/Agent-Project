@@ -1,6 +1,7 @@
 package cn.bugstack.ai.infrastructure.storage;
 
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
 import cn.bugstack.ai.types.exception.AppException;
@@ -17,8 +18,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Set;
@@ -87,6 +92,35 @@ public class MinioObjectStorageService implements ObjectStorageService {
     }
 
     /**
+     * 从暂存文件流式写入对象；参数是文件写入命令；返回对象摘要和位置。
+     */
+    @Override
+    public ObjectStorageResultEntity putFile(ObjectStorageFileCommandEntity command) {
+        long start = System.currentTimeMillis();
+        checkFileCommand(command);
+        MessageDigest digest = sha256Digest();
+        try {
+            if (useMinio()) {
+                putMinioFile(command, digest);
+            } else {
+                putLocalFile(command, digest);
+            }
+            long costMs = System.currentTimeMillis() - start;
+            AiLog.info(AiLog.oss().upload(command.getBucket(), command.getObjectKey(), command.getSizeBytes(), costMs, true));
+            return ObjectStorageResultEntity.builder()
+                    .bucket(command.getBucket())
+                    .objectKey(command.getObjectKey())
+                    .sha256(HexFormat.of().formatHex(digest.digest()))
+                    .sizeBytes(command.getSizeBytes())
+                    .build();
+        } catch (Exception e) {
+            long costMs = System.currentTimeMillis() - start;
+            AiLog.error(AiLog.oss().error("upload-file", command.getBucket(), command.getObjectKey(), costMs, e));
+            throw new AppException("OBJECT_STORAGE_UPLOAD_FAILED", "对象上传失败：" + e.getMessage());
+        }
+    }
+
+    /**
      * 读取对象；参数是存储桶和对象 Key；返回文件字节内容。
      */
     @Override
@@ -149,6 +183,11 @@ public class MinioObjectStorageService implements ObjectStorageService {
         return properties.getMinio().getAssetBucket();
     }
 
+    @Override
+    public String ragBucket() {
+        return properties.getMinio().getRagBucket();
+    }
+
     /**
      * 判断是否使用 MinIO；无参数；返回是否使用远端对象存储。
      */
@@ -172,6 +211,20 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    private void putMinioFile(ObjectStorageFileCommandEntity command, MessageDigest digest) throws Exception {
+        MinioClient client = minioClient();
+        ensureBucket(client, command.getBucket());
+        try (InputStream source = Files.newInputStream(command.getSourcePath());
+             DigestInputStream inputStream = new DigestInputStream(source, digest)) {
+            client.putObject(PutObjectArgs.builder()
+                    .bucket(command.getBucket())
+                    .object(command.getObjectKey())
+                    .stream(inputStream, command.getSizeBytes(), -1)
+                    .contentType(command.getContentType())
+                    .build());
+        }
+    }
+
     /**
      * 从 MinIO 下载；参数是存储桶和对象 Key；返回字节内容。
      */
@@ -190,6 +243,32 @@ public class MinioObjectStorageService implements ObjectStorageService {
         Path target = localPath(command.getBucket(), command.getObjectKey());
         Files.createDirectories(target.getParent());
         Files.write(target, command.getBytes());
+    }
+
+    private void putLocalFile(ObjectStorageFileCommandEntity command, MessageDigest digest) throws Exception {
+        Path target = localPath(command.getBucket(), command.getObjectKey());
+        Files.createDirectories(target.getParent());
+        Path temporary = Files.createTempFile(target.getParent(), ".upload-", ".tmp");
+        boolean moved = false;
+        try (InputStream source = Files.newInputStream(command.getSourcePath());
+             DigestInputStream inputStream = new DigestInputStream(source, digest);
+             OutputStream outputStream = Files.newOutputStream(temporary, StandardOpenOption.TRUNCATE_EXISTING)) {
+            inputStream.transferTo(outputStream);
+            outputStream.flush();
+            if (Files.size(temporary) != command.getSizeBytes()) {
+                throw new AppException("OBJECT_STORAGE_SIZE_MISMATCH", "暂存文件长度在上传期间发生变化");
+            }
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            moved = true;
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temporary);
+            }
+        }
     }
 
     /**
@@ -270,6 +349,31 @@ public class MinioObjectStorageService implements ObjectStorageService {
             throw new AppException("OBJECT_STORAGE_PARAM_INVALID", "对象存储参数不完整");
         }
         checkLocation(command.getBucket(), command.getObjectKey());
+    }
+
+    private void checkFileCommand(ObjectStorageFileCommandEntity command) {
+        if (command == null || command.getBucket() == null || command.getBucket().isBlank()
+                || command.getObjectKey() == null || command.getObjectKey().isBlank()
+                || command.getSourcePath() == null || command.getSizeBytes() < 0) {
+            throw new AppException("OBJECT_STORAGE_PARAM_INVALID", "对象存储文件参数不完整");
+        }
+        checkLocation(command.getBucket(), command.getObjectKey());
+        Path source = command.getSourcePath().toAbsolutePath().normalize();
+        try {
+            if (!Files.isRegularFile(source) || Files.size(source) != command.getSizeBytes()) {
+                throw new AppException("OBJECT_STORAGE_SOURCE_INVALID", "暂存文件不存在或长度不一致");
+            }
+        } catch (java.io.IOException e) {
+            throw new AppException("OBJECT_STORAGE_SOURCE_INVALID", "无法读取暂存文件", e);
+        }
+    }
+
+    private MessageDigest sha256Digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("JVM 不支持 SHA-256", e);
+        }
     }
 
     private void checkLocation(String bucket, String objectKey) {

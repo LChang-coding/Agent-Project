@@ -57,5 +57,10 @@ public class ObjectStorageProperties {
          * 通用资产存储桶
          */
         private String assetBucket = "ai-agent-assets";
+
+        /**
+         * RAG 原始文档存储桶
+         */
+        private String ragBucket = "ai-agent-rag";
     }
 }

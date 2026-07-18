@@ -2,18 +2,25 @@ package cn.bugstack.ai.domain.rag.service;
 
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.types.exception.AppException;
+import org.springframework.stereotype.Service;
 
 /**
  * 知识库管理员权限服务。
  * <p>身份必须来自可信上下文；浏览器字段不能决定租户或角色。</p>
  */
+@Service
 public final class RagKnowledgeBaseAuthorizationService {
 
-    /** 校验当前身份是租户 owner 或 admin。 */
-    public void requireTenantAdministrator(String tenantId, String userId, String roleCode) {
+    /** 校验当前身份是可信租户成员。 */
+    public void requireTenantMember(String tenantId, String userId) {
         if (isBlank(tenantId) || isBlank(userId)) {
             throw new AppException("RAG_AUTH_CONTEXT_MISSING", "缺少可信租户或用户身份");
         }
+    }
+
+    /** 校验当前身份是租户 owner 或 admin。 */
+    public void requireTenantAdministrator(String tenantId, String userId, String roleCode) {
+        requireTenantMember(tenantId, userId);
         if (!"owner".equalsIgnoreCase(roleCode) && !"admin".equalsIgnoreCase(roleCode)) {
             throw new AppException("RAG_ADMIN_REQUIRED", "仅租户管理员可以维护知识库");
         }

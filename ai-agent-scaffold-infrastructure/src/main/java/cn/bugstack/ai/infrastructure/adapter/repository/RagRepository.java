@@ -19,7 +19,9 @@ import cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagChunkPO;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceCodec;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
+import cn.bugstack.ai.types.exception.AppException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,7 +64,12 @@ public class RagRepository implements IRagRepository {
     @Override
     public int insertKnowledgeBase(String tenantId, RagKnowledgeBaseEntity knowledgeBase) {
         requireTenant(tenantId, knowledgeBase == null ? null : knowledgeBase.tenantId());
-        return knowledgeBaseDao.insert(mapper.toKnowledgeBasePo(knowledgeBase));
+        try {
+            return knowledgeBaseDao.insert(mapper.toKnowledgeBasePo(knowledgeBase));
+        } catch (DuplicateKeyException e) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_CONFLICT",
+                    "当前租户已存在同名知识库，请更换名称后重试", e);
+        }
     }
 
     @Override

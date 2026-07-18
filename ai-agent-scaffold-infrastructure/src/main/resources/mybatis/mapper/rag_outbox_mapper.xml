@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagOutboxDao">
+
+    <resultMap id="RagOutboxMap" type="cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO">
+        <id column="id" property="id"/>
+        <result column="event_id" property="eventId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="task_id" property="taskId"/>
+        <result column="aggregate_type" property="aggregateType"/>
+        <result column="aggregate_id" property="aggregateId"/>
+        <result column="event_type" property="eventType"/>
+        <result column="topic_name" property="topicName"/>
+        <result column="partition_key" property="partitionKey"/>
+        <result column="payload" property="payload"/>
+        <result column="status" property="status"/>
+        <result column="attempt_count" property="attemptCount"/>
+        <result column="max_attempts" property="maxAttempts"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="heartbeat_at" property="heartbeatAt"/>
+        <result column="fencing_token" property="fencingToken"/>
+        <result column="row_version" property="rowVersion"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="published_at" property="publishedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, event_id, tenant_id, task_id, aggregate_type, aggregate_id, event_type, topic_name,
+        partition_key, payload, status, attempt_count, max_attempts, next_retry_at, lease_owner,
+        lease_until, heartbeat_at, fencing_token, row_version, error_message, published_at,
+        create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_outbox (
+            event_id, tenant_id, task_id, aggregate_type, aggregate_id, event_type, topic_name,
+            partition_key, payload, status, attempt_count, max_attempts, next_retry_at, lease_owner,
+            lease_until, heartbeat_at, fencing_token, row_version, error_message, published_at
+        ) VALUES (
+            #{eventId}, #{tenantId}, #{taskId}, COALESCE(#{aggregateType}, 'rag_ingest_task'),
+            #{aggregateId}, #{eventType}, #{topicName}, #{partitionKey}, #{payload},
+            COALESCE(#{status}, 'pending'), COALESCE(#{attemptCount}, 0), COALESCE(#{maxAttempts}, 10),
+            #{nextRetryAt}, #{leaseOwner}, #{leaseUntil}, #{heartbeatAt}, COALESCE(#{fencingToken}, 0),
+            COALESCE(#{rowVersion}, 0), #{errorMessage}, #{publishedAt}
+        )
+    </insert>
+
+    <select id="queryByTenantAndEventId" resultMap="RagOutboxMap">
+        SELECT <include refid="Columns"/> FROM rag_outbox
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="queryListByTenantAndTaskId" resultMap="RagOutboxMap">
+        SELECT <include refid="Columns"/> FROM rag_outbox
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
+        ORDER BY id ASC
+    </select>
+
+    <update id="claimDue">
+        UPDATE rag_outbox
+        SET status = 'publishing', attempt_count = attempt_count + 1, next_retry_at = NULL,
+            lease_owner = #{leaseOwner}, lease_until = #{leaseUntil}, heartbeat_at = #{now},
+            fencing_token = fencing_token + 1, row_version = row_version + 1, error_message = NULL
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId} AND deleted = 0
+          AND attempt_count &lt; max_attempts
+          AND (
+              status = 'pending'
+              OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at &lt;= #{now})
+              OR (status = 'publishing' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+          )
+    </update>
+
+    <update id="renewLease">
+        UPDATE rag_outbox
+        SET lease_until = #{leaseUntil}, heartbeat_at = #{now}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId}
+          AND status = 'publishing' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{fencingToken} AND lease_until &gt; #{now} AND deleted = 0
+    </update>
+
+    <update id="markPublished">
+        UPDATE rag_outbox
+        SET status = 'published', next_retry_at = NULL, lease_owner = NULL, lease_until = NULL,
+            heartbeat_at = NULL, error_message = NULL, published_at = #{publishedAt},
+            row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId}
+          AND status = 'publishing' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{fencingToken} AND lease_until &gt;= #{publishedAt} AND deleted = 0
+    </update>
+
+    <update id="markRetrying">
+        UPDATE rag_outbox
+        SET status = 'retrying', next_retry_at = #{nextRetryAt},
+            lease_owner = NULL, lease_until = NULL, heartbeat_at = NULL,
+            error_message = #{errorMessage}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId}
+          AND status = 'publishing' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{fencingToken} AND lease_until &gt;= #{now} AND deleted = 0
+    </update>
+
+    <update id="markDead">
+        UPDATE rag_outbox
+        SET status = 'dead', next_retry_at = NULL,
+            lease_owner = NULL, lease_until = NULL, heartbeat_at = NULL,
+            error_message = #{errorMessage}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId}
+          AND status = 'publishing' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{fencingToken} AND lease_until &gt;= #{now} AND deleted = 0
+    </update>
+
+    <update id="markExhaustedDead">
+        UPDATE rag_outbox
+        SET status = 'dead', next_retry_at = NULL, lease_owner = NULL, lease_until = NULL,
+            heartbeat_at = NULL, error_message = #{errorMessage}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId} AND deleted = 0
+          AND status IN ('pending', 'retrying') AND attempt_count &gt;= max_attempts
+    </update>
+</mapper>
