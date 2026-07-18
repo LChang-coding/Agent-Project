@@ -61,6 +61,9 @@ class RagBenchmarkRunnerTest {
         assertEquals(8, Files.readAllLines(output.resolve("run.jsonl")).size());
         assertEquals(2, result.statistics().get("dense").requestCount());
         assertTrue(Files.isRegularFile(output.resolve("metrics.json")));
+        JsonNode targets = mapper.readTree(output.resolve("targets.json").toFile());
+        assertEquals("mini-run", targets.path("sourceRunId").asText());
+        assertEquals(4, targets.path("targets").size());
         JsonNode manifest = mapper.readTree(output.resolve("run-manifest.json").toFile());
         assertEquals("completed", manifest.path("status").asText());
         assertEquals("environment:TEST_TOKEN", manifest.path("credentialSource").asText());

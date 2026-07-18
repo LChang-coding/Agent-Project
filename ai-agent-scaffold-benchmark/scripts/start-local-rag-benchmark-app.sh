@@ -33,9 +33,9 @@ if [[ ! -r "$CODEX_FILE" || ! -r "$APP_JAR" ]]; then
   exit 2
 fi
 
-embedding_key="$(read_table_cell '| Embedding API |' 4)"
-reranker_key="$(read_table_cell '| Reranker API |' 4)"
-docling_key="$(read_table_cell '| Docling API |' 4)"
+embedding_key="$(read_table_cell '| Embedding API |' 5)"
+reranker_key="$(read_table_cell '| Reranker API |' 5)"
+docling_key="$(read_table_cell '| Docling API |' 5)"
 require_value AI_RAG_EMBEDDING_API_KEY "$embedding_key"
 require_value AI_RAG_RERANKER_API_KEY "$reranker_key"
 require_value AI_RAG_DOCLING_API_KEY "$docling_key"

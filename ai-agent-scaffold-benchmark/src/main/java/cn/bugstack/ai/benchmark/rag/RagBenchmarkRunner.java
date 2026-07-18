@@ -72,6 +72,10 @@ public final class RagBenchmarkRunner {
             }
             writeAtomic(configuration.runDirectory().resolve("profiles.json"), profiles);
             writeAtomic(configuration.runDirectory().resolve("bindings.json"), bindings);
+            writeAtomic(configuration.runDirectory().resolve("targets.json"), Map.of(
+                    "schemaVersion", 1,
+                    "sourceRunId", configuration.runId(),
+                    "targets", targets));
 
             List<Query> queries = readQueries(prepared.queriesFile());
             List<Query> shuffled = new ArrayList<>(queries);

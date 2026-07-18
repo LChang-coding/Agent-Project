@@ -32,6 +32,7 @@ public final class RagBenchmarkCli {
             case "prepare" -> prepare(options);
             case "score" -> score(options);
             case "run" -> run(options);
+            case "load" -> load(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
     }
@@ -88,6 +89,38 @@ public final class RagBenchmarkCli {
     }
 
     private static void run(Map<String, String> options) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Remote remote = remote(options, objectMapper);
+        RagBenchmarkRunner.Configuration configuration = new RagBenchmarkRunner.Configuration(
+                required(options, "run-id"), remote.baseUrl(), remote.credentialSource(),
+                required(options, "code-revision"),
+                path(options, "prepared"), path(options, "out"), number(options, "seed", 20260719L),
+                nonNegativeInteger(options, "warmup-queries", 10),
+                Duration.ofMillis(integer(options, "poll-ms", 1000)),
+                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 3600)));
+        RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, remote.client()).run(configuration);
+        System.out.printf("completed runId=%s knowledgeBaseId=%s taskId=%s out=%s%n",
+                result.runId(), result.knowledgeBaseId(), result.taskId(), configuration.runDirectory());
+    }
+
+    private static void load(Map<String, String> options) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Remote remote = remote(options, objectMapper);
+        RagLoadBenchmarkRunner.Configuration configuration = new RagLoadBenchmarkRunner.Configuration(
+                required(options, "run-id"), remote.baseUrl(), remote.credentialSource(),
+                required(options, "code-revision"), path(options, "prepared"), path(options, "targets"),
+                path(options, "out"), number(options, "seed", 20260719L),
+                positiveIntegers(options.getOrDefault("concurrency-levels", "1,10"), "concurrency-levels"),
+                nonNegativeInteger(options, "warmup-per-variant", 10),
+                integer(options, "requests-per-variant", 100),
+                Duration.ofSeconds(integer(options, "phase-timeout-seconds", 1800)));
+        RagLoadBenchmarkRunner.Result result = new RagLoadBenchmarkRunner(objectMapper, remote.client())
+                .run(configuration);
+        System.out.printf("completed load runId=%s requests=%d levels=%s out=%s%n", result.runId(),
+                result.records().size(), configuration.concurrencyLevels(), configuration.outputDirectory());
+    }
+
+    private static Remote remote(Map<String, String> options, ObjectMapper objectMapper) {
         String tokenEnvironment = options.getOrDefault("token-env", "RAG_BENCHMARK_ACCESS_TOKEN");
         if (!tokenEnvironment.matches("[A-Z][A-Z0-9_]{2,127}")) {
             throw new IllegalArgumentException("--token-env 必须是合法的环境变量名");
@@ -100,22 +133,12 @@ public final class RagBenchmarkCli {
         if (!List.of("http", "https").contains(baseUrl.getScheme())) {
             throw new IllegalArgumentException("--base-url 只允许 http/https");
         }
-        int requestTimeoutSeconds = integer(options, "request-timeout-seconds", 120);
-        ObjectMapper objectMapper = new ObjectMapper();
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(
                 integer(options, "connect-timeout-seconds", 10))).build();
         RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
-                Duration.ofSeconds(requestTimeoutSeconds), integer(options, "max-response-bytes", 8 * 1024 * 1024));
-        RagBenchmarkRunner.Configuration configuration = new RagBenchmarkRunner.Configuration(
-                required(options, "run-id"), baseUrl, "environment:" + tokenEnvironment,
-                required(options, "code-revision"),
-                path(options, "prepared"), path(options, "out"), number(options, "seed", 20260719L),
-                nonNegativeInteger(options, "warmup-queries", 10),
-                Duration.ofMillis(integer(options, "poll-ms", 1000)),
-                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 3600)));
-        RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, client).run(configuration);
-        System.out.printf("completed runId=%s knowledgeBaseId=%s taskId=%s out=%s%n",
-                result.runId(), result.knowledgeBaseId(), result.taskId(), configuration.runDirectory());
+                Duration.ofSeconds(integer(options, "request-timeout-seconds", 120)),
+                integer(options, "max-response-bytes", 8 * 1024 * 1024));
+        return new Remote(baseUrl, "environment:" + tokenEnvironment, client);
     }
 
     private static Map<String, String> options(String[] args) {
@@ -159,6 +182,18 @@ public final class RagBenchmarkCli {
             throw new IllegalArgumentException("参数必须是整数 --" + name, exception);
         }
     }
+    private static List<Integer> positiveIntegers(String value, String name) {
+        try {
+            List<Integer> values = java.util.Arrays.stream(value.split(",", -1))
+                    .map(String::trim).map(Integer::valueOf).toList();
+            if (values.isEmpty() || values.stream().anyMatch(item -> item < 1)) {
+                throw new NumberFormatException();
+            }
+            return values;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("--" + name + " 必须是逗号分隔的正整数", exception);
+        }
+    }
     private static String sha256(Path path) throws IOException {
         MessageDigest digest;
         try {
@@ -184,6 +219,12 @@ public final class RagBenchmarkCli {
         lines.add("        --code-revision GIT_COMMIT");
         lines.add("        [--token-env RAG_BENCHMARK_ACCESS_TOKEN --warmup-queries 10 --seed 20260719]");
         lines.add("        [--poll-ms 1000 --ingest-timeout-seconds 3600 --request-timeout-seconds 120]");
+        lines.add("load    --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
+        lines.add("        --run-id ID --code-revision GIT_COMMIT");
+        lines.add("        [--concurrency-levels 1,10 --warmup-per-variant 10 --requests-per-variant 100]");
+        lines.add("        [--phase-timeout-seconds 1800 --request-timeout-seconds 120]");
         lines.forEach(System.out::println);
     }
+
+    private record Remote(URI baseUrl, String credentialSource, RagBenchmarkHttpClient client) {}
 }

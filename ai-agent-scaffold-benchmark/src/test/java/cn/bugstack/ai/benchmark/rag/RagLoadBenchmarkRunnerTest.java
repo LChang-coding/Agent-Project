@@ -1,0 +1,123 @@
+package cn.bugstack.ai.benchmark.rag;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class RagLoadBenchmarkRunnerTest {
+
+    @TempDir Path temporary;
+    private HttpServer server;
+    private ExecutorService serverExecutor;
+
+    @AfterEach
+    void stopServer() {
+        if (server != null) server.stop(0);
+        if (serverExecutor != null) serverExecutor.shutdownNow();
+    }
+
+    @Test
+    void shouldExecuteBoundedConcurrentLoadAndPersistSingleWriterArtifacts() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path prepared = temporary.resolve("prepared");
+        Files.createDirectories(prepared);
+        Files.writeString(prepared.resolve("queries.jsonl"),
+                "{\"queryId\":\"q1\",\"text\":\"alpha query\"}\n"
+                        + "{\"queryId\":\"q2\",\"text\":\"beta query\"}\n", StandardCharsets.UTF_8);
+        Path targets = temporary.resolve("targets.json");
+        Map<String, String> targetValues = new LinkedHashMap<>();
+        RagBenchmarkHttpClient.ProfileDefinition.ablations().forEach(definition ->
+                targetValues.put(definition.variant(), "target-" + definition.variant()));
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "sourceRunId", "quality-run",
+                "targets", targetValues));
+
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maximum = new AtomicInteger();
+        AtomicInteger requestCount = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        serverExecutor = Executors.newCachedThreadPool();
+        server.setExecutor(serverExecutor);
+        server.createContext("/api/v1/rag/retrieval-debug", exchange ->
+                handleDebug(exchange, active, maximum, requestCount));
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, baseUrl,
+                "secret-token", Duration.ofSeconds(5), 1024 * 1024);
+        Path output = temporary.resolve("load");
+
+        RagLoadBenchmarkRunner.Result result = new RagLoadBenchmarkRunner(mapper, client).run(
+                new RagLoadBenchmarkRunner.Configuration("load-run", baseUrl, "environment:TEST_TOKEN",
+                        "commit-1", prepared, targets, output, 7L, List.of(3, 1), 1, 4,
+                        Duration.ofSeconds(10)));
+
+        assertEquals(32, result.records().size());
+        assertEquals(40, requestCount.get());
+        assertTrue(maximum.get() >= 2);
+        assertTrue(maximum.get() <= 3);
+        assertEquals(32, Files.readAllLines(output.resolve("load.jsonl")).size());
+        assertEquals(8, Files.readAllLines(output.resolve("warmup.jsonl")).size());
+        JsonNode report = mapper.readTree(output.resolve("load-report.json").toFile());
+        assertEquals(32, report.path("levels").path("1").path("requestCount").asInt()
+                + report.path("levels").path("3").path("requestCount").asInt());
+        assertTrue(report.path("levels").path("3").path("throughputRequestsPerSecond").asDouble() > 0);
+        JsonNode manifest = mapper.readTree(output.resolve("load-manifest.json").toFile());
+        assertEquals("completed", manifest.path("status").asText());
+        assertEquals("not_collected_by_client", manifest.path("serverResourceEvidence").asText());
+        assertFalse(manifest.toString().contains("secret-token"));
+    }
+
+    private void handleDebug(HttpExchange exchange, AtomicInteger active, AtomicInteger maximum,
+                             AtomicInteger requestCount) throws IOException {
+        exchange.getRequestBody().readAllBytes();
+        requestCount.incrementAndGet();
+        int now = active.incrementAndGet();
+        maximum.accumulateAndGet(now, Math::max);
+        try {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IOException("fake server interrupted", exception);
+            }
+            String data = "{\"retrievalId\":\"ret\",\"degraded\":false,\"degradationReasons\":[],"
+                    + "\"metrics\":{\"embeddingMs\":1,\"denseMs\":2,\"sparseMs\":1,\"fusionMs\":1,"
+                    + "\"rerankMs\":1,\"totalMs\":6,\"denseCandidateCount\":3,"
+                    + "\"sparseCandidateCount\":3,\"fusionCandidateCount\":3,"
+                    + "\"rerankCandidateCount\":3},\"citations\":[{\"headingPath\":\""
+                    + RagBenchmarkArtifactWriter.marker("doc-alpha") + " — Alpha\"}]}";
+            respond(exchange, 200, "{\"code\":\"0000\",\"info\":\"success\",\"data\":" + data + "}");
+        } finally {
+            active.decrementAndGet();
+        }
+    }
+
+    private void respond(HttpExchange exchange, int status, String body) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+}

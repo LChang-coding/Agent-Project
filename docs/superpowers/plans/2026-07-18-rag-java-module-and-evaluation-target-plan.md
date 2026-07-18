@@ -645,5 +645,44 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 真实 runId 为 `mini-real-20260718T194213Z`，输入为 1 个 Markdown、3 文档、2 查询、2 qrels，warmup=0，上传/查询线程都是 1，输出位于 `/tmp/rag-benchmark-mini-real-20260718T194213Z`。
 - 任务真实终止为 `dead/indexing/RAG_EMBEDDING_UNAVAILABLE`，因此未创建四组可评分 run，没有任何 Dense/Sparse/Hybrid/Rerank 质量或延迟指标。`upload.json` SHA-256 为 `62d7e8d021decb161c36864b08c183359a92add24f631ef9d68b516ce5e419eb`，失败 manifest SHA-256 为 `a5b4efccd73fce3b8dca7de7f934f67865d46a29be599b5d00c79e9496b7146c`。
-- 对 `codex.md` 记录的 Embedding Key 执行 1 条 `query: health probe` 脱敏请求，网关在 60 秒内返回 HTTP 401、响应 179 bytes，证明公网端点可达但当前文档 Key 已不被接受。首次 probe 还因 zsh 的 `status` 为只读变量而在发请求前退出，不计作服务失败。
-- 尝试使用 `codex.md` 已记录 SSH 凭据只读核对网关配置，服务器返回 `Permission denied`，因而无法自动取回当前密钥。本阶段停在 mini 准入失败，不启动 SciFact；恢复有效 Embedding API Key 或 RAG 服务器 SSH 运维凭据后才能继续真实指标闭环。
+- 当时的 Embedding probe 返回 HTTP 401、响应 179 bytes。后续已证实这不是 `codex.md` Key 失效：脚本错读了表格第 4 列的用户名“无”，真正 API Key 在第 5 列。首次 probe 还因 zsh 的 `status` 为只读变量而在发请求前退出；两次失败都不计作模型服务故障。
+- 当时 SSH 返回 `Permission denied`也不是已记录密码失效：取值 awk 先匹配到了正文而不是凭据表格行，实际传入空密码。用户重新确认原密码后使用精确表格匹配，SSH 连接成功。上述两项错误判断已在后续结果中纠正。
+
+### 阶段 6 第一切片执行计划：可复现并发压测与瓶颈证据协议
+
+1. 不绕过生产检索链。扩展 Java benchmark CLI，让完成的 `run` 产出 variant→targetId 映射；新增 `load` 子命令复用这些 target 调用 `/v1/rag/retrieval-debug`，不在压测工具内复制 Dense、Sparse、RRF 或 Rerank 实现。
+2. 压测参数全部留痕：固定 seed、variant、查询集 hash、并发级别、每 variant warmup 和 measured 请求数、请求/连接超时、开始结束时间、JDK/OS/CPU 以及代码 commit。默认对每个 variant 执行 100 次 measured，至少包含单并发与 10 并发；资源紧张时可通过显式参数降低，报告必须如实显示。
+3. 采用有界固定线程池和同步起跑门，将固定数量请求按稳定序列分发；每条原始记录包含 concurrency、worker/sequence、variant/query hash、wall 延迟、服务六阶段耗时、候选量、错误、降级和空结果。单一 writer 按 sequence 落 JSONL，避免并发追加交叉污染。
+4. 每个 concurrency/variant 输出 request count、throughput、error/degraded/empty rate、wall 和各服务阶段 mean/p50/p95/p99/max。额外计算 `clientAndQueueMs=max(0, wall-total)` 的同口径分布，只将最大阶段占比标记为“观测到的主导耗时”，不在无 CPU/内存/网络资源快照时声称已证明根因。
+5. 明确闭环边界：压测客户端机器快照与 RAG 服务器资源快照分开标识；后者必须由同时段 Prometheus/Docker 指标提供。当 SSH/API Key 仍无效时，只运行 fake HTTP 协议与压测工具自测，不把 fake 数字写成业务性能基线。
+6. 回归测试覆盖参数边界、同步并发峰值、精确请求数、错误计入分母、凭据脱敏、原始 JSONL 可重读和报告原子落盘。执行 Java 17 测试/打包后，将真实命令、通过数、耗时、失败与未验证项追加到本文档，重大闭环用中文本地提交。
+
+### 阶段 5 第三切片补充缺陷计划：评测脚本凭据列解析修正
+
+1. 以服务器密钥文件哈希、`codex.md` 表格正确列哈希和服务器本机 HTTP 返回为证据，区分“凭据失效”与“脚本取错列”。已观测到正确的 API Key 在第 5 列，脚本第 4 列实际读到用户名“无”。
+2. 仅修改本机启动脚本的表格列号，不轮换、不打印、不提交新密钥；用 `bash -n` 和脱敏 HTTP probe 验证。
+3. 重启 8092 隔离应用后重跑全新 mini，原失败 run 保留为证据。只有新任务 completed、文档 ready 且四组原始记录完整时才通过准入。
+
+### 2026-07-19 真实 mini 准入通过与并发压测工具阶段结果
+
+#### 凭据列解析纠正
+
+- RAG 服务器密码未变；精确读取 `| RAG 专用服务器 |` 表格行后 SSH 成功。六个中间件容器 Qdrant、Embedding、Reranker、Docling、Gateway、Prometheus 均为 healthy，Node Exporter 为 Up。
+- `codex.md` 第 5 列的 Embedding/Reranker/Docling Key SHA-256 分别与服务器密钥文件完全一致；未输出密钥原文。服务器本机和修正后的公网 Embedding probe 都返回 HTTP 200，1 个向量、768 维、响应 9455 bytes。
+- `start-local-rag-benchmark-app.sh` 已将三项 API Key 取值从第 4 列修正为第 5 列，`bash -n` 通过。没有轮换密钥，`codex.md` 中的原凭据无需更改。
+
+#### 真实 mini 质量与延迟
+
+- 新 runId `mini-real-20260718T195514Z`，代码基线 `89acc4159be975a082f165814454e623a096f18c`，使用 262 bytes 单 Markdown，共3文档、2查询、2 qrels，1 Worker、1 上传线程、1 查询线程，warmup=0。从 runner manifest 开始到结束约 37.844 秒。
+- 摄取任务终态为 completed/completed，3/3 chunks，revision=8，文档为 ready。四组各2条 measured，共8条，0 error、0 degraded、0 empty，所有 benchmark heading 解码成功。
+- 在这个只有2查询的功能性 fixture 上，Dense、Sparse、Hybrid+RRF、Hybrid+RRF+Rerank 的 Recall@1/5/10、MRR@10、nDCG@10、MAP@10 和 Success@1/5/10 全部为 1，Precision@10 均为 0.1。这只证明真实链路与评分闭环，数据量不足以证明消融方法的质量差异或统计显著性。
+- wall/service-total/client-and-queue 观测均值分别为：Dense 1732/993.5/738.5 ms，Sparse 1644.5/769.5/875 ms，Hybrid+RRF 1995/1154.5/840.5 ms，Hybrid+RRF+Rerank 2403.5/1505.5/898 ms。Rerank 组服务内 rerank mean=360.5 ms，比无 rerank 组增加了可观测阶段；但每组只有2个样本，不作性能 SLA 或根因结论。
+- 主要产物 SHA-256：`metrics.json`=`8a87b12a9512d884855ece499e8199ea5f2fd2d5d723fd40585e1e668b8b2760`，`run.jsonl`=`4fb4933fdbb88a8c15bafc923cf7fedc711a35c602ce5a1a3819538dceda016f`，`run-manifest.json`=`45e720cf55e6619472d3f173b2af803c93e6e97d7e34712071cbfa0adc4ffe71`。原始目录为 `/tmp/rag-benchmark-mini-real-20260718T195514Z`。
+- `2026-07-18T20:02:28Z` 的 Docker 快照是运行结束约 6.5 分钟后的事后状态，不是负载期间峰值。当时 Embedding/Reranker 各约 1.86 GiB/3 GiB（约62%），Docling 1.367 GiB/4 GiB，Qdrant 53.82 MiB/6 GiB；该数据只能证明静态容量，不用于宣称压测峰值。
+
+#### 并发压测工具实现与测试
+
+- 完成 `load` CLI 与 `RagLoadBenchmarkRunner`：复用生产 run 新增的 `targets.json`，按固定 seed 执行多并发级别、每 variant 固定 warmup/measured 数量，使用同步起跑门和有界固定线程池。所有 measured 记录按 concurrency/sequence 可追溯，由单 writer 生成 JSONL。
+- 报告按 concurrency/variant 输出 throughput、error/degraded/empty rate、wall 及各阶段 nearest-rank mean/p50/p95/p99/max，并单独计算 `clientAndQueueMs=max(0,wall-total)`。“observedDominantLatencyComponent”排除总计 `totalMs`，只是观测分解；报告明示 closed-loop coordinated-omission 边界和“未由客户端采集服务器资源”。
+- Java 17 首次编译时现有 10/10 测试通过，证明主代码可编译。新增并发和统计测试后，最终 `mvn -pl ai-agent-scaffold-benchmark package -DskipTests=false`：12/12 通过，0 failure/error/skipped，BUILD SUCCESS，总耗时 2.430 秒，Assembly 可执行 jar 生成。
+- fake HTTP 测试实际执行 40 个请求：8 warmup+32 measured，并发级别 1/3，观测峰值至少2且不超过3，验证了边界而非业务性能。fake 耗时不记作 RAG 性能基线。
