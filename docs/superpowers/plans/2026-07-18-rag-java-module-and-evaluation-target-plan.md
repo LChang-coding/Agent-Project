@@ -519,3 +519,44 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 本阶段验证了管理 UI、真实上传注册、重复内容幂等和 Worker 关闭条件下的无租约取消一致性；尚未把 PDF/DOCX/Markdown 真实摄取到 Qdrant、召回并生成回答。因此不能称为 RAG 全链 E2E。
 - 公共语料评测、Dense/Sparse/Hybrid/Rerank 消融、并发压测与瓶颈归因仍属于后续阶段；本节中的页面耗时和单次服务响应不作为性能基准数据。
+
+### 阶段 5 执行计划：公开基准、Java 评测框架与检索消融
+
+1. 只从官方论文、官方仓库或数据集主页筛选公开 RAG/IR 评测集，优先选择可重现且许可清楚的中英文子集。固定来源 URL、commit/tag/revision、许可、原始压缩包与规范化文件 SHA-256、文档/查询/qrels 数、字段映射和排除规则；原始大语料不提交 Git，只提交下载清单、转换脚本、微型 smoke fixture 和报告。
+2. 在 Java 项目内实现独立、可恢复的评测命令与数据适配器，不绕过生产检索核心。数据摄取使用专用 tenant/kb/profile/target 命名空间，任务和 Qdrant point 可幂等重跑并可清理；评测查询不得混入正式租户数据。
+3. 固定四组消融：Dense-only、现有 hashing log-TF Sparse-only、Dense+Sparse+RRF、Dense+Sparse+RRF+Rerank。除被消融组件外，候选数、最终 top-k、数据快照和评分脚本保持一致；随机性固定 seed，冷/热阶段分离，失败查询和降级均计入结果而非丢弃。
+4. 检索指标至少输出 Recall@1/5/10、MRR@10、nDCG@10、MAP@10、Success@10，并保存逐查询排名与 qrels 对照。只有数据集提供可验证 gold answer 且完成回答生成链时才报告回答指标；否则明确标记“未评测”，不使用检索相关性冒充答案正确率。
+5. 建立评测 run manifest：代码 commit、JDK/模型 revision、服务端点的脱敏标识、collection、文档格式、chunk 参数、线程数、batch、top-k、warmup、重复次数、开始/结束时间、机器与中间件资源快照、错误/超时数和每个输出文件哈希。所有最终数值由程序产物生成，报告不手工杜撰。
+6. 先用小型公开子集打通下载→转换→摄取→四组检索→评分闭环，核对一组可人工判断的 qrels；再扩大到服务器资源能承受的固定规模。若模型/公网/磁盘限制阻止全量，保留失败证据并报告实际完成规模，不外推成全量结论。
+7. 阶段完成后把官方来源、数据版本、真实命令、接口、线程/批次、耗时、指标表、失败和统计限制追加到本文，并用中文本地提交；随后才进入并发性能和瓶颈归因阶段。
+
+### 2026-07-19 阶段 5 阶段性结果（一）：Java 基准基础与 SciFact 全量准备
+
+#### 官方来源与许可核验
+
+- BEIR 官方仓库的 [Datasets available](https://github.com/beir-cellar/beir/wiki/Datasets-available) 明确给出 SciFact 下载地址、test 查询 300、约 5K corpus 和压缩包 MD5 `5f7d1de60b170fc8027bb7898e2efca1`；同时官方免责声明要求使用者自行核对原数据许可，不能只把“BEIR 可下载”当作授权结论。
+- SciFact 原作者仓库 [LICENSE.md](https://github.com/allenai/scifact/blob/master/LICENSE.md) 明确区分：claims/evidence annotations 为 CC BY 4.0，corpus abstracts 来自 S2ORC、为 ODC-By 1.0，代码为 Apache 2.0。本项目 manifest 因此记录复合许可，不笼统写成单一 Apache 或 CC 许可。
+- 带 gold answer 的后续生成评测优先候选为 [RAGBench 官方数据页](https://huggingface.co/datasets/galileo-ai/ragbench)，固定可核验 revision `d568091d7b5765d5eb05bb8cbdf116bbc5da0917`、CC BY 4.0；它提供给定上下文及相关性/利用率/完整性标注，但不是全库检索 qrels，因此只能作为生成与上下文使用评测补充。中文 CRUD-RAG 官方仓库未清楚声明新闻语料许可覆盖范围，暂不下载或再分发，不能因为仓库徽章为 Apache 2.0 就推定数据也同许可。
+- 官方 zip 下载到 `ai-agent-scaffold-benchmark/target/datasets/`，不进入 Git。实际大小约 2.7 MiB；MD5 与官方完全一致；额外计算 SHA-256 为 `536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`。
+
+#### 新增 Java benchmark 模块
+
+- 根 Maven reactor 新增 `ai-agent-scaffold-benchmark`，与在线 app 解耦；产物含普通 jar 和 Assembly 可执行 CLI，后续通过 HTTP 走生产上传/profile/binding/retrieval-debug 链，不复制 Embedding、Sparse、RRF 或 Rerank 实现。
+- `BeirDatasetLoader` 严格读取 UTF-8 corpus/queries JSONL 与 qrels TSV，限制行长/记录数，拒绝重复 ID、悬空 qrels、负相关性和无正例查询。真实 SciFact 首轮发现 queries 文件含 train+test 共 1109 条，而 test qrels 只覆盖 300 条；加载器现以指定 qrels split 过滤查询。
+- 支持固定 seed 的 positive-closed deterministic 子集：所选查询的全部正例必须保留，再以稳定哈希补足干扰文档；该策略在 manifest 明示，结果只能按实际子集规模报告。
+- 生成 Markdown 使用 `BENCH_DOC_B64_<base64url>` 一级标题保存原始 doc ID，正文中形如 Markdown 标题的行会转义，防止不可信语料逃逸到另一 section；分片按 UTF-8 实际字节上限，默认 4 MiB。映射表、规范化 query/qrels 和每个输入/输出文件的 SHA-256 写入 manifest；输出目录必须为空，禁止静默覆盖。
+- 评分器实现 Recall@1/5/10、MRR@10、graded nDCG@10、MAP@10、Precision@10、Success@1/5/10。MAP@10 明确以全部正例数为分母；缺失 run 查询按零分计，未知 query 和重复 ranked doc 直接拒绝。SciFact 没有 gold answer，score manifest 固定写 `answerMetrics=not_evaluated_no_gold_answers`。
+
+#### 真实构建、CLI smoke 与失败留痕
+
+- Java 17 模块最终 `mvn -pl ai-agent-scaffold-benchmark package -DskipTests=false`：6/6 tests 通过，0 failure/error/skipped，BUILD SUCCESS，总耗时 1.640 秒；生成 `ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar`。
+- Java 17 全 reactor `mvn package -DskipTests`：新增 benchmark 在内 8/8 模块 BUILD SUCCESS，总耗时 8.486 秒；该命令只验证全部模块编译/打包，测试通过数仍以单独的 6/6 命令为准。
+- 首次测试在代码编译后因受限沙箱不能写 `~/.m2` Surefire provider 而中止，未执行测试；转到允许 Maven 缓存的本机环境后通过。首次 fat-jar 使用 Shade 时，插件继承配置导致 Manifest transformer 参数解析失败；测试仍为 6/6，通过改用 Assembly 后 CLI 打包成功。两次失败均保留，不能计作通过。
+- Git 内保留 3 文档/2 查询/2 qrels 的 `beir-mini` 合成 fixture。CLI prepare 成功；CLI score 的固定 run 得到 Dense：Recall@10=1、MRR@10=0.75、nDCG@10=0.8154648768、MAP@10=0.75；Hybrid fixture：四项均为 1。这些数值只验证评分数学与产物，不是任何模型或中间件效果。
+- 真实 SciFact 第一次 prepare 输出 5183 documents、1109 queries、339 qrels，暴露 split 过滤缺陷，因此该目录不用于评测。修复后第二次输出 5183 documents、300 test queries、339 qrel pairs；生成 2 个 Markdown 分片，实际字节 4,192,977 和 3,764,696，均小于 4 MiB。
+- 真实源文件 SHA-256：corpus `dec31c8182f3d744c7d2c09423756fd1d17cbef75808db13ba01cc0aab4d1ac6`、queries `8ff84a7c903f722981cd8d595c022660140c51867b27608a6d4910db86080313`、test qrels `0864bb985e0ca2367ba217977e72004d549054b2b06666ed9d4825ac7c21284c`；两个 Markdown 分片为 `d2db7a2543dd1725f4d88e4e233d36ec9e61c0eac937827810a01a7d4ae20399`、`52a3379bd87a62299aa8e782dbcb4b8c31ebbdfa61779f5f4b565f16bf71dbd9`。
+
+#### 当前边界与下一切片
+
+- 当前只完成公开数据准备和离线评分基础，没有把 SciFact 上传、摄取或查询，因此没有任何真实 Dense/Sparse/Hybrid/Rerank 指标可报告。
+- 下一切片实现 Java 17 HTTP 黑盒 runner、四 profile/四 binding、上传任务轮询、引用 heading 解码、逐查询 checkpoint、降级/错误统计和延迟分位数；默认使用专用 benchmark 租户并保留现场，因为生产 API 尚无知识库/profile 的完整异步删除闭环。

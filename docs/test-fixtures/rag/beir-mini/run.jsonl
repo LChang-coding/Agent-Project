@@ -1,0 +1,4 @@
+{"variant":"dense","queryId":"query-alpha","rankedDocumentIds":["doc-alpha","doc-noise"],"elapsedMs":11,"degraded":false,"stageTimingsMs":{"dense":7}}
+{"variant":"dense","queryId":"query-beta","rankedDocumentIds":["doc-noise","doc-beta"],"elapsedMs":12,"degraded":false,"stageTimingsMs":{"dense":8}}
+{"variant":"hybrid_rrf","queryId":"query-alpha","rankedDocumentIds":["doc-alpha","doc-noise"],"elapsedMs":13,"degraded":false,"stageTimingsMs":{"dense":7,"sparse":2,"fusion":1}}
+{"variant":"hybrid_rrf","queryId":"query-beta","rankedDocumentIds":["doc-beta","doc-noise"],"elapsedMs":14,"degraded":false,"stageTimingsMs":{"dense":7,"sparse":3,"fusion":1}}
