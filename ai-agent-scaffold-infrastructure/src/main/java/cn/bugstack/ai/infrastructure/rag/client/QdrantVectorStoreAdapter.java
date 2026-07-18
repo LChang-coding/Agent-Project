@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
@@ -44,6 +45,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     private final Semaphore concurrency;
     private volatile boolean collectionReady;
 
+    @Autowired
     public QdrantVectorStoreAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getQdrant().getTimeout()).build());

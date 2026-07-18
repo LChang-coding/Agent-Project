@@ -25,6 +25,7 @@ import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
@@ -68,6 +69,7 @@ public class RagIngestWorker {
     private final Clock clock;
     private final ScheduledExecutorService heartbeatExecutor;
 
+    @Autowired
     public RagIngestWorker(IRagRepository repository, ObjectStorageService objectStorageService,
                            RagDocumentParserPort parser, EmbeddingPort embedding,
                            SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,

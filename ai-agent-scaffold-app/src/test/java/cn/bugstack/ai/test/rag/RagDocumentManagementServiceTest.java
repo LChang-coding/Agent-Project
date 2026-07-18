@@ -1,8 +1,12 @@
 package cn.bugstack.ai.test.rag;
 
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
@@ -28,7 +32,7 @@ import static org.mockito.Mockito.when;
 public class RagDocumentManagementServiceTest {
 
     @Test
-    public void shouldSynchronouslyCancelUnleasedPendingTaskWithTwoCasUpdates() {
+    public void shouldSynchronouslyCancelUnleasedPendingTaskWithOneLifecycleTransaction() {
         IRagRepository repository = repository();
         RagIngestJobEntity pending = pending();
         RagIngestJobEntity requested = pending.requestCancel("用户撤回");
@@ -36,12 +40,32 @@ public class RagDocumentManagementServiceTest {
         when(repository.findIngestJob("tenant-a", "task-a"))
                 .thenReturn(Optional.of(pending), Optional.of(requested), Optional.of(cancelled));
         when(repository.updateIngestJob(eq("tenant-a"), any(), anyLong())).thenReturn(1);
+        stubDocumentLifecycle(repository);
 
         RagIngestJobEntity result = service(repository).cancelTask(
                 "tenant-a", "admin-a", "admin", "task-a", "用户撤回");
 
         Assert.assertEquals("CANCELLED", result.status().name());
-        verify(repository, times(2)).updateIngestJob(eq("tenant-a"), any(), anyLong());
+        verify(repository, times(1)).updateIngestJob(eq("tenant-a"), any(), anyLong());
+        verify(repository).cancelUnclaimedIngestJob(eq("tenant-a"), any(), eq(requested.revision()),
+                eq(0L), eq(0L));
+    }
+
+    @Test
+    public void shouldRepairLegacyCancelledTaskWithOpenDocumentLifecycle() {
+        IRagRepository repository = repository();
+        RagIngestJobEntity requested = pending().requestCancel("用户撤回");
+        RagIngestJobEntity cancelled = requested.markCancelled(null, requested.fencingToken(), Instant.now());
+        when(repository.findIngestJob("tenant-a", "task-a"))
+                .thenReturn(Optional.of(cancelled), Optional.of(cancelled));
+        stubDocumentLifecycle(repository);
+
+        RagIngestJobEntity result = service(repository).cancelTask(
+                "tenant-a", "admin-a", "admin", "task-a", "再次确认");
+
+        Assert.assertEquals("CANCELLED", result.status().name());
+        verify(repository).cancelUnclaimedIngestJob(eq("tenant-a"), eq(cancelled),
+                eq(cancelled.revision()), eq(0L), eq(0L));
     }
 
     @Test
@@ -85,6 +109,16 @@ public class RagDocumentManagementServiceTest {
 
     private RagDocumentManagementService service(IRagRepository repository) {
         return new RagDocumentManagementService(repository, new RagKnowledgeBaseAuthorizationService());
+    }
+
+    private void stubDocumentLifecycle(IRagRepository repository) {
+        when(repository.findDocumentVersion("tenant-a", "ver-a")).thenReturn(Optional.of(
+                new RagDocumentVersionEntity("tenant-a", "kb-a", "doc-a", "ver-a", 1, 1,
+                        "rag", "object", "document.md", "sha256", "text/markdown", 10,
+                        RagDocumentVersionStatus.QUEUED, null, null, null, 0)));
+        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(
+                new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                        "document.md", null, 0, 1L, RagDocumentStatus.PROCESSING, 0)));
     }
 
     private RagIngestJobEntity pending() {

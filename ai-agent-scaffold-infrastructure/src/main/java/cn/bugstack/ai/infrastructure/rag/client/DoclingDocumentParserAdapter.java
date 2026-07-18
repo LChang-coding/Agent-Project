@@ -6,6 +6,7 @@ import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -56,6 +57,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
      * @param properties RAG 连接与资源配置
      * @param objectMapper JSON 编解码器
      */
+    @Autowired
     public DoclingDocumentParserAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getDocling().getTimeout()).build());

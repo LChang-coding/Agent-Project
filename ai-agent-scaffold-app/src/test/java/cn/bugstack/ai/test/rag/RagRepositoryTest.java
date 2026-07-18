@@ -181,6 +181,8 @@ public class RagRepositoryTest {
         Mockito.when(ingestTaskDao.updateClaimedByTenantFenceAndRevision(
                 Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
                 Mockito.anyLong(), Mockito.any())).thenReturn(1);
+        Mockito.when(ingestTaskDao.updateByTenantAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong())).thenReturn(1);
 
         repository.completeClaimedIngestJob(
                 "tenant-a", completed, 7L, "worker-a", 11L, activation, now);
@@ -234,21 +236,29 @@ public class RagRepositoryTest {
         Mockito.when(ingestTaskDao.updateClaimedByTenantFenceAndRevision(
                 Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
                 Mockito.anyLong(), Mockito.any())).thenReturn(1);
+        Mockito.when(ingestTaskDao.updateByTenantAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong())).thenReturn(1);
 
         repository.cancelClaimedIngestJob("tenant-a", terminalJob(RagIngestJobStatus.CANCELLED),
                 7L, 3L, 4L, "worker-a", 11L, now);
         repository.failClaimedIngestJob("tenant-a", terminalJob(RagIngestJobStatus.FAILED),
                 8L, 5L, 6L, "worker-a", 11L, now);
+        repository.cancelUnclaimedIngestJob("tenant-a", terminalJob(RagIngestJobStatus.CANCELLED),
+                9L, 9L, 10L);
 
         Mockito.verify(documentVersionDao).closeByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, "cancelled", 3L);
         Mockito.verify(documentVersionDao).closeByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, "failed", 5L);
+        Mockito.verify(documentVersionDao).closeByTenantAndRevision(
+                "tenant-a", "kb-1", "doc-1", "version-1", 2L, "cancelled", 9L);
         Mockito.verify(ingestTaskDao).cancelClaimedByTenantFenceAndRevision(
                 Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(7L), Mockito.eq("worker-a"), Mockito.eq(11L));
         Mockito.verify(ingestTaskDao).updateClaimedByTenantFenceAndRevision(
                 Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(8L), Mockito.eq("worker-a"),
                 Mockito.eq(11L), Mockito.eq(LocalDateTime.ofInstant(now, ZoneOffset.UTC)));
+        Mockito.verify(ingestTaskDao).updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(9L));
     }
 
     private RagKnowledgeBasePO knowledgeBasePo() {

@@ -3,7 +3,7 @@ package cn.bugstack.ai.test.config;
 import cn.bugstack.ai.config.ThreadPoolConfig;
 import cn.bugstack.ai.config.WorkflowExecutorConfig;
 import cn.bugstack.ai.config.WorkflowExecutorProperties;
-import cn.bugstack.ai.domain.agent.service.chat.ChatService;
+import cn.bugstack.ai.domain.agent.service.ChatService;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.observability.TraceContext;

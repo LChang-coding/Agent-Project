@@ -104,6 +104,11 @@ public interface IRagRepository {
                                 long expectedDocumentRevision, String leaseOwner,
                                 long expectedFencingToken, Instant now);
 
+    /** 在同一事务中关闭从未被 Worker 领取的版本、文档目标 generation 与任务。 */
+    void cancelUnclaimedIngestJob(String tenantId, RagIngestJobEntity cancelledJob,
+                                  long expectedTaskRevision, long expectedVersionRevision,
+                                  long expectedDocumentRevision);
+
     /** 在同一事务中关闭版本、清理文档目标 generation 并关闭失败任务。 */
     void failClaimedIngestJob(String tenantId, RagIngestJobEntity failedJob,
                               long expectedTaskRevision, long expectedVersionRevision,

@@ -2,10 +2,13 @@ package cn.bugstack.ai.domain.rag.service;
 
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.types.exception.AppException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ public class RagDocumentManagementService {
     private final RagKnowledgeBaseAuthorizationService authorizationService;
     private final Clock clock;
 
+    @Autowired
     public RagDocumentManagementService(IRagRepository repository,
                                         RagKnowledgeBaseAuthorizationService authorizationService) {
         this(repository, authorizationService, Clock.systemUTC());
@@ -57,7 +61,9 @@ public class RagDocumentManagementService {
     public RagIngestJobEntity cancelTask(String tenantId, String userId, String roleCode,
                                          String taskId, String reason) {
         RagIngestJobEntity current = requireTask(tenantId, userId, roleCode, taskId);
-        if (current.status() == RagIngestJobStatus.CANCELLED) return current;
+        if (current.status() == RagIngestJobStatus.CANCELLED) {
+            return reconcileUnclaimedCancellation(tenantId, current);
+        }
         if (current.status() != RagIngestJobStatus.CANCEL_REQUESTED) {
             RagIngestJobEntity requested = current.requestCancel(reason);
             requireUpdated(repository.updateIngestJob(tenantId, requested, current.revision()));
@@ -67,8 +73,33 @@ public class RagDocumentManagementService {
         if (current.lease() != null) return current;
         Instant now = clock.instant();
         RagIngestJobEntity cancelled = current.markCancelled(null, current.fencingToken(), now);
-        requireUpdated(repository.updateIngestJob(tenantId, cancelled, current.revision()));
+        RagDocumentVersionEntity version = requireVersion(tenantId, current.versionId());
+        RagDocumentEntity document = requireDocument(tenantId, current.documentId());
+        repository.cancelUnclaimedIngestJob(tenantId, cancelled, current.revision(),
+                version.revision(), document.revision());
         return repository.findIngestJob(tenantId, taskId).orElse(cancelled);
+    }
+
+    private RagIngestJobEntity reconcileUnclaimedCancellation(String tenantId, RagIngestJobEntity current) {
+        if (current.lease() != null) return current;
+        RagDocumentVersionEntity version = requireVersion(tenantId, current.versionId());
+        RagDocumentEntity document = requireDocument(tenantId, current.documentId());
+        if (version.status() == RagDocumentVersionStatus.CANCELLED && document.targetGeneration() == null) {
+            return current;
+        }
+        repository.cancelUnclaimedIngestJob(tenantId, current, current.revision(),
+                version.revision(), document.revision());
+        return repository.findIngestJob(tenantId, current.jobId()).orElse(current);
+    }
+
+    private RagDocumentVersionEntity requireVersion(String tenantId, String versionId) {
+        return repository.findDocumentVersion(tenantId, versionId)
+                .orElseThrow(() -> new AppException("RAG_DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在或无权访问"));
+    }
+
+    private RagDocumentEntity requireDocument(String tenantId, String documentId) {
+        return repository.findDocument(tenantId, documentId)
+                .orElseThrow(() -> new AppException("RAG_DOCUMENT_NOT_FOUND", "文档不存在或无权访问"));
     }
 
     private RagKnowledgeBaseEntity requireManageable(String tenantId, String userId, String roleCode,

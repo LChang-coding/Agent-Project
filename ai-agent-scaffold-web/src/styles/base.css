@@ -371,6 +371,7 @@ a {
   display: flex;
   align-items: center;
   flex-direction: column;
+  min-width: 0;
   gap: 4px;
   width: 100%;
   overflow: visible;
@@ -472,6 +473,7 @@ a {
 
 .topbar__breadcrumb {
   display: grid;
+  min-width: 0;
   gap: 2px;
 }
 
@@ -488,12 +490,14 @@ a {
 .topbar__actions {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 6px;
 }
 
 .user-chip {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   padding: 4px 6px 4px 4px;
   border: 1px solid transparent;
@@ -821,6 +825,13 @@ a {
 }
 
 @media (max-width: 700px) {
+  .app-shell,
+  .main {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+
   .auth-hero,
   .auth-panel,
   .page,
@@ -843,9 +854,34 @@ a {
     width: 100%;
   }
 
+  .topbar__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .topbar__breadcrumb,
+  .user-chip {
+    max-width: 100%;
+  }
+
+  .user-chip {
+    flex: 1;
+  }
+
+  .user-chip > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .button-row .button,
   .topbar__actions .button {
     flex: 1;
+  }
+
+  .topbar__actions .button {
+    flex: none;
+    width: auto;
   }
 }
 

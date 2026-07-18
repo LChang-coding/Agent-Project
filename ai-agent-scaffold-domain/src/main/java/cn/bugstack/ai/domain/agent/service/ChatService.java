@@ -1,11 +1,9 @@
-package cn.bugstack.ai.domain.agent.service.chat;
+package cn.bugstack.ai.domain.agent.service;
 
 import cn.bugstack.ai.domain.agent.model.entity.ChatCommandEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
-import cn.bugstack.ai.domain.agent.service.IChatService;
-import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;

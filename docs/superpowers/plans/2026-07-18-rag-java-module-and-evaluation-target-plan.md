@@ -459,3 +459,63 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 当前“可调试目标”以当前 tenant 中存在有效 RAG binding 为准；绑定创建时尚未与 Agent 注册表/Workflow 表做双向存在性校验，因此旧或手工写入的悬空绑定仍可进入调试服务后再由检索链处理。这项将在前端配置页对齐 Agent/Workflow 可见列表时补强，当前不宣称已完成双向校验。
 - 真实 MySQL 审计主表+引用事务回滚仍因无可用受限账号/SSH 可执行通道而未完成；不把 MyBatis 载入测试写成数据库集成通过。
+
+### 阶段 4A 执行计划：租户管理员 RAG 控制台
+
+1. 对齐 Vue 3/Pinia/Axios 现有架构、登录身份和响应契约，增加独立 `rag.ts` 类型化 API，覆盖知识库创建/列表、PDF/DOCX/Markdown 上传、文档/任务查询与取消、profile 配置、Agent/Workflow 绑定和检索调试。所有请求继续走全局 token refresh，前端不传 tenant/user/role。
+2. 将当前占位页改为“编辑室式知识运营台”：左侧知识库目录，中间文档生命周期，右侧检索调试/策略配置，沿用项目既有青墨+米金设计变量，通过有节制的纸张质感、精确层级和响应式断点解决当前低复杂度与组件覆盖，不引入新 UI 框架。
+3. 每个异步动作都有可见状态：按钮 loading/禁用和动作文案，页内成功/失败通知，skeleton/空态/重试，上传文件名与大小确认，摄取任务阶段进度和取消确认，调试阶段耗时/降级/引用可视化；按钮点击后不再无反馈。
+4. 知识库与文档对租户成员可读，创建/上传/取消/profile/绑定/调试仅 owner/admin 暴露可操作控件；后端仍是最终授权边界。绑定目标优先从现有 Agent/Workflow API 选择，如契约不足则先使用有明确标注的 ID 输入，不伪造目标列表。
+5. 使用 `vue-tsc --noEmit && vite build` 做类型/生产构建；用本地可控 API 响应或后端可用环境做浏览器点击路径验证，覆盖加载、空态、失败、上传、取消、策略、绑定和调试。没有真实后端/数据库时只宣称构建或模拟交互通过，不冒充 E2E。
+
+### 阶段 4A 补充执行计划：真实上传与取消联调
+
+1. 在仓库保留一份无敏感、可人工核验的 Markdown fixture，记录格式、字节数和 SHA-256；浏览器严格通过文件选择器上传，不用脚本绕过页面交互。
+2. 在隔离端口 5174→8092 和隔离 QA 租户中验证上传按钮状态、任务 ID/阶段展示与查询轮询。当前 Worker 默认关闭时，任务应保持待执行而非伪造完成。
+3. 对待执行任务发起页面取消并确认最终状态；若实际环境已启用 Worker，则按真实状态记录，绝不为了得到预设结果修改数据库。
+4. 完成后记录 fixture、租户/知识库/任务标识、接口链路、实际状态和耗时边界；测试数据保留用于审计，密码不写入文档。
+
+### 阶段 4A 联调缺陷修复计划：无租约取消生命周期一致性
+
+1. 修复真实联调发现的状态分裂：当前 pending 任务被同步标记 cancelled，但 document/version 仍停留 processing/queued。新增单事务无租约取消仓储操作，同时 CAS 关闭 version、清理 document target generation 并关闭 task。
+2. 保留运行中任务的取消屏障：持有有效租约时只写 cancel_requested，由 Worker 在每个外部调用前阻断并完成副作用清理；不让 HTTP 线程越权删除 Worker 正在管理的向量。
+3. 增加服务与持久化回归测试，覆盖无租约三表原子关闭、并发 revision 冲突回滚契约和有租约只写屏障。
+4. 前端依据后端返回的真实 status 展示“已取消”或“取消请求已记录”，任务卡显示状态、阶段和短任务 ID；重新执行真实取消联调并记录结果。
+
+### 阶段 4A 第二次联调缺陷修复计划：取消后的文档派生状态
+
+1. 保留第二份唯一 Markdown 联调样本的失败证据：任务已变为 `cancelled`、未激活版本已关闭，但文档列表仍显示 `processing`，因此本次真实联调不计为通过。
+2. 只读定位 `closeTargetGeneration`、文档状态机与列表 DTO 的真实语义，修复聚合根在无活动版本且取消目标代际后仍停留 PROCESSING 的问题；不在前端用 `targetGeneration == null` 猜测或遮蔽后端状态。
+3. 增加领域/仓储/应用服务回归断言，要求一次无租约取消事务后 task=CANCELLED、version=CANCELLED、document.targetGeneration=null 且 document.status 不再是 PROCESSING；已有活动版本时不得破坏其可用性。
+4. 重新干净构建并启动隔离 8092，使用第三份唯一哈希 Markdown 通过 5174 页面上传和取消，核对任务卡、文档行、0 chunks、通知与控制台错误；按实际结果追加留痕，未通过则继续修复而不是提交。
+
+### 2026-07-19 阶段 4A 执行结果：管理控制台与取消一致性闭环
+
+#### 代码与交互闭环
+
+- 新增类型化 `rag.ts` API，知识库页面从占位页改为租户 RAG 管理控制台，覆盖知识库创建/选择、PDF/DOCX/Markdown 上传、文档和摄取任务查看/刷新/取消、检索 Profile、Agent/Workflow 绑定及管理员检索调试。所有请求沿用全局认证，前端不提交 tenant/user/role。
+- 页面提供明确的 loading、禁用、成功/失败通知、空态、文件名/大小确认、任务状态/阶段/短 ID、chunk 与重试信息、取消确认、检索阶段耗时/降级和引用结果；窄屏改为单列并修复导航与内容覆盖。RAG 导航已接入控制台布局。
+- 修复运行时装配缺陷：`ChatService` 包声明与目录/引用统一；多个只有单构造器且同时存在测试构造器的 RAG 适配器、Worker 和文档服务显式标记生产构造器，避免 Spring 因多构造器无法选择；新增 Spring 反射装配测试防止回归。
+- 无租约取消改为一个事务内 CAS 关闭未激活版本、清理文档 target generation、按是否存在 active version 将文档恢复 READY 或关闭为 FAILED，再关闭任务为 CANCELLED。持有有效租约的运行中任务仍只设置 `cancel_requested`，由 Worker 在外部副作用屏障处接管清理。
+- 对历史上已经 CANCELLED 但文档派生状态未关闭的数据增加幂等修复路径。前端取消成功后同时重载任务和文档，避免后端已正确落库但列表保留旧 PROCESSING 快照。
+
+#### 真实浏览器联调留痕
+
+- 隔离环境：前端 `http://127.0.0.1:5174` 代理隔离后端 `http://127.0.0.1:8092`；既有 8091 进程未停止、未替换。使用隔离 QA 租户 `tenant_390f8c04-c571-45da-993d-9d8f8010d1a8`、owner 用户 `user_693ac48a-ca7c-4767-8e6f-3c40970d92b8`、知识库 `RAG QA 知识库 1784396133636`（短 ID `kb_fe56…911b`）。账号密码未写入仓库。
+- Fixture 1：`rag-ui-upload-cancel-smoke.md`，677 bytes，SHA-256 `f358ba51d0aa50b31e6f2f08861d7ae85cc90331c2dcbcad6b50c1c953368a7e`；完成真实文件选择上传，并验证相同内容重复上传复用既有任务，不产生重复摄取。
+- Fixture 2：`rag-ui-cancel-consistency-smoke.md`，306 bytes，SHA-256 `a14428f67254a687c415b02556e54cb96fff2bfb7e058a74bf1a97b700452c72`；任务 `ragtask…effe` 在 Worker 关闭时为 received、0 chunks。取消后任务和数据库文档派生状态已正确关闭，但页面未自动重载文档，必须手动刷新才从 PROCESSING 显示 FAILED。该轮作为缺陷证据，不计为最终通过。
+- Fixture 3：`rag-ui-cancel-refresh-smoke.md`，358 bytes，SHA-256 `3e8226c9a03509dd016aa80c8fcab2057c87fe6078a8f67bcc543c47cc3146e6`；任务 `ragtask…9fb4`，取消前 received、0 chunks、attempt 0/3。通过页面确认取消后等待约 4.2 秒，同一交互内任务显示“已取消 / received / 0 chunks / 尝试 0/3”，文档立即显示“失败”，通知为“摄取任务已取消，未激活的文档版本已关闭”，无需手动刷新。
+- 桌面 1440×900 和移动 375×812 均做页面检查；移动端首轮发现横向溢出并修复，刷新后布局正常。最终浏览器日志只有 Vite 连接与热更新 debug，无 error/warning。QA 数据和对象保留用于后续审计与摄取 E2E，不将待执行任务描述为摄取成功。
+
+#### 构建、测试与失败证据
+
+- 后端 `mvn clean package -DskipTests`：7 个模块 BUILD SUCCESS，总耗时 8.820 秒；隔离 8092 启动成功。首次受限启动因 Nacos 客户端需写用户目录日志被沙箱拒绝，改在已授权本机环境运行后成功，不属于应用启动失败。
+- Java 17 最终扩大测试命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest='*Rag*Test,ChatServiceAuthorizationTest,WorkflowExecutorConfigTest' -Dsurefire.failIfNoSpecifiedTests=false`；131/131 通过，0 failure、0 error、0 skipped，六模块 BUILD SUCCESS，总耗时 3.880 秒。
+- 同一测试此前有两批环境型失败且均保留：默认 Maven 使用 Java 25 时 131 项中 18 error，均为现有 Byte Buddy 版本不支持 class version 69；切换 Java 17 但留在受限沙箱时 67 error，均为 Mockito inline mock maker 无法自附加 agent。最终使用项目规定的 Temurin 17 并在允许 agent attach 的本机环境通过；两批错误都发生于 mock 初始化，没有业务 assertion failure，且不计入通过数。
+- 前端最终 `npm run build`：TypeScript 检查通过，1916 modules transformed，1.00 秒；RAG 页面 CSS 20.63 kB（gzip 4.33 kB）、JS 32.11 kB（gzip 10.62 kB），入口 JS 165.53 kB（gzip 63.75 kB）。
+- `git diff --check` 的全仓检查只命中不属于本阶段且明确不提交的运行日志尾随空格；对本阶段代码、测试、fixture 与计划文档的目标路径检查通过。未把日志、`data-alloy/`、`data/object-storage/`、设计草稿或 `skills/` 纳入本阶段提交。
+
+#### 尚未宣称完成的边界
+
+- 本阶段验证了管理 UI、真实上传注册、重复内容幂等和 Worker 关闭条件下的无租约取消一致性；尚未把 PDF/DOCX/Markdown 真实摄取到 Qdrant、召回并生成回答。因此不能称为 RAG 全链 E2E。
+- 公共语料评测、Dense/Sparse/Hybrid/Rerank 消融、并发压测与瓶颈归因仍属于后续阶段；本节中的页面耗时和单次服务响应不作为性能基准数据。

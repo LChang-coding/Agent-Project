@@ -260,6 +260,22 @@ public class RagRepository implements IRagRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void cancelUnclaimedIngestJob(String tenantId, RagIngestJobEntity cancelledJob,
+                                         long expectedTaskRevision, long expectedVersionRevision,
+                                         long expectedDocumentRevision) {
+        requireTenant(tenantId, cancelledJob == null ? null : cancelledJob.tenantId());
+        requireRevision(expectedTaskRevision);
+        if (cancelledJob.status() != RagIngestJobStatus.CANCELLED || cancelledJob.lease() != null) {
+            throw new IllegalArgumentException("无租约取消事务只允许关闭 cancelled 且未持有租约的任务");
+        }
+        closeVersionAndDocument(tenantId, cancelledJob, expectedVersionRevision,
+                expectedDocumentRevision, "cancelled");
+        requireChanged(ingestTaskDao.updateByTenantAndRevision(tenantId,
+                mapper.toIngestTaskPo(cancelledJob), expectedTaskRevision));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void failClaimedIngestJob(String tenantId, RagIngestJobEntity failedJob,
                                      long expectedTaskRevision, long expectedVersionRevision,
                                      long expectedDocumentRevision, String leaseOwner,

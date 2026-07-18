@@ -54,6 +54,7 @@ import {
   Blocks,
   Bot,
   CalendarClock,
+  Database,
   Gauge,
   GitBranch,
   MessageSquareText,
@@ -81,6 +82,7 @@ const navItems: NavItem[] = [
   { path: '/schedules', label: '定时任务', icon: CalendarClock },
   { path: '/mcp', label: 'MCP 中心', icon: Blocks },
   { path: '/skills', label: 'Skill 中心', icon: Bot },
+  { path: '/rag', label: 'RAG 知识库', icon: Database },
   { path: '/observability', label: '可观测性', icon: Activity },
   { path: '/settings', label: '账号设置', icon: Settings },
 ];

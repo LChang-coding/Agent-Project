@@ -5,6 +5,7 @@ import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
@@ -29,6 +30,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
     private final HttpClient httpClient;
     private final Semaphore concurrency;
 
+    @Autowired
     public TeiEmbeddingAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getEmbedding().getTimeout()).build());

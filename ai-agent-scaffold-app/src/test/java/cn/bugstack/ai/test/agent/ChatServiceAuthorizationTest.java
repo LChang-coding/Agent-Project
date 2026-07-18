@@ -3,7 +3,7 @@ package cn.bugstack.ai.test.agent;
 import cn.bugstack.ai.domain.agent.adapter.repository.IAgentTenantOverrideRepository;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
-import cn.bugstack.ai.domain.agent.service.chat.ChatService;
+import cn.bugstack.ai.domain.agent.service.ChatService;
 import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
 import org.junit.Test;
