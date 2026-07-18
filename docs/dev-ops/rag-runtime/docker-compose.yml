@@ -8,8 +8,6 @@ services:
     user: "1000:1000"
     environment:
       QDRANT__LOG_LEVEL: INFO
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
-      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
       QDRANT__SERVICE__METRICS_PREFIX: qdrant_
       QDRANT__TELEMETRY_DISABLED: "true"
     ports:
@@ -55,7 +53,6 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - /opt/ai-agent-rag/secrets/qdrant-readonly-api-key:/run/secrets/qdrant_readonly_api_key:ro
       - /opt/ai-agent-rag/data/prometheus:/prometheus
     networks:
       - rag-internal
