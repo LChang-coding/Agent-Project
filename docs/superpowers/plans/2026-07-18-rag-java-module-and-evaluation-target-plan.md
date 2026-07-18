@@ -355,3 +355,11 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java 17 组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=QdrantVectorStoreAdapterTest,TeiModelAdapterProtocolTest,RagPortContractTest,RagPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 23/23 通过，0 failure/error，六模块 BUILD SUCCESS，总耗时 7.530 秒。其中 TEI 本地 HttpServer 黑盒协议 8 项，Qdrant 协议 5 项，配置 7 项，端口契约 3 项。
 - 真实 Qdrant smoke 使用项目预定 collection `ai_agent_rag_e5_v1` 和一个可识别合成 point，无业务数据、单线程、批次 1。初始 GET 404/4.982752 秒，创建 200/3.770338 秒，upsert 200/2.205275 秒，精确 count 200/0.219369 秒且 count=1，hybrid RRF query 200/0.745412 秒且命中 1 条正确 tenant，其他 tenant 同向量 query 200/0.624840 秒且命中 0。tenant+version 删除 200/0.164220 秒，删除后 exact count 200/0.834627 秒且 count=0。collection 保留供项目使用，合成 point 已清理。
 - 上述 Qdrant 是功能 smoke，不是延迟基准；首次创建、公网往返和网关都混在单次数值中，禁止将它们当作 P50/P95 或吞吐量结论。真实断网、超限响应和分布式并发创建 409 仍待后续性能/故障评测。
+
+### 2026-07-19 阶段 2B 阶段性执行结果（三）：Docling 流式解析客户端
+
+- 新增 `DoclingDocumentParserAdapter`：Markdown 严格 UTF-8、8 KiB 字符缓冲、有界本地读取，规范化 BOM/换行并按 1~6 级标题产生章节，全程不访问 Docling。PDF/DOCX 用 `BodyPublishers.concat + ofFile` 构造已知 Content-Length 的 multipart，文件不聚合为 `byte[]`。
+- Docling 请求发往 `{endpoint}/convert/file`，使用 `X-Api-Key`，显式传 `target_type=inbody`、`from_formats=pdf|docx`、`to_formats=md`、`do_ocr=<命令>`、`force_ocr=false`、`include_images=false`、`include_page_images=false`、两个 `page_range=1|maxPages` 表单值和受控 `document_timeout`；因此 OCR、页数与超时不再依赖服务默认。
+- 客户端只对 `HttpClient.send` 的 `IOException` 最多重试一次；Interrupted、HTTP 非 200、响应超限、非法 JSON、空 Markdown 和非 success 状态都不重试且失败关闭。不保留远程错误体或 Jackson 原始异常文本，避免正文/密钥进入日志。
+- Java 17 最终协议组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=DoclingDocumentParserAdapterProtocolTest,TeiModelAdapterProtocolTest,QdrantVectorStoreAdapterTest,RagPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 28/28 通过，0 failure/error，六模块 BUILD SUCCESS，总耗时 7.470 秒。Docling 本地 HttpServer 黑盒测试 8 项，覆盖 Markdown 不出网、multipart 真实文件字节/全部显式字段、一次 I/O 重试、不重试故障、响应上限和错误脱敏。
+- 本切片没有访问或修改真实服务器，真实 Docling 合成 PDF/DOCX 的契约数据来自上一节只读探测。新增的重复 `page_range` multipart 序列化已在本地协议测试验证，尚需在 Worker 端到端 smoke 中验证真实网关接收语义。
