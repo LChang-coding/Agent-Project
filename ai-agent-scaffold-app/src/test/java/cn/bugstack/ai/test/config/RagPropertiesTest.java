@@ -78,6 +78,9 @@ public class RagPropertiesTest {
                 "ai.rag.embedding.timeout", "2500ms",
                 "ai.rag.embedding.max-concurrency", "3",
                 "ai.rag.embedding.batch-size", "24",
+                "ai.rag.embedding.max-retries", "4",
+                "ai.rag.embedding.retry-initial-backoff", "100ms",
+                "ai.rag.embedding.retry-max-backoff", "1500ms",
                 "ai.rag.embedding.dimension", "768",
                 "ai.rag.kafka.listener-enabled", "true"
         ));
@@ -90,6 +93,9 @@ public class RagPropertiesTest {
         Assert.assertEquals(Duration.ofMillis(2500), properties.getEmbedding().getTimeout());
         Assert.assertEquals(3, properties.getEmbedding().getMaxConcurrency());
         Assert.assertEquals(24, properties.getEmbedding().getBatchSize());
+        Assert.assertEquals(4, properties.getEmbedding().getMaxRetries());
+        Assert.assertEquals(Duration.ofMillis(100), properties.getEmbedding().getRetryInitialBackoff());
+        Assert.assertEquals(Duration.ofMillis(1500), properties.getEmbedding().getRetryMaxBackoff());
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
         Assert.assertTrue(properties.getKafka().isListenerEnabled());
     }
@@ -103,6 +109,9 @@ public class RagPropertiesTest {
         properties.getEmbedding().setMaxConcurrency(0);
         properties.getEmbedding().setBatchSize(0);
         properties.getEmbedding().setDimension(0);
+        properties.getEmbedding().setMaxRetries(-1);
+        properties.getEmbedding().setRetryInitialBackoff(Duration.ofSeconds(2));
+        properties.getEmbedding().setRetryMaxBackoff(Duration.ofSeconds(1));
 
         Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
 
@@ -116,6 +125,10 @@ public class RagPropertiesTest {
                 "embedding.batchSize".equals(violation.getPropertyPath().toString())));
         Assert.assertTrue(violations.stream().anyMatch(violation ->
                 "embedding.dimension".equals(violation.getPropertyPath().toString())));
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "embedding.maxRetries".equals(violation.getPropertyPath().toString())));
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "embedding.retryBackoffValid".equals(violation.getPropertyPath().toString())));
     }
 
     /** 校验日志脱敏；验证 toString 只输出密钥已配置状态。 */

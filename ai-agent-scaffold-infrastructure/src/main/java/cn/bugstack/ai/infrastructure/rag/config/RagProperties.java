@@ -2,6 +2,7 @@ package cn.bugstack.ai.infrastructure.rag.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -161,6 +162,19 @@ public class RagProperties {
         @Min(1)
         private int batchSize = 16;
 
+        /** 429/网关瞬态状态后的最大重试次数，不含首次请求。 */
+        @Min(0)
+        @Max(10)
+        private int maxRetries = 3;
+
+        /** 首次重试退避时长。 */
+        @NotNull
+        private Duration retryInitialBackoff = Duration.ofMillis(250);
+
+        /** 指数退避时长上限。 */
+        @NotNull
+        private Duration retryMaxBackoff = Duration.ofSeconds(2);
+
         /** 创建 Embedding 默认配置。 */
         public Embedding() {
             setEndpoint(URI.create("http://127.0.0.1:8081"));
@@ -168,11 +182,20 @@ public class RagProperties {
             setMaxConcurrency(2);
         }
 
+        /** 校验重试退避为正数且上限不小于初始值。 */
+        @AssertTrue(message = "Embedding 重试退避必须为正数且最大值不小于初始值")
+        public boolean isRetryBackoffValid() {
+            return retryInitialBackoff != null && !retryInitialBackoff.isZero() && !retryInitialBackoff.isNegative()
+                    && retryMaxBackoff != null && !retryMaxBackoff.isZero() && !retryMaxBackoff.isNegative()
+                    && retryMaxBackoff.compareTo(retryInitialBackoff) >= 0;
+        }
+
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Embedding 配置。 */
         @Override
         public String toString() {
             return summary("Embedding") + ", modelRevision='" + modelRevision
-                    + "', dimension=" + dimension + ", batchSize=" + batchSize + '}';
+                    + "', dimension=" + dimension + ", batchSize=" + batchSize
+                    + ", maxRetries=" + maxRetries + '}';
         }
     }
 

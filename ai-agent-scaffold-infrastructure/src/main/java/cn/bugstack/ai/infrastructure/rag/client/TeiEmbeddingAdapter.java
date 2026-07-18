@@ -50,7 +50,6 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
             throw new AppException("RAG_EMBEDDING_BATCH_TOO_LARGE", "Embedding 批次超过服务上限");
         }
         requireApiKey(config.getApiKey());
-        acquire(concurrency, config.getTimeout(), "Embedding");
         try {
             List<String> inputs = command.inputs().stream()
                     .map(input -> prefix(command.inputType(), input)).toList();
@@ -60,14 +59,31 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
                     .timeout(config.getTimeout()).header("Authorization", "Bearer " + config.getApiKey())
                     .header("Content-Type", "application/json").header("Accept", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofByteArray(objectMapper.writeValueAsBytes(payload))).build();
-            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            byte[] body = readBounded(response.body(), MAX_RESPONSE_BYTES);
-            if (response.statusCode() != 200) {
-                throw new AppException("RAG_EMBEDDING_HTTP_ERROR", "Embedding 服务返回状态 " + response.statusCode());
+            long backoffMs = Math.max(1L, config.getRetryInitialBackoff().toMillis());
+            long maxBackoffMs = Math.max(backoffMs, config.getRetryMaxBackoff().toMillis());
+            for (int attempt = 0; ; attempt++) {
+                acquire(concurrency, config.getTimeout(), "Embedding");
+                HttpResponse<InputStream> response;
+                byte[] body;
+                try {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    body = readBounded(response.body(), MAX_RESPONSE_BYTES);
+                } finally {
+                    concurrency.release();
+                }
+                if (response.statusCode() == 200) {
+                    List<List<Float>> vectors = objectMapper.readValue(body, new TypeReference<>() { });
+                    validate(vectors, inputs.size(), config.getDimension());
+                    return new EmbeddingResult(vectors, config.getDimension(), config.getModelRevision());
+                }
+                if (!isTransientStatus(response.statusCode()) || attempt >= config.getMaxRetries()) {
+                    throw new AppException("RAG_EMBEDDING_HTTP_ERROR",
+                            "Embedding 服务返回状态 " + response.statusCode());
+                }
+                Thread.sleep(backoffMs);
+                backoffMs = Math.min(maxBackoffMs,
+                        backoffMs > maxBackoffMs / 2L ? maxBackoffMs : backoffMs * 2L);
             }
-            List<List<Float>> vectors = objectMapper.readValue(body, new TypeReference<>() { });
-            validate(vectors, inputs.size(), config.getDimension());
-            return new EmbeddingResult(vectors, config.getDimension(), config.getModelRevision());
         } catch (AppException e) {
             throw e;
         } catch (InterruptedException e) {
@@ -75,9 +91,11 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
             throw new AppException("RAG_EMBEDDING_INTERRUPTED", "Embedding 请求被中断", e);
         } catch (Exception e) {
             throw new AppException("RAG_EMBEDDING_UNAVAILABLE", "Embedding 服务调用失败", e);
-        } finally {
-            concurrency.release();
         }
+    }
+
+    private boolean isTransientStatus(int status) {
+        return status == 429 || status == 502 || status == 503 || status == 504;
     }
 
     private void validate(List<List<Float>> vectors, int expectedCount, int dimensions) {

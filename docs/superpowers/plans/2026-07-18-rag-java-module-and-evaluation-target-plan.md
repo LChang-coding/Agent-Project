@@ -824,3 +824,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 阶段总耗时从32244 ms降到27675 ms，闭环吞吐从0.6203升到0.7227 req/s（+16.5%）。新组配置均值212.2–226.2 ms、审计489.4–501.6 ms、边界外74.8–92.0 ms；同步审计仍是最大单项。
 - 这是两轮各组只有5个样本、跨公网访问远程 MySQL 的先后对照。虽然四组 hydration 与 wall 都同向下降，但配置和审计也同步变快，存在网络时变影响；只能证明优化链路正确且方向有利，不能把全部12.7%–16.0% wall 改善归因于批量查询，也不能声称统计显著。
 - 产物 SHA-256：`load.jsonl`=`fcac6fba7ca05bcb79bfe13dee7bbd1dcea73e90686896e7f690a667e52564c4`，`load-report.json`=`6f43bd15fa8df74b405cf6201b097ddf6349df46d4c54f82d0bf33bb70bcc6c1`，`load-manifest.json`=`157d526ce74192ba5e08304bb226523214e2d7affa57982f69856b834c7c4476`。原始目录 `/tmp/rag-benchmark-mini-batchdoc-load-e6bd0c5`。
+
+### 阶段 7 第一切片执行计划：SciFact 真实检索质量消融
+
+1. 重新从 BEIR 官方 SciFact 下载地址获取数据，不复用已被 clean 清理的临时文件。校验官方 MD5 `5f7d1de60b170fc8027bb7898e2efca1`、既有 SHA-256 `536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`，并再次确认复合许可与 test split 规模。
+2. 使用现有 Java CLI 严格读取 corpus/queries/test qrels，准备完整5183文档、300 test 查询、339 qrel pairs。生成单个 Markdown 文件以符合当前知识库单 active generation 语义；记录源文件、规范化文件和 Markdown 的字节数、SHA-256、seed、映射策略与排除规则。
+3. 启动本机8092隔离应用，固定1个摄取 Worker、1个上传线程、1个查询线程；本地 Java 项目不上传服务器。并行采集 RAG 服务器容器资源，摄取期间如出现 OOM、持续错误或任务终态失败则保留现场，不把不完整语料用于评分。
+4. 通过真实生产 HTTP 链路创建专用租户、知识库、四组 profile/binding，完成 Dense-only、Sparse-only、Hybrid+RRF、Hybrid+RRF+Rerank。除消融组件外固定 topK、finalTopK=10、neighborWindow=0、上下文预算、去重与同一数据快照；warmup 与 measured 分离。
+5. 对300查询逐组计量，共1200条原始记录。失败、降级、空结果和缺失查询全部保留并计入分母；逐查询保存 query hash、retrievalId、排序文档、候选数和全链路耗时，不保存 Bearer 或查询凭据。
+6. 由程序产物计算 Recall@1/5/10、Precision@10、MRR@10、graded nDCG@10、MAP@10、Success@1/5/10，并输出四组绝对值和相对差异。SciFact 没有 gold answer，回答正确率、Faithfulness 与生成质量明确标记未评测，禁止用检索相关性替代。
+7. 核对 `run.jsonl` 恰有1200个唯一 variant/query、qrels 覆盖300查询、无未知/重复文档；数据库审计计数、引用唯一性和应用日志作为辅助证据。将真实命令、耗时、资源峰值、指标表、原始产物哈希、失败及统计边界追加本文并中文提交。
+
+### 阶段 7 第一切片补充缺陷计划：Embedding 429 背压恢复
+
+1. 首次完整 SciFact 摄取在 indexing 阶段终止，数据库任务为 `failed/RAG_EMBEDDING_HTTP_ERROR`，模型网关访问日志为 HTTP 429，TEI 明确记录 `no permits available`。保留失败 run 目录和服务资源记录，不覆盖、不删除。
+2. Embedding 适配器仅对 429、502、503、504 做次数有限、带上限的指数退避重试；400/401/403 等确定性错误不重试。每次响应体仍有界关闭，线程中断立即退出，耗尽后保留稳定错误码和 HTTP 状态，不做无限重试。
+3. 将重试次数、初始退避和最大退避纳入强类型配置并设保守默认值；增加单元测试验证 429 后成功、耗尽、非瞬态不重试和中断语义。日志不输出 API Key、正文或服务响应体。
+4. 本机隔离评测把 Embedding 批次从16降为4，仍保持单摄取 Worker、单查询线程，避免紧张服务器被一个大批次打满；该资源参数进入运行清单和最终结论，不把它与检索质量消融变量混淆。
+5. 完成测试与重新打包后启动新 JVM，以新的 runId 和空输出目录重跑完整 SciFact；首次失败作为失败证据追加本文，成功重跑不得覆盖失败历史。
+
+#### 补充吞吐调整
+
+- batch=4 已经证明可稳定推进，但实测前99秒仅完成44/7548 chunks。只读检查部署参数确认 TEI 为 `max-batch-tokens=8192`、`max-client-batch-size=16`；batch=16 在接近512 tokens/chunk 时会越过总 token 许可，而 batch=8 留有前缀余量。
+- 为避免数小时低效等待，先暂停 benchmark 轮询进程，再优雅停止本机8092旧 JVM，以 batch=8 启动同一代码和同一数据库任务；依靠既有 lease/checkpoint 从已完成向量位置恢复。新 JVM健康后恢复 benchmark 进程。全过程不改 qrels、查询、检索参数或语料，不构成质量消融变量。
+- 恢复后核对 task attempt、fencing token、checkpoint 单调推进以及 Qdrant/数据库无重复激活；若 batch=8 仍出现耗尽重试的429，则回退 batch=4，不修改远端服务器算力配额。
+
+#### 2026-07-19 SciFact 数据准备与 Embedding 背压修复阶段结果
+
+- 从 BEIR 官方地址重新下载 `scifact.zip`，MD5=`5f7d1de60b170fc8027bb7898e2efca1`、SHA-256=`536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`，与官方清单和既有留档一致。源 corpus/queries/test qrels 的 SHA-256 分别为 `dec31c8182f3d744c7d2c09423756fd1d17cbef75808db13ba01cc0aab4d1ac6`、`8ff84a7c903f722981cd8d595c022660140c51867b27608a6d4910db86080313`、`0864bb985e0ca2367ba217977e72004d549054b2b06666ed9d4825ac7c21284c`。
+- Java prepare 实际产出5183文档、300个 test 查询、339组 qrel；单 Markdown 为7,957,673 bytes，SHA-256=`0287493f09e9cb8d13d44bd46c01540229a7bad18d8c9da344f60429a89d6680`。`document-map.jsonl`、规范化 queries、qrels 的 SHA-256 分别为 `1718e1ed99f145f839156afccca3b13de7608a154232e5d829f20a36cb124c84`、`331f88f940774ac84e1fc6ef517720dd94d07deab77efbdc85f42fc405335ad0`、`5602d9f31c96d309a906692e1b722a9acfc4138c5d52e06d47bbb89a9c4ab7c3`。
+- 首次 runId `scifact-quality-b00f9cc` 在 indexing 首批失败：任务 `failed`、attempt=1、checkpoint=0/7548、错误码 `RAG_EMBEDDING_HTTP_ERROR`。远端网关证据为 HTTP 429，TEI 日志为 `no permits available`；失败目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-b00f9cc` 保留，未用于评分。
+- `TeiEmbeddingAdapter` 现在仅对429/502/503/504执行可配置的有限指数退避，重试期间释放本地并发许可；默认最多3次、250ms起步、2s封顶，配置硬限制最多10次。401等确定性状态不重试，响应体仍受8MiB上限约束，线程中断会恢复 interrupt flag。
+- 定向测试首次24项中23项通过；失败项把“调用前已中断”误期望成退避中断，实际稳定码为既有 `RAG_REMOTE_INTERRUPTED`。测试改为服务返回429后中断退避线程，最终24/24通过，0 failure/error/skipped，BUILD SUCCESS 2.719秒；随后本机 app 打包成功。
+- 重跑 runId `scifact-quality-retry-b00f9cc` 先用 batch=4 推进到184/7548。只读检查部署确认 TEI `max-batch-tokens=8192`、`max-client-batch-size=16`，随后暂停 benchmark 轮询、优雅停止旧 JVM并以 batch=8启动。旧 lease 自然到期后，新 Worker 从 checkpoint 恢复：attempt 1→2、fencing token 1→2、进度184→232→320，错误码为空；再恢复 benchmark 轮询。该过程验证 checkpoint/fencing 闭环，未上传项目到服务器，未更改语料和检索变量。
+- benchmark 脚本新增可外部配置的 warmup 查询数和摄取超时，默认行为保持0和900秒；本次明确为 warmup=10、ingest timeout=7200秒。成功重跑仍在进行，最终1200条结果和指标将在完成后继续追加。

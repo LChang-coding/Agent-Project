@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,7 +37,9 @@ public class TeiModelAdapterProtocolTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicInteger status = new AtomicInteger(200);
+    private final ConcurrentLinkedQueue<Integer> responseStatuses = new ConcurrentLinkedQueue<>();
     private volatile byte[] responseBody;
+    private volatile Thread interruptAfterResponseThread;
     private HttpServer server;
     private RagProperties properties;
     private TeiEmbeddingAdapter embeddingAdapter;
@@ -54,6 +57,8 @@ public class TeiModelAdapterProtocolTest {
         configure(properties.getReranker(), endpoint);
         properties.getEmbedding().setDimension(768);
         properties.getEmbedding().setBatchSize(2);
+        properties.getEmbedding().setRetryInitialBackoff(Duration.ofMillis(1));
+        properties.getEmbedding().setRetryMaxBackoff(Duration.ofMillis(2));
         properties.getEmbedding().setModelRevision("embedding-revision");
         properties.getReranker().setBatchSize(3);
         properties.getReranker().setModelRevision("reranker-revision");
@@ -123,6 +128,47 @@ public class TeiModelAdapterProtocolTest {
         AppException exception = expectEmbeddingFailure();
         Assert.assertEquals("RAG_EMBEDDING_HTTP_ERROR", exception.getCode());
         assertSensitiveValuesHidden(exception);
+    }
+
+    @Test
+    public void embeddingShouldRetryOnlyTransientStatusesWithinBound() throws Exception {
+        respondJson(objectMapper.writeValueAsString(List.of(vector(1F))));
+        responseStatuses.addAll(List.of(429, 503, 200));
+
+        EmbeddingResult result = embeddingAdapter.embed(new EmbeddingCommand(
+                "tenant", "trace", EmbeddingInputType.QUERY, List.of("question")));
+
+        Assert.assertEquals(1, result.vectors().size());
+        Assert.assertEquals(3, requests.size());
+
+        requests.clear();
+        properties.getEmbedding().setMaxRetries(2);
+        status.set(429);
+        AppException exhausted = expectEmbeddingFailure();
+        Assert.assertEquals("RAG_EMBEDDING_HTTP_ERROR", exhausted.getCode());
+        Assert.assertEquals(3, requests.size());
+
+        requests.clear();
+        status.set(401);
+        AppException nonTransient = expectEmbeddingFailure();
+        Assert.assertEquals("RAG_EMBEDDING_HTTP_ERROR", nonTransient.getCode());
+        Assert.assertEquals(1, requests.size());
+    }
+
+    @Test
+    public void embeddingRetryShouldPreserveThreadInterruption() {
+        status.set(429);
+        respondJson("{}");
+        interruptAfterResponseThread = Thread.currentThread();
+        try {
+            AppException exception = expectEmbeddingFailure();
+            Assert.assertEquals("RAG_EMBEDDING_INTERRUPTED", exception.getCode());
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+            Assert.assertEquals(1, requests.size());
+        } finally {
+            interruptAfterResponseThread = null;
+            Thread.interrupted();
+        }
     }
 
     @Test
@@ -200,13 +246,19 @@ public class TeiModelAdapterProtocolTest {
                 exchange.getRequestHeaders().getFirst("Accept"), body));
         byte[] currentResponse = responseBody == null ? new byte[0] : responseBody;
         exchange.getResponseHeaders().set("Content-Type", "application/json");
+        Integer queuedStatus = responseStatuses.poll();
+        int responseStatus = queuedStatus == null ? status.get() : queuedStatus;
         try {
-            exchange.sendResponseHeaders(status.get(), currentResponse.length);
+            exchange.sendResponseHeaders(responseStatus, currentResponse.length);
             exchange.getResponseBody().write(currentResponse);
         } catch (IOException ignored) {
             // 客户端超限后会主动关闭响应流。
         } finally {
             exchange.close();
+            Thread thread = interruptAfterResponseThread;
+            if (thread != null) {
+                thread.interrupt();
+            }
         }
     }
 

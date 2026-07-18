@@ -13,6 +13,8 @@ LOAD_OUTPUT_DIR="${RAG_BENCHMARK_LOAD_OUTPUT_DIR:-$OUTPUT_DIR-load}"
 LOAD_CONCURRENCY_LEVELS="${RAG_BENCHMARK_LOAD_CONCURRENCY_LEVELS:-1,10}"
 LOAD_WARMUP_PER_VARIANT="${RAG_BENCHMARK_LOAD_WARMUP_PER_VARIANT:-10}"
 LOAD_REQUESTS_PER_VARIANT="${RAG_BENCHMARK_LOAD_REQUESTS_PER_VARIANT:-100}"
+WARMUP_QUERIES="${RAG_BENCHMARK_WARMUP_QUERIES:-0}"
+INGEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_INGEST_TIMEOUT_SECONDS:-900}"
 CLI_JAR="$PROJECT_ROOT/ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar"
 
 for command_name in curl jq openssl java git; do
@@ -78,9 +80,9 @@ java -jar "$CLI_JAR" run \
   --out "$OUTPUT_DIR" \
   --run-id "$RUN_ID" \
   --code-revision "$code_revision" \
-  --warmup-queries 0 \
+  --warmup-queries "$WARMUP_QUERIES" \
   --poll-ms 1000 \
-  --ingest-timeout-seconds 900 \
+  --ingest-timeout-seconds "$INGEST_TIMEOUT_SECONDS" \
   --request-timeout-seconds 120
 
 if [[ "$LOAD_ENABLED" == "true" ]]; then
