@@ -53,6 +53,11 @@ public class RagProperties {
     @NotNull
     private Kafka kafka = new Kafka();
 
+    /** RAG Outbox 可靠发布配置。 */
+    @Valid
+    @NotNull
+    private Outbox outbox = new Outbox();
+
     /**
      * 校验启用时的认证边界；无参数；返回是否可以安全连接全部 RAG 服务。
      */
@@ -76,6 +81,7 @@ public class RagProperties {
                 ", reranker=" + reranker +
                 ", docling=" + docling +
                 ", kafka=" + kafka +
+                ", outbox=" + outbox +
                 '}';
     }
 
@@ -192,6 +198,63 @@ public class RagProperties {
         @Override
         public String toString() {
             return "Kafka{topic='" + topic + "'}";
+        }
+    }
+
+    /** RAG Outbox 可靠发布边界。 */
+    @Getter
+    @Setter
+    public static class Outbox {
+
+        /** 是否启用发布器。 */
+        private boolean enabled;
+
+        /** 到期扫描间隔。 */
+        @Min(10)
+        private long pollDelayMs = 1000L;
+
+        /** 单次扫描上限。 */
+        @Min(1)
+        private int batchSize = 20;
+
+        /** 发布租约时长。 */
+        @Min(1000)
+        private long leaseDurationMs = 30000L;
+
+        /** Kafka ACK 最长等待时间。 */
+        @Min(100)
+        private long ackTimeoutMs = 10000L;
+
+        /** 首次重试基础延迟。 */
+        @Min(1)
+        private long retryBaseDelayMs = 1000L;
+
+        /** 重试延迟上限。 */
+        @Min(1)
+        private long retryMaxDelayMs = 300000L;
+
+        /** 抖动比例，取值 0 到 0.5。 */
+        private double retryJitterRatio = 0.2D;
+
+        /** 校验 ACK 必须在租约内完成。 */
+        @AssertTrue(message = "RAG Outbox ACK超时必须小于租约时长")
+        public boolean isAckWithinLease() {
+            return ackTimeoutMs < leaseDurationMs;
+        }
+
+        /** 校验退避上限和抖动范围。 */
+        @AssertTrue(message = "RAG Outbox重试退避配置不合法")
+        public boolean isRetryBoundaryValid() {
+            return retryMaxDelayMs >= retryBaseDelayMs
+                    && retryJitterRatio >= 0D && retryJitterRatio <= 0.5D;
+        }
+
+        /** 输出不含敏感值的配置摘要。 */
+        @Override
+        public String toString() {
+            return "Outbox{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
+                    + ", batchSize=" + batchSize + ", leaseDurationMs=" + leaseDurationMs
+                    + ", ackTimeoutMs=" + ackTimeoutMs + '}';
         }
     }
 

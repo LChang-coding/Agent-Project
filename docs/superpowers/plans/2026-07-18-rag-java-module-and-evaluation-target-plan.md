@@ -286,3 +286,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 #### 尚未闭环
 
 - 本次是阶段性提交；文档上传 HTTP、任务查询/取消、Outbox 轮询发布器和真实 Kafka CAS 集成仍在阶段 2A 后续切片，不能把当前状态描述为完整可用 RAG。
+
+### 阶段 2A 第二切片执行计划：文档 API、取消与可靠发布
+
+1. 增加文档上传/列表和摄取任务详情 DTO/Controller；Multipart 只转存到受控临时 Path，finally 删除，不调用 `getBytes()`；响应不暴露 source bucket/object key、lease owner、fencing token 或内部错误堆栈。
+2. 增加任务取消管理用例：可信 owner/admin 鉴权并校验 task->kb 同租户归属；pending/retrying 在本地事务内经过 cancel_requested 后落 cancelled，running 只写 cancel_requested 作为 Worker 外部调用前屏障；所有更新使用 revision CAS。
+3. 增加 Outbox 扫描候选查询和轮询发布器：短事务领取、事务外等待 Kafka ack、随后 fencing CAS 确认；失败指数退避并截断脱敏错误，耗尽进入 dead；关闭开关时不启动调度。
+4. 增加 Controller、取消状态、Outbox 发布成功/失败/旧栅栏测试；在临时 MySQL 做 document/version/task/outbox 同事务成功与故障回滚、并发 claim/fencing 验证；Kafka 若无法建立可控测试环境，使用 mock ack 单测并明确不冒充真实 broker 集成。
+5. 完成后将全部命令、接口、线程/轮询参数、失败与未完成项追加到本计划，执行中文本地提交。
+
+### 2026-07-18 阶段 2A 第二切片执行结果
+
+#### API 与取消闭环
+
+- 新增 `POST /api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents`、同路径 GET 列表、`GET /api/v1/rag/ingest-tasks/{taskId}` 和 `POST /api/v1/rag/ingest-tasks/{taskId}/cancel`。
+- HTTP 层只使用可信 `TenantContextHolder`。Multipart 通过 `transferTo(Path)` 落入系统临时文件，领域校验和对象存储结束后在 `finally` 删除；没有调用 `MultipartFile.getBytes()`。响应不含 bucket/objectKey、leaseOwner、leaseUntil、fencingToken、checkpoint JSON 或内部错误 message。
+- 新增文档/任务管理员用例。pending/retrying 或无租约 cancel_requested 使用两次 revision CAS 依次记录取消请求和 cancelled 终态；running 只写 cancel_requested 并保留当前租约，后续 Worker 的 `assertExternalCallAllowed` 会阻断解析、Embedding 和向量写入等新副作用。
+
+#### Outbox 发布闭环
+
+- 全局 due 扫描是唯一无 tenant 入参的 Outbox 查询，并且只投影 tenantId/eventId；claim、读回、published/retrying/dead 均使用 tenant+event，终态变更还要求 leaseOwner+fencingToken。
+- `RagOutboxClaimService` 在短事务内原子领取并读回新 fence；Kafka send 和 ACK 等待在事务外。只有明确 ACK 才 CAS 标记 published；异常只落 `KAFKA_PUBLISH_FAILED:<异常类型>`，不保存可能含密钥的原始 message。
+- 重试采用指数退避、上限和可配置抖动；attempt 耗尽进入 dead。配置：默认关闭、poll 1000ms、batch 20、lease 30000ms、ACK timeout 10000ms、retry 1000~300000ms、jitter 0.2。发布器使用条件 Bean，关闭时不创建调度线程。
+- 本轮 Kafka 测试使用 mock `KafkaTemplate` 和真实 Spring Kafka 3.3.3 Future API，没有连接真实 broker；因此不能宣称验证了网络断连、broker 重启或真实 ACK 延迟。
+
+#### 真实验证结果
+
+- Java 17 最终组合命令包含知识库、上传、Controller、取消、Outbox、配置、MyBatis 和对象存储共 13 个测试类；结果 52/52 通过，0 failure、0 error、0 skipped，六模块 BUILD SUCCESS，总耗时 7.838 秒。
+- 临时 MySQL 四表事务测试：成功事务提交后 task/document/version/outbox 计数为 `1/1/1/1`；第二个事务先写 task/document/version，再故意触发 outbox `(tenant,event)` 重复键，客户端确认出现 `Duplicate entry` 后执行 ROLLBACK，四类 rollback 业务 ID 计数均为 `0/0/0/0`。临时库已删除。
+- 临时 MySQL Outbox 并发领取：两个独立客户端同时 claim 同一 pending event，worker-a 影响 0 行、worker-b 影响 1 行；最终 attempt/fence/rowVersion=`1/1/1`。旧 owner+旧 fence 的 published CAS 影响 0 行，赢家 CAS 影响 1 行，最终 published 且 rowVersion=2。临时库已删除。
+- XML、组合源码 `git diff --check` 通过。正式开发库在本切片没有新增业务数据操作。
+
+#### 下一步
+
+- 阶段 2A 管理/投递入口已闭环；真正解析、切块、Embedding、Qdrant 写入、任务心跳/checkpoint/取消清理和激活索引仍属于阶段 2B Worker，当前上传的任务不会在 Outbox/Worker 开关关闭时自动完成。

@@ -1,5 +1,6 @@
 package cn.bugstack.ai.infrastructure.dao;
 
+import cn.bugstack.ai.infrastructure.dao.po.RagOutboxCandidatePO;
 import cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -12,6 +13,10 @@ import java.util.List;
  */
 @Mapper
 public interface IRagOutboxDao {
+
+    /** 全局扫描到期事件标识；不返回业务载荷。 */
+    List<RagOutboxCandidatePO> queryDueCandidates(@Param("now") LocalDateTime now,
+                                                  @Param("limit") int limit);
 
     /** 与业务任务在同一事务中新增待发布事件。 */
     int insert(RagOutboxPO outbox);

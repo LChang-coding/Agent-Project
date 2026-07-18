@@ -71,6 +71,15 @@ ai:
       batch-size: ${AI_RAG_DOCLING_BATCH_SIZE:1}
     kafka:
       topic: ${AI_RAG_KAFKA_TOPIC:rag.ingest.request.v1}
+    outbox:
+      enabled: ${AI_RAG_OUTBOX_ENABLED:false}
+      poll-delay-ms: ${AI_RAG_OUTBOX_POLL_DELAY_MS:1000}
+      batch-size: ${AI_RAG_OUTBOX_BATCH_SIZE:20}
+      lease-duration-ms: ${AI_RAG_OUTBOX_LEASE_DURATION_MS:30000}
+      ack-timeout-ms: ${AI_RAG_OUTBOX_ACK_TIMEOUT_MS:10000}
+      retry-base-delay-ms: ${AI_RAG_OUTBOX_RETRY_BASE_DELAY_MS:1000}
+      retry-max-delay-ms: ${AI_RAG_OUTBOX_RETRY_MAX_DELAY_MS:300000}
+      retry-jitter-ratio: ${AI_RAG_OUTBOX_RETRY_JITTER_RATIO:0.2}
   scheduler:
     reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
     dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}

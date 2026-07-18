@@ -36,6 +36,20 @@
         create_time, update_time, deleted
     </sql>
 
+    <!-- 这是唯一允许无 tenant 入参的全局扫描，严格只返回 tenant_id + event_id。 -->
+    <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagOutboxCandidatePO">
+        SELECT tenant_id AS tenantId, event_id AS eventId
+        FROM rag_outbox
+        WHERE deleted = 0
+          AND (
+              status = 'pending'
+              OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at &lt;= #{now})
+              OR (status = 'publishing' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+          )
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_outbox (
