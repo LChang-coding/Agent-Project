@@ -560,3 +560,36 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 当前只完成公开数据准备和离线评分基础，没有把 SciFact 上传、摄取或查询，因此没有任何真实 Dense/Sparse/Hybrid/Rerank 指标可报告。
 - 下一切片实现 Java 17 HTTP 黑盒 runner、四 profile/四 binding、上传任务轮询、引用 heading 解码、逐查询 checkpoint、降级/错误统计和延迟分位数；默认使用专用 benchmark 租户并保留现场，因为生产 API 尚无知识库/profile 的完整异步删除闭环。
+
+### 阶段 5 第二切片执行计划：生产链黑盒 Runner 与语料代际一致性
+
+1. 先验证生产上传上限、Markdown 本地解析上限和知识库 generation 语义。当前检索只读 KB 单一 active generation；若多个 benchmark 分片先后激活会隐藏早期分片，runner 必须在执行前拒绝不安全的多分片输入。SciFact 优先提高受控单分片上限，在现有上传/解析上限允许时生成一个约 7.6 MiB 文件；如果不允许，则先实现“同一批次共享 generation”的后端闭环，不能用不完整语料评测。
+2. 在独立 benchmark 模块实现 Java 17 `HttpClient`：Bearer 只从环境变量读取，不进入参数回显、日志或 manifest；统一解析应用 `Response<T>`，限制响应体、超时和重试范围。提供知识库创建、multipart 上传、任务轮询、profile/binding 创建和 retrieval-debug。
+3. 用唯一 runId 创建专用 KB、四个 profile 和四个 Workflow target binding。四组固定 Dense、Sparse、Hybrid+RRF、Hybrid+RRF+Rerank；除被消融组件外统一候选范围、finalTopK=10、neighborWindow=0、上下文预算和去重参数，Rerank 候选不超过服务 batch 上限 16。
+4. 上传后轮询真实任务到 terminal；任何 ingest 失败、取消、超时或文档未 READY 立即停止查询，保留 task/revision/stage/errorCode。引用必须从 `BENCH_DOC_B64_` heading 无损解码，按原始文档首次出现去重；heading 缺失/非法使该查询失败，禁止猜测。
+5. 固定 seed 交错四组查询顺序，warmup 与 measured 分离；每条结果立即追加 JSONL checkpoint，记录 retrievalId、wall/service/各阶段耗时、候选数、降级原因、原始 doc 排名和错误。恢复时以 runId+variant+query+iteration 去重。
+6. 聚合质量指标、失败/降级/空结果率以及 wall/service/阶段 p50/p95/p99/mean/max；输出绝对值与组间差值，但在没有 bootstrap 或重复实验时不声称统计显著。先跑 beir-mini 真实 E2E，再评估是否启动 SciFact 全量。
+7. 增加纯协议测试和本地 fake HTTP Server 黑盒测试，覆盖认证脱敏、multipart、任务失败、profile 消融参数、引用解码、断点恢复和响应上限。执行后把接口、线程、批次、文件大小、命令、测试与真实结果追加到本文，重大闭环中文提交。
+
+### 2026-07-19 阶段 5 阶段性结果（二）：生产 HTTP 黑盒 Runner
+
+#### 执行与留痕闭环
+
+- 新增 `run` 子命令，只通过指定环境变量读取 Bearer，命令行、返回对象和 manifest 都不保存凭证值。基础 URL 必须是 HTTP(S)，响应体有可配置硬上限，应用 `Response<T>` 的非 `0000` 业务码与 HTTP/协议错误分开记录。
+- Runner 通过生产 `/api/v1/rag` 接口依次建库、multipart 上传、轮询任务、查询文档 READY、创建四个 profile 和四个 Workflow binding，然后调用 retrieval-debug。摄取 failed/dead/cancelled/超时或文档未 READY 都会在检索前终止。
+- 四组参数固定为 Dense-only、Sparse-only、Hybrid+RRF、Hybrid+RRF+Rerank；dense/sparse topK=100、fusion/rerank topK=16、final topK=10、neighborWindow=0、maxContextTokens=32768、query rewrite=false、deduplicate=true。warmup 单独落 `warmup.jsonl`，measured 按 query 轮换起始 variant 交错执行，查询和上传线程均为 1。
+- 每条 measured 结果立即 append 到 `run.jsonl`，记录 runId、query SHA-256、retrievalId、原始文档排名、wall 耗时、六个服务阶段耗时、四类候选数、降级原因和稳定错误码。引用仅认 `BENCH_DOC_B64_` heading，同文档多 chunk 按首次出现去重，无法解码的查询记为失败和空排名，不猜测 ID。
+- `metrics.json` 同时保存检索质量与运行统计：error/degraded/empty 数与比率，wall、阶段耗时及候选量的 mean/P50/P95/P99/max；分位数固定为 nearest-rank。manifest 保存 code revision、JDK、OS/架构、逻辑 CPU数、数据 revision/hash/bytes、seed、线程和四组参数，凭证只记环境变量名。
+- 黑盒评测前置校验必须只有一个 Markdown 分片。根据现有“每次文档激活推进 KB generation”语义，顺序上传两个 SciFact 分片会使前一分片退出活动代际。因此已在忽略的 target 产出一个约 7.6 MiB 的 SciFact 单分片，低于现有 50 MiB 上传和 64 MiB 本地 Markdown 解析边界；没有用两分片做不完整评测。
+
+#### 真实测试结果与失败记录
+
+- Java 17 最终测试：`mvn -pl ai-agent-scaffold-benchmark test -DskipTests=false`，10/10 通过，0 failure/error/skipped，BUILD SUCCESS，总耗时 1.891 秒。包含本地 fake HTTP Server 全链路测试：3 文档/2 查询、4 消融组、8 条 measured 请求，验证上传到评分产物落盘、Bearer 脱敏、响应上限、引用去重和统计算法。
+- Java 17 打包：`mvn -pl ai-agent-scaffold-benchmark package -DskipTests=false`，当时 10/10 通过，Assembly 可执行 jar 生成成功，BUILD SUCCESS，总耗时 1.616 秒。`java -jar ... --help` 已验证 prepare/score/run 三个入口可达。
+- 统计测试首轮将两条有效 denseMs=20/30 的 mean 误写为 20，实际程序正确输出 25，导致当时 7 项中 1 failure。核对原始记录后只修正测试预期，业务统计代码未修改；最终结果为上述 10/10，失败轮不计入通过数。
+- 全仓 `git diff --check` 仍只命中用户既有运行日志的尾随空格；本切片的 benchmark 源码、测试和本文不包含这些日志，亦不提交它们。
+
+#### 未宣称完成的边界
+
+- 本切片完成的是可执行与可审计的黑盒评测工具，fake Server 只证明协议和产物闭环，不是模型效果或服务器性能结果。尚未执行真实 beir-mini/SciFact 摄取与四组查询，因此本节没有报告任何真实质量或延迟数字。
+- 现在每条查询已经 append checkpoint，中断时不丢已有原始记录；但由于生产 API 尚无完整 KB/profile 清理及评测资源恢复契约，当前命令要求空输出目录，还不支持跨进程 resume。下一切片先做真实 mini E2E，再根据实际摄取耗时决定是否在 SciFact 全量前补资源恢复/清理 API；不把本进程内落盘误称为完整断点续跑。

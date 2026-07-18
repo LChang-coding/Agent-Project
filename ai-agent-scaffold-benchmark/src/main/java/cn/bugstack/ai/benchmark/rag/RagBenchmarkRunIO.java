@@ -23,8 +23,20 @@ public final class RagBenchmarkRunIO {
     public RagBenchmarkRunIO(ObjectMapper objectMapper) { this.objectMapper = objectMapper; }
 
     public Map<String, Map<String, List<String>>> read(Path path) throws IOException {
-        if (path == null || !Files.isRegularFile(path)) throw new IllegalArgumentException("run文件不存在");
+        List<RunRecord> records = readRecords(path);
         Map<String, Map<String, List<String>>> variants = new LinkedHashMap<>();
+        for (RunRecord record : records) {
+            Map<String, List<String>> runs = variants.computeIfAbsent(record.variant(), ignored -> new LinkedHashMap<>());
+            if (runs.putIfAbsent(record.queryId(), record.rankedDocumentIds()) != null) {
+                throw new IllegalArgumentException("同一variant/query出现重复run记录");
+            }
+        }
+        return variants;
+    }
+
+    public List<RunRecord> readRecords(Path path) throws IOException {
+        if (path == null || !Files.isRegularFile(path)) throw new IllegalArgumentException("run文件不存在");
+        List<RunRecord> records = new ArrayList<>();
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             String line;
             int lineNumber = 0;
@@ -34,14 +46,11 @@ public final class RagBenchmarkRunIO {
                 if (line.length() > 2_000_000) throw new IllegalArgumentException("run单行超过上限");
                 RunRecord record = objectMapper.readValue(line, RunRecord.class);
                 validate(record, lineNumber);
-                Map<String, List<String>> runs = variants.computeIfAbsent(record.variant(), ignored -> new LinkedHashMap<>());
-                if (runs.putIfAbsent(record.queryId(), record.rankedDocumentIds()) != null) {
-                    throw new IllegalArgumentException("同一variant/query出现重复run记录");
-                }
+                records.add(record);
             }
         }
-        if (variants.isEmpty()) throw new IllegalArgumentException("run文件为空");
-        return variants;
+        if (records.isEmpty()) throw new IllegalArgumentException("run文件为空");
+        return List.copyOf(records);
     }
 
     public void writeReport(Path path, Map<String, RagRetrievalScorer.AggregateMetrics> metrics,
@@ -72,12 +81,16 @@ public final class RagBenchmarkRunIO {
 
     private boolean blank(String value) { return value == null || value.isBlank(); }
 
-    public record RunRecord(String variant, String queryId, List<String> rankedDocumentIds,
-                            long elapsedMs, boolean degraded, String errorCode,
-                            Map<String, Long> stageTimingsMs) {
+    public record RunRecord(String runId, String variant, String queryId, String querySha256,
+                            String retrievalId, List<String> rankedDocumentIds,
+                            long elapsedMs, boolean degraded, List<String> degradationReasons,
+                            String errorCode, Map<String, Long> stageTimingsMs,
+                            Map<String, Integer> candidateCounts) {
         public RunRecord {
             rankedDocumentIds = rankedDocumentIds == null ? List.of() : List.copyOf(rankedDocumentIds);
+            degradationReasons = degradationReasons == null ? List.of() : List.copyOf(degradationReasons);
             stageTimingsMs = stageTimingsMs == null ? Map.of() : Map.copyOf(stageTimingsMs);
+            candidateCounts = candidateCounts == null ? Map.of() : Map.copyOf(candidateCounts);
         }
     }
 }

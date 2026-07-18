@@ -4,17 +4,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** RAG 基准数据准备与离线评分入口。认证和在线执行由后续 run 子命令承接。 */
+/** RAG 基准数据准备、生产黑盒执行与离线评分入口。 */
 public final class RagBenchmarkCli {
 
     private RagBenchmarkCli() {}
@@ -28,6 +31,7 @@ public final class RagBenchmarkCli {
         switch (args[0].toLowerCase()) {
             case "prepare" -> prepare(options);
             case "score" -> score(options);
+            case "run" -> run(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
     }
@@ -83,6 +87,37 @@ public final class RagBenchmarkCli {
                 value.ndcgAt10(), value.mapAt10()));
     }
 
+    private static void run(Map<String, String> options) throws Exception {
+        String tokenEnvironment = options.getOrDefault("token-env", "RAG_BENCHMARK_ACCESS_TOKEN");
+        if (!tokenEnvironment.matches("[A-Z][A-Z0-9_]{2,127}")) {
+            throw new IllegalArgumentException("--token-env 必须是合法的环境变量名");
+        }
+        String token = System.getenv(tokenEnvironment);
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("环境变量 " + tokenEnvironment + " 未设置");
+        }
+        URI baseUrl = URI.create(required(options, "base-url"));
+        if (!List.of("http", "https").contains(baseUrl.getScheme())) {
+            throw new IllegalArgumentException("--base-url 只允许 http/https");
+        }
+        int requestTimeoutSeconds = integer(options, "request-timeout-seconds", 120);
+        ObjectMapper objectMapper = new ObjectMapper();
+        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(
+                integer(options, "connect-timeout-seconds", 10))).build();
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
+                Duration.ofSeconds(requestTimeoutSeconds), integer(options, "max-response-bytes", 8 * 1024 * 1024));
+        RagBenchmarkRunner.Configuration configuration = new RagBenchmarkRunner.Configuration(
+                required(options, "run-id"), baseUrl, "environment:" + tokenEnvironment,
+                required(options, "code-revision"),
+                path(options, "prepared"), path(options, "out"), number(options, "seed", 20260719L),
+                nonNegativeInteger(options, "warmup-queries", 10),
+                Duration.ofMillis(integer(options, "poll-ms", 1000)),
+                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 3600)));
+        RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, client).run(configuration);
+        System.out.printf("completed runId=%s knowledgeBaseId=%s taskId=%s out=%s%n",
+                result.runId(), result.knowledgeBaseId(), result.taskId(), configuration.runDirectory());
+    }
+
     private static Map<String, String> options(String[] args) {
         Map<String, String> values = new LinkedHashMap<>();
         for (int index = 1; index < args.length; index += 2) {
@@ -108,6 +143,11 @@ public final class RagBenchmarkCli {
     private static int integer(Map<String, String> values, String name, int fallback) {
         long value = number(values, name, fallback);
         if (value < 1 || value > Integer.MAX_VALUE) throw new IllegalArgumentException("参数超出范围 --" + name);
+        return (int) value;
+    }
+    private static int nonNegativeInteger(Map<String, String> values, String name, int fallback) {
+        long value = number(values, name, fallback);
+        if (value < 0 || value > Integer.MAX_VALUE) throw new IllegalArgumentException("参数超出范围 --" + name);
         return (int) value;
     }
     private static long number(Map<String, String> values, String name, long fallback) {
@@ -140,6 +180,10 @@ public final class RagBenchmarkCli {
         lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE");
         lines.add("        [--max-documents N --max-queries N --seed N --shard-max-bytes N]");
         lines.add("score   --qrels qrels.tsv --run run.jsonl --out metrics.json");
+        lines.add("run     --base-url http://HOST:PORT/api --prepared DIR --out EMPTY_DIR --run-id ID");
+        lines.add("        --code-revision GIT_COMMIT");
+        lines.add("        [--token-env RAG_BENCHMARK_ACCESS_TOKEN --warmup-queries 10 --seed 20260719]");
+        lines.add("        [--poll-ms 1000 --ingest-timeout-seconds 3600 --request-timeout-seconds 120]");
         lines.forEach(System.out::println);
     }
 }

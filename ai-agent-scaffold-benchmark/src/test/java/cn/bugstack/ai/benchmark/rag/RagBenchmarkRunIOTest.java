@@ -20,8 +20,9 @@ class RagBenchmarkRunIOTest {
     void shouldRoundTripVariantRunsAndRejectDuplicateVariantQuery() throws Exception {
         RagBenchmarkRunIO io = new RagBenchmarkRunIO(new ObjectMapper());
         Path run = temporaryDirectory.resolve("run.jsonl");
-        RagBenchmarkRunIO.RunRecord record = new RagBenchmarkRunIO.RunRecord("dense", "q1",
-                List.of("d1", "d2"), 12L, false, null, Map.of("dense", 8L));
+        RagBenchmarkRunIO.RunRecord record = new RagBenchmarkRunIO.RunRecord("run-1", "dense", "q1",
+                "query-sha", "retrieval-1", List.of("d1", "d2"), 12L, false, List.of(), null,
+                Map.of("dense", 8L), Map.of("dense", 2));
         io.append(run, record);
 
         assertEquals(List.of("d1", "d2"), io.read(run).get("dense").get("q1"));
