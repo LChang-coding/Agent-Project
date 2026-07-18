@@ -136,6 +136,10 @@ public class RagIngestWorkerTest {
                 new AppException("RAG_INGEST_INDEX_COUNT_MISMATCH", secret));
         RagIngestErrorClassifier.Failure retryable = classifier.classify(
                 new AppException("OBJECT_STORAGE_DOWNLOAD_FAILED", secret));
+        RagIngestErrorClassifier.Failure transientEmbedding = classifier.classify(
+                new AppException("RAG_EMBEDDING_TRANSIENT_HTTP_ERROR", secret));
+        RagIngestErrorClassifier.Failure permanentEmbedding = classifier.classify(
+                new AppException("RAG_EMBEDDING_HTTP_ERROR", secret));
 
         Assert.assertEquals("RAG_INGEST_INDEX_COUNT_MISMATCH", terminal.code());
         Assert.assertFalse(terminal.retryable());
@@ -144,6 +148,9 @@ public class RagIngestWorkerTest {
         Assert.assertEquals("OBJECT_STORAGE_DOWNLOAD_FAILED", retryable.code());
         Assert.assertTrue(retryable.retryable());
         Assert.assertFalse(retryable.safeMessage().contains(secret));
+        Assert.assertTrue(transientEmbedding.retryable());
+        Assert.assertFalse(permanentEmbedding.retryable());
+        Assert.assertFalse(transientEmbedding.safeMessage().contains(secret));
     }
 
     @Test

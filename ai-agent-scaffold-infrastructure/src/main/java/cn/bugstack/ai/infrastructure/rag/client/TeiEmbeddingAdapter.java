@@ -76,8 +76,11 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
                     validate(vectors, inputs.size(), config.getDimension());
                     return new EmbeddingResult(vectors, config.getDimension(), config.getModelRevision());
                 }
-                if (!isTransientStatus(response.statusCode()) || attempt >= config.getMaxRetries()) {
-                    throw new AppException("RAG_EMBEDDING_HTTP_ERROR",
+                boolean transientStatus = isTransientStatus(response.statusCode());
+                if (!transientStatus || attempt >= config.getMaxRetries()) {
+                    throw new AppException(transientStatus
+                            ? "RAG_EMBEDDING_TRANSIENT_HTTP_ERROR"
+                            : "RAG_EMBEDDING_HTTP_ERROR",
                             "Embedding 服务返回状态 " + response.statusCode());
                 }
                 Thread.sleep(backoffMs);

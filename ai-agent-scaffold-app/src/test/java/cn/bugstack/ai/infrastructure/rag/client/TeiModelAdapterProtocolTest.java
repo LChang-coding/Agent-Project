@@ -126,7 +126,7 @@ public class TeiModelAdapterProtocolTest {
         status.set(503);
         respondJson("{\"detail\":\"" + RESPONSE_SECRET + " " + API_KEY + "\"}");
         AppException exception = expectEmbeddingFailure();
-        Assert.assertEquals("RAG_EMBEDDING_HTTP_ERROR", exception.getCode());
+        Assert.assertEquals("RAG_EMBEDDING_TRANSIENT_HTTP_ERROR", exception.getCode());
         assertSensitiveValuesHidden(exception);
     }
 
@@ -145,7 +145,7 @@ public class TeiModelAdapterProtocolTest {
         properties.getEmbedding().setMaxRetries(2);
         status.set(429);
         AppException exhausted = expectEmbeddingFailure();
-        Assert.assertEquals("RAG_EMBEDDING_HTTP_ERROR", exhausted.getCode());
+        Assert.assertEquals("RAG_EMBEDDING_TRANSIENT_HTTP_ERROR", exhausted.getCode());
         Assert.assertEquals(3, requests.size());
 
         requests.clear();

@@ -858,3 +858,29 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 定向测试首次24项中23项通过；失败项把“调用前已中断”误期望成退避中断，实际稳定码为既有 `RAG_REMOTE_INTERRUPTED`。测试改为服务返回429后中断退避线程，最终24/24通过，0 failure/error/skipped，BUILD SUCCESS 2.719秒；随后本机 app 打包成功。
 - 重跑 runId `scifact-quality-retry-b00f9cc` 先用 batch=4 推进到184/7548。只读检查部署确认 TEI `max-batch-tokens=8192`、`max-client-batch-size=16`，随后暂停 benchmark 轮询、优雅停止旧 JVM并以 batch=8启动。旧 lease 自然到期后，新 Worker 从 checkpoint 恢复：attempt 1→2、fencing token 1→2、进度184→232→320，错误码为空；再恢复 benchmark 轮询。该过程验证 checkpoint/fencing 闭环，未上传项目到服务器，未更改语料和检索变量。
 - benchmark 脚本新增可外部配置的 warmup 查询数和摄取超时，默认行为保持0和900秒；本次明确为 warmup=10、ingest timeout=7200秒。成功重跑仍在进行，最终1200条结果和指标将在完成后继续追加。
+- 成功重跑后续除服务器容器 `docker stats` 外，再按5秒间隔采集本机隔离 app JVM 与 benchmark JVM 的 CPU/RSS/VSZ；采集文件只记录 PID、进程角色与资源数值，不记录命令行、环境变量或凭据。最终按摄取、warmup、measured 时间边界汇总峰值与阶段差异。
+- 当前 run 在背压修复尚未提交时启动，因此自动写入的 `codeRevision=b00f9cc...` 只代表启动时 HEAD，不足以唯一标识运行字节码。已在运行中且未重新打包时冻结证据：app JAR SHA-256=`ec0a0035aca50f5cf37f79f66f3b465a330e33dda265d8e87b58aba816771a3c`（323,829,376 bytes，构建时间2026-07-19 04:59:11+08:00），benchmark CLI JAR SHA-256=`3bb93739c42a6e8bb3cdea1856013a1bb178237eccb1b98c2e6e68ca84fdc470`。最终报告同时使用 JAR 哈希和提交 `a150d43`，并明确该提交比运行 JAR只多重试上限校验/亚毫秒保护，不伪称二者字节相同。后续脚本需补 runtime artifact hash/dirty 状态，避免只记录 HEAD。
+
+#### 第二次受控吞吐调整
+
+- batch=8 在长时间采样中约为1.2–2.2 chunks/s，Embedding 计算峰值约4.2核但大量时间等待本地应用到远程 MySQL 的 barrier/checkpoint 往返；按当前速率接近7200秒摄取超时边界。child 上限420估算 tokens，TEI总批次上限8192，batch=12 的理论上界约5040估算 tokens，保留足够 tokenizer 偏差空间。
+- 前一次人为重启和一次真实心跳重领已使 attempt=3/maxAttempts=3。为让同一评测任务能安全完成，只对当前 taskId、`status=running`、`max_attempts=3` 做条件更新到6，并核对恰好影响1行；不改 checkpoint、fencing token、lease、generation 或文档状态。该运维干预和 SQL 影响行数必须留痕。
+- 再次暂停 benchmark 轮询，优雅停止 batch=8 JVM，以 batch=12、600秒 lease、30秒 heartbeat 启动；等待旧 lease 到期并确认 attempt=4、fencing token递增、checkpoint单调后恢复轮询。如果实际出现连续429，有限重试耗尽后保留失败，不继续扩大批次或服务器资源。
+
+#### 终态清理缺陷恢复计划（执行前）
+
+1. 保持 benchmark JVM 暂停，冻结 batch=12 失败任务及 run 目录；先从源码、MySQL 与 Qdrant 三方核验失败后的真实副作用，不直接把终态任务改回 `retrying`。
+2. 已由源码确认：重试耗尽后适配器抛出稳定码 `RAG_EMBEDDING_HTTP_ERROR`，但错误分类器未把该码识别为瞬态，Worker 因而走 `cleanupForTerminalFailure`，删除该版本全部 Qdrant 向量和数据库 chunks，再关闭任务、版本和文档。继续核对数据库 chunk 数、任务/版本/文档状态以及 Qdrant version filter 计数；若清理成立，禁止从 checkpoint 1504 伪续跑。
+3. 修复错误语义：Embedding 适配器对429/502/503/504重试耗尽时抛出新的可重试稳定码，非瞬态4xx继续抛终态 HTTP 错误；错误分类器只把前者列为可重试。增加分类器和适配器回归测试，覆盖429耗尽为可重试、401为不可重试，避免永久配置错误无限占用 Worker。
+4. 旧失败任务、错误码、checkpoint 和清理结果完整保留。通过生产 HTTP 链路新建独立 run/租户/知识库并从0重新摄取完整 SciFact，不复用已被清空的 version；使用已验证更稳定的 batch=8、600秒 lease、30秒 heartbeat，摄取超时按完整重跑重新计时。
+5. 新任务必须先核对 attempt/fencing/checkpoint、数据库 chunk 与 Qdrant point 同步增长，才允许进入300查询×4消融评分。当前暂停的旧 benchmark 进程在证据收集后终止，不恢复成会误报成功的旧 run。
+6. 将 batch=12 失败、错误分类根因、清理计数、代码测试、新 run 标识、运行参数和所有后续真实结果追加本文；修复闭环后进行中文本地提交，不纳入用户日志及无关文件。
+7. 只读连接发现 `codex.md` 的 MySQL 凭据与用户本阶段明确提供值不一致；在不输出旧值和新值到日志/提交信息的前提下，仅修正本地凭据表，并用脱敏连接结果校验。`codex.md` 若按规范不受 Git 管理，则不强行纳入提交。
+
+##### 终态清理缺陷核验与修复结果
+
+- batch=12 任务在 attempt=5、fencing token=5、checkpoint=1504/7548 时以 `RAG_EMBEDDING_HTTP_ERROR` 关闭。源码证明 `cleanupForTerminalFailure` 会先删除 Qdrant version points 和数据库 chunks，再以事务关闭任务、版本和文档；MySQL 实查该 version 的 chunk count=0、版本 `failed/chunk_count=0`、文档 `failed/active_version_id=NULL/chunk_count=0`，Qdrant 以 tenant+version 精确过滤计数也为0。由此否决了直接恢复旧 checkpoint 的方案。
+- 修复将瞬态状态429/502/503/504在有限重试耗尽后的稳定码改为 `RAG_EMBEDDING_TRANSIENT_HTTP_ERROR`，错误分类器只把该码视作可重试；401等非瞬态状态仍使用 `RAG_EMBEDDING_HTTP_ERROR` 并终态处理。这样既不会因模型网关瞬态背压清空整版数据，也不会让永久认证/请求错误无限重试。
+- 首轮定向测试中协议适配器10/10通过，Worker 的4个 error 均为旧 Surefire fork JVM 未收到 Mockito attach 参数。使用 `-DargLine=-Djdk.attach.allowAttachSelf=true` clean 重跑后，`TeiModelAdapterProtocolTest` 10/10、`RagIngestWorkerTest` 6/6，共16/16通过，0 failure/error/skipped，BUILD SUCCESS 9.394秒；随后 app `package -DskipTests` BUILD SUCCESS 7.674秒。
+- 旧 benchmark JVM在保持暂停的前提下收到中断并退出（exit 130），不会把已清空版本误用于评分；batch=12旧 app已优雅停止。新修复 JAR以 batch=8、最多5次HTTP重试、500ms到4s退避、600秒 lease、30秒 heartbeat 启动，PID=81885，8092健康且 MySQL连接池成功建连。
+- `codex.md` 的凭据表已按用户本阶段明确提供的 MySQL 值修正；第一次脱敏校验仍误匹配到上方“中间件用途”表的同名行而失败，追加“用户名列包含应用配置说明”的唯一条件后 `SELECT 1` 成功。该歧义只影响临时校验命令，未把凭据打印到输出。
