@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao">
+
+    <resultMap id="RagRetrievalProfileMap" type="cn.bugstack.ai.infrastructure.dao.po.RagRetrievalProfilePO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="profile_id" property="profileId"/>
+        <result column="profile_name" property="profileName"/>
+        <result column="dense_enabled" property="denseEnabled"/>
+        <result column="sparse_enabled" property="sparseEnabled"/>
+        <result column="fusion_strategy" property="fusionStrategy"/>
+        <result column="dense_weight" property="denseWeight"/>
+        <result column="sparse_weight" property="sparseWeight"/>
+        <result column="dense_top_k" property="denseTopK"/>
+        <result column="sparse_top_k" property="sparseTopK"/>
+        <result column="fusion_top_k" property="fusionTopK"/>
+        <result column="rerank_enabled" property="rerankEnabled"/>
+        <result column="rerank_top_k" property="rerankTopK"/>
+        <result column="final_top_k" property="finalTopK"/>
+        <result column="neighbor_window" property="neighborWindow"/>
+        <result column="max_context_tokens" property="maxContextTokens"/>
+        <result column="score_threshold" property="scoreThreshold"/>
+        <result column="query_rewrite_enabled" property="queryRewriteEnabled"/>
+        <result column="deduplicate_enabled" property="deduplicateEnabled"/>
+        <result column="config_json" property="configJson"/>
+        <result column="revision" property="revision"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="queryByTenantAndProfileId" resultMap="RagRetrievalProfileMap">
+        SELECT id, tenant_id, profile_id, profile_name, dense_enabled, sparse_enabled, fusion_strategy,
+               dense_weight, sparse_weight, dense_top_k, sparse_top_k, fusion_top_k, rerank_enabled,
+               rerank_top_k, final_top_k, neighbor_window, max_context_tokens, score_threshold,
+               query_rewrite_enabled, deduplicate_enabled, config_json, revision, status,
+               create_time, update_time, deleted
+        FROM rag_retrieval_profile
+        WHERE tenant_id = #{tenantId} AND profile_id = #{profileId}
+          AND status = 'active' AND deleted = 0
+        LIMIT 1
+    </select>
+</mapper>

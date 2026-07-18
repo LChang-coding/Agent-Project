@@ -48,6 +48,16 @@ public class RagKnowledgeBasePO extends BasePO {
      */
     private String embeddingModel;
 
+    private Integer embeddingDimension;
+
+    private String collectionAlias;
+
+    private Long currentGeneration;
+
+    private String retrievalProfileId;
+
+    private Long revision;
+
     /**
      * 知识库状态：active/disabled/indexing
      */

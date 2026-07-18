@@ -38,6 +38,8 @@ public class RagDocumentPO extends BasePO {
      */
     private String documentId;
 
+    private String assetId;
+
     /**
      * 文件名
      */
@@ -53,10 +55,42 @@ public class RagDocumentPO extends BasePO {
      */
     private String sourceUri;
 
+    private String sourceBucket;
+
+    private String sourceObjectKey;
+
+    private String mimeType;
+
+    private Long sizeBytes;
+
     /**
      * 内容哈希
      */
     private String contentHash;
+
+    private Integer documentVersion;
+
+    private Long activeGeneration;
+
+    private String activeVersionId;
+
+    private Long targetGeneration;
+
+    private String parserName;
+
+    private String parserVersion;
+
+    private Integer pageCount;
+
+    private Integer chunkCount;
+
+    private String lastErrorCode;
+
+    private String lastErrorMessage;
+
+    private java.time.LocalDateTime indexedAt;
+
+    private Long revision;
 
     /**
      * 文档状态：active/indexing/indexed/failed/deleted

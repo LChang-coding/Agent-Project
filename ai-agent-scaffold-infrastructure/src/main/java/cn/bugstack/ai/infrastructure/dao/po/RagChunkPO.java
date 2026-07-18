@@ -38,6 +38,12 @@ public class RagChunkPO extends BasePO {
      */
     private String documentId;
 
+    private Integer documentVersion;
+
+    private String versionId;
+
+    private Long generation;
+
     /**
      * 切片业务ID
      */
@@ -48,10 +54,28 @@ public class RagChunkPO extends BasePO {
      */
     private Integer chunkIndex;
 
+    private String parentChunkId;
+
+    private String previousChunkId;
+
+    private String nextChunkId;
+
+    private String sectionPath;
+
+    private Integer pageFrom;
+
+    private Integer pageTo;
+
+    private Integer charStart;
+
+    private Integer charEnd;
+
     /**
      * 切片内容
      */
     private String content;
+
+    private String contentHash;
 
     /**
      * 切片 token 数
@@ -63,10 +87,14 @@ public class RagChunkPO extends BasePO {
      */
     private String embeddingId;
 
+    private String vectorPointId;
+
     /**
      * 切片状态：active/deleted
      */
     private String status;
+
+    private Long revision;
 
     /**
      * 扩展信息

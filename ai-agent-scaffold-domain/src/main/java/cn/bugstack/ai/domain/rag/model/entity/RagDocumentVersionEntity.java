@@ -13,6 +13,7 @@ public record RagDocumentVersionEntity(String tenantId,
                                        long generation,
                                        String objectBucket,
                                        String objectKey,
+                                       String fileName,
                                        String sha256,
                                        String mimeType,
                                        long sizeBytes,
@@ -29,6 +30,7 @@ public record RagDocumentVersionEntity(String tenantId,
         requireText(versionId, "文档版本ID");
         requireText(objectBucket, "对象存储桶");
         requireText(objectKey, "对象存储键");
+        requireText(fileName, "文件名");
         requireText(sha256, "文件摘要");
         requireText(mimeType, "文件类型");
         if (versionNumber < 1 || generation < 1 || sizeBytes < 0 || status == null || revision < 0) {

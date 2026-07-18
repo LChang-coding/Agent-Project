@@ -9,78 +9,119 @@
         <result column="visibility" property="visibility"/>
         <result column="kb_id" property="knowledgeBaseId"/>
         <result column="document_id" property="documentId"/>
+        <result column="document_version" property="documentVersion"/>
+        <result column="version_id" property="versionId"/>
+        <result column="generation" property="generation"/>
         <result column="chunk_id" property="chunkId"/>
         <result column="chunk_index" property="chunkIndex"/>
+        <result column="parent_chunk_id" property="parentChunkId"/>
+        <result column="previous_chunk_id" property="previousChunkId"/>
+        <result column="next_chunk_id" property="nextChunkId"/>
+        <result column="section_path" property="sectionPath"/>
+        <result column="page_from" property="pageFrom"/>
+        <result column="page_to" property="pageTo"/>
+        <result column="char_start" property="charStart"/>
+        <result column="char_end" property="charEnd"/>
         <result column="content" property="content"/>
+        <result column="content_hash" property="contentHash"/>
         <result column="token_count" property="tokenCount"/>
         <result column="embedding_id" property="embeddingId"/>
+        <result column="vector_point_id" property="vectorPointId"/>
         <result column="status" property="status"/>
+        <result column="revision" property="revision"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="deleted" property="deleted"/>
     </resultMap>
 
-    <sql id="RagChunkColumns">
-        id, tenant_id, owner_user_id, visibility, kb_id, document_id, chunk_id, chunk_index, content, token_count, embedding_id, status, metadata, create_time, update_time, deleted
+    <sql id="Columns">
+        id, tenant_id, owner_user_id, visibility, kb_id, document_id, document_version, version_id,
+        generation, chunk_id, chunk_index, parent_chunk_id, previous_chunk_id, next_chunk_id,
+        section_path, page_from, page_to, char_start, char_end, content, content_hash, token_count,
+        embedding_id, vector_point_id, status, revision, metadata, create_time, update_time, deleted
     </sql>
 
-    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO rag_chunk (tenant_id, owner_user_id, visibility, kb_id, document_id, chunk_id, chunk_index, content, token_count, embedding_id, status, metadata)
-        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{knowledgeBaseId}, #{documentId}, #{chunkId}, #{chunkIndex}, #{content}, #{tokenCount}, #{embeddingId}, #{status}, #{metadata})
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_chunk (
+            tenant_id, owner_user_id, visibility, kb_id, document_id, document_version, version_id,
+            generation, chunk_id, chunk_index, parent_chunk_id, previous_chunk_id, next_chunk_id,
+            section_path, page_from, page_to, char_start, char_end, content, content_hash, token_count,
+            embedding_id, vector_point_id, status, revision, metadata
+        ) VALUES (
+            #{tenantId}, #{ownerUserId}, #{visibility}, #{knowledgeBaseId}, #{documentId},
+            #{documentVersion}, #{versionId}, #{generation}, #{chunkId}, #{chunkIndex},
+            #{parentChunkId}, #{previousChunkId}, #{nextChunkId}, #{sectionPath}, #{pageFrom}, #{pageTo},
+            #{charStart}, #{charEnd}, #{content}, #{contentHash}, #{tokenCount}, #{embeddingId},
+            #{vectorPointId}, #{status}, COALESCE(#{revision}, 1), #{metadata}
+        )
     </insert>
 
-    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO">
-        UPDATE rag_chunk
-        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, kb_id = #{knowledgeBaseId}, document_id = #{documentId}, chunk_id = #{chunkId}, chunk_index = #{chunkIndex}, content = #{content}, token_count = #{tokenCount}, embedding_id = #{embeddingId}, status = #{status}, metadata = #{metadata}
-        WHERE id = #{id} AND deleted = 0
-    </update>
+    <insert id="upsertBatch">
+        INSERT INTO rag_chunk (
+            tenant_id, owner_user_id, visibility, kb_id, document_id, document_version, version_id,
+            generation, chunk_id, chunk_index, parent_chunk_id, previous_chunk_id, next_chunk_id,
+            section_path, page_from, page_to, char_start, char_end, content, content_hash, token_count,
+            embedding_id, vector_point_id, status, revision, metadata, deleted
+        ) VALUES
+        <foreach collection="chunks" item="chunk" separator=",">
+            (#{tenantId}, #{chunk.ownerUserId}, #{chunk.visibility}, #{chunk.knowledgeBaseId},
+             #{chunk.documentId}, #{chunk.documentVersion}, #{versionId}, #{chunk.generation},
+             #{chunk.chunkId}, #{chunk.chunkIndex}, #{chunk.parentChunkId}, #{chunk.previousChunkId},
+             #{chunk.nextChunkId}, #{chunk.sectionPath}, #{chunk.pageFrom}, #{chunk.pageTo},
+             #{chunk.charStart}, #{chunk.charEnd}, #{chunk.content}, #{chunk.contentHash},
+             #{chunk.tokenCount}, #{chunk.embeddingId}, #{chunk.vectorPointId}, #{chunk.status},
+             COALESCE(#{chunk.revision}, 1), #{chunk.metadata}, 0)
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            owner_user_id = VALUES(owner_user_id),
+            visibility = VALUES(visibility),
+            kb_id = VALUES(kb_id),
+            document_version = VALUES(document_version),
+            version_id = VALUES(version_id),
+            parent_chunk_id = VALUES(parent_chunk_id),
+            previous_chunk_id = VALUES(previous_chunk_id),
+            next_chunk_id = VALUES(next_chunk_id),
+            section_path = VALUES(section_path),
+            page_from = VALUES(page_from),
+            page_to = VALUES(page_to),
+            char_start = VALUES(char_start),
+            char_end = VALUES(char_end),
+            content = VALUES(content),
+            content_hash = VALUES(content_hash),
+            token_count = VALUES(token_count),
+            embedding_id = VALUES(embedding_id),
+            vector_point_id = VALUES(vector_point_id),
+            status = VALUES(status),
+            metadata = VALUES(metadata),
+            revision = revision + 1,
+            deleted = 0
+    </insert>
 
-    <select id="queryById" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE id = #{id} AND deleted = 0
+    <select id="queryListByTenantAndVersionId" resultMap="RagChunkMap">
+        SELECT <include refid="Columns"/> FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND version_id = #{versionId} AND deleted = 0
+        ORDER BY chunk_index ASC, id ASC
     </select>
 
-    <select id="queryByChunkId" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE chunk_id = #{chunkId} AND deleted = 0
+    <select id="queryByTenantAndChunkId" resultMap="RagChunkMap">
+        SELECT <include refid="Columns"/> FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND chunk_id = #{chunkId} AND deleted = 0 LIMIT 1
     </select>
 
     <select id="queryListByTenantId" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE tenant_id = #{tenantId} AND deleted = 0
-        ORDER BY chunk_index ASC, id ASC
-    </select>
-
-    <select id="queryListByOwnerUserId" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE owner_user_id = #{ownerUserId} AND deleted = 0
-        ORDER BY chunk_index ASC, id ASC
-    </select>
-
-    <select id="queryListByKnowledgeBaseId" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE kb_id = #{knowledgeBaseId} AND deleted = 0
-        ORDER BY chunk_index ASC, id ASC
-    </select>
-
-    <select id="queryListByDocumentId" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE document_id = #{documentId} AND deleted = 0
-        ORDER BY chunk_index ASC, id ASC
+        SELECT <include refid="Columns"/> FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND deleted = 0 ORDER BY id DESC
     </select>
 
     <select id="queryListByTenantIdAndVisibility" resultMap="RagChunkMap">
-        SELECT <include refid="RagChunkColumns"/>
-        FROM rag_chunk
-        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0
-        ORDER BY id DESC
+        SELECT <include refid="Columns"/> FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0 ORDER BY id DESC
     </select>
 
+    <update id="softDeleteByTenantAndVersionId">
+        UPDATE rag_chunk SET status = 'deleted', deleted = 1, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND version_id = #{versionId} AND deleted = 0
+    </update>
 </mapper>

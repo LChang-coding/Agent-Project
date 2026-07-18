@@ -37,6 +37,10 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/rag_knowledge_base_mapper.xml",
                 "mybatis/mapper/rag_document_mapper.xml",
                 "mybatis/mapper/rag_chunk_mapper.xml",
+                "mybatis/mapper/rag_document_version_mapper.xml",
+                "mybatis/mapper/rag_ingest_task_mapper.xml",
+                "mybatis/mapper/rag_retrieval_profile_mapper.xml",
+                "mybatis/mapper/rag_agent_binding_mapper.xml",
                 "mybatis/mapper/skill_definition_mapper.xml",
                 "mybatis/mapper/skill_version_mapper.xml",
                 "mybatis/mapper/mcp_server_config_mapper.xml",
@@ -84,8 +88,48 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.updateByTenantAndRevision"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.claimDue"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.queryByTenantAndProfileId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.queryActiveByTenantAndTarget"));
         assertContextInsightAggregateScopes(configuration);
         assertScheduleReconcileScopes(configuration);
+        assertRagTenantAndClaimScopes(configuration);
+    }
+
+    private void assertRagTenantAndClaimScopes(Configuration configuration) {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("tenantId", "tenant_1");
+        parameters.put("taskId", "task_1");
+        parameters.put("leaseOwner", "worker_1");
+        parameters.put("now", java.time.LocalDateTime.now());
+        parameters.put("leaseUntil", java.time.LocalDateTime.now().plusMinutes(1));
+
+        String claimSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.claimDue", parameters);
+        Assert.assertTrue(claimSql.contains("tenant_id = ?"));
+        Assert.assertTrue(claimSql.contains("task_id = ?"));
+        Assert.assertTrue(claimSql.contains("attempt_count < max_attempts"));
+        Assert.assertTrue(claimSql.contains("fencing_token = fencing_token + 1"));
+        Assert.assertTrue(claimSql.contains("row_version = row_version + 1"));
+        Assert.assertTrue(claimSql.contains("status = 'retrying'"));
+        Assert.assertTrue(claimSql.contains("status = 'running'"));
+        Assert.assertTrue(claimSql.contains("lease_until <= ?"));
+
+        parameters.put("versionId", "version_1");
+        String chunkQuerySql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagChunkDao.queryListByTenantAndVersionId", parameters);
+        Assert.assertTrue(chunkQuerySql.contains("tenant_id = ?"));
+        Assert.assertTrue(chunkQuerySql.contains("version_id = ?"));
+
+        parameters.put("targetType", "agent");
+        parameters.put("targetId", "agent_1");
+        String bindingSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.queryActiveByTenantAndTarget", parameters);
+        Assert.assertTrue(bindingSql.contains("tenant_id = ?"));
+        Assert.assertTrue(bindingSql.contains("target_type = ?"));
+        Assert.assertTrue(bindingSql.contains("target_id = ?"));
+        Assert.assertTrue(bindingSql.contains("status = 'active'"));
     }
 
     private void assertScheduleReconcileScopes(Configuration configuration) {

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao">
+
+    <resultMap id="RagAgentBindingMap" type="cn.bugstack.ai.infrastructure.dao.po.RagAgentBindingPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="binding_id" property="bindingId"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="profile_id" property="profileId"/>
+        <result column="priority" property="priority"/>
+        <result column="required" property="required"/>
+        <result column="max_tokens" property="maxTokens"/>
+        <result column="status" property="status"/>
+        <result column="revision" property="revision"/>
+        <result column="metadata" property="metadata"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="queryActiveByTenantAndTarget" resultMap="RagAgentBindingMap">
+        SELECT id, tenant_id, binding_id, target_type, target_id, kb_id, profile_id, priority,
+               required, max_tokens, status, revision, metadata, create_time, update_time, deleted
+        FROM rag_agent_binding
+        WHERE tenant_id = #{tenantId} AND target_type = #{targetType} AND target_id = #{targetId}
+          AND status = 'active' AND deleted = 0
+        ORDER BY priority ASC, id ASC
+    </select>
+</mapper>

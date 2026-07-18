@@ -9,10 +9,27 @@
         <result column="visibility" property="visibility"/>
         <result column="kb_id" property="knowledgeBaseId"/>
         <result column="document_id" property="documentId"/>
+        <result column="asset_id" property="assetId"/>
         <result column="file_name" property="fileName"/>
         <result column="source_type" property="sourceType"/>
         <result column="source_uri" property="sourceUri"/>
+        <result column="source_bucket" property="sourceBucket"/>
+        <result column="source_object_key" property="sourceObjectKey"/>
+        <result column="mime_type" property="mimeType"/>
+        <result column="size_bytes" property="sizeBytes"/>
         <result column="content_hash" property="contentHash"/>
+        <result column="document_version" property="documentVersion"/>
+        <result column="active_generation" property="activeGeneration"/>
+        <result column="active_version_id" property="activeVersionId"/>
+        <result column="target_generation" property="targetGeneration"/>
+        <result column="parser_name" property="parserName"/>
+        <result column="parser_version" property="parserVersion"/>
+        <result column="page_count" property="pageCount"/>
+        <result column="chunk_count" property="chunkCount"/>
+        <result column="last_error_code" property="lastErrorCode"/>
+        <result column="last_error_message" property="lastErrorMessage"/>
+        <result column="indexed_at" property="indexedAt"/>
+        <result column="revision" property="revision"/>
         <result column="status" property="status"/>
         <result column="metadata" property="metadata"/>
         <result column="create_time" property="createTime"/>
@@ -20,66 +37,60 @@
         <result column="deleted" property="deleted"/>
     </resultMap>
 
-    <sql id="RagDocumentColumns">
-        id, tenant_id, owner_user_id, visibility, kb_id, document_id, file_name, source_type, source_uri, content_hash, status, metadata, create_time, update_time, deleted
+    <sql id="Columns">
+        id, tenant_id, owner_user_id, visibility, kb_id, document_id, asset_id, file_name,
+        source_type, source_uri, source_bucket, source_object_key, mime_type, size_bytes, content_hash,
+        document_version, active_generation, active_version_id, target_generation, parser_name,
+        parser_version, page_count, chunk_count, last_error_code, last_error_message, indexed_at,
+        revision, status, metadata, create_time, update_time, deleted
     </sql>
 
-    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO rag_document (tenant_id, owner_user_id, visibility, kb_id, document_id, file_name, source_type, source_uri, content_hash, status, metadata)
-        VALUES (#{tenantId}, #{ownerUserId}, #{visibility}, #{knowledgeBaseId}, #{documentId}, #{fileName}, #{sourceType}, #{sourceUri}, #{contentHash}, #{status}, #{metadata})
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_document (
+            tenant_id, owner_user_id, visibility, kb_id, document_id, asset_id, file_name,
+            source_type, source_uri, source_bucket, source_object_key, mime_type, size_bytes, content_hash,
+            document_version, active_generation, active_version_id, target_generation, parser_name,
+            parser_version, page_count, chunk_count, last_error_code, last_error_message, indexed_at,
+            revision, status, metadata
+        ) VALUES (
+            #{tenantId}, #{ownerUserId}, #{visibility}, #{knowledgeBaseId}, #{documentId}, #{assetId},
+            #{fileName}, #{sourceType}, #{sourceUri}, #{sourceBucket}, #{sourceObjectKey}, #{mimeType},
+            #{sizeBytes}, #{contentHash}, COALESCE(#{documentVersion}, 1), COALESCE(#{activeGeneration}, 0),
+            #{activeVersionId}, #{targetGeneration}, #{parserName}, #{parserVersion}, #{pageCount},
+            COALESCE(#{chunkCount}, 0),
+            #{lastErrorCode}, #{lastErrorMessage}, #{indexedAt}, #{revision}, #{status}, #{metadata}
+        )
     </insert>
 
-    <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO">
-        UPDATE rag_document
-        SET tenant_id = #{tenantId}, owner_user_id = #{ownerUserId}, visibility = #{visibility}, kb_id = #{knowledgeBaseId}, document_id = #{documentId}, file_name = #{fileName}, source_type = #{sourceType}, source_uri = #{sourceUri}, content_hash = #{contentHash}, status = #{status}, metadata = #{metadata}
-        WHERE id = #{id} AND deleted = 0
-    </update>
-
-    <select id="queryById" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE id = #{id} AND deleted = 0
+    <select id="queryByTenantAndDocumentId" resultMap="RagDocumentMap">
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND document_id = #{documentId} AND deleted = 0 LIMIT 1
     </select>
 
-    <select id="queryByDocumentId" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE document_id = #{documentId} AND deleted = 0
+    <select id="queryListByTenantAndKnowledgeBaseId" resultMap="RagDocumentMap">
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0 ORDER BY id DESC
     </select>
 
     <select id="queryListByTenantId" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE tenant_id = #{tenantId} AND deleted = 0
-        ORDER BY id DESC
-    </select>
-
-    <select id="queryListByOwnerUserId" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE owner_user_id = #{ownerUserId} AND deleted = 0
-        ORDER BY id DESC
-    </select>
-
-    <select id="queryListByKnowledgeBaseId" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE kb_id = #{knowledgeBaseId} AND deleted = 0
-        ORDER BY id DESC
-    </select>
-
-    <select id="queryListByDocumentId" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE document_id = #{documentId} AND deleted = 0
-        ORDER BY id DESC
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND deleted = 0 ORDER BY id DESC
     </select>
 
     <select id="queryListByTenantIdAndVisibility" resultMap="RagDocumentMap">
-        SELECT <include refid="RagDocumentColumns"/>
-        FROM rag_document
-        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0
-        ORDER BY id DESC
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0 ORDER BY id DESC
     </select>
 
+    <update id="updateByTenantAndRevision">
+        UPDATE rag_document
+        SET owner_user_id = #{document.ownerUserId}, visibility = #{document.visibility},
+            kb_id = #{document.knowledgeBaseId}, file_name = #{document.fileName},
+            active_generation = #{document.activeGeneration},
+            active_version_id = #{document.activeVersionId}, target_generation = #{document.targetGeneration},
+            status = #{document.status}, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND document_id = #{document.documentId}
+          AND revision = #{expectedRevision} AND deleted = 0
+    </update>
 </mapper>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao">
+
+    <resultMap id="RagDocumentVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.RagDocumentVersionPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="document_id" property="documentId"/>
+        <result column="version_id" property="versionId"/>
+        <result column="version_no" property="versionNumber"/>
+        <result column="generation" property="generation"/>
+        <result column="asset_id" property="assetId"/>
+        <result column="source_bucket" property="sourceBucket"/>
+        <result column="source_object_key" property="sourceObjectKey"/>
+        <result column="file_name" property="fileName"/>
+        <result column="mime_type" property="mimeType"/>
+        <result column="size_bytes" property="sizeBytes"/>
+        <result column="content_hash" property="contentHash"/>
+        <result column="parser_name" property="parserName"/>
+        <result column="parser_version" property="parserVersion"/>
+        <result column="chunker_version" property="chunkerVersion"/>
+        <result column="embedding_model_revision" property="embeddingModelRevision"/>
+        <result column="parsed_bucket" property="parsedBucket"/>
+        <result column="parsed_object_key" property="parsedObjectKey"/>
+        <result column="page_count" property="pageCount"/>
+        <result column="character_count" property="characterCount"/>
+        <result column="chunk_count" property="chunkCount"/>
+        <result column="status" property="status"/>
+        <result column="metadata" property="metadata"/>
+        <result column="row_version" property="rowVersion"/>
+        <result column="indexed_at" property="indexedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, tenant_id, kb_id, document_id, version_id, version_no, generation, asset_id,
+        source_bucket, source_object_key, file_name, mime_type, size_bytes, content_hash,
+        parser_name, parser_version, chunker_version, embedding_model_revision, parsed_bucket,
+        parsed_object_key, page_count, character_count, chunk_count, status, metadata, row_version,
+        indexed_at, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagDocumentVersionPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_document_version (
+            tenant_id, kb_id, document_id, version_id, version_no, generation, asset_id,
+            source_bucket, source_object_key, file_name, mime_type, size_bytes, content_hash,
+            parser_name, parser_version, chunker_version, embedding_model_revision, parsed_bucket,
+            parsed_object_key, page_count, character_count, chunk_count, status, metadata, row_version,
+            indexed_at
+        ) VALUES (
+            #{tenantId}, #{knowledgeBaseId}, #{documentId}, #{versionId}, #{versionNumber},
+            #{generation}, #{assetId}, #{sourceBucket}, #{sourceObjectKey}, #{fileName}, #{mimeType},
+            #{sizeBytes}, #{contentHash}, #{parserName}, #{parserVersion}, #{chunkerVersion},
+            #{embeddingModelRevision}, #{parsedBucket}, #{parsedObjectKey}, #{pageCount},
+            #{characterCount}, COALESCE(#{chunkCount}, 0), #{status}, #{metadata}, #{rowVersion}, #{indexedAt}
+        )
+    </insert>
+
+    <select id="queryByTenantAndVersionId" resultMap="RagDocumentVersionMap">
+        SELECT <include refid="Columns"/> FROM rag_document_version
+        WHERE tenant_id = #{tenantId} AND version_id = #{versionId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="queryListByTenantAndDocumentId" resultMap="RagDocumentVersionMap">
+        SELECT <include refid="Columns"/> FROM rag_document_version
+        WHERE tenant_id = #{tenantId} AND document_id = #{documentId} AND deleted = 0
+        ORDER BY version_no DESC, id DESC
+    </select>
+
+    <update id="updateByTenantAndRevision">
+        UPDATE rag_document_version
+        SET parser_version = #{version.parserVersion}, chunker_version = #{version.chunkerVersion},
+            embedding_model_revision = #{version.embeddingModelRevision},
+            status = #{version.status}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND version_id = #{version.versionId}
+          AND row_version = #{expectedRevision} AND deleted = 0
+    </update>
+</mapper>

@@ -68,7 +68,7 @@ public interface IRagRepository {
     int updateIngestJob(String tenantId, RagIngestJobEntity job, long expectedRevision);
 
     /** 领取一条到期任务；实现必须原子分配单调递增 fencing token。 */
-    Optional<RagIngestJobEntity> claimDueIngestJob(String tenantId, String leaseOwner,
+    Optional<RagIngestJobEntity> claimDueIngestJob(String tenantId, String jobId, String leaseOwner,
                                                    Instant now, Instant leaseUntil);
 
     /** 查询租户文档版本的分块。 */

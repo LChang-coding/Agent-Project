@@ -26,12 +26,6 @@ public class PlatformRepository implements IPlatformRepository {
 
     private final IArtifactAssetDao artifactAssetDao;
 
-    private final IRagKnowledgeBaseDao ragKnowledgeBaseDao;
-
-    private final IRagDocumentDao ragDocumentDao;
-
-    private final IRagChunkDao ragChunkDao;
-
     private final ISkillDefinitionDao skillDefinitionDao;
 
     private final IMcpServerConfigDao mcpServerConfigDao;
@@ -50,9 +44,6 @@ public class PlatformRepository implements IPlatformRepository {
                               IChatMessageDao chatMessageDao,
                               IModelUsageDao modelUsageDao,
                               IArtifactAssetDao artifactAssetDao,
-                              IRagKnowledgeBaseDao ragKnowledgeBaseDao,
-                              IRagDocumentDao ragDocumentDao,
-                              IRagChunkDao ragChunkDao,
                               ISkillDefinitionDao skillDefinitionDao,
                               IMcpServerConfigDao mcpServerConfigDao,
                               IAgentScheduleConfigDao agentScheduleConfigDao,
@@ -66,9 +57,6 @@ public class PlatformRepository implements IPlatformRepository {
         this.chatMessageDao = chatMessageDao;
         this.modelUsageDao = modelUsageDao;
         this.artifactAssetDao = artifactAssetDao;
-        this.ragKnowledgeBaseDao = ragKnowledgeBaseDao;
-        this.ragDocumentDao = ragDocumentDao;
-        this.ragChunkDao = ragChunkDao;
         this.skillDefinitionDao = skillDefinitionDao;
         this.mcpServerConfigDao = mcpServerConfigDao;
         this.agentScheduleConfigDao = agentScheduleConfigDao;
@@ -271,110 +259,6 @@ public class PlatformRepository implements IPlatformRepository {
 
     public List<ArtifactAssetPO> queryArtifactAssetListByTenantIdAndVisibility(String tenantId, String visibility) {
         return artifactAssetDao.queryListByTenantIdAndVisibility(tenantId, visibility);
-    }
-
-    public int insertRagKnowledgeBase(RagKnowledgeBasePO ragKnowledgeBase) {
-        return ragKnowledgeBaseDao.insert(ragKnowledgeBase);
-    }
-
-    public int updateRagKnowledgeBaseById(RagKnowledgeBasePO ragKnowledgeBase) {
-        return ragKnowledgeBaseDao.updateById(ragKnowledgeBase);
-    }
-
-    public RagKnowledgeBasePO queryRagKnowledgeBaseById(Long id) {
-        return ragKnowledgeBaseDao.queryById(id);
-    }
-
-    public RagKnowledgeBasePO queryRagKnowledgeBaseByKnowledgeBaseId(String knowledgeBaseId) {
-        return ragKnowledgeBaseDao.queryByKnowledgeBaseId(knowledgeBaseId);
-    }
-
-    public List<RagKnowledgeBasePO> queryRagKnowledgeBaseListByTenantId(String tenantId) {
-        return ragKnowledgeBaseDao.queryListByTenantId(tenantId);
-    }
-
-    public List<RagKnowledgeBasePO> queryRagKnowledgeBaseListByOwnerUserId(String ownerUserId) {
-        return ragKnowledgeBaseDao.queryListByOwnerUserId(ownerUserId);
-    }
-
-    public List<RagKnowledgeBasePO> queryRagKnowledgeBaseListByKnowledgeBaseId(String knowledgeBaseId) {
-        return ragKnowledgeBaseDao.queryListByKnowledgeBaseId(knowledgeBaseId);
-    }
-
-    public List<RagKnowledgeBasePO> queryRagKnowledgeBaseListByTenantIdAndVisibility(String tenantId, String visibility) {
-        return ragKnowledgeBaseDao.queryListByTenantIdAndVisibility(tenantId, visibility);
-    }
-
-    public int insertRagDocument(RagDocumentPO ragDocument) {
-        return ragDocumentDao.insert(ragDocument);
-    }
-
-    public int updateRagDocumentById(RagDocumentPO ragDocument) {
-        return ragDocumentDao.updateById(ragDocument);
-    }
-
-    public RagDocumentPO queryRagDocumentById(Long id) {
-        return ragDocumentDao.queryById(id);
-    }
-
-    public RagDocumentPO queryRagDocumentByDocumentId(String documentId) {
-        return ragDocumentDao.queryByDocumentId(documentId);
-    }
-
-    public List<RagDocumentPO> queryRagDocumentListByTenantId(String tenantId) {
-        return ragDocumentDao.queryListByTenantId(tenantId);
-    }
-
-    public List<RagDocumentPO> queryRagDocumentListByOwnerUserId(String ownerUserId) {
-        return ragDocumentDao.queryListByOwnerUserId(ownerUserId);
-    }
-
-    public List<RagDocumentPO> queryRagDocumentListByKnowledgeBaseId(String knowledgeBaseId) {
-        return ragDocumentDao.queryListByKnowledgeBaseId(knowledgeBaseId);
-    }
-
-    public List<RagDocumentPO> queryRagDocumentListByDocumentId(String documentId) {
-        return ragDocumentDao.queryListByDocumentId(documentId);
-    }
-
-    public List<RagDocumentPO> queryRagDocumentListByTenantIdAndVisibility(String tenantId, String visibility) {
-        return ragDocumentDao.queryListByTenantIdAndVisibility(tenantId, visibility);
-    }
-
-    public int insertRagChunk(RagChunkPO ragChunk) {
-        return ragChunkDao.insert(ragChunk);
-    }
-
-    public int updateRagChunkById(RagChunkPO ragChunk) {
-        return ragChunkDao.updateById(ragChunk);
-    }
-
-    public RagChunkPO queryRagChunkById(Long id) {
-        return ragChunkDao.queryById(id);
-    }
-
-    public RagChunkPO queryRagChunkByChunkId(String chunkId) {
-        return ragChunkDao.queryByChunkId(chunkId);
-    }
-
-    public List<RagChunkPO> queryRagChunkListByTenantId(String tenantId) {
-        return ragChunkDao.queryListByTenantId(tenantId);
-    }
-
-    public List<RagChunkPO> queryRagChunkListByOwnerUserId(String ownerUserId) {
-        return ragChunkDao.queryListByOwnerUserId(ownerUserId);
-    }
-
-    public List<RagChunkPO> queryRagChunkListByKnowledgeBaseId(String knowledgeBaseId) {
-        return ragChunkDao.queryListByKnowledgeBaseId(knowledgeBaseId);
-    }
-
-    public List<RagChunkPO> queryRagChunkListByDocumentId(String documentId) {
-        return ragChunkDao.queryListByDocumentId(documentId);
-    }
-
-    public List<RagChunkPO> queryRagChunkListByTenantIdAndVisibility(String tenantId, String visibility) {
-        return ragChunkDao.queryListByTenantIdAndVisibility(tenantId, visibility);
     }
 
     public int insertSkillDefinition(SkillDefinitionPO skillDefinition) {

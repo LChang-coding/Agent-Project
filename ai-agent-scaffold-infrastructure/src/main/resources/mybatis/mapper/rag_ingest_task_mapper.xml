@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao">
+
+    <resultMap id="RagIngestTaskMap" type="cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="task_key" property="taskKey"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="document_id" property="documentId"/>
+        <result column="version_id" property="versionId"/>
+        <result column="document_version" property="documentVersion"/>
+        <result column="generation" property="generation"/>
+        <result column="operation" property="operation"/>
+        <result column="stage" property="stage"/>
+        <result column="status" property="status"/>
+        <result column="attempt_count" property="attemptCount"/>
+        <result column="max_attempts" property="maxAttempts"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="heartbeat_at" property="heartbeatAt"/>
+        <result column="fencing_token" property="fencingToken"/>
+        <result column="row_version" property="rowVersion"/>
+        <result column="checkpoint" property="checkpoint"/>
+        <result column="cancel_reason" property="cancelReason"/>
+        <result column="cancel_requested_at" property="cancelRequestedAt"/>
+        <result column="cancelled_at" property="cancelledAt"/>
+        <result column="error_code" property="errorCode"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="finished_at" property="finishedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, task_id, task_key, tenant_id, kb_id, document_id, version_id, document_version,
+        generation, operation, stage, status, attempt_count, max_attempts, next_retry_at,
+        lease_owner, lease_until, heartbeat_at, fencing_token, row_version, checkpoint,
+        cancel_reason, cancel_requested_at, cancelled_at, error_code, error_message, trace_id,
+        started_at, finished_at, create_time, update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_ingest_task (
+            task_id, task_key, tenant_id, kb_id, document_id, version_id, document_version,
+            generation, operation, stage, status, attempt_count, max_attempts, next_retry_at,
+            lease_owner, lease_until, heartbeat_at, fencing_token, row_version, checkpoint,
+            cancel_reason, cancel_requested_at, cancelled_at, error_code, error_message, trace_id,
+            started_at, finished_at
+        ) VALUES (
+            #{taskId}, #{taskKey}, #{tenantId}, #{knowledgeBaseId}, #{documentId}, #{versionId},
+            #{documentVersion}, #{generation}, #{operation}, #{stage}, #{status}, #{attemptCount},
+            #{maxAttempts}, #{nextRetryAt}, #{leaseOwner}, #{leaseUntil}, #{heartbeatAt},
+            #{fencingToken}, #{rowVersion}, #{checkpoint}, #{cancelReason}, #{cancelRequestedAt},
+            #{cancelledAt}, #{errorCode}, #{errorMessage}, #{traceId}, #{startedAt}, #{finishedAt}
+        )
+    </insert>
+
+    <select id="queryByTenantAndTaskId" resultMap="RagIngestTaskMap">
+        SELECT <include refid="Columns"/> FROM rag_ingest_task
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="queryByTenantAndTaskKey" resultMap="RagIngestTaskMap">
+        SELECT <include refid="Columns"/> FROM rag_ingest_task
+        WHERE tenant_id = #{tenantId} AND task_key = #{taskKey} AND deleted = 0 LIMIT 1
+    </select>
+
+    <update id="claimDue">
+        UPDATE rag_ingest_task
+        SET status = 'running', attempt_count = attempt_count + 1, next_retry_at = NULL,
+            lease_owner = #{leaseOwner}, lease_until = #{leaseUntil}, heartbeat_at = #{now},
+            fencing_token = fencing_token + 1, row_version = row_version + 1,
+            started_at = COALESCE(started_at, #{now}), error_code = NULL, error_message = NULL
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
+          AND attempt_count &lt; max_attempts
+          AND (
+              status = 'pending'
+              OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at &lt;= #{now})
+              OR (status = 'running' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+          )
+    </update>
+
+    <update id="updateByTenantAndRevision">
+        UPDATE rag_ingest_task
+        SET stage = #{task.stage}, status = #{task.status}, attempt_count = #{task.attemptCount},
+            max_attempts = #{task.maxAttempts}, next_retry_at = #{task.nextRetryAt},
+            lease_owner = #{task.leaseOwner}, lease_until = #{task.leaseUntil},
+            heartbeat_at = CASE
+                WHEN #{task.status} = 'running' AND #{task.leaseUntil} IS NOT NULL THEN CURRENT_TIMESTAMP(3)
+                ELSE NULL
+            END,
+            fencing_token = #{task.fencingToken},
+            checkpoint = #{task.checkpoint}, cancel_reason = #{task.cancelReason},
+            cancel_requested_at = CASE
+                WHEN #{task.status} = 'cancel_requested' THEN COALESCE(cancel_requested_at, CURRENT_TIMESTAMP(3))
+                ELSE cancel_requested_at
+            END,
+            cancelled_at = CASE
+                WHEN #{task.status} = 'cancelled' THEN COALESCE(cancelled_at, CURRENT_TIMESTAMP(3))
+                ELSE cancelled_at
+            END,
+            error_code = #{task.errorCode}, error_message = #{task.errorMessage},
+            trace_id = COALESCE(#{task.traceId}, trace_id),
+            started_at = COALESCE(started_at, #{task.startedAt}),
+            finished_at = CASE
+                WHEN #{task.status} IN ('cancelled', 'completed', 'failed', 'dead')
+                    THEN COALESCE(finished_at, CURRENT_TIMESTAMP(3))
+                ELSE finished_at
+            END,
+            row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
+          AND row_version = #{expectedRevision} AND deleted = 0
+    </update>
+</mapper>

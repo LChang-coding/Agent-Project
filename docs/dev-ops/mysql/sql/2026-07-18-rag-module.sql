@@ -296,10 +296,18 @@ CALL `sp_rag_add_column_20260718`('rag_document', 'revision',
 
 CALL `sp_rag_add_column_20260718`('rag_chunk', 'document_version',
     'INT NOT NULL DEFAULT 1 COMMENT ''所属文档版本'' AFTER `document_id`');
+CALL `sp_rag_add_column_20260718`('rag_chunk', 'version_id',
+    'VARCHAR(64) NULL COMMENT ''所属文档版本业务ID'' AFTER `document_version`');
 CALL `sp_rag_add_column_20260718`('rag_chunk', 'generation',
-    'BIGINT NOT NULL DEFAULT 1 COMMENT ''索引构建代引代'' AFTER `document_version`');
+    'BIGINT NOT NULL DEFAULT 1 COMMENT ''索引构建代引代'' AFTER `version_id`');
+CALL `sp_rag_add_column_20260718`('rag_chunk', 'parent_chunk_id',
+    'VARCHAR(64) NULL COMMENT ''父级切片ID'' AFTER `chunk_index`');
+CALL `sp_rag_add_column_20260718`('rag_chunk', 'previous_chunk_id',
+    'VARCHAR(64) NULL COMMENT ''前一切片ID'' AFTER `parent_chunk_id`');
+CALL `sp_rag_add_column_20260718`('rag_chunk', 'next_chunk_id',
+    'VARCHAR(64) NULL COMMENT ''后一切片ID'' AFTER `previous_chunk_id`');
 CALL `sp_rag_add_column_20260718`('rag_chunk', 'section_path',
-    'VARCHAR(1000) NULL COMMENT ''标题层级路径'' AFTER `chunk_index`');
+    'VARCHAR(1000) NULL COMMENT ''标题层级路径'' AFTER `next_chunk_id`');
 CALL `sp_rag_add_column_20260718`('rag_chunk', 'page_from',
     'INT NULL COMMENT ''起始页码，从1开始'' AFTER `section_path`');
 CALL `sp_rag_add_column_20260718`('rag_chunk', 'page_to',
@@ -415,6 +423,7 @@ CREATE TABLE IF NOT EXISTS `rag_ingest_task` (
   `row_version` BIGINT NOT NULL DEFAULT 0 COMMENT '行乐观锁版本',
   `checkpoint` JSON NULL COMMENT '可恢复阶段检查点，不存密钥和正文',
   `cancel_requested_at` DATETIME(3) NULL COMMENT '取消请求时间UTC',
+  `cancel_reason` VARCHAR(512) NULL COMMENT '脱敏后的取消原因',
   `cancelled_at` DATETIME(3) NULL COMMENT '取消完成时间UTC',
   `error_code` VARCHAR(64) NULL COMMENT '稳定错误码',
   `error_message` VARCHAR(1000) NULL COMMENT '脱敏错误摘要',
@@ -500,11 +509,13 @@ CREATE TABLE IF NOT EXISTS `rag_agent_binding` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `tenant_id` VARCHAR(64) NOT NULL COMMENT '租户业务ID',
   `binding_id` VARCHAR(64) NOT NULL COMMENT '绑定业务ID',
-  `agent_id` VARCHAR(64) NOT NULL COMMENT 'Agent业务ID',
+  `target_type` VARCHAR(32) NOT NULL DEFAULT 'agent' COMMENT 'agent/workflow/workflow_node',
+  `target_id` VARCHAR(64) NOT NULL COMMENT 'Agent、工作流或节点业务ID',
   `kb_id` VARCHAR(64) NOT NULL COMMENT '知识库业务ID',
   `profile_id` VARCHAR(64) NOT NULL COMMENT '检索策略业务ID',
   `priority` INT NOT NULL DEFAULT 0 COMMENT '多个知识库检索优先级',
   `required` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '检索失败时是否阻断Agent运行',
+  `max_tokens` INT NOT NULL DEFAULT 4096 COMMENT '本绑定最大上下文Token预算',
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active/disabled',
   `revision` BIGINT NOT NULL DEFAULT 1 COMMENT '绑定乐观锁版本',
   `metadata` JSON NULL COMMENT '扩展元数据',
@@ -513,8 +524,8 @@ CREATE TABLE IF NOT EXISTS `rag_agent_binding` (
   `deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_rag_agent_binding_id` (`tenant_id`, `binding_id`),
-  UNIQUE KEY `uk_rag_agent_kb` (`tenant_id`, `agent_id`, `kb_id`),
-  KEY `idx_rag_agent_active` (`tenant_id`, `agent_id`, `status`, `priority`)
+  UNIQUE KEY `uk_rag_target_kb` (`tenant_id`, `target_type`, `target_id`, `kb_id`),
+  KEY `idx_rag_target_active` (`tenant_id`, `target_type`, `target_id`, `status`, `priority`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Agent与知识库检索策略绑定';
 
 CREATE TABLE IF NOT EXISTS `rag_retrieval_record` (
@@ -629,7 +640,7 @@ WHERE TABLE_SCHEMA = DATABASE()
   AND IS_NULLABLE = 'YES';
 
 -- 预期 0；验证关键新增列均存在。
-SELECT 20 - COUNT(*) AS missing_critical_column_count
+SELECT 25 - COUNT(*) AS missing_critical_column_count
 FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = DATABASE()
   AND (TABLE_NAME, COLUMN_NAME) IN (
@@ -642,7 +653,11 @@ WHERE TABLE_SCHEMA = DATABASE()
       ('rag_document', 'target_generation'),
       ('rag_document', 'revision'),
       ('rag_chunk', 'document_version'),
+      ('rag_chunk', 'version_id'),
       ('rag_chunk', 'generation'),
+      ('rag_chunk', 'parent_chunk_id'),
+      ('rag_chunk', 'previous_chunk_id'),
+      ('rag_chunk', 'next_chunk_id'),
       ('rag_chunk', 'content_hash'),
       ('rag_chunk', 'vector_point_id'),
       ('rag_chunk', 'revision'),
@@ -652,6 +667,7 @@ WHERE TABLE_SCHEMA = DATABASE()
       ('rag_ingest_task', 'lease_until'),
       ('rag_ingest_task', 'fencing_token'),
       ('rag_ingest_task', 'checkpoint'),
+      ('rag_ingest_task', 'cancel_reason'),
       ('rag_outbox', 'published_at')
   );
 
