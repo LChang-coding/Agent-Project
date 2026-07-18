@@ -320,3 +320,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 #### 下一步
 
 - 阶段 2A 管理/投递入口已闭环；真正解析、切块、Embedding、Qdrant 写入、任务心跳/checkpoint/取消清理和激活索引仍属于阶段 2B Worker，当前上传的任务不会在 Outbox/Worker 开关关闭时自动完成。
+
+### 阶段 2B 执行计划：摄取 Worker、模型客户端与索引激活
+
+1. 只读探测已部署 Docling、Embedding、Reranker、Qdrant 的版本、健康和真实 API 契约；只使用官方文档与服务自描述结果，不凭记忆硬编码。探测不上传项目源码、不写服务器配置，密钥和服务器密码不进入日志/提交。
+2. 增加对象存储流式下载到受控 Path；实现 Docling 文件解析适配器、Markdown 本地解析、结构化分块器和稳定内容哈希。PDF/DOCX 的远程请求使用文件流，解析结果限制响应体、页数/字符数和超时。
+3. 实现 TEI Dense Embedding、纯 Java 稳定 Sparse 编码、Qdrant collection/point upsert/delete/search 和 Reranker 客户端；统一限流、超时、响应上限、维度检查、租户+kb+version/generation payload，日志不含正文/向量/密钥。
+4. 实现 Kafka ingest consumer 与 Worker：按 tenant+task 领取租约；每次 Docling、Embedding、Qdrant 外部副作用前重新读取任务并执行取消/fencing 屏障；分批推进 checkpoint、心跳续租、可重试/不可重试错误；完成验证后用 CAS 激活 document/version/knowledge-base，再清理旧版本。
+5. 增加纯单元/协议契约测试，并针对公网中间件使用不含项目源码的合成小样本做真实 smoke test；记录接口、文件格式、批次、线程、耗时和失败。临时 MySQL 验证 checkpoint/取消/fencing/激活；阶段闭环后追加结果并中文提交。
+
+### 2026-07-18 阶段 2B 阶段性执行结果（一）：流式下载、Chunker 与 Sparse
+
+- 对象存储新增受控流式下载：MinIO 和本地对象均使用 8 KiB buffer，不进入整文件 `byte[]`；实时 maxBytes、SHA-256、同目录临时文件和原子发布；失败删除半成品并保留原目标，拒绝绝对/越界路径和符号链接根、父目录、目标。
+- 新增结构化 Parent/Child Chunker：识别标题、段落、列表、Markdown 表格、fenced code；字符+近似 Token 双预算、超长 Unicode 安全拆分、受控 overlap、父子/前后邻接、稳定 SHA-256 chunk ID/content hash 和版本 metadata。
+- 新增确定性 Sparse 编码：NFKC+小写，Unicode 英数词和中日韩单字/双字，词表 revision 参与 64-bit FNV-1a 索引；冲突累加 log-TF，L2 归一化并按 index 稳定排序。该实现是真实稀疏词项向量，不使用 Dense 冒充，但没有 corpus IDF，后续消融必须单独标识为 hashing log-TF sparse。
+- 新增 version/document/knowledge-base 激活规则：版本必须 processing 后才能 ready；文档只能激活匹配 target generation；知识库 generation 不允许倒退。
+- Java 17 组合验证 32/32 通过，0 failure/error：Sparse 5、Chunker 6、激活 3、配置 7、对象存储 11，总耗时 7.326 秒。Chunker/Sparse 另有 100 组随机预算边界；默认 Java 25 仍受既有 Byte Buddy 版本限制，规定运行时 Java 17 下通过。
+- 本小节仅是可独立复用的本地处理基础，远程客户端与 Worker 尚未在此提交中宣称完成。

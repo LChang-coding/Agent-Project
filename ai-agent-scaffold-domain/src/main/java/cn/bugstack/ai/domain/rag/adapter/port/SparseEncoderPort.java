@@ -1,7 +1,9 @@
 package cn.bugstack.ai.domain.rag.adapter.port;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * 稀疏检索编码端口。
@@ -32,7 +34,7 @@ public interface SparseEncoderPort {
                             || !Float.isFinite(entry.getValue()))) {
                 throw new IllegalArgumentException("稀疏向量参数非法");
             }
-            weights = Map.copyOf(weights);
+            weights = Collections.unmodifiableMap(new TreeMap<>(weights));
         }
     }
 

@@ -35,4 +35,14 @@ public record RagKnowledgeBaseEntity(String tenantId,
             throw new IllegalArgumentException(name + "不能为空");
         }
     }
+
+    /** 推进知识库当前可见代引代，禁止倒退。 */
+    public RagKnowledgeBaseEntity activateGeneration(long generation) {
+        if (generation < 1 || generation < currentGeneration) {
+            throw new IllegalArgumentException("知识库generation不能倒退");
+        }
+        return new RagKnowledgeBaseEntity(tenantId, ownerUserId, knowledgeBaseId, name, description,
+                visibility, RagKnowledgeBaseStatus.ACTIVE, retrievalProfileId, embeddingDimension,
+                collectionAlias, generation, revision + 1);
+    }
 }

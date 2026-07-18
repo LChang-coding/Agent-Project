@@ -1,6 +1,8 @@
 package cn.bugstack.ai.infrastructure.storage;
 
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageCommandEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadCommandEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadResultEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
@@ -20,6 +22,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -151,6 +154,43 @@ public class MinioObjectStorageService implements ObjectStorageService {
     }
 
     /**
+     * 将对象流式下载到受控路径；参数包含根目录、相对目标和字节上限；返回落盘摘要。
+     */
+    @Override
+    public ObjectStorageDownloadResultEntity downloadToFile(ObjectStorageDownloadCommandEntity command) {
+        long start = System.currentTimeMillis();
+        checkDownloadCommand(command);
+        Path target = controlledTarget(command.getTargetRoot(), command.getRelativeTargetPath());
+        try {
+            prepareControlledParent(command.getTargetRoot(), target);
+            if (Files.isSymbolicLink(target)) {
+                throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载目标不能是符号链接");
+            }
+            StreamCopyResult result;
+            try (InputStream inputStream = useMinio()
+                    ? minioObjectStream(command.getBucket(), command.getObjectKey())
+                    : localObjectStream(command.getBucket(), command.getObjectKey())) {
+                result = copyAtomically(inputStream, target, command.getMaxBytes());
+            }
+            long costMs = System.currentTimeMillis() - start;
+            AiLog.info(AiLog.oss().download(command.getBucket(), command.getObjectKey(), result.sizeBytes(), costMs, true));
+            return ObjectStorageDownloadResultEntity.builder()
+                    .bucket(command.getBucket())
+                    .objectKey(command.getObjectKey())
+                    .targetPath(target)
+                    .sha256(result.sha256())
+                    .sizeBytes(result.sizeBytes())
+                    .build();
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            long costMs = System.currentTimeMillis() - start;
+            AiLog.error(AiLog.oss().error("download-file", command.getBucket(), command.getObjectKey(), costMs, e));
+            throw new AppException("OBJECT_STORAGE_DOWNLOAD_FAILED", "对象流式下载失败：" + e.getMessage(), e);
+        }
+    }
+
+    /**
      * 删除对象；参数是桶和对象键；无返回值。
      */
     @Override
@@ -236,6 +276,16 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    /** 打开 MinIO 对象流；参数是桶和对象 Key；返回由调用方关闭的响应流。 */
+    private InputStream minioObjectStream(String bucket, String objectKey) throws Exception {
+        return minioClient().getObject(GetObjectArgs.builder().bucket(bucket).object(objectKey).build());
+    }
+
+    /** 打开本地对象流；参数是桶和对象 Key；返回由调用方关闭的文件流。 */
+    private InputStream localObjectStream(String bucket, String objectKey) throws Exception {
+        return Files.newInputStream(localPath(bucket, objectKey), StandardOpenOption.READ);
+    }
+
     /**
      * 上传到本地目录；参数是对象命令；无返回值。
      */
@@ -278,6 +328,90 @@ public class MinioObjectStorageService implements ObjectStorageService {
         Path path = localPath(bucket, objectKey);
         checkReadSize(Files.size(path), maxBytes);
         return Files.readAllBytes(path);
+    }
+
+    /**
+     * 流式复制并原子发布目标；参数是输入流、目标和上限；返回字节数与摘要。
+     */
+    private StreamCopyResult copyAtomically(InputStream inputStream, Path target, long maxBytes) throws Exception {
+        MessageDigest digest = sha256Digest();
+        Path temporary = Files.createTempFile(target.getParent(), ".download-", ".tmp");
+        boolean moved = false;
+        long sizeBytes = 0L;
+        try (OutputStream outputStream = Files.newOutputStream(temporary,
+                StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                if (read == 0) {
+                    continue;
+                }
+                if (read > maxBytes - sizeBytes) {
+                    throw new AppException("OBJECT_STORAGE_TOO_LARGE", "对象大小超过流式下载上限");
+                }
+                outputStream.write(buffer, 0, read);
+                digest.update(buffer, 0, read);
+                sizeBytes += read;
+            }
+            outputStream.flush();
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            moved = true;
+            return new StreamCopyResult(sizeBytes, HexFormat.of().formatHex(digest.digest()));
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temporary);
+            }
+        }
+    }
+
+    /**
+     * 构造受控目标；参数是根目录和相对路径；返回规范化的绝对目标。
+     */
+    private Path controlledTarget(Path targetRoot, Path relativeTargetPath) {
+        if (relativeTargetPath.isAbsolute()) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载目标必须使用相对路径");
+        }
+        Path root = targetRoot.toAbsolutePath().normalize();
+        Path target = root.resolve(relativeTargetPath).normalize();
+        if (target.equals(root) || !target.startsWith(root)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载目标越出受控根目录");
+        }
+        return target;
+    }
+
+    /**
+     * 校验目标父目录的真实路径；参数是受控根目录和目标；无返回值。
+     */
+    private void prepareControlledParent(Path targetRoot, Path target) throws Exception {
+        Path root = targetRoot.toAbsolutePath().normalize();
+        Path parent = target.getParent().toAbsolutePath().normalize();
+        if (!parent.startsWith(root)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载父目录越出受控根目录");
+        }
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载受控根目录不存在或不是目录");
+        }
+        Path cursor = root;
+        if (Files.isSymbolicLink(cursor)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载受控根目录不能是符号链接");
+        }
+        for (Path part : root.relativize(parent)) {
+            cursor = cursor.resolve(part);
+            if (!Files.exists(cursor, LinkOption.NOFOLLOW_LINKS)) {
+                Files.createDirectory(cursor);
+            }
+            if (Files.isSymbolicLink(cursor)) {
+                throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载父目录不能包含符号链接");
+            }
+            if (!Files.isDirectory(cursor, LinkOption.NOFOLLOW_LINKS)) {
+                throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载父路径不是目录");
+            }
+        }
+        Path realRoot = root.toRealPath();
+        Path realParent = parent.toRealPath();
+        if (!realParent.startsWith(realRoot)) {
+            throw new AppException("OBJECT_STORAGE_PATH_INVALID", "对象下载父目录越出受控根目录");
+        }
     }
 
     /**
@@ -368,6 +502,17 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    /** 校验流式下载命令；参数是下载命令；无返回值。 */
+    private void checkDownloadCommand(ObjectStorageDownloadCommandEntity command) {
+        if (command == null || command.getBucket() == null || command.getBucket().isBlank()
+                || command.getObjectKey() == null || command.getObjectKey().isBlank()
+                || command.getTargetRoot() == null || command.getRelativeTargetPath() == null
+                || command.getRelativeTargetPath().toString().isBlank() || command.getMaxBytes() <= 0) {
+            throw new AppException("OBJECT_STORAGE_PARAM_INVALID", "对象流式下载参数不完整");
+        }
+        checkLocation(command.getBucket(), command.getObjectKey());
+    }
+
     private MessageDigest sha256Digest() {
         try {
             return MessageDigest.getInstance("SHA-256");
@@ -395,5 +540,9 @@ public class MinioObjectStorageService implements ObjectStorageService {
     private String sha256(byte[] bytes) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return HexFormat.of().formatHex(digest.digest(bytes));
+    }
+
+    /** 流式复制摘要。 */
+    private record StreamCopyResult(long sizeBytes, String sha256) {
     }
 }
