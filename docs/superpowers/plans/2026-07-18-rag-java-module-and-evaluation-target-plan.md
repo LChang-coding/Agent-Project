@@ -686,3 +686,10 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 报告按 concurrency/variant 输出 throughput、error/degraded/empty rate、wall 及各阶段 nearest-rank mean/p50/p95/p99/max，并单独计算 `clientAndQueueMs=max(0,wall-total)`。“observedDominantLatencyComponent”排除总计 `totalMs`，只是观测分解；报告明示 closed-loop coordinated-omission 边界和“未由客户端采集服务器资源”。
 - Java 17 首次编译时现有 10/10 测试通过，证明主代码可编译。新增并发和统计测试后，最终 `mvn -pl ai-agent-scaffold-benchmark package -DskipTests=false`：12/12 通过，0 failure/error/skipped，BUILD SUCCESS，总耗时 2.430 秒，Assembly 可执行 jar 生成。
 - fake HTTP 测试实际执行 40 个请求：8 warmup+32 measured，并发级别 1/3，观测峰值至少2且不超过3，验证了边界而非业务性能。fake 耗时不记作 RAG 性能基线。
+
+### 阶段 6 真实联跑补充计划：一次性租户认证生命周期
+
+1. 保留“每个评测 run 使用独立租户、凭据不落长期文件”的安全边界。不为了复用 target 而将明文密码或 Bearer 写入 manifest。
+2. 扩展本机 mini 编排脚本：当显式启用 load 时，在同一 shell 进程、同一短期 token 生命周期内顺序执行质量 `run` 和读取其 `targets.json` 的 `load`，两者完成后再由原 trap 清理认证临时文件和环境变量。
+3. load 开关默认关闭，并发级别、warmup 和 measured 数必须从显式环境变量传入并由 CLI manifest 留痕。真实 pilot 使用 1/2/4/10 并发、每 variant 2 warmup+20 measured，不将小样本 p99 声称为稳定 SLA。
+4. 该缺口是在 `mini-real-20260718T200511Z` 完成并生成 `targets.json` 后发现的；因 token/密码已按原安全策略销毁，该 run 不用于后续 load。修复后创建全新租户重跑，不从数据库反查或重置一次性账号。
