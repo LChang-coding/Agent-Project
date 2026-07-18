@@ -19,6 +19,7 @@ import java.util.TreeMap;
 public final class DeterministicSparseEncoder implements SparseEncoderPort {
 
     public static final int DEFAULT_DIMENSION = 1 << 20;
+    public static final String VOCABULARY_REVISION = "hashing-logtf-v1";
     private final int dimension;
 
     public DeterministicSparseEncoder() {

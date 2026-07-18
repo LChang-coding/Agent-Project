@@ -79,4 +79,22 @@
         WHERE tenant_id = #{tenantId} AND version_id = #{version.versionId}
           AND row_version = #{expectedRevision} AND deleted = 0
     </update>
+
+    <update id="markReadyByTenantAndRevision">
+        UPDATE rag_document_version
+        SET status = 'ready', indexed_at = #{indexedAt}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND document_id = #{documentId} AND version_id = #{versionId}
+          AND generation = #{generation} AND row_version = #{expectedRevision}
+          AND status = 'processing' AND deleted = 0
+    </update>
+
+    <update id="closeByTenantAndRevision">
+        UPDATE rag_document_version
+        SET status = #{status}, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND document_id = #{documentId} AND version_id = #{versionId}
+          AND generation = #{generation} AND row_version = #{expectedRevision}
+          AND status IN ('created', 'queued', 'processing') AND deleted = 0
+    </update>
 </mapper>

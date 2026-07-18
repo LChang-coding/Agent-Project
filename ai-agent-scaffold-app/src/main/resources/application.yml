@@ -81,6 +81,7 @@ ai:
       max-response-bytes: ${AI_RAG_DOCLING_MAX_RESPONSE_BYTES:67108864}
     kafka:
       topic: ${AI_RAG_KAFKA_TOPIC:rag.ingest.request.v1}
+      group-id: ${AI_RAG_KAFKA_GROUP_ID:ai-agent-rag-ingest}
     outbox:
       enabled: ${AI_RAG_OUTBOX_ENABLED:false}
       poll-delay-ms: ${AI_RAG_OUTBOX_POLL_DELAY_MS:1000}
@@ -90,6 +91,19 @@ ai:
       retry-base-delay-ms: ${AI_RAG_OUTBOX_RETRY_BASE_DELAY_MS:1000}
       retry-max-delay-ms: ${AI_RAG_OUTBOX_RETRY_MAX_DELAY_MS:300000}
       retry-jitter-ratio: ${AI_RAG_OUTBOX_RETRY_JITTER_RATIO:0.2}
+    worker:
+      enabled: ${AI_RAG_WORKER_ENABLED:false}
+      poll-delay-ms: ${AI_RAG_WORKER_POLL_DELAY_MS:2000}
+      scan-batch-size: ${AI_RAG_WORKER_SCAN_BATCH_SIZE:10}
+      lease-duration-ms: ${AI_RAG_WORKER_LEASE_DURATION_MS:180000}
+      heartbeat-interval-ms: ${AI_RAG_WORKER_HEARTBEAT_INTERVAL_MS:30000}
+      retry-base-delay-ms: ${AI_RAG_WORKER_RETRY_BASE_DELAY_MS:5000}
+      retry-max-delay-ms: ${AI_RAG_WORKER_RETRY_MAX_DELAY_MS:300000}
+      child-max-chars: ${AI_RAG_WORKER_CHILD_MAX_CHARS:1800}
+      child-max-tokens: ${AI_RAG_WORKER_CHILD_MAX_TOKENS:420}
+      parent-max-chars: ${AI_RAG_WORKER_PARENT_MAX_CHARS:6000}
+      parent-max-tokens: ${AI_RAG_WORKER_PARENT_MAX_TOKENS:1400}
+      overlap-chars: ${AI_RAG_WORKER_OVERLAP_CHARS:160}
   scheduler:
     reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
     dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}

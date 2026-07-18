@@ -72,6 +72,22 @@
         WHERE tenant_id = #{tenantId} AND task_key = #{taskKey} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO">
+        SELECT tenant_id AS tenantId, task_id AS jobId
+        FROM rag_ingest_task
+        WHERE deleted = 0
+          AND (
+              (attempt_count &lt; max_attempts AND (
+                  status = 'pending'
+                  OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at &lt;= #{now})
+                  OR (status = 'running' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+              ))
+              OR (status = 'cancel_requested' AND (lease_until IS NULL OR lease_until &lt;= #{now}))
+          )
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <update id="claimDue">
         UPDATE rag_ingest_task
         SET status = 'running', attempt_count = attempt_count + 1, next_retry_at = NULL,
@@ -85,6 +101,15 @@
               OR (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at &lt;= #{now})
               OR (status = 'running' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
           )
+    </update>
+
+    <update id="claimCancelledForCleanup">
+        UPDATE rag_ingest_task
+        SET lease_owner = #{leaseOwner}, lease_until = #{leaseUntil}, heartbeat_at = #{now},
+            fencing_token = fencing_token + 1, row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
+          AND status = 'cancel_requested'
+          AND (lease_until IS NULL OR lease_until &lt;= #{now})
     </update>
 
     <update id="updateByTenantAndRevision">
@@ -117,5 +142,59 @@
             row_version = row_version + 1
         WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
           AND row_version = #{expectedRevision} AND deleted = 0
+    </update>
+
+    <sql id="WorkerStateSet">
+        stage = #{task.stage}, status = #{task.status}, attempt_count = #{task.attemptCount},
+        max_attempts = #{task.maxAttempts}, next_retry_at = #{task.nextRetryAt},
+        lease_owner = #{task.leaseOwner}, lease_until = #{task.leaseUntil},
+        heartbeat_at = CASE
+            WHEN #{task.status} = 'running' AND #{task.leaseUntil} IS NOT NULL THEN CURRENT_TIMESTAMP(3)
+            ELSE NULL
+        END,
+        checkpoint = #{task.checkpoint}, cancel_reason = #{task.cancelReason},
+        cancelled_at = CASE
+            WHEN #{task.status} = 'cancelled' THEN COALESCE(cancelled_at, CURRENT_TIMESTAMP(3))
+            ELSE cancelled_at
+        END,
+        error_code = #{task.errorCode}, error_message = #{task.errorMessage},
+        trace_id = COALESCE(#{task.traceId}, trace_id),
+        finished_at = CASE
+            WHEN #{task.status} IN ('cancelled', 'completed', 'failed', 'dead')
+                THEN COALESCE(finished_at, CURRENT_TIMESTAMP(3))
+            ELSE finished_at
+        END,
+        row_version = row_version + 1
+    </sql>
+
+    <update id="updateClaimedByTenantFenceAndRevision">
+        UPDATE rag_ingest_task
+        SET <include refid="WorkerStateSet"/>
+        WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
+          AND row_version = #{expectedRevision}
+          AND status = 'running' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{expectedFencingToken}
+          AND lease_until IS NOT NULL AND lease_until &gt; #{now}
+          AND deleted = 0
+    </update>
+
+    <update id="heartbeatClaimed">
+        UPDATE rag_ingest_task
+        SET heartbeat_at = #{now}, lease_until = #{leaseUntil}
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId}
+          AND status IN ('running', 'cancel_requested') AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{expectedFencingToken}
+          AND lease_until IS NOT NULL AND lease_until &gt; #{now}
+          AND deleted = 0
+    </update>
+
+    <update id="cancelClaimedByTenantFenceAndRevision">
+        UPDATE rag_ingest_task
+        SET <include refid="WorkerStateSet"/>
+        WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
+          AND row_version = #{expectedRevision}
+          AND status IN ('running', 'cancel_requested') AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{expectedFencingToken}
+          AND deleted = 0
     </update>
 </mapper>

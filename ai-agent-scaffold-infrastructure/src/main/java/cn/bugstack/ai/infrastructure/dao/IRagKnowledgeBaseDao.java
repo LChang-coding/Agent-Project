@@ -31,4 +31,10 @@ public interface IRagKnowledgeBaseDao {
                                   @Param("knowledgeBase") RagKnowledgeBasePO knowledgeBase,
                                   @Param("expectedRevision") long expectedRevision);
 
+    /** 以 CAS 推进知识库的当前可见 generation。 */
+    int activateGenerationByTenantAndRevision(@Param("tenantId") String tenantId,
+                                               @Param("knowledgeBaseId") String knowledgeBaseId,
+                                               @Param("generation") long generation,
+                                               @Param("expectedRevision") long expectedRevision);
+
 }

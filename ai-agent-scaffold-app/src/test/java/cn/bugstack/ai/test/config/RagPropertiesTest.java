@@ -30,6 +30,10 @@ public class RagPropertiesTest {
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
         Assert.assertEquals("ai_agent_rag_e5_v1", properties.getQdrant().getCollection());
         Assert.assertEquals("rag.ingest.request.v1", properties.getKafka().getTopic());
+        Assert.assertFalse(properties.getWorker().isEnabled());
+        Assert.assertEquals(10, properties.getWorker().getScanBatchSize());
+        Assert.assertTrue(properties.getWorker().getLeaseDurationMs()
+                > properties.getDocling().getTimeout().toMillis());
         Assert.assertTrue(validator.validate(properties).isEmpty());
     }
 
@@ -120,6 +124,25 @@ public class RagPropertiesTest {
         Assert.assertFalse(summary.contains("reranker-secret"));
         Assert.assertFalse(summary.contains("docling-secret"));
         Assert.assertTrue(summary.contains("apiKey=<configured>"));
+    }
+
+    /** 校验 Worker 租约、心跳、退避和分块预算的联合约束。 */
+    @Test
+    public void shouldRejectInvalidWorkerBoundaries() {
+        RagProperties properties = enabledProperties();
+        properties.getWorker().setLeaseDurationMs(15000L);
+        properties.getWorker().setHeartbeatIntervalMs(8000L);
+        properties.getWorker().setRetryBaseDelayMs(5000L);
+        properties.getWorker().setRetryMaxDelayMs(1000L);
+        properties.getWorker().setChildMaxChars(2000);
+        properties.getWorker().setParentMaxChars(1000);
+
+        Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
+
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "worker.heartbeatWithinLease".equals(violation.getPropertyPath().toString())));
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "worker.boundaryValid".equals(violation.getPropertyPath().toString())));
     }
 
     private RagProperties enabledProperties() {

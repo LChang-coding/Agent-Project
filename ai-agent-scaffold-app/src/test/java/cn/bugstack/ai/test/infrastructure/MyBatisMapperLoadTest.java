@@ -90,6 +90,11 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.updateByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.claimDue"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.queryDueCandidates"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.claimCancelledForCleanup"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.updateClaimedByTenantFenceAndRevision"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.heartbeatClaimed"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.markReadyByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.queryByTenantAndProfileId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.queryActiveByTenantAndTarget"));
         assertContextInsightAggregateScopes(configuration);
@@ -115,6 +120,34 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(claimSql.contains("status = 'retrying'"));
         Assert.assertTrue(claimSql.contains("status = 'running'"));
         Assert.assertTrue(claimSql.contains("lease_until <= ?"));
+
+        parameters.put("limit", 20);
+        String candidatesSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.queryDueCandidates", parameters);
+        Assert.assertTrue(candidatesSql.contains("SELECT tenant_id AS tenantId, task_id AS jobId"));
+        Assert.assertFalse(candidatesSql.contains("checkpoint"));
+        Assert.assertTrue(candidatesSql.contains("status = 'cancel_requested'"));
+
+        parameters.put("expectedRevision", 7L);
+        parameters.put("expectedFencingToken", 11L);
+        parameters.put("task", Map.of("taskId", "task_1", "stage", "indexing", "status", "completed",
+                "attemptCount", 1, "maxAttempts", 3, "fencingToken", 11L));
+        String workerSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.updateClaimedByTenantFenceAndRevision",
+                parameters);
+        Assert.assertTrue(workerSql.contains("tenant_id = ?"));
+        Assert.assertTrue(workerSql.contains("task_id = ?"));
+        Assert.assertTrue(workerSql.contains("row_version = ?"));
+        Assert.assertTrue(workerSql.contains("lease_owner = ?"));
+        Assert.assertTrue(workerSql.contains("fencing_token = ?"));
+        Assert.assertTrue(workerSql.contains("lease_until > ?"));
+
+        String heartbeatSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.heartbeatClaimed", parameters);
+        Assert.assertTrue(heartbeatSql.contains("tenant_id = ?"));
+        Assert.assertTrue(heartbeatSql.contains("lease_owner = ?"));
+        Assert.assertTrue(heartbeatSql.contains("fencing_token = ?"));
+        Assert.assertFalse(heartbeatSql.contains("row_version"));
 
         parameters.put("versionId", "version_1");
         String chunkQuerySql = sql(configuration,

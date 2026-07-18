@@ -99,10 +99,36 @@ public class RagIngestJobEntityTest {
     }
 
     @Test
+    public void shouldKeepTerminalFailureNonTerminalUntilCleanupCompletes() {
+        RagIngestJobEntity running = pending(2).claim("worker-a", 1L, NOW, LEASE);
+        RagIngestJobEntity cleanup = running.requestFailureCleanup(
+                true, "RAG_QDRANT_UNAVAILABLE", "向量索引阶段失败");
+
+        Assert.assertEquals(RagIngestJobStatus.CANCEL_REQUESTED, cleanup.status());
+        Assert.assertEquals(RagIngestJobEntity.FAILURE_CLEANUP_DEAD, cleanup.cancelReason());
+        RagIngestJobEntity dead = cleanup.markFailedAfterCleanup(
+                "worker-a", 1L, NOW.plusSeconds(1));
+
+        Assert.assertEquals(RagIngestJobStatus.DEAD, dead.status());
+        Assert.assertNull(dead.lease());
+        Assert.assertEquals("RAG_QDRANT_UNAVAILABLE", dead.errorCode());
+    }
+
+    @Test
     public void shouldRequireVerificationBeforeCompletion() {
         RagIngestJobEntity running = pending(2).claim("worker-a", 1L, NOW, LEASE);
         assertAppException("RAG_INGEST_NOT_VERIFIED",
                 () -> running.complete("worker-a", 1L, NOW.plusSeconds(1)));
+    }
+
+    @Test
+    public void shouldRejectIncompleteVerifiedCheckpoint() {
+        try {
+            checkpoint(RagIngestStage.VERIFYING, 2, 3, 1, 2);
+            Assert.fail("预期拒绝不完整验证检查点");
+        } catch (IllegalArgumentException expected) {
+            Assert.assertTrue(expected.getMessage().contains("检查点"));
+        }
     }
 
     @Test

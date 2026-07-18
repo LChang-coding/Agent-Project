@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 /**
  * 租户 RAG 文档版本 DAO。
@@ -26,4 +27,22 @@ public interface IRagDocumentVersionDao {
     int updateByTenantAndRevision(@Param("tenantId") String tenantId,
                                   @Param("version") RagDocumentVersionPO version,
                                   @Param("expectedRevision") long expectedRevision);
+
+    /** 将已验证的 processing 版本以 CAS 切换为 ready。 */
+    int markReadyByTenantAndRevision(@Param("tenantId") String tenantId,
+                                     @Param("knowledgeBaseId") String knowledgeBaseId,
+                                     @Param("documentId") String documentId,
+                                     @Param("versionId") String versionId,
+                                     @Param("generation") long generation,
+                                     @Param("expectedRevision") long expectedRevision,
+                                     @Param("indexedAt") LocalDateTime indexedAt);
+
+    /** 取消或失败时关闭未激活版本。 */
+    int closeByTenantAndRevision(@Param("tenantId") String tenantId,
+                                 @Param("knowledgeBaseId") String knowledgeBaseId,
+                                 @Param("documentId") String documentId,
+                                 @Param("versionId") String versionId,
+                                 @Param("generation") long generation,
+                                 @Param("status") String status,
+                                 @Param("expectedRevision") long expectedRevision);
 }

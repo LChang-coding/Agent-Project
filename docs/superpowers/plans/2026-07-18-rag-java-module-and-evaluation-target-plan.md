@@ -363,3 +363,34 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 客户端只对 `HttpClient.send` 的 `IOException` 最多重试一次；Interrupted、HTTP 非 200、响应超限、非法 JSON、空 Markdown 和非 success 状态都不重试且失败关闭。不保留远程错误体或 Jackson 原始异常文本，避免正文/密钥进入日志。
 - Java 17 最终协议组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=DoclingDocumentParserAdapterProtocolTest,TeiModelAdapterProtocolTest,QdrantVectorStoreAdapterTest,RagPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 28/28 通过，0 failure/error，六模块 BUILD SUCCESS，总耗时 7.470 秒。Docling 本地 HttpServer 黑盒测试 8 项，覆盖 Markdown 不出网、multipart 真实文件字节/全部显式字段、一次 I/O 重试、不重试故障、响应上限和错误脱敏。
 - 本切片没有访问或修改真实服务器，真实 Docling 合成 PDF/DOCX 的契约数据来自上一节只读探测。新增的重复 `page_range` multipart 序列化已在本地协议测试验证，尚需在 Worker 端到端 smoke 中验证真实网关接收语义。
+
+### 阶段 2B Worker 执行切片计划：从任务领取到索引激活
+
+1. 只读对齐现有 task/document/version/chunk/knowledge-base Mapper 与事务边界，补充全局到期任务候选（只投影 tenantId+jobId）、带 fencing 的心跳/检查点 CAS、分块批量幂等写入和文档/版本/知识库原子激活。
+2. 实现单 Worker 摄取编排：原子 claim、受控临时目录、MinIO 流式下载与 size/SHA 复核、Docling/本地 Markdown 解析、Parent/Child 分块、MySQL 存块、child 分批 Embedding+Sparse+Qdrant upsert、精确 count 验证和激活。
+3. 每一次 Docling、Embedding、Qdrant upsert/delete/count 前都从 MySQL 重读任务，校验 status、lease owner、leaseUntil 和 fencing token；每批后以 revision CAS 推进单调 checkpoint 并续租。取消时先阻断新的外部副作用，再按 tenant+version 删除 Qdrant 点和 MySQL chunk，关闭 version/document/task，不激活半成品。
+4. Kafka listener 只作“有任务可抢”的唤醒，消息仍只含标识符；另有条件开启的短间隔数据库扫描，保证 Kafka 重复/丢失、应用重启和 retrying 任务仍可恢复。首期执行线程固定为 1，进程内去重避免同任务重入。
+5. 用内存仓储/伪端口单测覆盖完整成功、每个外部调用前取消、旧 fencing、下载摘要不符、分批检查点、重试/终止错误、索引计数不符和激活事务回滚；再用临时 MySQL 验证 CAS/激活，有条件时做一份无敏感 Markdown 的真实端到端。
+6. 本切片完成后追加文件、状态轨迹、配置、线程/批次、命令、测试数、真实耗时、失败与未完成边界，通过后中文本地提交。
+
+### 2026-07-19 阶段 2B Worker 执行切片结果（一）：任务、租约与摄取主链
+
+- 持久化新增全局 due 最小投影，仅返回 tenantId+jobId；普通 claim 与 `cancel_requested` 过期租约清理 claim 分离。取消清理接管保持取消态、递增 fence/revision 且不消耗 attempt，解决原 Worker 宕机后取消任务永久卡住的问题。
+- Worker checkpoint/状态更新的 SQL `WHERE` 强制 tenant+task+revision+leaseOwner+fence+未过期租约；心跳使用独立 SQL，只更新 heartbeat/leaseUntil，不读写 row_version，因此不与 checkpoint CAS 争抢。每一次 MinIO/Docling/Embedding/Qdrant 前后都回查 MySQL 并验证实时取消、owner、fence 和租约。
+- 新增 complete/cancel/fail 三类本地事务：complete 依次 CAS version READY、document activeVersion/generation、knowledge-base generation、task COMPLETED；cancel/fail 关闭未激活 version、清 targetGeneration、保留旧 activeVersion，再 fenced 关闭 task。任一 CAS 不为 1 抛 `RAG_LIFECYCLE_CONFLICT` 并整个回滚。
+- `RagIngestWorker` 实现 INGEST 主链：不可变 scope/generation 校验→version PROCESSING→每 attempt 独立 0700 工作目录→流式下载并复核 size/SHA→解析→确定性 Parent/Child chunk 快照→仅 child 分批 Dense+Sparse→单 Qdrant 批次幂等 upsert→checkpoint→Qdrant exact count + MySQL child count→VERIFYING→原子激活。崩溃恢复从 MySQL chunk 重做未确认批次，pointId 稳定，不持久中间向量。
+- 检查点增加 `vectorUpsertIndex<=totalChunks` 和 VERIFYING 必须 `total>0 && processed=vector=total` 不变式；`complete()` 再做一次完整性校验。Qdrant 或 chunk 计数不符禁止激活并清理半成品。终止失败清理本身失败时不提前写 FAILED/DEAD，而转入可过期接管的内部清理态，清理成功后再恢复目标终态。
+- 新增 Kafka+DB 双唤醒调度器：Kafka 严格解析 schemaVersion/tenantId/taskId，只作唤醒；默认 2000 ms 数据库扫描补偿 Kafka 丢失/重复、应用重启、retrying 到期、running 租约过期和 cancel cleanup。首期固定 1 个 `rag-ingest-worker-1` 执行线程，有界队列和进程内 tenant+job 去重；总开关默认关闭，关闭时不创建 Worker/扫描/心跳线程。
+- 资源默认：scan batch 10，lease 180000 ms，heartbeat 30000 ms，Embedding batch 16，Qdrant batch 64，实际 Worker 批次取两者最小值 16；child 1800 chars/420 近似 tokens，parent 6000/1400，overlap 160。这些配置受 Bean Validation 联合约束并可由环境变量覆盖。
+
+#### Java 真实验证
+
+- Java 17 组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=RagIngestWorkerTest,RagIngestJobEntityTest,RagRepositoryTest,RagPropertiesTest,MyBatisMapperLoadTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 34/34 通过，0 failure/error，六模块 BUILD SUCCESS，总耗时 7.870 秒。
+- Worker 6 项包含：完整 Markdown 到单次原子 complete；Embedding 前 DB 取消时 Embedding/Qdrant upsert 均 0 调用并清理 CANCELLED；Qdrant count 不符不 complete，清理向量/chunk 并 FAILED；heartbeat 发现新 fence 后下载、解析、Embedding、upsert、cleanup、complete 全部 0 调用；错误脱敏/真实对象下载错误可重试；工作目录不跟随 symlink，外部文件保留，普通根和断链根入口均删除。
+- 持久化/状态机/配置/Mapper 28 项全部通过。一次编译在 Worker 初版把 Sparse 单文本直接传给批量端口时被 Java 类型系统拒绝；已改为整批 `SparseEncodingCommand` 并与 Dense 同批对齐，修正后上述 34 项全绿。
+- 审查发现并修复两项真实缺陷：错误分类器原未包含对象存储实际错误码 `OBJECT_STORAGE_DOWNLOAD_FAILED`，会误判终止；workspace 原 `Files.exists(root)` 会跟随链接，根被替换为断链 symlink 时可能遗留，现使用 `NOFOLLOW_LINKS`。
+
+#### 当前边界
+
+- 本 Worker 明确只执行 `INGEST`。现有检索是 knowledge-base generation 过滤，单文档 REBUILD 直接推进全库 generation 会隐藏其他文档，因此未在语义没有重新设计前冒充实现；DELETE 也尚未开放 API。
+- 本节的 Worker 端到端是内存仓储+伪外部端口，尚未使用真实 MySQL+MinIO+Embedding+Qdrant 完成一份文档的全链路。Kafka 唤醒也尚未用真实 broker 断线/重启验证；不将单元测试写成真实 E2E。

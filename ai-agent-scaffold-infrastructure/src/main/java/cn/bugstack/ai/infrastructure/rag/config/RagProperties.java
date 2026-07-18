@@ -58,6 +58,11 @@ public class RagProperties {
     @NotNull
     private Outbox outbox = new Outbox();
 
+    /** RAG 摄取 Worker 资源与恢复边界。 */
+    @Valid
+    @NotNull
+    private Worker worker = new Worker();
+
     /**
      * 校验启用时的认证边界；无参数；返回是否可以安全连接全部 RAG 服务。
      */
@@ -82,6 +87,7 @@ public class RagProperties {
                 ", docling=" + docling +
                 ", kafka=" + kafka +
                 ", outbox=" + outbox +
+                ", worker=" + worker +
                 '}';
     }
 
@@ -238,10 +244,14 @@ public class RagProperties {
         @NotBlank
         private String topic = "rag.ingest.request.v1";
 
+        /** 摄取 Worker 消费组。 */
+        @NotBlank
+        private String groupId = "ai-agent-rag-ingest";
+
         /** 输出 Kafka 摘要；无参数；返回 Topic 信息。 */
         @Override
         public String toString() {
-            return "Kafka{topic='" + topic + "'}";
+            return "Kafka{topic='" + topic + "', groupId='" + groupId + "'}";
         }
     }
 
@@ -299,6 +309,74 @@ public class RagProperties {
             return "Outbox{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
                     + ", batchSize=" + batchSize + ", leaseDurationMs=" + leaseDurationMs
                     + ", ackTimeoutMs=" + ackTimeoutMs + '}';
+        }
+    }
+
+    /** RAG 摄取 Worker 配置；首期固定单线程。 */
+    @Getter
+    @Setter
+    public static class Worker {
+
+        /** 是否启动 Kafka/数据库摄取唤醒。 */
+        private boolean enabled;
+
+        /** 数据库恢复扫描间隔。 */
+        @Min(100)
+        private long pollDelayMs = 2000L;
+
+        /** 每次扫描的任务标识数上限。 */
+        @Min(1)
+        private int scanBatchSize = 10;
+
+        /** 任务租约，需覆盖单次 Docling 超时。 */
+        @Min(15000)
+        private long leaseDurationMs = 180000L;
+
+        /** 心跳间隔。 */
+        @Min(1000)
+        private long heartbeatIntervalMs = 30000L;
+
+        /** 可重试故障的初始退避。 */
+        @Min(100)
+        private long retryBaseDelayMs = 5000L;
+
+        /** 可重试故障的最大退避。 */
+        @Min(100)
+        private long retryMaxDelayMs = 300000L;
+
+        /** Child chunk 字符/近似 Token 上限。 */
+        @Min(128)
+        private int childMaxChars = 1800;
+        @Min(64)
+        private int childMaxTokens = 420;
+
+        /** Parent chunk 字符/近似 Token 上限。 */
+        @Min(256)
+        private int parentMaxChars = 6000;
+        @Min(128)
+        private int parentMaxTokens = 1400;
+
+        /** 超长块分割重叠字符数。 */
+        @Min(0)
+        private int overlapChars = 160;
+
+        @AssertTrue(message = "RAG Worker心跳必须早于租约过期")
+        public boolean isHeartbeatWithinLease() {
+            return heartbeatIntervalMs * 2 < leaseDurationMs;
+        }
+
+        @AssertTrue(message = "RAG Worker重试退避或分块预算不合法")
+        public boolean isBoundaryValid() {
+            return retryMaxDelayMs >= retryBaseDelayMs
+                    && childMaxChars <= parentMaxChars && childMaxTokens <= parentMaxTokens
+                    && overlapChars < childMaxChars;
+        }
+
+        @Override
+        public String toString() {
+            return "Worker{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
+                    + ", scanBatchSize=" + scanBatchSize + ", concurrency=1, leaseDurationMs="
+                    + leaseDurationMs + ", heartbeatIntervalMs=" + heartbeatIntervalMs + '}';
         }
     }
 

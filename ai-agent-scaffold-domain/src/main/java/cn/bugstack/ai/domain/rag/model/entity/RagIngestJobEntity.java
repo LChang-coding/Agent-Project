@@ -33,6 +33,9 @@ public record RagIngestJobEntity(String tenantId,
                                  String errorCode,
                                  String errorMessage) {
 
+    public static final String FAILURE_CLEANUP_FAILED = "SYSTEM_FAILURE_CLEANUP:FAILED";
+    public static final String FAILURE_CLEANUP_DEAD = "SYSTEM_FAILURE_CLEANUP:DEAD";
+
     public RagIngestJobEntity {
         requireText(tenantId, "租户ID");
         requireText(knowledgeBaseId, "知识库ID");
@@ -127,6 +130,16 @@ public record RagIngestJobEntity(String tenantId,
                 fencingToken, normalizeReason(reason), errorCode, errorMessage);
     }
 
+    /** 终止失败的副作用清理未完成，转入可接管清理态。 */
+    public RagIngestJobEntity requestFailureCleanup(boolean dead, String code, String message) {
+        if (status != RagIngestJobStatus.RUNNING) {
+            throw domainError("RAG_INGEST_CLEANUP_STATE_INVALID", "只有运行中任务可转入失败清理");
+        }
+        return copy(RagIngestJobStatus.CANCEL_REQUESTED, checkpoint, attemptCount, null, lease,
+                fencingToken, dead ? FAILURE_CLEANUP_DEAD : FAILURE_CLEANUP_FAILED,
+                normalizeCode(code), normalizeMessage(message));
+    }
+
     /** 在取消屏障生效后将任务推进为已取消。 */
     public RagIngestJobEntity markCancelled(String leaseOwner, long expectedFencingToken, Instant now) {
         if (status == RagIngestJobStatus.CANCELLED) {
@@ -142,11 +155,29 @@ public record RagIngestJobEntity(String tenantId,
                 fencingToken, cancelReason, null, null);
     }
 
+    /** 失败副作用已清理，按预定目标关闭为 FAILED/DEAD。 */
+    public RagIngestJobEntity markFailedAfterCleanup(String leaseOwner, long expectedFencingToken, Instant now) {
+        if (status != RagIngestJobStatus.CANCEL_REQUESTED
+                || !FAILURE_CLEANUP_FAILED.equals(cancelReason) && !FAILURE_CLEANUP_DEAD.equals(cancelReason)) {
+            throw domainError("RAG_INGEST_CLEANUP_STATE_INVALID", "摄取任务不在失败清理状态");
+        }
+        assertFence(leaseOwner, expectedFencingToken, now, true);
+        RagIngestJobStatus target = FAILURE_CLEANUP_DEAD.equals(cancelReason)
+                ? RagIngestJobStatus.DEAD : RagIngestJobStatus.FAILED;
+        return copy(target, checkpoint, attemptCount, null, null, fencingToken,
+                null, errorCode, errorMessage);
+    }
+
     /** 完成已验证的任务，完成前不允许跳过 VERIFYING。 */
     public RagIngestJobEntity complete(String leaseOwner, long expectedFencingToken, Instant now) {
         assertExternalCallAllowed(leaseOwner, expectedFencingToken, now);
         if (checkpoint.stage() != RagIngestStage.VERIFYING) {
             throw domainError("RAG_INGEST_NOT_VERIFIED", "摄取任务完成前必须验证索引");
+        }
+        if (checkpoint.totalChunks() < 1
+                || checkpoint.processedChunks() != checkpoint.totalChunks()
+                || checkpoint.vectorUpsertIndex() != checkpoint.totalChunks()) {
+            throw domainError("RAG_INGEST_INDEX_INCOMPLETE", "摄取任务的分块或向量索引尚未完整");
         }
         RagIngestCheckpoint completed = new RagIngestCheckpoint(RagIngestStage.COMPLETED,
                 checkpoint.processedChunks(), checkpoint.totalChunks(), checkpoint.embeddingBatchIndex(),

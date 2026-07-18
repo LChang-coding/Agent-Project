@@ -70,4 +70,12 @@
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBase.knowledgeBaseId}
           AND revision = #{expectedRevision} AND deleted = 0
     </update>
+
+    <update id="activateGenerationByTenantAndRevision">
+        UPDATE rag_knowledge_base
+        SET current_generation = #{generation}, status = 'active', revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND revision = #{expectedRevision} AND current_generation &lt;= #{generation}
+          AND status IN ('active', 'indexing') AND deleted = 0
+    </update>
 </mapper>

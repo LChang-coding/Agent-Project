@@ -40,6 +40,9 @@ public class RagKnowledgeBaseAuthorizationServiceTest {
     @Test
     public void shouldKeepTenantIdAsFirstRepositoryArgument() {
         for (Method method : IRagRepository.class.getDeclaredMethods()) {
+            if (method.getName().equals("listDueIngestJobCandidates")) {
+                continue; // Worker 全局发现仅返回 tenantId + jobId，不读写业务内容。
+            }
             Assert.assertTrue("仓储方法必须至少包含 tenantId: " + method.getName(), method.getParameterCount() > 0);
             Assert.assertEquals("仓储方法首参必须是 tenantId 字符串: " + method.getName(),
                     String.class, method.getParameterTypes()[0]);

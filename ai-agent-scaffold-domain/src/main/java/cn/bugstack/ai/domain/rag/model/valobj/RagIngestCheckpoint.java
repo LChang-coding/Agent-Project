@@ -17,7 +17,9 @@ public record RagIngestCheckpoint(RagIngestStage stage,
 
     public RagIngestCheckpoint {
         if (stage == null || processedChunks < 0 || totalChunks < 0 || processedChunks > totalChunks
-                || embeddingBatchIndex < 0 || vectorUpsertIndex < 0) {
+                || embeddingBatchIndex < 0 || vectorUpsertIndex < 0 || vectorUpsertIndex > totalChunks
+                || stage == RagIngestStage.VERIFYING
+                && (totalChunks < 1 || processedChunks != totalChunks || vectorUpsertIndex != totalChunks)) {
             throw new IllegalArgumentException("摄取检查点参数非法");
         }
     }

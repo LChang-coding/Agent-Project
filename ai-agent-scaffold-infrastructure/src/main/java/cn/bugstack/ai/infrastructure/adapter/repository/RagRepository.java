@@ -9,6 +9,9 @@ import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobCandidate;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao;
 import cn.bugstack.ai.infrastructure.dao.IRagChunkDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
@@ -17,6 +20,7 @@ import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagChunkPO;
+import cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceCodec;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
 import cn.bugstack.ai.types.exception.AppException;
@@ -159,6 +163,14 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    public List<RagIngestJobCandidate> listDueIngestJobCandidates(Instant now, int limit) {
+        if (now == null) throw new IllegalArgumentException("now不能为空");
+        if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit必须在1到1000之间");
+        return ingestTaskDao.queryDueCandidates(LocalDateTime.ofInstant(now, ZoneOffset.UTC), limit).stream()
+                .map(this::toIngestCandidate).toList();
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Optional<RagIngestJobEntity> claimDueIngestJob(String tenantId, String jobId, String leaseOwner,
                                                           Instant now, Instant leaseUntil) {
@@ -174,6 +186,95 @@ public class RagRepository implements IRagRepository {
         if (changed != 1) return Optional.empty();
         return Optional.ofNullable(mapper.toIngestJob(
                 ingestTaskDao.queryByTenantAndTaskId(tenantId, jobId)));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Optional<RagIngestJobEntity> claimCancelledIngestJobForCleanup(String tenantId, String jobId,
+                                                                          String leaseOwner, Instant now,
+                                                                          Instant leaseUntil) {
+        validateClaimArguments(tenantId, jobId, leaseOwner, now, leaseUntil);
+        int changed = ingestTaskDao.claimCancelledForCleanup(tenantId, jobId, leaseOwner,
+                LocalDateTime.ofInstant(now, ZoneOffset.UTC),
+                LocalDateTime.ofInstant(leaseUntil, ZoneOffset.UTC));
+        if (changed != 1) return Optional.empty();
+        return Optional.ofNullable(mapper.toIngestJob(
+                ingestTaskDao.queryByTenantAndTaskId(tenantId, jobId)));
+    }
+
+    @Override
+    public int updateClaimedIngestJob(String tenantId, RagIngestJobEntity job, long expectedRevision,
+                                      String leaseOwner, long expectedFencingToken, Instant now) {
+        validateWorkerUpdate(tenantId, job, expectedRevision, leaseOwner, expectedFencingToken, now);
+        return ingestTaskDao.updateClaimedByTenantFenceAndRevision(tenantId, mapper.toIngestTaskPo(job),
+                expectedRevision, leaseOwner, expectedFencingToken,
+                LocalDateTime.ofInstant(now, ZoneOffset.UTC));
+    }
+
+    @Override
+    public int heartbeatClaimedIngestJob(String tenantId, String jobId, String leaseOwner,
+                                         long expectedFencingToken, Instant now, Instant leaseUntil) {
+        validateClaimArguments(tenantId, jobId, leaseOwner, now, leaseUntil);
+        if (expectedFencingToken < 1) throw new IllegalArgumentException("fencing token必须为正数");
+        return ingestTaskDao.heartbeatClaimed(tenantId, jobId, leaseOwner, expectedFencingToken,
+                LocalDateTime.ofInstant(now, ZoneOffset.UTC),
+                LocalDateTime.ofInstant(leaseUntil, ZoneOffset.UTC));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void completeClaimedIngestJob(String tenantId, RagIngestJobEntity completedJob,
+                                         long expectedTaskRevision, String leaseOwner,
+                                         long expectedFencingToken, RagIndexActivation activation, Instant now) {
+        validateLifecycle(tenantId, completedJob, expectedTaskRevision, leaseOwner,
+                expectedFencingToken, now, RagIngestJobStatus.COMPLETED);
+        requireActivationMatchesJob(activation, completedJob);
+        LocalDateTime indexedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
+        requireChanged(documentVersionDao.markReadyByTenantAndRevision(tenantId,
+                activation.knowledgeBaseId(), activation.documentId(), activation.versionId(),
+                activation.generation(), activation.expectedVersionRevision(), indexedAt));
+        requireChanged(documentDao.activateVersionByTenantAndRevision(tenantId,
+                activation.knowledgeBaseId(), activation.documentId(), activation.versionId(),
+                activation.generation(), activation.expectedDocumentRevision(), indexedAt));
+        requireChanged(knowledgeBaseDao.activateGenerationByTenantAndRevision(tenantId,
+                activation.knowledgeBaseId(), activation.generation(),
+                activation.expectedKnowledgeBaseRevision()));
+        requireChanged(ingestTaskDao.updateClaimedByTenantFenceAndRevision(tenantId,
+                mapper.toIngestTaskPo(completedJob), expectedTaskRevision, leaseOwner,
+                expectedFencingToken, indexedAt));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelClaimedIngestJob(String tenantId, RagIngestJobEntity cancelledJob,
+                                       long expectedTaskRevision, long expectedVersionRevision,
+                                       long expectedDocumentRevision, String leaseOwner,
+                                       long expectedFencingToken, Instant now) {
+        validateLifecycle(tenantId, cancelledJob, expectedTaskRevision, leaseOwner,
+                expectedFencingToken, now, RagIngestJobStatus.CANCELLED);
+        closeVersionAndDocument(tenantId, cancelledJob, expectedVersionRevision,
+                expectedDocumentRevision, "cancelled");
+        requireChanged(ingestTaskDao.cancelClaimedByTenantFenceAndRevision(tenantId,
+                mapper.toIngestTaskPo(cancelledJob), expectedTaskRevision, leaseOwner, expectedFencingToken));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void failClaimedIngestJob(String tenantId, RagIngestJobEntity failedJob,
+                                     long expectedTaskRevision, long expectedVersionRevision,
+                                     long expectedDocumentRevision, String leaseOwner,
+                                     long expectedFencingToken, Instant now) {
+        if (failedJob == null || failedJob.status() != RagIngestJobStatus.FAILED
+                && failedJob.status() != RagIngestJobStatus.DEAD) {
+            throw new IllegalArgumentException("失败事务只允许关闭 failed/dead 任务");
+        }
+        validateLifecycle(tenantId, failedJob, expectedTaskRevision, leaseOwner,
+                expectedFencingToken, now, failedJob.status());
+        closeVersionAndDocument(tenantId, failedJob, expectedVersionRevision,
+                expectedDocumentRevision, "failed");
+        requireChanged(ingestTaskDao.updateClaimedByTenantFenceAndRevision(tenantId,
+                mapper.toIngestTaskPo(failedJob), expectedTaskRevision, leaseOwner,
+                expectedFencingToken, LocalDateTime.ofInstant(now, ZoneOffset.UTC)));
     }
 
     @Override
@@ -222,6 +323,70 @@ public class RagRepository implements IRagRepository {
         requireText(trustedTenantId, "tenantId");
         if (!trustedTenantId.equals(entityTenantId)) {
             throw new IllegalArgumentException("RAG 实体租户范围不一致");
+        }
+    }
+
+    private RagIngestJobCandidate toIngestCandidate(RagIngestCandidatePO candidate) {
+        if (candidate == null) throw new IllegalStateException("RAG 任务候选投影不能为空");
+        return new RagIngestJobCandidate(candidate.getTenantId(), candidate.getJobId());
+    }
+
+    private void validateClaimArguments(String tenantId, String jobId, String leaseOwner,
+                                        Instant now, Instant leaseUntil) {
+        requireText(tenantId, "tenantId");
+        requireText(jobId, "jobId");
+        requireText(leaseOwner, "leaseOwner");
+        if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {
+            throw new IllegalArgumentException("RAG 任务领取时间非法");
+        }
+    }
+
+    private void validateWorkerUpdate(String tenantId, RagIngestJobEntity job, long expectedRevision,
+                                      String leaseOwner, long expectedFencingToken, Instant now) {
+        requireTenant(tenantId, job == null ? null : job.tenantId());
+        requireRevision(expectedRevision);
+        requireText(leaseOwner, "leaseOwner");
+        if (expectedFencingToken < 1 || now == null) {
+            throw new IllegalArgumentException("Worker fencing token或时间非法");
+        }
+        if (job.fencingToken() != expectedFencingToken) {
+            throw new IllegalArgumentException("Worker 任务 fencing token与预期不一致");
+        }
+    }
+
+    private void validateLifecycle(String tenantId, RagIngestJobEntity job, long expectedRevision,
+                                   String leaseOwner, long expectedFencingToken, Instant now,
+                                   RagIngestJobStatus expectedStatus) {
+        validateWorkerUpdate(tenantId, job, expectedRevision, leaseOwner, expectedFencingToken, now);
+        if (job.status() != expectedStatus) {
+            throw new IllegalArgumentException("RAG lifecycle 任务目标状态不一致");
+        }
+    }
+
+    private void requireActivationMatchesJob(RagIndexActivation activation, RagIngestJobEntity job) {
+        if (activation == null || !activation.knowledgeBaseId().equals(job.knowledgeBaseId())
+                || !activation.documentId().equals(job.documentId())
+                || !activation.versionId().equals(job.versionId())
+                || activation.generation() != job.generation()) {
+            throw new IllegalArgumentException("RAG 激活范围与任务不一致");
+        }
+    }
+
+    private void closeVersionAndDocument(String tenantId, RagIngestJobEntity job,
+                                         long expectedVersionRevision, long expectedDocumentRevision,
+                                         String versionStatus) {
+        requireRevision(expectedVersionRevision);
+        requireRevision(expectedDocumentRevision);
+        requireChanged(documentVersionDao.closeByTenantAndRevision(tenantId, job.knowledgeBaseId(),
+                job.documentId(), job.versionId(), job.generation(), versionStatus, expectedVersionRevision));
+        requireChanged(documentDao.closeTargetGenerationByTenantAndRevision(tenantId, job.knowledgeBaseId(),
+                job.documentId(), job.generation(), expectedDocumentRevision));
+    }
+
+    private void requireChanged(int changed) {
+        if (changed != 1) {
+            throw new AppException("RAG_LIFECYCLE_CONFLICT",
+                    "RAG 状态已被其他 Worker 或管理操作修改，本次事务已回滚");
         }
     }
 
