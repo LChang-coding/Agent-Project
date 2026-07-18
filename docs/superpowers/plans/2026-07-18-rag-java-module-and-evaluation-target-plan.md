@@ -794,3 +794,33 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 原先600–782 ms 的 `wall-total` 已被证据拆开：同步审计是四组最大单项，均值525.2–593.4 ms；数据装载416.0–497.2 ms，配置读取244.8–284.0 ms；完整服务边界外仅90.4–129.4 ms。当前优化优先级应是减少远程 MySQL 审计/读取往返，其次才是模型或 HTTP 客户端；本切片没有未经测量就改成异步审计。
 - 产物 SHA-256：`load.jsonl`=`489f58ed81b4592dd9b308e225c32296eec624546a3fab4db7f2b7739f3d57f2`，`load-report.json`=`c3cade89832a25fe1fe3690ef14ee7b5596592745f4a02b4e4509a650a7f8855`，`load-manifest.json`=`0d5c8cb9ccae3e71f4258621641228f4f96cd0d4f969fa9ac97a36ea34ec390e`。原始目录 `/tmp/rag-benchmark-mini-timing-load-43b1d62`。
 - 数据库核验首次使用 `codex.md` 模糊表格匹配时误读到前一张中间件用途表，认证失败；按用户已提供的密码连接成功。随后一次查询误用不存在的 `ai_agent` 库名，改为应用配置的 `ai_agent_scaffold` 后得到上述计数。`codex.md` 实际密码记录正确，无需修改。
+
+### 阶段 6 第三切片执行计划：批量装载引用文档
+
+1. 基线证据显示每次返回3个不同文档引用时，数据装载包含1次命中 chunk 批量查询和3次逐文档查询，`hydrationMs` 均值416.0–497.2 ms。先减少确定存在的远程 MySQL 往返，不用本地缓存制造配置/索引状态陈旧窗口。
+2. 在 `IRagRepository` 增加强租户 `listDocumentsByIds`，约束空输入、去重和最多500个 ID；MyBatis 使用单条 `tenant_id + document_id IN (...) + deleted=0` 查询，基础设施映射回领域实体。
+3. 检索组装前一次性收集最终候选涉及的 document ID 并批量加载，组装时只从该快照取文档；缺失文档继续 fail closed，活动版本/generation 校验保持不变。由此将3个文档往返合并为1个，不改变检索排序、token 预算和引用内容。
+4. 新增仓储批量边界和领域调用次数测试：多引用只调用一次批量文档接口，逐文档接口不再调用；跨租户/缺失范围仍不能静默通过。执行 Java 17 定向测试和 benchmark 回归。
+5. 重启本机8092隔离应用，用与上一轮相同的1并发、每组1预热+5计量做真实对照。记录 hydration、total、service、audit、outside 的均值变化和原始产物哈希；小样本只用于方向性验证，不声称统计显著。
+
+#### 2026-07-19 阶段 6 第三切片执行结果
+
+- `IRagRepository`、`IRagDocumentDao` 和 MyBatis mapper 新增强租户批量文档读取：输入去重、空输入直接返回、单批最多500个 ID，SQL 始终包含 `tenant_id` 与 `deleted=0`。检索服务对超过500个不同文档的候选自动分批。
+- 引用组装现在先从最终排序候选收集 document ID，再一次批量装载为请求内快照；后续组装不再逐条查询。缺失文档仍抛 `RAG_DOCUMENT_MISSING`，重复业务 ID 抛范围违规，活动版本与 generation 校验未改变。
+- 测试验证两引用只调用一次 `listDocumentsByIds`、不调用 `findDocument`，并覆盖仓储去重和501条上限。打包定向测试45/45通过；补跑 MyBatis XML 装载后46/46通过，均为0 failure/error/skipped，最后一次 BUILD SUCCESS 总耗时2.701秒。
+- 打包时曾覆盖正在运行的隔离 app jar，随后停止旧 JVM 时 Nacos/Logback 嵌套类加载出现 shutdown-only `NoClassDefFoundError`；HTTP 服务已先停止，未影响请求结果。之后使用新 jar 启动全新 JVM 完成对照；生产发布应通过版本化文件+原子软链/容器替换，不能原地覆盖运行中的 jar。
+
+##### 同参数真实对照
+
+- 优化 runId `mini-batchdoc-e6bd0c5`，load runId `mini-batchdoc-load-e6bd0c5`；参数与上一轮相同：1并发、每组1次预热+5次计量，共20条 measured。20条仍为0 error、0 degraded、0 empty；数据库为32条 success 审计，96条引用、32个不同 retrieval ID、96个不同 citation ID，日志无审计重复键错误。
+
+| 组别 | wall 前→后 ms | hydration 前→后 ms | service 前→后 ms | audit 前→后 ms |
+|---|---:|---:|---:|---:|
+| Dense | 1508.2→1299.6（-13.8%） | 418.6→355.6（-15.1%） | 1417.8→1224.8 | 525.2→493.8 |
+| Sparse | 1445.6→1214.0（-16.0%） | 433.6→368.0（-15.1%） | 1330.2→1134.4 | 564.6→489.4 |
+| Hybrid+RRF | 1594.8→1361.8（-14.6%） | 416.0→353.4（-15.0%） | 1475.8→1269.8 | 593.4→494.6 |
+| Hybrid+RRF+Rerank | 1898.2→1657.0（-12.7%） | 497.2→459.0（-7.7%） | 1768.8→1578.0 | 570.4→501.6 |
+
+- 阶段总耗时从32244 ms降到27675 ms，闭环吞吐从0.6203升到0.7227 req/s（+16.5%）。新组配置均值212.2–226.2 ms、审计489.4–501.6 ms、边界外74.8–92.0 ms；同步审计仍是最大单项。
+- 这是两轮各组只有5个样本、跨公网访问远程 MySQL 的先后对照。虽然四组 hydration 与 wall 都同向下降，但配置和审计也同步变快，存在网络时变影响；只能证明优化链路正确且方向有利，不能把全部12.7%–16.0% wall 改善归因于批量查询，也不能声称统计显著。
+- 产物 SHA-256：`load.jsonl`=`fcac6fba7ca05bcb79bfe13dee7bbd1dcea73e90686896e7f690a667e52564c4`，`load-report.json`=`6f43bd15fa8df74b405cf6201b097ddf6349df46d4c54f82d0bf33bb70bcc6c1`，`load-manifest.json`=`157d526ce74192ba5e08304bb226523214e2d7affa57982f69856b834c7c4476`。原始目录 `/tmp/rag-benchmark-mini-batchdoc-load-e6bd0c5`。

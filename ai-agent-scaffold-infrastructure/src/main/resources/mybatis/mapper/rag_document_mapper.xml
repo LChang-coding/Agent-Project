@@ -68,6 +68,15 @@
         WHERE tenant_id = #{tenantId} AND document_id = #{documentId} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryListByTenantAndDocumentIds" resultMap="RagDocumentMap">
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND document_id IN
+        <foreach collection="documentIds" item="documentId" open="(" separator="," close=")">
+            #{documentId}
+        </foreach>
+        AND deleted = 0
+    </select>
+
     <select id="queryListByTenantAndKnowledgeBaseId" resultMap="RagDocumentMap">
         SELECT <include refid="Columns"/> FROM rag_document
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0 ORDER BY id DESC

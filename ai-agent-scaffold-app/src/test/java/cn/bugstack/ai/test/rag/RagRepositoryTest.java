@@ -69,6 +69,22 @@ public class RagRepositoryTest {
     }
 
     @Test
+    public void shouldNormalizeAndBoundTenantDocumentBatch() {
+        Mockito.when(documentDao.queryListByTenantAndDocumentIds("tenant-a", List.of("doc-1", "doc-2")))
+                .thenReturn(List.of());
+
+        Assert.assertTrue(repository.listDocumentsByIds(
+                "tenant-a", List.of("doc-1", "doc-1", "doc-2")).isEmpty());
+        Mockito.verify(documentDao).queryListByTenantAndDocumentIds(
+                "tenant-a", List.of("doc-1", "doc-2"));
+
+        List<String> tooMany = java.util.stream.IntStream.range(0, 501)
+                .mapToObj(index -> "doc-" + index).toList();
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> repository.listDocumentsByIds("tenant-a", tooMany));
+    }
+
+    @Test
     public void shouldRejectEntityFromAnotherTenantBeforeInsert() {
         RagKnowledgeBaseEntity crossTenant = new RagKnowledgeBaseEntity("tenant-b", "owner-1", "kb-1",
                 "企业知识库", null, RagVisibility.TENANT, RagKnowledgeBaseStatus.ACTIVE,

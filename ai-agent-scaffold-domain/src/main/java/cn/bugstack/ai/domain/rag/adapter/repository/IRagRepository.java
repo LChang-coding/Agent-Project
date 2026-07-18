@@ -36,6 +36,9 @@ public interface IRagRepository {
     /** 按租户查询逻辑文档。 */
     Optional<RagDocumentEntity> findDocument(String tenantId, String documentId);
 
+    /** 按租户批量查询逻辑文档；实现必须限制批次并去重。 */
+    List<RagDocumentEntity> listDocumentsByIds(String tenantId, List<String> documentIds);
+
     /** 查询租户知识库下的文档。 */
     List<RagDocumentEntity> listDocuments(String tenantId, String knowledgeBaseId);
 

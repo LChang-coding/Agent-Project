@@ -20,6 +20,10 @@ public interface IRagDocumentDao {
     RagDocumentPO queryByTenantAndDocumentId(@Param("tenantId") String tenantId,
                                              @Param("documentId") String documentId);
 
+    /** 按租户批量查询业务文档。 */
+    List<RagDocumentPO> queryListByTenantAndDocumentIds(@Param("tenantId") String tenantId,
+                                                        @Param("documentIds") List<String> documentIds);
+
     /** 查询租户知识库的文档列表。 */
     List<RagDocumentPO> queryListByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                             @Param("knowledgeBaseId") String knowledgeBaseId);

@@ -91,6 +91,19 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    public List<RagDocumentEntity> listDocumentsByIds(String tenantId, List<String> documentIds) {
+        requireText(tenantId, "tenantId");
+        if (documentIds == null || documentIds.isEmpty()) return List.of();
+        List<String> normalized = documentIds.stream().map(value -> requireText(value, "documentId"))
+                .distinct().toList();
+        if (normalized.size() > 500) {
+            throw new IllegalArgumentException("RAG文档批量查询不能超过500条");
+        }
+        return documentDao.queryListByTenantAndDocumentIds(tenantId, normalized).stream()
+                .map(mapper::toDocument).toList();
+    }
+
+    @Override
     public List<RagDocumentEntity> listDocuments(String tenantId, String knowledgeBaseId) {
         return documentDao.queryListByTenantAndKnowledgeBaseId(requireText(tenantId, "tenantId"),
                         requireText(knowledgeBaseId, "knowledgeBaseId")).stream()

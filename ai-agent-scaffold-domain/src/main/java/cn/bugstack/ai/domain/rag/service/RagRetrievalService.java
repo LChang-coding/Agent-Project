@@ -50,6 +50,7 @@ public class RagRetrievalService {
     private static final int MAX_QUERY_CHARS = 4096;
     private static final int RRF_K = 60;
     private static final int MAX_BINDINGS = 32;
+    private static final int DOCUMENT_LOAD_BATCH_SIZE = 500;
 
     private final IRagRepository repository;
     private final EmbeddingPort embeddingPort;
@@ -351,7 +352,7 @@ public class RagRetrievalService {
                 value -> value.binding().bindingId(), value -> Math.min(value.binding().maxTokens(),
                         value.profile().maxContextTokens())));
         Map<String, Integer> bindingUsed = new LinkedHashMap<>();
-        Map<String, RagDocumentEntity> documents = new LinkedHashMap<>();
+        Map<String, RagDocumentEntity> documents = loadDocuments(request.tenantId(), ranked, aggregate);
         Set<String> emittedChunks = new LinkedHashSet<>();
         List<RagRetrievalResult.Citation> citations = new ArrayList<>();
         int used = 0;
@@ -365,15 +366,8 @@ public class RagRetrievalService {
             int localUsed = bindingUsed.getOrDefault(bindingId, 0);
             if (tokens < 1 || used + tokens > globalBudget
                     || localUsed + tokens > bindingBudget.get(bindingId)) continue;
-            RagDocumentEntity document = documents.get(value.chunk().documentId());
-            if (document == null) {
-                Timed<Optional<RagDocumentEntity>> loaded = timed(() -> repository.findDocument(
-                        request.tenantId(), value.chunk().documentId()));
-                aggregate.hydrationMs += loaded.elapsedMs();
-                document = loaded.value().orElseThrow(
-                        () -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
-                documents.put(value.chunk().documentId(), document);
-            }
+            RagDocumentEntity document = Optional.ofNullable(documents.get(value.chunk().documentId()))
+                    .orElseThrow(() -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
             validateDocumentScope(value, document);
             used += tokens;
             bindingUsed.put(bindingId, localUsed + tokens);
@@ -389,6 +383,25 @@ public class RagRetrievalService {
                             "profile_revision", Long.toString(value.resolved().profile().revision()))));
         }
         return List.copyOf(citations);
+    }
+
+    private Map<String, RagDocumentEntity> loadDocuments(String tenantId, List<RankedChunk> ranked,
+                                                          Aggregate aggregate) {
+        List<String> documentIds = ranked.stream().map(value -> value.chunk().documentId()).distinct().toList();
+        Map<String, RagDocumentEntity> documents = new LinkedHashMap<>();
+        for (int offset = 0; offset < documentIds.size(); offset += DOCUMENT_LOAD_BATCH_SIZE) {
+            List<String> batch = documentIds.subList(offset,
+                    Math.min(offset + DOCUMENT_LOAD_BATCH_SIZE, documentIds.size()));
+            Timed<List<RagDocumentEntity>> loaded = timed(() -> repository.listDocumentsByIds(tenantId, batch));
+            aggregate.hydrationMs += loaded.elapsedMs();
+            for (RagDocumentEntity document : loaded.value()) {
+                RagDocumentEntity previous = documents.putIfAbsent(document.documentId(), document);
+                if (previous != null) {
+                    throw new AppException("RAG_DOCUMENT_SCOPE_VIOLATION", "批量文档查询返回重复业务ID");
+                }
+            }
+        }
+        return documents;
     }
 
     private List<RagChunkEntity> expandContext(String tenantId, RankedChunk value, Aggregate aggregate) {

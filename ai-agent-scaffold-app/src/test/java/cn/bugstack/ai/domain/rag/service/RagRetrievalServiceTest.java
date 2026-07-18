@@ -112,6 +112,8 @@ public class RagRetrievalServiceTest {
         verify(sparse, times(1)).encode(any());
         verify(vectorStore, times(2)).search(anyString(), any());
         verify(reranker, times(1)).rerank(any());
+        verify(repository, times(1)).listDocumentsByIds(anyString(), any());
+        verify(repository, never()).findDocument(anyString(), anyString());
     }
 
     @Test
@@ -252,8 +254,13 @@ public class RagRetrievalServiceTest {
             List<String> ids = invocation.getArgument(1);
             return ids.stream().filter(chunks::containsKey).map(chunks::get).toList();
         });
-        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(document("doc-a", "ver-a", "Alpha.md")));
-        when(repository.findDocument("tenant-a", "doc-b")).thenReturn(Optional.of(document("doc-b", "ver-b", "Beta.md")));
+        Map<String, RagDocumentEntity> documents = Map.of(
+                "doc-a", document("doc-a", "ver-a", "Alpha.md"),
+                "doc-b", document("doc-b", "ver-b", "Beta.md"));
+        when(repository.listDocumentsByIds(anyString(), any())).thenAnswer(invocation -> {
+            List<String> ids = invocation.getArgument(1);
+            return ids.stream().filter(documents::containsKey).map(documents::get).toList();
+        });
     }
 
     private void modelFixturesOneHit() {
