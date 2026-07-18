@@ -45,6 +45,9 @@ public class RagRetrievalDebugControllerTest {
         Assert.assertEquals("retrieval-a", response.getData().getRetrievalId());
         Assert.assertEquals(Integer.valueOf(8), response.getData().getEstimatedTokenCount());
         Assert.assertEquals("chunk-a", response.getData().getCitations().get(0).getChunkId());
+        Assert.assertEquals(Long.valueOf(6), response.getData().getMetrics().getAssemblyMs());
+        Assert.assertEquals(Long.valueOf(9), response.getData().getMetrics().getAuditMs());
+        Assert.assertEquals(Long.valueOf(24), response.getData().getMetrics().getServiceMs());
     }
 
     @Test
@@ -86,6 +89,7 @@ public class RagRetrievalDebugControllerTest {
                 "chunk-a", "7 天内可退货", 1, "退货", "hash-a",
                 0.8, 0.6, 0.7, 0.9, Map.of("kind", "child"));
         return new RagRetrievalResult("retrieval-a", List.of(citation), 8, false, List.of(),
-                new RagRetrievalResult.Metrics(10, 10, 8, 5, 2, 3, 4, 1, 5, 15));
+                new RagRetrievalResult.Metrics(10, 10, 8, 5, 2, 3, 4, 1, 5, 15,
+                        2, 3, 6, 9, 24));
     }
 }

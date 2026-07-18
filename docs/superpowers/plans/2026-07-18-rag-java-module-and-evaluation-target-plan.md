@@ -747,3 +747,50 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `codex.md` 的 `RAG 专用服务器` 唯一凭据记录与用户最新提供值一致，因此未重复修改凭据，也未在命令输出和提交信息中输出密码。
 - 使用该记录完成只读 SSH 检查，远端主机名为 `ser570412309881`。检查期间只执行 `hostname` 和 `docker ps`，未上传本地 Java/Vue 项目，未修改服务器文件或配置。
 - `rag-qdrant`、`rag-embedding`、`rag-reranker`、`rag-docling`、`rag-model-gateway`、`rag-prometheus` 均为 `Up 6 hours (healthy)`；`rag-node-exporter` 为 `Up 6 hours`。本次凭据与 RAG 环境连通性前置检查通过，无失败项。
+
+### 阶段 6 第二切片执行计划：检索全链路分段计时与审计边界校正
+
+1. 保留现有 `totalMs` 的“检索管线、不含审计”语义以兼容既有调用；新增配置解析、数据库数据装载、纯组装、同步审计和完整服务耗时，贯穿领域结果、调试 API 与 benchmark 原始记录。
+2. 配置耗时覆盖知识库绑定、知识库和检索画像读取；数据装载耗时覆盖 chunk、文档和相邻 chunk 读取；纯组装耗时用组装总耗时扣除其中的数据装载，所有差值向零截断，避免重叠统计。
+3. 同步审计继续保持当前可靠性和事务语义，只测量耗时，不在没有数据前改为异步。完整服务耗时统计到审计尝试结束；审计失败仍沿用现有降级记录策略，同时返回实际耗时边界。
+4. 将已有审计表 `assemble_ms` 字段真正写入，并把可在审计前确定的配置/装载阶段写入扩展 JSON；不为了本次计时新增数据库迁移。审计自身耗时只返回给调用方，避免为记录自己的写入耗时再追加一次数据库更新。
+5. benchmark 对新旧响应兼容解析；负载报告将含混的 `clientAndQueueMs` 改为 `outsideReportedServiceMs=max(0, wall-serviceMs)`，并在旧响应没有 `serviceMs` 时明确回退到 `totalMs`。主导阶段分析排除 `totalMs`、`serviceMs` 等汇总项。
+6. 补齐构造器、序列化、审计映射、HTTP 解析和统计测试，执行 Java 17 定向测试与 benchmark 全量测试。随后用相同参数做一轮真实小样本复测，比较审计、边界外和各内部阶段；所有命令、结果、失败和未验证项追加到本文档后再中文提交。
+
+### 阶段 6 第二切片补充缺陷计划：重复检索审计引用主键冲突
+
+1. 旧 8092 应用退出日志显示，同一评测租户的首批检索后，大量 `RagRetrievalService` 审计写入因 `DuplicateKeyException` 失败。先核对引用表主键/唯一键和引用 ID 生成范围，确认是否由跨检索复用确定性 `citationId` 导致，不用猜测代替证据。
+2. 若引用 ID 当前只绑定 chunk 与 rank，则将其改为检索实例范围内稳定：纳入 `retrievalId`，保证一次响应内可追溯、同一检索重放确定，同时不同检索不冲突；不扩大数据库结构变更。
+3. 新增同一查询连续检索两次的测试，断言引用 ID 不同且两次审计都被调用；保留引用与 retrieval 的关联。完成定向测试后，真实复测除延迟字段完整外，还必须检查应用日志无审计重复键错误。
+
+#### 2026-07-19 阶段 6 第二切片执行结果
+
+##### 全链路计时与统计语义
+
+- `RagRetrievalResult.Metrics` 新增 `configurationMs`、`hydrationMs`、`assemblyMs`、`auditMs`、`serviceMs`，保留旧十参数构造器和 `totalMs` 的检索管线语义。`serviceMs` 计时到同步审计尝试结束，审计失败仍不覆盖成功检索结果。
+- 配置计时包含 binding/knowledge-base/profile 解析；数据装载计时包含命中 chunk、父/相邻 chunk 和文档读取；组装计时扣除了组装期间的数据装载时间。调试 API 已返回全部字段。
+- 审计表已有的 `assemble_ms` 现在实际写入；扩展阶段 JSON 增加配置与数据装载耗时。审计写入前无法知道审计自身耗时，故没有为记录自身耗时再增加一次数据库更新。
+- benchmark HTTP 客户端兼容读取全部新字段。负载报告把含混的 `clientAndQueueMs` 改为 `outsideReportedServiceMs`，优先以 `wall-serviceMs` 计算，旧响应才回退 `totalMs`；主导阶段分析排除 `totalMs`、`serviceMs` 汇总项。
+
+##### 重复检索审计缺陷修复
+
+- 表结构证据：`rag_retrieval_citation` 有唯一键 `(tenant_id, citation_id)`，而旧 `citationId` 只由 tenant/version/chunk/rank 生成；相同 chunk 在后续检索中会复用 ID。旧 8092 日志中的连续 `DuplicateKeyException` 与该约束一致。
+- 引用 ID 现纳入 `retrievalId`，因此同一检索实例内仍稳定可追溯，不同检索不再冲突；不需要数据库迁移。新增同一查询连续两次的回归测试，断言 retrieval ID、citation ID 均不同且两次审计都执行。
+- 真实复测后只读查询数据库：本次租户有32条 `success` 检索记录；引用总数96、不同 retrieval ID 32、不同 citation ID 96。应用复测日志未出现新的审计重复键错误，修复闭环。
+
+##### 测试过程与真实复测结果
+
+- 首次 app 定向测试在沙盒内运行，33个测试中32个 Mockito 测试因 ByteBuddy 无法附着测试 JVM 而报环境错误；不是断言失败。沙盒外加 `-Djdk.attach.allowAttachSelf=true` 并 clean 编译后33/33通过。最终加入新断言和主键回归后，打包测试34/34通过，0 failure/error/skipped，BUILD SUCCESS，总耗时8.706秒。
+- benchmark 首次在沙盒内 clean 测试时，4个本地 HTTP 测试因不允许绑定回环端口失败，其余8个通过；沙盒外最终13/13通过，0 failure/error/skipped，BUILD SUCCESS，总耗时2.840秒。
+- 真实 runId `mini-timing-43b1d62` 完成质量链路；load runId `mini-timing-load-43b1d62` 使用1并发、每组1次预热+5次计量，共20条 measured。20条均有完整新指标，0 error、0 degraded、0 empty；阶段耗时32.244秒、吞吐0.620 req/s。样本太小，p95/p99不作为 SLA。
+
+| 组别 | wall mean ms | total mean ms | service mean ms | audit mean ms | configuration mean ms | hydration mean ms | assembly mean ms | outside service mean ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Dense | 1508.2 | 892.0 | 1417.8 | 525.2 | 268.6 | 418.6 | 2.0 | 90.4 |
+| Sparse | 1445.6 | 764.6 | 1330.2 | 564.6 | 262.0 | 433.6 | 2.0 | 115.4 |
+| Hybrid+RRF | 1594.8 | 881.4 | 1475.8 | 593.4 | 244.8 | 416.0 | 2.4 | 119.0 |
+| Hybrid+RRF+Rerank | 1898.2 | 1197.4 | 1768.8 | 570.4 | 284.0 | 497.2 | 2.0 | 129.4 |
+
+- 原先600–782 ms 的 `wall-total` 已被证据拆开：同步审计是四组最大单项，均值525.2–593.4 ms；数据装载416.0–497.2 ms，配置读取244.8–284.0 ms；完整服务边界外仅90.4–129.4 ms。当前优化优先级应是减少远程 MySQL 审计/读取往返，其次才是模型或 HTTP 客户端；本切片没有未经测量就改成异步审计。
+- 产物 SHA-256：`load.jsonl`=`489f58ed81b4592dd9b308e225c32296eec624546a3fab4db7f2b7739f3d57f2`，`load-report.json`=`c3cade89832a25fe1fe3690ef14ee7b5596592745f4a02b4e4509a650a7f8855`，`load-manifest.json`=`0d5c8cb9ccae3e71f4258621641228f4f96cd0d4f969fa9ac97a36ea34ec390e`。原始目录 `/tmp/rag-benchmark-mini-timing-load-43b1d62`。
+- 数据库核验首次使用 `codex.md` 模糊表格匹配时误读到前一张中间件用途表，认证失败；按用户已提供的密码连接成功。随后一次查询误用不存在的 `ai_agent` 库名，改为应用配置的 `ai_agent_scaffold` 后得到上述计数。`codex.md` 实际密码记录正确，无需修改。

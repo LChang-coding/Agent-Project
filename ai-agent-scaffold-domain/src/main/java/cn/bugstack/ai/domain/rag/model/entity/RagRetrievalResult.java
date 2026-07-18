@@ -27,6 +27,22 @@ public record RagRetrievalResult(String retrievalId,
                 new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs));
     }
 
+    public static RagRetrievalResult empty(String retrievalId, long totalMs, long configurationMs) {
+        return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
+                new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs,
+                        configurationMs, 0, 0, 0, 0));
+    }
+
+    /** 补齐同步审计和完整服务边界；审计记录本身仍保存审计前即可确定的指标。 */
+    public RagRetrievalResult withCompletionTimings(long auditMs, long serviceMs) {
+        Metrics value = metrics;
+        return new RagRetrievalResult(retrievalId, citations, estimatedTokenCount, degraded, degradationReasons,
+                new Metrics(value.denseCandidateCount(), value.sparseCandidateCount(), value.fusionCandidateCount(),
+                        value.rerankCandidateCount(), value.embeddingMs(), value.denseMs(), value.sparseMs(),
+                        value.fusionMs(), value.rerankMs(), value.totalMs(), value.configurationMs(),
+                        value.hydrationMs(), value.assemblyMs(), auditMs, serviceMs));
+    }
+
     /** 最终引用；context 可包含同版本父块和相邻块，chunkId 始终指向主命中。 */
     public record Citation(String citationId,
                            int rank,
@@ -75,11 +91,24 @@ public record RagRetrievalResult(String retrievalId,
                           long sparseMs,
                           long fusionMs,
                           long rerankMs,
-                          long totalMs) {
+                          long totalMs,
+                          long configurationMs,
+                          long hydrationMs,
+                          long assemblyMs,
+                          long auditMs,
+                          long serviceMs) {
+        public Metrics(int denseCandidateCount, int sparseCandidateCount, int fusionCandidateCount,
+                       int rerankCandidateCount, long embeddingMs, long denseMs, long sparseMs,
+                       long fusionMs, long rerankMs, long totalMs) {
+            this(denseCandidateCount, sparseCandidateCount, fusionCandidateCount, rerankCandidateCount,
+                    embeddingMs, denseMs, sparseMs, fusionMs, rerankMs, totalMs, 0, 0, 0, 0, 0);
+        }
+
         public Metrics {
             if (denseCandidateCount < 0 || sparseCandidateCount < 0 || fusionCandidateCount < 0
                     || rerankCandidateCount < 0 || embeddingMs < 0 || denseMs < 0 || sparseMs < 0
-                    || fusionMs < 0 || rerankMs < 0 || totalMs < 0) {
+                    || fusionMs < 0 || rerankMs < 0 || totalMs < 0 || configurationMs < 0
+                    || hydrationMs < 0 || assemblyMs < 0 || auditMs < 0 || serviceMs < 0) {
                 throw new IllegalArgumentException("RAG检索指标非法");
             }
         }

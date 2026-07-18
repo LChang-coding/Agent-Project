@@ -94,8 +94,9 @@ public class RagRetrievalService {
         AuditState audit = new AuditState();
         try {
             RagRetrievalResult result = retrieveInternal(request, retrievalId, query, started, audit);
+            long auditStarted = System.nanoTime();
             recordAudit(request, query, result, result.citations().isEmpty() ? "empty" : "success", null, audit);
-            return result;
+            return result.withCompletionTimings(elapsedMs(auditStarted), elapsedMs(started));
         } catch (RuntimeException exception) {
             RagRetrievalResult failed = RagRetrievalResult.empty(retrievalId, elapsedMs(started));
             recordAudit(request, query, failed, "failed", exception, audit);
@@ -105,22 +106,25 @@ public class RagRetrievalService {
 
     private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
                                                 long started, AuditState audit) {
+        Aggregate aggregate = new Aggregate();
+        long configurationStarted = System.nanoTime();
         List<RagAgentBindingEntity> bindings = repository.listBindings(request.tenantId(), request.targetType(),
                 request.targetId());
         if (bindings.isEmpty()) {
-            return RagRetrievalResult.empty(retrievalId, elapsedMs(started));
+            aggregate.configurationMs = elapsedMs(configurationStarted);
+            return RagRetrievalResult.empty(retrievalId, elapsedMs(started), aggregate.configurationMs);
         }
         if (bindings.size() > MAX_BINDINGS) {
             throw new AppException("RAG_BINDING_LIMIT_EXCEEDED", "单个运行目标的知识库绑定不能超过32个");
         }
 
         List<ResolvedBinding> resolved = resolveBindings(request, bindings);
+        aggregate.configurationMs = elapsedMs(configurationStarted);
         audit.capture(resolved);
         if (resolved.isEmpty()) {
-            return RagRetrievalResult.empty(retrievalId, elapsedMs(started));
+            return RagRetrievalResult.empty(retrievalId, elapsedMs(started), aggregate.configurationMs);
         }
 
-        Aggregate aggregate = new Aggregate();
         resolved.stream().filter(value -> value.profile().queryRewriteEnabled())
                 .map(value -> "query_rewrite_unavailable:" + value.profile().profileId()).distinct()
                 .forEach(aggregate.degradationReasons::add);
@@ -151,7 +155,8 @@ public class RagRetrievalService {
         if (active.isEmpty()) {
             return new RagRetrievalResult(retrievalId, List.of(), 0, true, aggregate.degradationReasons,
                     new RagRetrievalResult.Metrics(0, 0, 0, 0, dense.elapsedMs(), 0, 0, 0, 0,
-                            elapsedMs(started)));
+                            elapsedMs(started), aggregate.configurationMs, aggregate.hydrationMs,
+                            aggregate.assemblyMs, 0, 0));
         }
 
         List<RankedChunk> ranked = new ArrayList<>();
@@ -173,13 +178,19 @@ public class RagRetrievalService {
                 .collect(Collectors.toMap(value -> value.chunk().chunkId(), value -> value,
                         this::better, LinkedHashMap::new)).values().stream()
                 .sorted(RANKING).toList();
-        List<RagRetrievalResult.Citation> citations = assembleCitations(request, merged, active);
+        long assemblyStarted = System.nanoTime();
+        long hydrationBeforeAssembly = aggregate.hydrationMs;
+        List<RagRetrievalResult.Citation> citations = assembleCitations(
+                request, retrievalId, merged, active, aggregate);
+        aggregate.assemblyMs += Math.max(0L, elapsedMs(assemblyStarted)
+                - (aggregate.hydrationMs - hydrationBeforeAssembly));
         int tokens = citations.stream().mapToInt(value -> tokenCounter.estimate(value.context())).sum();
         long totalMs = elapsedMs(started);
         RagRetrievalResult.Metrics metrics = new RagRetrievalResult.Metrics(aggregate.denseCandidates,
                 aggregate.sparseCandidates, aggregate.fusionCandidates, aggregate.rerankCandidates,
                 dense.elapsedMs(), aggregate.denseMs, aggregate.sparseMs, aggregate.fusionMs,
-                aggregate.rerankMs, totalMs);
+                aggregate.rerankMs, totalMs, aggregate.configurationMs, aggregate.hydrationMs,
+                aggregate.assemblyMs, 0, 0);
         log.info("RAG检索完成 tenantId:{} targetType:{} targetId:{} retrievalId:{} citations:{} tokens:{} degraded:{} totalMs:{}",
                 request.tenantId(), request.targetType(), request.targetId(), retrievalId, citations.size(), tokens,
                 !aggregate.degradationReasons.isEmpty(), totalMs);
@@ -263,8 +274,8 @@ public class RagRetrievalService {
         aggregate.fusionCandidates += fused.size();
         if (fused.isEmpty()) return List.of();
 
-        Map<String, RagChunkEntity> chunks = repository.listChunksByIds(request.tenantId(),
-                        fused.stream().map(value -> value.hit().chunkId()).toList()).stream()
+        Map<String, RagChunkEntity> chunks = loadChunks(request.tenantId(),
+                        fused.stream().map(value -> value.hit().chunkId()).toList(), aggregate).stream()
                 .collect(Collectors.toMap(RagChunkEntity::chunkId, value -> value));
         List<RankedChunk> candidates = new ArrayList<>();
         Set<String> contentHashes = new LinkedHashSet<>();
@@ -330,8 +341,10 @@ public class RagRetrievalService {
     }
 
     private List<RagRetrievalResult.Citation> assembleCitations(RagRetrievalRequest request,
+                                                                 String retrievalId,
                                                                  List<RankedChunk> ranked,
-                                                                 List<ResolvedBinding> resolved) {
+                                                                 List<ResolvedBinding> resolved,
+                                                                 Aggregate aggregate) {
         if (ranked.isEmpty()) return List.of();
         int globalBudget = request.maxContextTokens();
         Map<String, Integer> bindingBudget = resolved.stream().collect(Collectors.toMap(
@@ -344,7 +357,7 @@ public class RagRetrievalService {
         int used = 0;
         for (RankedChunk value : ranked) {
             if (citations.size() >= value.resolved().profile().finalTopK()) continue;
-            List<RagChunkEntity> contextChunks = expandContext(request.tenantId(), value);
+            List<RagChunkEntity> contextChunks = expandContext(request.tenantId(), value, aggregate);
             contextChunks = contextChunks.stream().filter(chunk -> !emittedChunks.contains(chunk.chunkId())).toList();
             String context = contextChunks.stream().map(RagChunkEntity::content).collect(Collectors.joining("\n\n"));
             int tokens = tokenCounter.estimate(context);
@@ -352,15 +365,21 @@ public class RagRetrievalService {
             int localUsed = bindingUsed.getOrDefault(bindingId, 0);
             if (tokens < 1 || used + tokens > globalBudget
                     || localUsed + tokens > bindingBudget.get(bindingId)) continue;
-            RagDocumentEntity document = documents.computeIfAbsent(value.chunk().documentId(), id -> repository
-                    .findDocument(request.tenantId(), id)
-                    .orElseThrow(() -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在")));
+            RagDocumentEntity document = documents.get(value.chunk().documentId());
+            if (document == null) {
+                Timed<Optional<RagDocumentEntity>> loaded = timed(() -> repository.findDocument(
+                        request.tenantId(), value.chunk().documentId()));
+                aggregate.hydrationMs += loaded.elapsedMs();
+                document = loaded.value().orElseThrow(
+                        () -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
+                documents.put(value.chunk().documentId(), document);
+            }
             validateDocumentScope(value, document);
             used += tokens;
             bindingUsed.put(bindingId, localUsed + tokens);
             contextChunks.forEach(chunk -> emittedChunks.add(chunk.chunkId()));
             int rank = citations.size() + 1;
-            citations.add(new RagRetrievalResult.Citation(citationId(value.chunk(), rank), rank,
+            citations.add(new RagRetrievalResult.Citation(citationId(retrievalId, value.chunk(), rank), rank,
                     value.chunk().knowledgeBaseId(), value.chunk().documentId(), document.displayName(),
                     value.chunk().versionId(), value.chunk().versionNumber(), value.chunk().generation(),
                     value.chunk().chunkId(), context, value.chunk().pageNumber(), value.chunk().headingPath(),
@@ -372,20 +391,20 @@ public class RagRetrievalService {
         return List.copyOf(citations);
     }
 
-    private List<RagChunkEntity> expandContext(String tenantId, RankedChunk value) {
+    private List<RagChunkEntity> expandContext(String tenantId, RankedChunk value, Aggregate aggregate) {
         int window = value.resolved().profile().neighborWindow();
         LinkedHashMap<String, RagChunkEntity> chunks = new LinkedHashMap<>();
         RagChunkEntity main = value.chunk();
         chunks.put(main.chunkId(), main);
         if (hasText(main.parentChunkId())) {
-            for (RagChunkEntity parent : repository.listChunksByIds(tenantId, List.of(main.parentChunkId()))) {
+            for (RagChunkEntity parent : loadChunks(tenantId, List.of(main.parentChunkId()), aggregate)) {
                 validateRelatedScope(main, parent);
                 chunks.putIfAbsent(parent.chunkId(), parent);
             }
         }
         Set<String> frontier = neighborIds(main);
         for (int depth = 0; depth < window && !frontier.isEmpty(); depth++) {
-            List<RagChunkEntity> loaded = repository.listChunksByIds(tenantId, List.copyOf(frontier));
+            List<RagChunkEntity> loaded = loadChunks(tenantId, List.copyOf(frontier), aggregate);
             frontier = new LinkedHashSet<>();
             for (RagChunkEntity chunk : loaded) {
                 validateRelatedScope(main, chunk);
@@ -396,6 +415,12 @@ public class RagRetrievalService {
             }
         }
         return chunks.values().stream().sorted(Comparator.comparingInt(RagChunkEntity::chunkIndex)).toList();
+    }
+
+    private List<RagChunkEntity> loadChunks(String tenantId, List<String> chunkIds, Aggregate aggregate) {
+        Timed<List<RagChunkEntity>> loaded = timed(() -> repository.listChunksByIds(tenantId, chunkIds));
+        aggregate.hydrationMs += loaded.elapsedMs();
+        return loaded.value();
     }
 
     private Set<String> neighborIds(RagChunkEntity chunk) {
@@ -453,8 +478,9 @@ public class RagRetrievalService {
         return normalized;
     }
 
-    private String citationId(RagChunkEntity chunk, int rank) {
-        return "cite_" + sha256(chunk.tenantId() + "|" + chunk.versionId() + "|" + chunk.chunkId() + "|" + rank)
+    private String citationId(String retrievalId, RagChunkEntity chunk, int rank) {
+        return "cite_" + sha256(retrievalId + "|" + chunk.tenantId() + "|" + chunk.versionId()
+                + "|" + chunk.chunkId() + "|" + rank)
                 .substring(0, 24);
     }
 
@@ -521,6 +547,9 @@ public class RagRetrievalService {
         private long sparseMs;
         private long fusionMs;
         private long rerankMs;
+        private long configurationMs;
+        private long hydrationMs;
+        private long assemblyMs;
         private final List<String> degradationReasons = new ArrayList<>();
     }
 

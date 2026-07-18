@@ -39,12 +39,14 @@ public final class RagLoadBenchmarkStatistics {
                 .forEach(stage -> stages.put(stage, distribution(records.stream()
                         .filter(value -> value.stageTimingsMs().containsKey(stage))
                         .map(value -> value.stageTimingsMs().get(stage)).toList())));
-        List<Long> clientAndQueue = records.stream().filter(value -> !value.failed())
+        List<Long> outsideReportedService = records.stream().filter(value -> !value.failed())
                 .map(value -> Math.max(0L, value.elapsedMs()
-                        - value.stageTimingsMs().getOrDefault("totalMs", 0L))).toList();
-        if (!clientAndQueue.isEmpty()) stages.put("clientAndQueueMs", distribution(clientAndQueue));
+                        - reportedServiceMs(value.stageTimingsMs()))).toList();
+        if (!outsideReportedService.isEmpty()) {
+            stages.put("outsideReportedServiceMs", distribution(outsideReportedService));
+        }
         String dominant = stages.entrySet().stream().filter(entry -> entry.getValue().count() > 0)
-                .filter(entry -> !"totalMs".equals(entry.getKey()))
+                .filter(entry -> !List.of("totalMs", "serviceMs").contains(entry.getKey()))
                 .max(Comparator.<Map.Entry<String, Distribution>>comparingDouble(entry -> entry.getValue().mean())
                         .thenComparing(Map.Entry::getKey))
                 .map(Map.Entry::getKey).orElse("unavailable");
@@ -52,6 +54,11 @@ public final class RagLoadBenchmarkStatistics {
                 ratio(degraded, records.size()), empty, ratio(empty, records.size()),
                 distribution(records.stream().map(RagLoadBenchmarkRunner.LoadRecord::elapsedMs).toList()),
                 Map.copyOf(stages), dominant);
+    }
+
+    private long reportedServiceMs(Map<String, Long> timings) {
+        long serviceMs = timings.getOrDefault("serviceMs", 0L);
+        return serviceMs > 0 ? serviceMs : timings.getOrDefault("totalMs", 0L);
     }
 
     private long requiredElapsed(Map<Integer, Long> values, int concurrency) {

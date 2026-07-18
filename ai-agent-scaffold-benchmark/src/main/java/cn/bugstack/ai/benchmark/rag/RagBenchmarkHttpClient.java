@@ -136,7 +136,8 @@ public final class RagBenchmarkHttpClient {
         }
         JsonNode metrics = data.path("metrics");
         Map<String, Long> timings = new LinkedHashMap<>();
-        for (String name : List.of("embeddingMs", "denseMs", "sparseMs", "fusionMs", "rerankMs", "totalMs")) {
+        for (String name : List.of("embeddingMs", "denseMs", "sparseMs", "fusionMs", "rerankMs", "totalMs",
+                "configurationMs", "hydrationMs", "assemblyMs", "auditMs", "serviceMs")) {
             timings.put(name, metrics.path(name).asLong());
         }
         Map<String, Integer> candidates = new LinkedHashMap<>();

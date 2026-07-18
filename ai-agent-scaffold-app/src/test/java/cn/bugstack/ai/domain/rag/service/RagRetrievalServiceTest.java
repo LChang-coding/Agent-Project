@@ -71,6 +71,8 @@ public class RagRetrievalServiceTest {
         RagRetrievalResult result = service.retrieve(request(1000));
 
         Assert.assertTrue(result.citations().isEmpty());
+        Assert.assertTrue(result.metrics().serviceMs() >= result.metrics().totalMs());
+        Assert.assertTrue(result.metrics().auditMs() >= 0);
         verify(embedding, never()).embed(any());
         verify(sparse, never()).encode(any());
         verify(vectorStore, never()).search(anyString(), any());
@@ -210,6 +212,22 @@ public class RagRetrievalServiceTest {
         Assert.assertEquals(1, result.metrics().sparseCandidateCount());
         verify(embedding, never()).embed(any());
         verify(vectorStore, times(1)).search(anyString(), any());
+    }
+
+    @Test
+    public void shouldScopeCitationIdToRetrievalAndAuditRepeatedQuery() {
+        fixtures(singleModeProfile(RagRetrievalMode.DENSE), false);
+        when(embedding.embed(any())).thenReturn(new EmbeddingPort.EmbeddingResult(
+                List.of(List.of(1F, 0F)), 2, "dense-r1"));
+        when(vectorStore.search(anyString(), any())).thenReturn(
+                List.of(hit("chunk-a", "doc-a", "ver-a", 0.8)));
+
+        RagRetrievalResult first = service.retrieve(request(1000));
+        RagRetrievalResult second = service.retrieve(request(1000));
+
+        Assert.assertNotEquals(first.retrievalId(), second.retrievalId());
+        Assert.assertNotEquals(first.citations().get(0).citationId(), second.citations().get(0).citationId());
+        verify(audit, times(2)).record(any());
     }
 
     @Test

@@ -52,6 +52,9 @@ public class RagRetrievalAuditRepositoryTest {
         Assert.assertNull(record.getValue().getQueryText());
         Assert.assertEquals(64, record.getValue().getQueryHash().length());
         Assert.assertFalse(record.getValue().getRequestSnapshot().contains("Injected secret query"));
+        Assert.assertEquals(Long.valueOf(6), record.getValue().getAssembleMs());
+        Assert.assertTrue(record.getValue().getStageMetrics().contains("\"configurationMs\":7"));
+        Assert.assertTrue(record.getValue().getStageMetrics().contains("\"hydrationMs\":8"));
         ArgumentCaptor<List<RagRetrievalCitationPO>> citations = ArgumentCaptor.forClass(List.class);
         verify(citationDao).insertBatch(Mockito.eq("tenant-a"), Mockito.eq("ret-a"), citations.capture());
         Assert.assertNull(citations.getValue().get(0).getContentSnapshot());
@@ -102,7 +105,8 @@ public class RagRetrievalAuditRepositoryTest {
         RagRetrievalResult result = "failed".equals(status)
                 ? RagRetrievalResult.empty("ret-a", 7)
                 : new RagRetrievalResult("ret-a", List.of(citation()), 10, false, List.of(),
-                new RagRetrievalResult.Metrics(5, 4, 3, 2, 1, 2, 3, 1, 4, 12));
+                new RagRetrievalResult.Metrics(5, 4, 3, 2, 1, 2, 3, 1, 4, 12,
+                        7, 8, 6, 0, 0));
         return new RagRetrievalAuditCommand("ret-a", "tenant-a", "user-a", "session-a", "run-a",
                 "agent-a", "profile-a", 2, query, true, true, true, result, status, errorCode,
                 errorCode == null ? null : "HttpFailure", "trace-a", Map.of("profileIds", List.of("profile-a")));

@@ -62,7 +62,8 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
                 .sparseMs(metrics == null ? null : metrics.sparseMs())
                 .fusionMs(metrics == null ? null : metrics.fusionMs())
                 .rerankMs(metrics == null ? null : metrics.rerankMs())
-                .assembleMs(null).totalMs(metrics == null ? 0L : metrics.totalMs())
+                .assembleMs(metrics == null ? null : metrics.assemblyMs())
+                .totalMs(metrics == null ? 0L : metrics.totalMs())
                 .status(command.status()).errorCode(command.errorCode())
                 .errorMessage(errorSummary(command.errorCode(), command.errorType()))
                 .traceId(command.traceId()).requestSnapshot(json(command.requestSnapshot()))
@@ -96,7 +97,9 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
     private Map<String, Object> stageMetrics(RagRetrievalResult result) {
         if (result == null) return Map.of();
         return Map.of("degraded", result.degraded(), "degradationReasons", result.degradationReasons(),
-                "estimatedTokenCount", result.estimatedTokenCount());
+                "estimatedTokenCount", result.estimatedTokenCount(),
+                "configurationMs", result.metrics().configurationMs(),
+                "hydrationMs", result.metrics().hydrationMs());
     }
 
     private String errorSummary(String code, String type) {

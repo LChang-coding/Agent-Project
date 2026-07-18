@@ -66,7 +66,10 @@ public class RagRetrievalDebugController {
                         .rerankCandidateCount(metrics.rerankCandidateCount())
                         .embeddingMs(metrics.embeddingMs()).denseMs(metrics.denseMs())
                         .sparseMs(metrics.sparseMs()).fusionMs(metrics.fusionMs())
-                        .rerankMs(metrics.rerankMs()).totalMs(metrics.totalMs()).build())
+                        .rerankMs(metrics.rerankMs()).totalMs(metrics.totalMs())
+                        .configurationMs(metrics.configurationMs()).hydrationMs(metrics.hydrationMs())
+                        .assemblyMs(metrics.assemblyMs()).auditMs(metrics.auditMs())
+                        .serviceMs(metrics.serviceMs()).build())
                 .citations(result.citations().stream().map(this::toCitation).toList()).build();
     }
 

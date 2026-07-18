@@ -26,8 +26,20 @@ class RagLoadBenchmarkStatisticsTest {
         assertEquals(1.0 / 3, variant.errorRate(), 0.000001);
         assertEquals(1, variant.degradedCount());
         assertEquals(1, variant.emptyResultCount());
-        assertEquals(40, variant.stageTimingsMs().get("clientAndQueueMs").p95());
-        assertEquals("clientAndQueueMs", variant.observedDominantLatencyComponent());
+        assertEquals(40, variant.stageTimingsMs().get("outsideReportedServiceMs").p95());
+        assertEquals("outsideReportedServiceMs", variant.observedDominantLatencyComponent());
+    }
+
+    @Test
+    void shouldPreferCompleteServiceBoundaryOverRetrievalTotal() {
+        RagLoadBenchmarkRunner.LoadRecord record = new RagLoadBenchmarkRunner.LoadRecord(
+                "run", 1, 0, "worker", "dense", "query", "hash", null, List.of("doc"),
+                30, false, List.of(), null, Map.of("totalMs", 10L, "serviceMs", 24L), Map.of());
+
+        RagLoadBenchmarkStatistics.VariantStatistics variant = new RagLoadBenchmarkStatistics()
+                .aggregate(List.of(record), Map.of(1, 30L)).get(1).variants().get("dense");
+
+        assertEquals(6, variant.stageTimingsMs().get("outsideReportedServiceMs").p95());
     }
 
     private RagLoadBenchmarkRunner.LoadRecord record(int concurrency, long sequence, long elapsed,

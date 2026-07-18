@@ -30,6 +30,11 @@ public class RagRetrievalDebugResponseDTO {
         private Long fusionMs;
         private Long rerankMs;
         private Long totalMs;
+        private Long configurationMs;
+        private Long hydrationMs;
+        private Long assemblyMs;
+        private Long auditMs;
+        private Long serviceMs;
     }
 
     @Data
