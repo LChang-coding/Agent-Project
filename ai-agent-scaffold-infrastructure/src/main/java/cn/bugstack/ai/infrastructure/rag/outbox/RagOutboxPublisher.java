@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +28,6 @@ import java.util.function.DoubleSupplier;
  */
 @Slf4j
 @Component
-@EnableScheduling
 @ConditionalOnProperty(prefix = "ai.rag.outbox", name = "enabled", havingValue = "true")
 public class RagOutboxPublisher {
 

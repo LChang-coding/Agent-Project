@@ -615,3 +615,35 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `RagProperties.Kafka` 新增默认 false 的 `listenerEnabled`，`application.yml` 暴露 `AI_RAG_KAFKA_LISTENER_ENABLED`；`RagIngestDispatcher` bean 和 MySQL `@Scheduled` 扫描仍由 `AI_RAG_WORKER_ENABLED` 控制，仅 `@KafkaListener.autoStartup` 改由新开关控制。Worker 与 Kafka 的 payload、任务回查和单线程语义没有改变。
 - `RagPropertiesTest` 新增默认关闭和 Spring Boot 类型绑定断言。最终本机 Temurin 17 命令 `mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest='*Rag*Test,ChatServiceAuthorizationTest,WorkflowExecutorConfigTest' -Dsurefire.failIfNoSpecifiedTests=false`：131/131 通过，0 failure/error/skipped，六模块 BUILD SUCCESS，总耗时 3.184 秒。
 - 同一组测试先在受限沙箱中运行：124 项中 66 error、0 assertion failure，错误均为 Mockito inline mock maker 不能自附加 Java agent；不计入通过数。切换到允许 agent attach 的同一本机 Java 17 环境后得到上述最终结果。
+
+### 阶段 5 第三切片缺陷修复计划：定时扫描与 Outbox 条件解耦
+
+1. 先保留真实运行现场：隔离应用中 `RagIngestWorker` 和 `RagIngestDispatcher` 均已实例化，但任务长期停留 queued；全仓只有受 `ai.rag.outbox.enabled=true` 限制的 `RagOutboxPublisher` 标注 `@EnableScheduling`。先以此作为待验证根因，不把推断写成已证实结论。
+2. 将 Spring 定时任务基础设施放入不受 RAG Outbox 开关影响的中央配置，移除 `RagOutboxPublisher` 上的 `@EnableScheduling`。Outbox 发布和 RAG Worker 扫描仍各自由原有业务开关控制，不改变调度周期、租约或单线程语义。
+3. 增加轻量 Spring Context 回归测试，证明 Outbox 不存在/关闭时 `ScheduledAnnotationBeanPostProcessor` 仍被注册，同时确认扫描方法仍保留 `@Scheduled`。
+4. 用 Java 17 运行 RAG 扩大测试与打包；重启 8092 隔离应用后，用数据库任务状态和 Worker 日志验证扫描真正发生。验证失败则记录新证据并继续定位，不启动 SciFact。
+
+### 2026-07-19 阶段 5 第三切片阶段性结果：调度恢复与真实 mini 失败准入
+
+#### 本机隔离运行与凭据边界
+
+- 新增的 `start-local-rag-benchmark-app.sh` 只在本机 8092 启动当前 jar，原 8091 未停止或替换，Java/Vue 项目未上传 RAG 服务器。启动参数强制关闭 Context Kafka、RAG Kafka Listener 和 Outbox，启用单 Worker/MySQL 扫描，使用 `/tmp/ai-agent-rag-benchmark/object-storage` 隔离本地对象存储。
+- 首次不使用 Nacos 的启动分别因 MySQL 无密码和密码错误失败；`codex.md` 中当前 MySQL 密码对公网 root 实测仍是 1045。随后仅恢复 Nacos Config 读取现有数据源，同时用命令行参数覆盖评测开关；数据库连接成功。
+- 第一次恢复 Nacos 时曾意外启动 Context Kafka consumer 并加入现有 group，发现后立即停止。后续启动脚本用最高优先级参数明确关闭 Context 和 Kafka，不再连入生产消费组。
+- MinIO 路径未通过：`codex.md` 旧 Access Key 返回“Access Key ID 不存在”，Nacos 现有 MinIO 密钥为空。因此 mini 只验证隔离本地存储，不宣称 MinIO 真实链路通过。
+- 新增 `run-local-rag-mini.sh` 为每次 run 生成独立租户和唯一 email/phone，短期 Bearer 只在进程环境中，注册/登录临时文件退出时删除。早期传空 email 曾触发 `user_account.uk_email` 唯一约束，不计作 RAG 结果。
+
+#### 调度缺陷实证与修复
+
+- 修复前，Worker 和 Dispatcher bean 都存在，但任务始终 queued；全仓 `@EnableScheduling` 只在受 `ai.rag.outbox.enabled=true` 限制的 `RagOutboxPublisher` 上。评测为了不接入 Kafka 关闭 Outbox 时，Spring 调度基础设施也被一并关闭，这是任务无法执行的根因。
+- 新增无条件 `SchedulingConfig` 集中启用调度，移除 Outbox 类上的 `@EnableScheduling`。业务方法仍由各自条件 bean 和原 `@Scheduled` 参数控制，未改租约、频率或单线程执行语义。
+- Java 17 扩大回归最终 133/133 通过，0 failure/error/skipped，六模块 BUILD SUCCESS，总耗时 5.857 秒。新增两项测试分别证明无 Outbox bean 时 `ScheduledAnnotationBeanPostProcessor` 存在，以及 Worker 数据库扫描仍保留 2000 ms 默认 fixed delay。
+- `mvn -pl ai-agent-scaffold-app -am package -DskipTests` 在上述测试之后完成六模块打包，BUILD SUCCESS，总耗时 3.827 秒；该打包命令不重复计入测试通过数。
+- 重启 8092 后日志出现 `scheduling-1` 并由它初始化 MySQL。全新 mini 任务随后被领取，状态从 queued 推进到 indexing 并最终 dead，证明 MySQL 到期扫描与 Worker 执行已真实恢复，不只是 bean 存在。
+
+#### 真实 mini 准入结果
+
+- 真实 runId 为 `mini-real-20260718T194213Z`，输入为 1 个 Markdown、3 文档、2 查询、2 qrels，warmup=0，上传/查询线程都是 1，输出位于 `/tmp/rag-benchmark-mini-real-20260718T194213Z`。
+- 任务真实终止为 `dead/indexing/RAG_EMBEDDING_UNAVAILABLE`，因此未创建四组可评分 run，没有任何 Dense/Sparse/Hybrid/Rerank 质量或延迟指标。`upload.json` SHA-256 为 `62d7e8d021decb161c36864b08c183359a92add24f631ef9d68b516ce5e419eb`，失败 manifest SHA-256 为 `a5b4efccd73fce3b8dca7de7f934f67865d46a29be599b5d00c79e9496b7146c`。
+- 对 `codex.md` 记录的 Embedding Key 执行 1 条 `query: health probe` 脱敏请求，网关在 60 秒内返回 HTTP 401、响应 179 bytes，证明公网端点可达但当前文档 Key 已不被接受。首次 probe 还因 zsh 的 `status` 为只读变量而在发请求前退出，不计作服务失败。
+- 尝试使用 `codex.md` 已记录 SSH 凭据只读核对网关配置，服务器返回 `Permission denied`，因而无法自动取回当前密钥。本阶段停在 mini 准入失败，不启动 SciFact；恢复有效 Embedding API Key 或 RAG 服务器 SSH 运维凭据后才能继续真实指标闭环。
