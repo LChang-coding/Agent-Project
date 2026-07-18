@@ -41,6 +41,36 @@ xxl:
       log-retention-days: ${XXL_JOB_EXECUTOR_LOG_RETENTION_DAYS:30}
 
 ai:
+  rag:
+    enabled: ${AI_RAG_ENABLED:false}
+    qdrant:
+      endpoint: ${AI_RAG_QDRANT_ENDPOINT:http://127.0.0.1:6333}
+      api-key: ${AI_RAG_QDRANT_API_KEY:}
+      timeout: ${AI_RAG_QDRANT_TIMEOUT:3s}
+      max-concurrency: ${AI_RAG_QDRANT_MAX_CONCURRENCY:4}
+      batch-size: ${AI_RAG_QDRANT_BATCH_SIZE:64}
+      collection: ${AI_RAG_QDRANT_COLLECTION:ai_agent_rag_e5_v1}
+    embedding:
+      endpoint: ${AI_RAG_EMBEDDING_ENDPOINT:http://127.0.0.1:8081}
+      api-key: ${AI_RAG_EMBEDDING_API_KEY:}
+      timeout: ${AI_RAG_EMBEDDING_TIMEOUT:10s}
+      max-concurrency: ${AI_RAG_EMBEDDING_MAX_CONCURRENCY:2}
+      batch-size: ${AI_RAG_EMBEDDING_BATCH_SIZE:32}
+      dimension: ${AI_RAG_EMBEDDING_DIMENSION:768}
+    reranker:
+      endpoint: ${AI_RAG_RERANKER_ENDPOINT:http://127.0.0.1:8082}
+      api-key: ${AI_RAG_RERANKER_API_KEY:}
+      timeout: ${AI_RAG_RERANKER_TIMEOUT:10s}
+      max-concurrency: ${AI_RAG_RERANKER_MAX_CONCURRENCY:2}
+      batch-size: ${AI_RAG_RERANKER_BATCH_SIZE:32}
+    docling:
+      endpoint: ${AI_RAG_DOCLING_ENDPOINT:http://127.0.0.1:5001/v1}
+      api-key: ${AI_RAG_DOCLING_API_KEY:}
+      timeout: ${AI_RAG_DOCLING_TIMEOUT:120s}
+      max-concurrency: ${AI_RAG_DOCLING_MAX_CONCURRENCY:1}
+      batch-size: ${AI_RAG_DOCLING_BATCH_SIZE:1}
+    kafka:
+      topic: ${AI_RAG_KAFKA_TOPIC:rag.ingest.request.v1}
   scheduler:
     reconcile-batch-size: ${AI_SCHEDULER_RECONCILE_BATCH_SIZE:200}
     dispatch-batch-size: ${AI_SCHEDULER_DISPATCH_BATCH_SIZE:50}
