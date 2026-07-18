@@ -1,0 +1,10 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "20m",
+    "max-file": "3"
+  },
+  "live-restore": true,
+  "no-new-privileges": true,
+  "storage-driver": "overlay2"
+}

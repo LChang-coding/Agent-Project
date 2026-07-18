@@ -1,0 +1,115 @@
+name: ai-agent-rag-runtime
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: rag-qdrant
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      QDRANT__LOG_LEVEL: INFO
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
+      QDRANT__SERVICE__METRICS_PREFIX: qdrant_
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - /opt/ai-agent-rag/data/qdrant/.qdrant-initialized:/qdrant/.qdrant-initialized
+      - /opt/ai-agent-rag/data/qdrant/storage:/qdrant/storage
+      - /opt/ai-agent-rag/data/qdrant/snapshots:/qdrant/snapshots
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 6g
+    cpus: 8.0
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/6333"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  prometheus:
+    image: prom/prometheus:v3.12.0-distroless
+    container_name: rag-prometheus
+    restart: unless-stopped
+    user: "65532:65532"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /opt/ai-agent-rag/secrets/qdrant-readonly-api-key:/run/secrets/qdrant_readonly_api_key:ro
+      - /opt/ai-agent-rag/data/prometheus:/prometheus
+    networks:
+      - rag-internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      node-exporter:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/bin/promtool", "query", "instant", "http://127.0.0.1:9090", "up"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.11.1
+    container_name: rag-node-exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($|/)
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - rag-internal
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+networks:
+  rag-internal:
+    name: rag-internal
+    driver: bridge

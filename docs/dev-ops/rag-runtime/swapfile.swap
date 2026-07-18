@@ -1,0 +1,10 @@
+[Unit]
+Description=RAG server emergency swap file
+Before=local-fs.target
+
+[Swap]
+What=/swapfile
+Priority=-2
+
+[Install]
+WantedBy=swap.target
