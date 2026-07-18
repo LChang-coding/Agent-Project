@@ -171,6 +171,22 @@ public class RagPersistenceMapper {
                 enabled(po.getDeduplicateEnabled(), "去重开关"), requiredLong(po.getRevision(), "策略revision"));
     }
 
+    public RagRetrievalProfilePO toRetrievalProfilePo(RagRetrievalProfileEntity entity) {
+        boolean dense = entity.mode() != RagRetrievalMode.SPARSE;
+        boolean sparse = entity.mode() != RagRetrievalMode.DENSE;
+        return RagRetrievalProfilePO.builder().tenantId(entity.tenantId()).profileId(entity.profileId())
+                .profileName(entity.name()).denseEnabled(dense ? 1 : 0).sparseEnabled(sparse ? 1 : 0)
+                .fusionStrategy(codec.databaseValue(entity.fusionStrategy()))
+                .denseWeight(entity.denseWeight()).sparseWeight(entity.sparseWeight())
+                .denseTopK(entity.denseTopK()).sparseTopK(entity.sparseTopK())
+                .fusionTopK(entity.fusionTopK()).rerankEnabled(entity.rerankEnabled() ? 1 : 0)
+                .rerankTopK(entity.rerankTopK()).finalTopK(entity.finalTopK())
+                .neighborWindow(entity.neighborWindow()).maxContextTokens(entity.maxContextTokens())
+                .scoreThreshold(entity.scoreThreshold()).queryRewriteEnabled(entity.queryRewriteEnabled() ? 1 : 0)
+                .deduplicateEnabled(entity.deduplicateEnabled() ? 1 : 0).configJson("{}")
+                .revision(entity.revision()).status("active").build();
+    }
+
     public RagAgentBindingEntity toAgentBinding(RagAgentBindingPO po) {
         if (po == null) return null;
         return new RagAgentBindingEntity(po.getTenantId(), po.getBindingId(),
@@ -178,6 +194,14 @@ public class RagPersistenceMapper {
                 po.getTargetId(), po.getKnowledgeBaseId(), po.getProfileId(),
                 enabled(po.getRequired(), "绑定required"), requiredInt(po.getMaxTokens(), "绑定Token预算"),
                 requiredInt(po.getPriority(), "绑定优先级"), requiredLong(po.getRevision(), "绑定revision"));
+    }
+
+    public RagAgentBindingPO toAgentBindingPo(RagAgentBindingEntity entity) {
+        return RagAgentBindingPO.builder().tenantId(entity.tenantId()).bindingId(entity.bindingId())
+                .targetType(codec.databaseValue(entity.targetType())).targetId(entity.targetId())
+                .knowledgeBaseId(entity.knowledgeBaseId()).profileId(entity.retrievalProfileId())
+                .priority(entity.priority()).required(entity.required() ? 1 : 0).maxTokens(entity.maxTokens())
+                .status("active").revision(entity.revision()).metadata("{}").build();
     }
 
     private RagDocumentStatus readDocumentStatus(String value) {

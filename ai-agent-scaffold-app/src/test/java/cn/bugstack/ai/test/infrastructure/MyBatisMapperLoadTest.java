@@ -98,7 +98,9 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.heartbeatClaimed"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.markReadyByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.queryByTenantAndProfileId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.updateByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.queryActiveByTenantAndTarget"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.softDeleteByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalRecordDao.insert"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalCitationDao.insertBatch"));
         assertContextInsightAggregateScopes(configuration);
@@ -167,6 +169,40 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(bindingSql.contains("target_type = ?"));
         Assert.assertTrue(bindingSql.contains("target_id = ?"));
         Assert.assertTrue(bindingSql.contains("status = 'active'"));
+
+        parameters.put("expectedRevision", 2L);
+        Map<String, Object> profile = new HashMap<>();
+        profile.put("profileId", "profile_1");
+        profile.put("profileName", "hybrid");
+        profile.put("denseEnabled", 1);
+        profile.put("sparseEnabled", 1);
+        profile.put("fusionStrategy", "rrf");
+        profile.put("denseWeight", 1);
+        profile.put("sparseWeight", 1);
+        profile.put("denseTopK", 20);
+        profile.put("sparseTopK", 20);
+        profile.put("fusionTopK", 20);
+        profile.put("rerankEnabled", 1);
+        profile.put("rerankTopK", 10);
+        profile.put("finalTopK", 5);
+        profile.put("neighborWindow", 1);
+        profile.put("maxContextTokens", 1024);
+        profile.put("queryRewriteEnabled", 0);
+        profile.put("deduplicateEnabled", 1);
+        profile.put("configJson", "{}");
+        parameters.put("profile", profile);
+        String profileUpdateSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.updateByTenantAndRevision", parameters);
+        Assert.assertTrue(profileUpdateSql.contains("tenant_id = ?"));
+        Assert.assertTrue(profileUpdateSql.contains("profile_id = ?"));
+        Assert.assertTrue(profileUpdateSql.contains("revision = ?"));
+
+        parameters.put("bindingId", "binding_1");
+        String bindingDeleteSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.softDeleteByTenantAndRevision", parameters);
+        Assert.assertTrue(bindingDeleteSql.contains("tenant_id = ?"));
+        Assert.assertTrue(bindingDeleteSql.contains("binding_id = ?"));
+        Assert.assertTrue(bindingDeleteSql.contains("revision = ?"));
     }
 
     private void assertScheduleReconcileScopes(Configuration configuration) {

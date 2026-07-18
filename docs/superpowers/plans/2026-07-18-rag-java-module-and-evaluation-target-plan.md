@@ -439,3 +439,23 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 #### 本切片剩余项
 
 - Profile/绑定管理 API、管理员检索调试 API 尚未实现；真实 MySQL 事务验证亦未通过，本次只封板脱敏审计的代码和本地契约测试。
+
+### 2026-07-19 阶段 3A 第二切片阶段性结果（二）：检索策略、运行绑定与管理员调试
+
+#### 已完成代码和对外契约
+
+- 新增强租户 retrieval profile 创建、修改、列表持久化与 API：`POST/PUT/GET /api/v1/rag/retrieval-profiles`。更新必须携带 `expectedRevision`，MyBatis 更新使用 tenant+profile+revision CAS；模式、融合策略、TopK、重排候选、邻居窗口、Token 预算、阈值和混合权重均在领域实体内校验，Hybrid 两路权重不允许同时为 0。
+- 新增 Agent/Workflow 运行目标的绑定创建、列表与软删除 API：`POST/GET /api/v1/rag/bindings`、`DELETE /api/v1/rag/bindings/{bindingId}?expectedRevision=...`。知识库和 profile 都必须由当前 tenant 查到，绑定预算不能超过 profile 预算，重复键映射稳定冲突码，删除使用 revision CAS。HTTP 层的 `expectedRevision` 改为可选参数后由应用返回稳定 `RAG_BINDING_REVISION_REQUIRED`，避免被 Spring 提前变成通用 400。
+- 新增 `POST /api/v1/rag/retrieval-debug`。请求只接收 targetType/targetId/query/maxContextTokens，tenant/user/role/traceId 全部来自可信服务端上下文；不允许请求指定 KB、generation、session/run 或 tenant。只允许 owner/admin，且目标在当前租户至少存在一条有效绑定，否则不调用检索链。空查询和 1~32768 之外预算返回稳定业务错误。
+- 调试响应包含 retrievalId、候选数、各阶段耗时、降级原因和最终引用，但不定义 query 留痕、objectKey、向量、密钥或中间件错误体字段。这是租户管理员调试入口，引用正文会返回给该管理员。
+
+#### 真实验证与失败留痕
+
+- Java 17 最终组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=RagRetrievalConfigurationServiceTest,RagRetrievalConfigurationControllerTest,RagRetrievalDebugServiceTest,RagRetrievalDebugControllerTest,RagRepositoryTest,RagPersistenceMapperTest,MyBatisMapperLoadTest,RagRetrievalServiceTest -Dsurefire.failIfNoSpecifiedTests=false`。结果 40/40 通过，0 failure/error/skipped，六模块 BUILD SUCCESS，Maven 总耗时 2.346 秒。
+- 本组覆盖 profile/绑定管理 10 项、调试服务与 Controller 7 项、仓储/映射/MyBatis 13 项和检索主链 10 项。调试用例明确验证非管理员在读绑定前被拒绝、未绑定目标不调检索、可信租户身份传递、默认 4096 Token 预算、空问题稳定错误和响应契约不含内部字段。
+- 首轮组合测试因 Controller 测试将 Mockito 的一个 matcher 与七个原始参数混用，导致测试夹具 1 error（当时 39 项中 38 通过）；将全部入参改为明确 matcher 后业务代码未改动即 39/39 通过。随后增加缺失 revision 的稳定错误用例，最终为上述 40/40；首次失败不计入通过数。
+
+#### 当前边界
+
+- 当前“可调试目标”以当前 tenant 中存在有效 RAG binding 为准；绑定创建时尚未与 Agent 注册表/Workflow 表做双向存在性校验，因此旧或手工写入的悬空绑定仍可进入调试服务后再由检索链处理。这项将在前端配置页对齐 Agent/Workflow 可见列表时补强，当前不宣称已完成双向校验。
+- 真实 MySQL 审计主表+引用事务回滚仍因无可用受限账号/SSH 可执行通道而未完成；不把 MyBatis 载入测试写成数据库集成通过。

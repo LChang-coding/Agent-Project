@@ -29,4 +29,38 @@
           AND status = 'active' AND deleted = 0
         ORDER BY priority ASC, id ASC
     </select>
+
+    <select id="queryListByTenant" resultMap="RagAgentBindingMap">
+        SELECT id, tenant_id, binding_id, target_type, target_id, kb_id, profile_id, priority,
+               required, max_tokens, status, revision, metadata, create_time, update_time, deleted
+        FROM rag_agent_binding
+        WHERE tenant_id = #{tenantId} AND status = 'active' AND deleted = 0
+        ORDER BY priority ASC, id ASC
+    </select>
+
+    <select id="queryByTenantAndBindingId" resultMap="RagAgentBindingMap">
+        SELECT id, tenant_id, binding_id, target_type, target_id, kb_id, profile_id, priority,
+               required, max_tokens, status, revision, metadata, create_time, update_time, deleted
+        FROM rag_agent_binding
+        WHERE tenant_id = #{tenantId} AND binding_id = #{bindingId}
+          AND status = 'active' AND deleted = 0 LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagAgentBindingPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_agent_binding (
+            tenant_id, binding_id, target_type, target_id, kb_id, profile_id, priority,
+            required, max_tokens, status, revision, metadata
+        ) VALUES (
+            #{tenantId}, #{bindingId}, #{targetType}, #{targetId}, #{knowledgeBaseId}, #{profileId},
+            #{priority}, #{required}, #{maxTokens}, #{status}, #{revision}, #{metadata}
+        )
+    </insert>
+
+    <update id="softDeleteByTenantAndRevision">
+        UPDATE rag_agent_binding
+        SET status = 'disabled', deleted = 1, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND binding_id = #{bindingId}
+          AND revision = #{expectedRevision} AND status = 'active' AND deleted = 0
+    </update>
 </mapper>

@@ -125,6 +125,27 @@ public interface IRagRepository {
     /** 按租户查询检索配置。 */
     Optional<RagRetrievalProfileEntity> findRetrievalProfile(String tenantId, String profileId);
 
+    /** 查询租户启用的检索配置。 */
+    List<RagRetrievalProfileEntity> listRetrievalProfiles(String tenantId);
+
+    /** 新增租户检索配置。 */
+    int insertRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile);
+
+    /** revision CAS 更新租户检索配置。 */
+    int updateRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile, long expectedRevision);
+
     /** 查询租户目标的知识库绑定。 */
     List<RagAgentBindingEntity> listBindings(String tenantId, RagBindingTargetType targetType, String targetId);
+
+    /** 查询租户全部启用绑定。 */
+    List<RagAgentBindingEntity> listBindings(String tenantId);
+
+    /** 按租户查询绑定。 */
+    Optional<RagAgentBindingEntity> findBinding(String tenantId, String bindingId);
+
+    /** 新增租户绑定。 */
+    int insertBinding(String tenantId, RagAgentBindingEntity binding);
+
+    /** revision CAS 软删除租户绑定。 */
+    int deleteBinding(String tenantId, String bindingId, long expectedRevision);
 }

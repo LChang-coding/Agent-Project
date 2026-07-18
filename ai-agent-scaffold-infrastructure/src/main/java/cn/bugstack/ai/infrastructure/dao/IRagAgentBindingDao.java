@@ -15,4 +15,15 @@ public interface IRagAgentBindingDao {
     List<RagAgentBindingPO> queryActiveByTenantAndTarget(@Param("tenantId") String tenantId,
                                                          @Param("targetType") String targetType,
                                                          @Param("targetId") String targetId);
+
+    List<RagAgentBindingPO> queryListByTenant(@Param("tenantId") String tenantId);
+
+    RagAgentBindingPO queryByTenantAndBindingId(@Param("tenantId") String tenantId,
+                                                @Param("bindingId") String bindingId);
+
+    int insert(RagAgentBindingPO binding);
+
+    int softDeleteByTenantAndRevision(@Param("tenantId") String tenantId,
+                                      @Param("bindingId") String bindingId,
+                                      @Param("expectedRevision") long expectedRevision);
 }

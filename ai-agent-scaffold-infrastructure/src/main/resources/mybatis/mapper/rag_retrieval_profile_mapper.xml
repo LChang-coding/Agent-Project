@@ -42,4 +42,47 @@
           AND status = 'active' AND deleted = 0
         LIMIT 1
     </select>
+
+    <select id="queryListByTenant" resultMap="RagRetrievalProfileMap">
+        SELECT id, tenant_id, profile_id, profile_name, dense_enabled, sparse_enabled, fusion_strategy,
+               dense_weight, sparse_weight, dense_top_k, sparse_top_k, fusion_top_k, rerank_enabled,
+               rerank_top_k, final_top_k, neighbor_window, max_context_tokens, score_threshold,
+               query_rewrite_enabled, deduplicate_enabled, config_json, revision, status,
+               create_time, update_time, deleted
+        FROM rag_retrieval_profile
+        WHERE tenant_id = #{tenantId} AND status = 'active' AND deleted = 0
+        ORDER BY id ASC
+    </select>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagRetrievalProfilePO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_retrieval_profile (
+            tenant_id, profile_id, profile_name, dense_enabled, sparse_enabled, fusion_strategy,
+            dense_weight, sparse_weight, dense_top_k, sparse_top_k, fusion_top_k, rerank_enabled,
+            rerank_top_k, final_top_k, neighbor_window, max_context_tokens, score_threshold,
+            query_rewrite_enabled, deduplicate_enabled, config_json, revision, status
+        ) VALUES (
+            #{tenantId}, #{profileId}, #{profileName}, #{denseEnabled}, #{sparseEnabled},
+            #{fusionStrategy}, #{denseWeight}, #{sparseWeight}, #{denseTopK}, #{sparseTopK},
+            #{fusionTopK}, #{rerankEnabled}, #{rerankTopK}, #{finalTopK}, #{neighborWindow},
+            #{maxContextTokens}, #{scoreThreshold}, #{queryRewriteEnabled}, #{deduplicateEnabled},
+            #{configJson}, #{revision}, #{status}
+        )
+    </insert>
+
+    <update id="updateByTenantAndRevision">
+        UPDATE rag_retrieval_profile
+        SET profile_name = #{profile.profileName}, dense_enabled = #{profile.denseEnabled},
+            sparse_enabled = #{profile.sparseEnabled}, fusion_strategy = #{profile.fusionStrategy},
+            dense_weight = #{profile.denseWeight}, sparse_weight = #{profile.sparseWeight},
+            dense_top_k = #{profile.denseTopK}, sparse_top_k = #{profile.sparseTopK},
+            fusion_top_k = #{profile.fusionTopK}, rerank_enabled = #{profile.rerankEnabled},
+            rerank_top_k = #{profile.rerankTopK}, final_top_k = #{profile.finalTopK},
+            neighbor_window = #{profile.neighborWindow}, max_context_tokens = #{profile.maxContextTokens},
+            score_threshold = #{profile.scoreThreshold}, query_rewrite_enabled = #{profile.queryRewriteEnabled},
+            deduplicate_enabled = #{profile.deduplicateEnabled}, config_json = #{profile.configJson},
+            revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND profile_id = #{profile.profileId}
+          AND revision = #{expectedRevision} AND status = 'active' AND deleted = 0
+    </update>
 </mapper>

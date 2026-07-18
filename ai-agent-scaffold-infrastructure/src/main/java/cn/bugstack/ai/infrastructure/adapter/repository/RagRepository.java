@@ -324,12 +324,68 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    public List<RagRetrievalProfileEntity> listRetrievalProfiles(String tenantId) {
+        return retrievalProfileDao.queryListByTenant(requireText(tenantId, "tenantId")).stream()
+                .map(mapper::toRetrievalProfile).toList();
+    }
+
+    @Override
+    public int insertRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile) {
+        requireTenant(tenantId, profile == null ? null : profile.tenantId());
+        try {
+            return retrievalProfileDao.insert(mapper.toRetrievalProfilePo(profile));
+        } catch (DuplicateKeyException exception) {
+            throw new AppException("RAG_PROFILE_CONFLICT", "检索策略创建冲突", exception);
+        }
+    }
+
+    @Override
+    public int updateRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile,
+                                      long expectedRevision) {
+        requireTenant(tenantId, profile == null ? null : profile.tenantId());
+        if (expectedRevision < 0 || profile.revision() != expectedRevision + 1) {
+            throw new IllegalArgumentException("RAG检索配置revision非法");
+        }
+        return retrievalProfileDao.updateByTenantAndRevision(tenantId,
+                mapper.toRetrievalProfilePo(profile), expectedRevision);
+    }
+
+    @Override
     public List<RagAgentBindingEntity> listBindings(String tenantId, RagBindingTargetType targetType,
                                                      String targetId) {
         if (targetType == null) throw new IllegalArgumentException("targetType不能为空");
         return agentBindingDao.queryActiveByTenantAndTarget(requireText(tenantId, "tenantId"),
                         codec.databaseValue(targetType), requireText(targetId, "targetId")).stream()
                 .map(mapper::toAgentBinding).toList();
+    }
+
+    @Override
+    public List<RagAgentBindingEntity> listBindings(String tenantId) {
+        return agentBindingDao.queryListByTenant(requireText(tenantId, "tenantId")).stream()
+                .map(mapper::toAgentBinding).toList();
+    }
+
+    @Override
+    public Optional<RagAgentBindingEntity> findBinding(String tenantId, String bindingId) {
+        return Optional.ofNullable(mapper.toAgentBinding(agentBindingDao.queryByTenantAndBindingId(
+                requireText(tenantId, "tenantId"), requireText(bindingId, "bindingId"))));
+    }
+
+    @Override
+    public int insertBinding(String tenantId, RagAgentBindingEntity binding) {
+        requireTenant(tenantId, binding == null ? null : binding.tenantId());
+        try {
+            return agentBindingDao.insert(mapper.toAgentBindingPo(binding));
+        } catch (DuplicateKeyException exception) {
+            throw new AppException("RAG_BINDING_CONFLICT", "当前目标已绑定该知识库", exception);
+        }
+    }
+
+    @Override
+    public int deleteBinding(String tenantId, String bindingId, long expectedRevision) {
+        if (expectedRevision < 0) throw new IllegalArgumentException("RAG绑定revision非法");
+        return agentBindingDao.softDeleteByTenantAndRevision(requireText(tenantId, "tenantId"),
+                requireText(bindingId, "bindingId"), expectedRevision);
     }
 
     private void requireTenant(String trustedTenantId, String entityTenantId) {

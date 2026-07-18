@@ -48,6 +48,9 @@ public record RagRetrievalProfileEntity(String tenantId,
         if (mode == RagRetrievalMode.HYBRID && fusionStrategy == RagFusionStrategy.NONE) {
             throw new IllegalArgumentException("混合检索必须配置融合策略");
         }
+        if (mode == RagRetrievalMode.HYBRID && denseWeight.add(sparseWeight).signum() == 0) {
+            throw new IllegalArgumentException("混合检索至少一个融合权重必须大于0");
+        }
         if (scoreThreshold != null && (scoreThreshold.signum() < 0 || scoreThreshold.doubleValue() > 1D)) {
             throw new IllegalArgumentException("检索分数阈值必须位于0到1之间");
         }
