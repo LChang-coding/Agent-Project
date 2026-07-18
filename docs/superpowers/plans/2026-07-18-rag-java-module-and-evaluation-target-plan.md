@@ -693,3 +693,45 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 2. 扩展本机 mini 编排脚本：当显式启用 load 时，在同一 shell 进程、同一短期 token 生命周期内顺序执行质量 `run` 和读取其 `targets.json` 的 `load`，两者完成后再由原 trap 清理认证临时文件和环境变量。
 3. load 开关默认关闭，并发级别、warmup 和 measured 数必须从显式环境变量传入并由 CLI manifest 留痕。真实 pilot 使用 1/2/4/10 并发、每 variant 2 warmup+20 measured，不将小样本 p99 声称为稳定 SLA。
 4. 该缺口是在 `mini-real-20260718T200511Z` 完成并生成 `targets.json` 后发现的；因 token/密码已按原安全策略销毁，该 run 不用于后续 load。修复后创建全新租户重跑，不从数据库反查或重置一次性账号。
+
+### 2026-07-19 阶段 6 真实并发 pilot 结果
+
+#### 执行参数与完整性
+
+- 质量 runId `mini-perf-b3c1698` 先完成摄取、文档 READY 和四组检索，随后在同一一次性租户/token 内执行 load runId `mini-load-b3c1698`。代码 revision 为 `b3c1698b669be6c88411da53a3ef7d6eb13215ca`，凭据仅记录环境变量名。
+- load 从 `2026-07-18T20:10:39.154158Z` 到 `2026-07-18T20:15:09.875588Z`，共 270.721 秒。固定 seed=20260719，2 条查询，4 个 variant，并发级别 1/2/4/10；每级别每 variant 2 warmup+20 measured。最终 32 warmup+320 measured 原始记录，0 error、0 degraded、0 empty。
+- 工具使用 closed-loop 固定请求数；这不表示 open-loop 指定到达率下的过载能力。每 variant 只有 20 个 measured 样本，p99 等于最大值，只作 pilot 极值，不是稳定 SLA。
+
+#### 吞吐、延迟和稳定性
+
+| 并发 | measured | 阶段耗时 ms | 吞吐 req/s | 错误 | 降级 | 四组 wall p95 范围 ms |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 80 | 135069 | 0.592 | 0 | 0 | 1783–2803 |
+| 2 | 80 | 63231 | 1.265 | 0 | 0 | 1557–2074 |
+| 4 | 80 | 30105 | 2.657 | 0 | 0 | 1495–2045 |
+| 10 | 80 | 14218 | 5.627 | 0 | 0 | 1863–2362 |
+
+- 吞吐在1→2→4并发基本倍增，10并发仍达到5.627 req/s，且未出现错误、降级或空结果。这个范围内没有观测到明确吞吐拐点；但未继续提高并发，不能宣称系统容量上限。
+- 1并发 wall mean/p95：Dense 1619.95/2040 ms，Sparse 1463.6/1783 ms，Hybrid+RRF 1714.45/2194 ms，Hybrid+RRF+Rerank 1953.4/2803 ms。10并发分别为 Dense 1590.5/1869 ms，Sparse 1441.2/1863 ms，Hybrid+RRF 1807.3/2121 ms，Hybrid+RRF+Rerank 2003/2362 ms。延迟没有随并发出现持续性恶化。
+- 10并发时 Embedding p95：Dense 405 ms、Hybrid 373 ms、Hybrid+Rerank 395 ms；Rerank 组 rerank p95=327 ms。它们较低并发有增长，但仍未触发服务降级或超时。
+
+#### 同时段服务器资源证据
+
+- 服务器从质量 run 前到 load 后采样，名义间隔 5 秒；`docker stats --no-stream` 本身有采集耗时。严格按 load manifest 时间裁剪后每容器 38 个样本。CPU 超过100% 表示使用多个核，不是百分比解析错误。
+
+| 容器 | CPU mean | CPU max | 内存上限占用 max |
+|---|---:|---:|---:|
+| Embedding | 30.45% | 155.93% | 62.12% |
+| Reranker | 22.57% | 200.02% | 62.27% |
+| Qdrant | 1.49% | 7.04% | 0.94% |
+| Docling | 2.30% | 28.24% | 34.18% |
+| Gateway | 0.44% | 6.02% | 11.62% |
+| Prometheus | 1.47% | 19.96% | 14.34% |
+
+- 在16核服务器上，Embedding 峰值约1.56核、Reranker 峰值约2核，Qdrant CPU/内存都很低；本 pilot 没有证据表明 RAG 服务器 CPU 或内存饱和。内存的主要固定成本是两个模型常驻，各约1.86 GiB，而不是随并发快速增长。
+
+#### 当前瓶颈定位边界
+
+- 四组在所有并发级别下，`wall-total` 均值约600–782 ms，且是当前报告中最大的非汇总分量。源码核对表明 `RagRetrievalService.totalMs` 从 domain retrieve 开始计时，但在同步 `recordAudit` 之前就已固定；而审计随后开启 MySQL 事务，执行主记录 insert、引用 batch insert 及事务提交。
+- 因此现有 `clientAndQueueMs` 名称过度简化：它实际包含审计写入、controller/JSON、HTTP/本机网络和客户端排队，不能将全部 600–782 ms 归因于队列。下一切片必须将其改名为边界外差值，并在生产返回中单独暴露 audit 和完整 service 耗时，再决定是优化审计写路径、配置查询还是网络。
+- 产物 SHA-256：`load.jsonl`=`206d146e12d4bdf4b07842cd0b69ae024d6911d0b354bacf309e04bd7d81e05e`，`load-report.json`=`5a5c31893e6209dfeb81911a6551082858e6a4c98760d0aaf091eaaeee8165f0`，`load-manifest.json`=`148592533db1bc19da8e8c06bcf37798d36bd903666ec97af87ece7947915164`，`warmup.jsonl`=`1efac7d9da3dedc2352a062e0facc23db633900e78e9138de4c4ae767d3bdf41`。原始目录为 `/tmp/rag-benchmark-mini-load-b3c1698`，服务器采样下载副本为 `/tmp/rag-load-docker-stats-b3c1698.tsv`。
