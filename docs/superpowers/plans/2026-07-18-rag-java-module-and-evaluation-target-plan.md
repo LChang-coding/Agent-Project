@@ -593,3 +593,25 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 本切片完成的是可执行与可审计的黑盒评测工具，fake Server 只证明协议和产物闭环，不是模型效果或服务器性能结果。尚未执行真实 beir-mini/SciFact 摄取与四组查询，因此本节没有报告任何真实质量或延迟数字。
 - 现在每条查询已经 append checkpoint，中断时不丢已有原始记录；但由于生产 API 尚无完整 KB/profile 清理及评测资源恢复契约，当前命令要求空输出目录，还不支持跨进程 resume。下一切片先做真实 mini E2E，再根据实际摄取耗时决定是否在 SciFact 全量前补资源恢复/清理 API；不把本进程内落盘误称为完整断点续跑。
+
+### 阶段 5 第三切片执行计划：真实 mini E2E 与 SciFact 准入判定
+
+1. 按 `codex.md` 只读核对本机应用所需的 MySQL/Redis/Kafka/MinIO 与 RAG 服务端点，以及 RAG Worker 开关。密码和 API Key 只进入当前进程环境，不输出、不写评测 manifest、不提交 Git。
+2. 不上传 Java/Vue 项目。使用本机隔离端口启动当前 commit 的 Java 应用，仅由本机应用通过网络调用 RAG 服务器上的 Qdrant、Embedding、Reranker 和 Docling 环境。原 8091 如果存活则不替换、不停止。
+3. 先对网络端点、本机数据库迁移状态和应用健康做只读检查；如需迁移，只执行已验证的增量 RAG SQL，执行前备份/记录 schema 状态，不删除业务数据。
+4. 使用 Git 内 `beir-mini` 生成单 Markdown，通过真实认证获取专用 benchmark tenant 的短期 token，执行真实建库→上传→Worker 摄取→文档 READY→四策略→四组检索→评分。记录接口基址、文档格式/字节/hash、查询数、warmup、线程、批次、开始/结束、错误和原始产物路径；账号密码/token 不留痕。
+5. mini 准入条件：摄取 terminal=completed、文档 READY，四组各 2 条 measured 记录，无未解码 heading，指标由程序产物读取。任一条件不满足则停在 mini 查明原因，不启动 SciFact。
+6. mini 通过后，根据实际摄取吞吐、服务器当时 CPU/内存/磁盘和模型错误率判定 SciFact 全量是否安全。若执行，固定 1 个 Worker、1 个上传线程、1 个查询线程和预备的 5183 文档/300 查询单分片；若不安全，保留真实证据并降到固定可复现子集，不外推为全量结果。
+7. 本切片完成后追加真实操作、失败、产物 hash、质量/延迟数字和资源快照；对可归因性严格限定，没有重复和显著性检验时只报告观测差异。形成重大闭环后中文本地提交。
+
+### 阶段 5 第三切片缺陷修复计划：Worker 与 Kafka 唤醒解耦
+
+1. 保留 `ai.rag.worker.enabled` 作为摄取 Worker、MySQL 到期任务扫描和单线程执行器总开关；新增 `ai.rag.kafka.listener-enabled`，只控制 Kafka 事件唤醒。默认 false，未配置 Kafka 时 Worker 仍能依靠 MySQL 扫描恢复摄取。
+2. Kafka Listener 只在 Worker bean 存在且 listener 显式开启时启动；不改变事件 payload、幂等键和 MySQL 回查语义。生产需要低延迟唤醒时必须同时显式开启两个开关。
+3. 增加配置绑定/反射回归测试，证明 Listener 不再与 Worker 开关绑死；运行现有 RAG 扩大测试和六模块 compile。修复通过后才启动隔离本机应用。
+
+### 2026-07-19 Worker/Kafka 解耦结果
+
+- `RagProperties.Kafka` 新增默认 false 的 `listenerEnabled`，`application.yml` 暴露 `AI_RAG_KAFKA_LISTENER_ENABLED`；`RagIngestDispatcher` bean 和 MySQL `@Scheduled` 扫描仍由 `AI_RAG_WORKER_ENABLED` 控制，仅 `@KafkaListener.autoStartup` 改由新开关控制。Worker 与 Kafka 的 payload、任务回查和单线程语义没有改变。
+- `RagPropertiesTest` 新增默认关闭和 Spring Boot 类型绑定断言。最终本机 Temurin 17 命令 `mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest='*Rag*Test,ChatServiceAuthorizationTest,WorkflowExecutorConfigTest' -Dsurefire.failIfNoSpecifiedTests=false`：131/131 通过，0 failure/error/skipped，六模块 BUILD SUCCESS，总耗时 3.184 秒。
+- 同一组测试先在受限沙箱中运行：124 项中 66 error、0 assertion failure，错误均为 Mockito inline mock maker 不能自附加 Java agent；不计入通过数。切换到允许 agent attach 的同一本机 Java 17 环境后得到上述最终结果。

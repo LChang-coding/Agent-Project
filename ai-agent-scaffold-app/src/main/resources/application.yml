@@ -82,6 +82,7 @@ ai:
     kafka:
       topic: ${AI_RAG_KAFKA_TOPIC:rag.ingest.request.v1}
       group-id: ${AI_RAG_KAFKA_GROUP_ID:ai-agent-rag-ingest}
+      listener-enabled: ${AI_RAG_KAFKA_LISTENER_ENABLED:false}
     outbox:
       enabled: ${AI_RAG_OUTBOX_ENABLED:false}
       poll-delay-ms: ${AI_RAG_OUTBOX_POLL_DELAY_MS:1000}

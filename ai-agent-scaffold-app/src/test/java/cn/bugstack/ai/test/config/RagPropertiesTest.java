@@ -30,6 +30,7 @@ public class RagPropertiesTest {
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
         Assert.assertEquals("ai_agent_rag_e5_v1", properties.getQdrant().getCollection());
         Assert.assertEquals("rag.ingest.request.v1", properties.getKafka().getTopic());
+        Assert.assertFalse(properties.getKafka().isListenerEnabled());
         Assert.assertFalse(properties.getWorker().isEnabled());
         Assert.assertEquals(10, properties.getWorker().getScanBatchSize());
         Assert.assertFalse(properties.getAudit().isStoreQueryText());
@@ -77,7 +78,8 @@ public class RagPropertiesTest {
                 "ai.rag.embedding.timeout", "2500ms",
                 "ai.rag.embedding.max-concurrency", "3",
                 "ai.rag.embedding.batch-size", "24",
-                "ai.rag.embedding.dimension", "768"
+                "ai.rag.embedding.dimension", "768",
+                "ai.rag.kafka.listener-enabled", "true"
         ));
 
         RagProperties properties = new Binder(source).bind("ai.rag", RagProperties.class)
@@ -89,6 +91,7 @@ public class RagPropertiesTest {
         Assert.assertEquals(3, properties.getEmbedding().getMaxConcurrency());
         Assert.assertEquals(24, properties.getEmbedding().getBatchSize());
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
+        Assert.assertTrue(properties.getKafka().isListenerEnabled());
     }
 
     /** 校验连接与批处理边界；验证非 HTTP 端点、非正超时、并发和批次均会被拒绝。 */

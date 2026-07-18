@@ -56,7 +56,7 @@ public class RagIngestDispatcher {
     /** Kafka 只传标识符并作为唤醒；任务内容始终回查 MySQL。 */
     @KafkaListener(topics = "${ai.rag.kafka.topic:rag.ingest.request.v1}",
             groupId = "${ai.rag.kafka.group-id:ai-agent-rag-ingest}",
-            autoStartup = "${ai.rag.worker.enabled:false}")
+            autoStartup = "${ai.rag.kafka.listener-enabled:false}")
     public void consume(String payload) {
         try {
             JsonNode root = objectMapper.readTree(payload);

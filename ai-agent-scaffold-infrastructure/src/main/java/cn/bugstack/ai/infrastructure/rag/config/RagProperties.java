@@ -254,10 +254,14 @@ public class RagProperties {
         @NotBlank
         private String groupId = "ai-agent-rag-ingest";
 
+        /** 是否启用 Kafka 低延迟唤醒；Worker 仍可独立依靠 MySQL 补偿扫描。 */
+        private boolean listenerEnabled;
+
         /** 输出 Kafka 摘要；无参数；返回 Topic 信息。 */
         @Override
         public String toString() {
-            return "Kafka{topic='" + topic + "', groupId='" + groupId + "'}";
+            return "Kafka{topic='" + topic + "', groupId='" + groupId
+                    + "', listenerEnabled=" + listenerEnabled + "}";
         }
     }
 
