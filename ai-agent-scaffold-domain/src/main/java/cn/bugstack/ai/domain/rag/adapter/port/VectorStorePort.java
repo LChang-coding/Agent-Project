@@ -16,6 +16,9 @@ public interface VectorStorePort {
     /** 删除租户指定文档版本的全部向量点。 */
     void deleteVersion(String tenantId, String versionId);
 
+    /** 精确统计租户指定文档版本的向量点数。 */
+    long countVersion(String tenantId, String versionId);
+
     /** 使用可信知识库范围检索候选。 */
     List<VectorSearchHit> search(String tenantId, VectorSearchCommand command);
 

@@ -337,3 +337,21 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增 version/document/knowledge-base 激活规则：版本必须 processing 后才能 ready；文档只能激活匹配 target generation；知识库 generation 不允许倒退。
 - Java 17 组合验证 32/32 通过，0 failure/error：Sparse 5、Chunker 6、激活 3、配置 7、对象存储 11，总耗时 7.326 秒。Chunker/Sparse 另有 100 组随机预算边界；默认 Java 25 仍受既有 Byte Buddy 版本限制，规定运行时 Java 17 下通过。
 - 本小节仅是可独立复用的本地处理基础，远程客户端与 Worker 尚未在此提交中宣称完成。
+
+### 2026-07-19 阶段 2B 真实中间件契约探测留痕
+
+- 探测只使用无敏感合成文本和最小 PDF/DOCX；没有上传项目源码或业务文档，没有修改服务器配置，临时文件已清理，密钥未写入日志和仓库。
+- Docling Serve 1.26.0 真实公网契约为 `POST :5001/v1/convert/file`，`multipart/form-data`，认证头 `X-Api-Key`；唯一必填字段是 binary array `files`。默认 `to_formats=[md]`，200 JSON 的有效正文位于 `document.md_content`，其他格式字段可为 null。服务默认 `do_ocr=true`，与首期设计相反，Java 必须显式发送 `do_ocr=false`、`force_ocr=false`、`include_images=false`、`include_page_images=false`和受控 `document_timeout`。
+- Docling 合成 DOCX 首次总耗时 8.884315 秒，热请求 2.196345 秒，服务内 processing_time 分别为 0.235355/0.029989 秒；显式关闭 OCR 的请求 200，总耗时 8.885362 秒。最小一页 PDF 总耗时 12.242203 秒，服务 processing_time 11.459224 秒。发生过一次约 5.016 秒的网关空连接，容器一直健康且同请求一次重试后 200；客户端只对连接类异常做有界重试，业务幂等仍以 ingest task 为真相源。
+- Embedding 契约为 `POST :8081/embed`，Bearer，请求 `{inputs:string[]}`；真实 2 条合成输入响应 200，耗时 0.981055 秒、响应 18994 bytes，得到 2×768 维 L2 归一向量。固定 multilingual-e5-base revision `d128750597153bb5987e10b1c3493a34e5a4502a`，query/passage 必须使用对应前缀；服务最大输入 512，并发 8，client batch 16。
+- Reranker 契约为 `POST :8082/rerank`，Bearer，字段为 `query/texts/return_text/raw_scores`；真实 3 候选请求 200，耗时 2.360528 秒、响应 268 bytes，顶层数组项为 `index/text/score`。固定 bge-reranker-base revision `2cfc18c9415c912f9d8155881c133215df768a70`，client batch 16。单个合成语义样例的直观排序并不可靠，后续只以公开基准集指标判断 rerank 增益。
+- Qdrant 版本 1.18.2，匿名公网 `/healthz` 和 `/readyz` 均 200，`/collections` 当时为空；本次只读阶段未创建 collection 或 point，因此不把 Qdrant upsert/query 写成“真实服务已通过”。
+- 服务器探测结束时 7 个容器均 running，已定义健康检查的容器均 healthy，Prometheus 6 个 target 均 up。内存占用：Embedding 1.863 GiB、Reranker 1.867 GiB、Docling 1.367 GiB、Qdrant 46.55 MiB；主机基线 5.1/15 GiB，Swap 0/2 GiB，根盘 14/39 GiB。这些是单次功能探测快照，不是压测结果。
+
+### 2026-07-19 阶段 2B 阶段性执行结果（二）：TEI 与 Qdrant 客户端
+
+- 新增 TEI Embedding/Reranker Java HTTP 适配器：请求前批次和文本上限校验、公平并发槽位、连接/请求超时、有界响应、非 200 不回显错误体或密钥。Embedding 显式添加 E5 `query: `/`passage: ` 前缀并严格校验数量、768 维和有限数；Reranker 按真实 `index/score` 映射 chunk，拒绝缺字段、重复/越界索引和非有限分数。审查发现并修复了 `index/score` 原用基本类型、缺字段会被 Jackson 静默补成 0 的缺陷。
+- 新增 Qdrant 1.18.2 REST 适配器：`dense` 768/Cosine + `sparse` named vector 严格 schema 校验与幂等创建；`wait=true` 分批 upsert；非 UUID 业务 ID 稳定映射 UUID 并在 payload 保留原 ID；可信 tenant/kb/document/version/generation/chunk 字段强制覆盖调用方伪造值。delete/count 强制 tenant+version，count 使用 `exact=true`。Dense/Sparse/Hybrid Query API 支持双 prefetch + RRF，同时下推 `tenant AND (kb,activeGeneration)` 并对响应逐条后验，越界命中失败关闭。
+- Java 17 组合命令：`mvn -pl ai-agent-scaffold-app -am test -DskipTests=false -Dtest=QdrantVectorStoreAdapterTest,TeiModelAdapterProtocolTest,RagPortContractTest,RagPropertiesTest -Dsurefire.failIfNoSpecifiedTests=false`；结果 23/23 通过，0 failure/error，六模块 BUILD SUCCESS，总耗时 7.530 秒。其中 TEI 本地 HttpServer 黑盒协议 8 项，Qdrant 协议 5 项，配置 7 项，端口契约 3 项。
+- 真实 Qdrant smoke 使用项目预定 collection `ai_agent_rag_e5_v1` 和一个可识别合成 point，无业务数据、单线程、批次 1。初始 GET 404/4.982752 秒，创建 200/3.770338 秒，upsert 200/2.205275 秒，精确 count 200/0.219369 秒且 count=1，hybrid RRF query 200/0.745412 秒且命中 1 条正确 tenant，其他 tenant 同向量 query 200/0.624840 秒且命中 0。tenant+version 删除 200/0.164220 秒，删除后 exact count 200/0.834627 秒且 count=0。collection 保留供项目使用，合成 point 已清理。
+- 上述 Qdrant 是功能 smoke，不是延迟基准；首次创建、公网往返和网关都混在单次数值中，禁止将它们当作 P50/P95 或吞吐量结论。真实断网、超限响应和分布式并发创建 409 仍待后续性能/故障评测。

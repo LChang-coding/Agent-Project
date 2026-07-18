@@ -98,6 +98,25 @@ public class RagProperties {
         @Min(1)
         private int batchSize = 64;
 
+        /** Sparse 倒排索引是否只常驻磁盘。 */
+        private boolean sparseOnDisk = true;
+
+        /** 单次 Qdrant 请求体上限。 */
+        @Min(1024)
+        private long maxRequestBytes = 16L * 1024 * 1024;
+
+        /** 单次 Qdrant 响应体上限。 */
+        @Min(1024)
+        private long maxResponseBytes = 16L * 1024 * 1024;
+
+        /** 检索 topK 硬上限。 */
+        @Min(1)
+        private int maxSearchTopK = 200;
+
+        /** Hybrid 每路预取相对 topK 的倍数。 */
+        @Min(1)
+        private int prefetchMultiplier = 4;
+
         /** 创建 Qdrant 默认配置。 */
         public Qdrant() {
             setEndpoint(URI.create("http://127.0.0.1:6333"));
@@ -108,7 +127,8 @@ public class RagProperties {
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Qdrant 配置。 */
         @Override
         public String toString() {
-            return summary("Qdrant") + ", collection='" + collection + "', batchSize=" + batchSize + '}';
+            return summary("Qdrant") + ", collection='" + collection + "', batchSize=" + batchSize
+                    + ", sparseOnDisk=" + sparseOnDisk + ", maxSearchTopK=" + maxSearchTopK + '}';
         }
     }
 
@@ -117,13 +137,17 @@ public class RagProperties {
     @Setter
     public static class Embedding extends RemoteService {
 
+        /** 已部署模型不可变 revision。 */
+        @NotBlank
+        private String modelRevision = "d128750597153bb5987e10b1c3493a34e5a4502a";
+
         /** 向量维度，必须与固定模型 revision 一致。 */
         @Min(1)
         private int dimension = 768;
 
         /** 单批向量化文本数量。 */
         @Min(1)
-        private int batchSize = 32;
+        private int batchSize = 16;
 
         /** 创建 Embedding 默认配置。 */
         public Embedding() {
@@ -135,7 +159,8 @@ public class RagProperties {
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Embedding 配置。 */
         @Override
         public String toString() {
-            return summary("Embedding") + ", dimension=" + dimension + ", batchSize=" + batchSize + '}';
+            return summary("Embedding") + ", modelRevision='" + modelRevision
+                    + "', dimension=" + dimension + ", batchSize=" + batchSize + '}';
         }
     }
 
@@ -144,9 +169,13 @@ public class RagProperties {
     @Setter
     public static class Reranker extends RemoteService {
 
+        /** 已部署模型不可变 revision。 */
+        @NotBlank
+        private String modelRevision = "2cfc18c9415c912f9d8155881c133215df768a70";
+
         /** 单批重排候选数量。 */
         @Min(1)
-        private int batchSize = 32;
+        private int batchSize = 16;
 
         /** 创建 Reranker 默认配置。 */
         public Reranker() {
@@ -158,7 +187,8 @@ public class RagProperties {
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Reranker 配置。 */
         @Override
         public String toString() {
-            return summary("Reranker") + ", batchSize=" + batchSize + '}';
+            return summary("Reranker") + ", modelRevision='" + modelRevision
+                    + "', batchSize=" + batchSize + '}';
         }
     }
 
@@ -166,6 +196,18 @@ public class RagProperties {
     @Getter
     @Setter
     public static class Docling extends RemoteService {
+
+        /** 部署解析器版本。 */
+        @NotBlank
+        private String parserRevision = "docling-serve-1.26.0";
+
+        /** 单文档页数硬上限。 */
+        @Min(1)
+        private int maxPages = 500;
+
+        /** 解析响应最大字节数。 */
+        @Min(1024)
+        private long maxResponseBytes = 64L * 1024 * 1024;
 
         /** 单次解析的文档数量，首期保持为 1。 */
         @Min(1)
@@ -181,7 +223,9 @@ public class RagProperties {
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Docling 配置。 */
         @Override
         public String toString() {
-            return summary("Docling") + ", batchSize=" + batchSize + '}';
+            return summary("Docling") + ", parserRevision='" + parserRevision
+                    + "', batchSize=" + batchSize + ", maxPages=" + maxPages
+                    + ", maxResponseBytes=" + maxResponseBytes + '}';
         }
     }
 

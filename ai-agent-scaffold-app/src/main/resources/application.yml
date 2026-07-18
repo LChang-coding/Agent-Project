@@ -50,25 +50,35 @@ ai:
       max-concurrency: ${AI_RAG_QDRANT_MAX_CONCURRENCY:4}
       batch-size: ${AI_RAG_QDRANT_BATCH_SIZE:64}
       collection: ${AI_RAG_QDRANT_COLLECTION:ai_agent_rag_e5_v1}
+      sparse-on-disk: ${AI_RAG_QDRANT_SPARSE_ON_DISK:true}
+      max-request-bytes: ${AI_RAG_QDRANT_MAX_REQUEST_BYTES:16777216}
+      max-response-bytes: ${AI_RAG_QDRANT_MAX_RESPONSE_BYTES:16777216}
+      max-search-top-k: ${AI_RAG_QDRANT_MAX_SEARCH_TOP_K:200}
+      prefetch-multiplier: ${AI_RAG_QDRANT_PREFETCH_MULTIPLIER:4}
     embedding:
       endpoint: ${AI_RAG_EMBEDDING_ENDPOINT:http://127.0.0.1:8081}
       api-key: ${AI_RAG_EMBEDDING_API_KEY:}
       timeout: ${AI_RAG_EMBEDDING_TIMEOUT:10s}
       max-concurrency: ${AI_RAG_EMBEDDING_MAX_CONCURRENCY:2}
-      batch-size: ${AI_RAG_EMBEDDING_BATCH_SIZE:32}
+      batch-size: ${AI_RAG_EMBEDDING_BATCH_SIZE:16}
       dimension: ${AI_RAG_EMBEDDING_DIMENSION:768}
+      model-revision: ${AI_RAG_EMBEDDING_MODEL_REVISION:d128750597153bb5987e10b1c3493a34e5a4502a}
     reranker:
       endpoint: ${AI_RAG_RERANKER_ENDPOINT:http://127.0.0.1:8082}
       api-key: ${AI_RAG_RERANKER_API_KEY:}
       timeout: ${AI_RAG_RERANKER_TIMEOUT:10s}
       max-concurrency: ${AI_RAG_RERANKER_MAX_CONCURRENCY:2}
-      batch-size: ${AI_RAG_RERANKER_BATCH_SIZE:32}
+      batch-size: ${AI_RAG_RERANKER_BATCH_SIZE:16}
+      model-revision: ${AI_RAG_RERANKER_MODEL_REVISION:2cfc18c9415c912f9d8155881c133215df768a70}
     docling:
       endpoint: ${AI_RAG_DOCLING_ENDPOINT:http://127.0.0.1:5001/v1}
       api-key: ${AI_RAG_DOCLING_API_KEY:}
       timeout: ${AI_RAG_DOCLING_TIMEOUT:120s}
       max-concurrency: ${AI_RAG_DOCLING_MAX_CONCURRENCY:1}
       batch-size: ${AI_RAG_DOCLING_BATCH_SIZE:1}
+      parser-revision: ${AI_RAG_DOCLING_PARSER_REVISION:docling-serve-1.26.0}
+      max-pages: ${AI_RAG_DOCLING_MAX_PAGES:500}
+      max-response-bytes: ${AI_RAG_DOCLING_MAX_RESPONSE_BYTES:67108864}
     kafka:
       topic: ${AI_RAG_KAFKA_TOPIC:rag.ingest.request.v1}
     outbox:
