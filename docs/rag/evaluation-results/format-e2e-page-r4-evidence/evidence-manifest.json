@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-19T23:28:10Z",
+  "runId": "format-e2e-page-r4-27f9a19-minio",
+  "runExitCode": 0,
+  "files": [
+    {
+      "name": "local-process.jsonl",
+      "sha256": "2a9a3daf482388492d5268c631cd794141e8c46dd7aa3e409ce8a91af8c72084",
+      "bytes": 14439
+    },
+    {
+      "name": "remote-containers.jsonl",
+      "sha256": "e74fa13d99763db161b61d875b622cfdf3ad93cbcc8922395a58f80d58d6e128",
+      "bytes": 62980
+    },
+    {
+      "name": "remote-inspect-before.txt",
+      "sha256": "61bdd7dd9c396a6724d092227b1985dce4ebdb31b921f6ee2831d2a910e3ecee",
+      "bytes": 632
+    },
+    {
+      "name": "remote-inspect-after.txt",
+      "sha256": "61992d06de109d98fd96919483d7b215a07bb62aaf7f7e638225f1b0cfd87c84",
+      "bytes": 632
+    }
+  ]
+}

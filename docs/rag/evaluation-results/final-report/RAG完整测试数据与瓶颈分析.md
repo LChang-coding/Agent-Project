@@ -8,7 +8,8 @@
 2. Rerank保持Recall@10不变，却把MRR/nDCG/MAP分别提高0.079398/0.058705/0.075396；代价是质量run p50从1.851s升至12.408s。它改善67个query的排序，也伤害29个query；20个内部复测代表中为8改善、7伤害、5不变。
 3. 在本次SciFact在线检索负载中，首个已证明的主导瓶颈是Reranker：并发4出现67.190s fallback，Reranker CPU峰值566.50%；稳定健康容量只证明到并发2。该结论不外推到大文件摄取或多租户全系统。
 4. 三格式真实MinIO链路r6为15/15检索证据词项覆盖、0降级；MySQL child chunk/distinct vector point与Qdrant exact point一致，MinIO哈希一致。PDF摄取37.597s，其中Docling HTTP 34.163s，是本轮摄取主导阶段。
-5. 尚不能宣告完整答案质量闭环：SciFact没有gold answer；无答案题虽然能召回“文档未提供该值”的段落，但检索层仍返回5～6条候选，Agent是否拒绝编造尚未黑盒评测。
+5. 页码链路已在独立r4真实复测中闭环：三页PDF的pageCount=3，6个章节数据库页码为1/1/1/2/2/3，30条查询citation全部与金标一致，5/5问题均召回其正确证据章节和页码。Markdown与当前Docling DOCX继续按页语义未知处理，没有猜页码。
+6. 尚不能宣告完整答案质量闭环：SciFact没有gold answer；无答案题虽然能召回“文档未提供该值”的段落，但检索层仍返回5～6条候选，Agent是否拒绝编造尚未黑盒评测。
 
 ## 二、测试口径与有效数据
 
@@ -19,6 +20,7 @@
 | 稳定性能r1+r2 | 320 measured，另有warmup | 并发1/2、顺序反转 | 已验证健康容量和延迟范围 |
 | 并发4边界 | 共199条measured（并发1=80、2=80、4=39） | 容量失败定位 | 并发4不能作为稳定分位数，只作失败边界 |
 | 三格式r6 | 3文件、15答案问题、3无答案探针 | 真实MinIO摄取/召回 | 格式功能、三端一致性、小文件单线程性能 |
+| 页码r4 | 同一3文件、15答案问题、PDF 6章节金标 | 真实MinIO重新摄取/召回 | PDF页码准确性、未知页语义不猜测 |
 
 ## 三、RAG技术点前后差异
 
@@ -282,7 +284,7 @@ Gold文档：
 1. **Reranker CPU推理与排队**：事实—并发4出现67.190s降级回退；稳定轮Rerank占完整链路绝大部分延迟。 有证据支持的解释/待验证假设—Top10按3/3/3/1串行子批是代码层候选解释；Semaphore等待与远端排队各自贡献尚未分段测量。 影响—当前完整Rerank链路只验证到并发2健康。 优化—合并批次、异步批处理/动态batch、缓存与只重排高不确定查询；完成后重跑并发1/2/4。
 2. **Docling PDF解析**：事实—r6 PDF摄取37.597s，Docling单次HTTP 34.163s；Docling CPU峰值461.93%。 有证据支持的解释/待验证假设—Docling调用占总墙钟约90.9%；其余约3.434s没有阶段分段，不能分摊给Java、MinIO或向量写入。 影响—PDF摄取显著慢于Markdown 3.056s与DOCX 6.094s。 优化—内容哈希去重、解析缓存、格式快速路径、独立解析队列；用多页/表格PDF复测。
 3. **融合TopK/阈值召回损失**：事实—80条内部诊断中17条首个完全损失位于fusion threshold/TopK联合步骤。 有证据支持的解释/待验证假设—当前轨迹将threshold与TopK合并，尚不能进一步分离两者。 影响—部分Gold在原始候选存在但融合后消失。 优化—拆分threshold与TopK轨迹，调大fusion候选并做按query类型的权重/阈值校准。
-4. **页级元数据缺口**：事实—r6 DOCX/PDF均成功解析并召回，但数据库pageCount仍为0。 有证据支持的解释/待验证假设—Docling结果到领域模型的页级元数据没有产出/映射闭环。 影响—不能把0解释为0页，页码引用与页级审计尚未被证明。 优化—解析响应保留页span并贯穿chunk/citation；增加多页PDF页码金标测试。
+4. **DOCX固定页语义缺失**：事实—r4三页PDF的6个章节、30条查询citation和5个问题证据章节均通过页码金标；同轮DOCX的Docling pages为空，数据库与citation保持null。 有证据支持的解释/待验证假设—流式DOCX在Docling 1.26.0响应中没有page provenance；当前证据不能把它解释为解析丢失或0页。 影响—PDF页码链路已闭环，但DOCX仍不能提供固定页审计。 优化—若业务刚需DOCX页码，先转换为固定版式PDF或引入能输出版式页span的解析器，再用同一金标门禁复测。
 
 ## 七、Markdown/DOCX/PDF真实链路
 
@@ -293,6 +295,29 @@ Gold文档：
 | pdf | 37597 | 1 | 1375 | 6/6 | 0（未知，未闭环） | 2309/3034/3034 | `5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448` |
 
 r6资源采样：21个远端样本、46个Java样本。Docling CPU峰值461.93%，Reranker 408.24%，Embedding 359.77%；Java CPU峰值14.9%、RSS峰值566608KiB，前后容器0重启、无OOM。单次PDF Docling日志为34163ms，因此其37.597s摄取耗时主要由解析占据。
+
+### 页码修复前后与真实金标
+
+r1在业务上传前因测试启动脚本误取MinIO账号字段失败；r2在DOCX遇到`pages={}`时被错误判为非法；修正空页为未知后，r3完成15/15，但连续H2被旧标题栈错误嵌套，PDF只有文档标题能匹配页码。r4改用真实标题level出栈后重新摄取同一份PDF，以下结果全部来自MySQL chunk与原始HTTP citation，不是单元测试推断。
+
+| 格式 | r4摄取ms | pageCount语义 | child块/Qdrant点 | 查询citation | 页码门禁 | 对应文档 |
+|---|---:|---|---:|---:|---|---|
+| docx | 13381 | 未知（数据库/citation均null） | 6/6 | 30 | 未猜测页码 | [源文档](../../evaluation-data/format-e2e/format-fidelity.docx) |
+| markdown | 9824 | 未知（数据库/citation均null） | 5/5 | 25 | 未猜测页码 | [源文档](../../evaluation-data/format-e2e/format-fidelity.md) |
+| pdf | 62539 | 3页（固定） | 6/6 | 30 | 6章节、全部citation、5问题证据章节均匹配 | [源文档](../../evaluation-data/format-e2e/format-fidelity.pdf) |
+
+PDF章节金标与数据库实值：
+
+| 章节 | pageFrom/pageTo |
+|---|---:|
+| RAG Format Fidelity Observatory Manual | 1/1 |
+| Identity and access | 1/1 |
+| Sensor limits | 1/1 |
+| Emergency procedure | 2/2 |
+| Cross-page continuity | 2/2 |
+| Deliberate omissions | 3/3 |
+
+页码失败的因果链是：Docling JSON本身已有正确provenance → Java同时拿到Markdown H2与JSON level=1 → 旧代码按栈长度出栈，把连续H2错误嵌套 → 文本路径不等导致章节页码为null → r4按真实level弹栈后路径一致，数据库与citation金标全部恢复。DOCX则停在更早的解析输出阶段：Docling响应没有pages/provenance，因此系统保留null；这不是同一个标题栈问题。
 
 无答案探针：
 
@@ -307,7 +332,7 @@ r6资源采样：21个远端样本、46个Java样本。Docling CPU峰值461.93%�
 1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。
 2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense 0.797944，同时报告MRR/延迟代价。
 3. Docling按内容哈希缓存解析结果，并分离PDF重任务队列。门槛：真实多页/表格PDF至少30份，报告p50/p95、页面/表格保真和失败重试。
-4. 页span贯穿解析、chunk、Qdrant payload、citation和回源。门槛：多页PDF逐页金标，pageCount不再为未知，引用页码精确率单独报告。
+4. PDF页span已贯穿解析、chunk、Qdrant payload和citation并通过单份三页金标；下一门槛是至少30份多页/表格/扫描PDF以及引用回源黑盒。DOCX若刚需固定页码，需增加固定版式转换或替换解析器后用相同金标门禁。
 5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。
 
 ## 九、明确未测与证据限制
@@ -317,7 +342,7 @@ r6资源采样：21个远端样本、46个Java样本。Docling CPU峰值461.93%�
 - 无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。
 - r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。
 - 内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。
-- fusion threshold与TopK尚未分开留痕；页数为未知而非0页。
+- fusion threshold与TopK尚未分开留痕；PDF页码已闭环，但Markdown和当前Docling DOCX的页数仍是未知而非0页。
 
 ## 十、证据索引与复算
 

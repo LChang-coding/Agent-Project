@@ -1,0 +1,2 @@
+26-07-20.07:26:05.011 [rag-ingest-worker-1] INFO  DoclingDocumentParserAdapter traceId= tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=2193
+26-07-20.07:27:39.937 [rag-ingest-worker-1] INFO  DoclingDocumentParserAdapter traceId= tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=52368

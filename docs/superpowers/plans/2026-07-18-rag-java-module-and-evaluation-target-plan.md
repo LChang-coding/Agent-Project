@@ -1922,3 +1922,22 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增真实协议形态回归：Markdown为连续H2、结构化JSON为连续level=1，并分别带第1、2页provenance；断言章节路径为`First`/`Second`且页码为1/2。既有H1→H2、重复标题、非法页对象和DOCX空页语义测试继续保留。
 - Java 17定向`DoclingDocumentParserAdapterProtocolTest`为12/12通过；按文件名精确生成的全部RAG测试为176/176通过，0 failure/error/skipped，六模块BUILD SUCCESS。首次执行`git diff --check`被既有运行日志尾随空格挡住；改为仅校验本切片两个源文件后通过，没有修改或暂存这些运行日志。
 - 本节只证明算法与回归门禁，尚未把单元结果写成真实PDF页码结论；下一步提交本切片、重新打包并在全新r4目录执行真实MinIO摄取和页码金标核对。
+
+#### r4页码金标与三端证据固化计划（执行前）
+
+1. 保留已完成的`format-e2e-page-r4-27f9a19-minio`原始HTTP和资源目录，不手改其中任何响应；冻结App JAR SHA-256、commit、fixture三文件hash、单线程/单Worker和请求超时口径。
+2. 为三格式fixture新增独立页语义金标文件：PDF明确文档标题及五个章节的1/1/1/2/2/3页；Markdown与当前Docling DOCX明确为页码未知。该金标只用于复核，不修改已摄取文档字节，并记录自身及对应源文档hash。
+3. 扩展存储一致性采集器，在既有MinIO/MySQL/Qdrant检查之外，读取MySQL可检索child chunk的`section_path/page_from/page_to`和原始查询响应引用；固定页格式要求数据库章节映射、每条引用页码及每个问题的证据章节全部与金标一致，未知页格式要求数据库不出现猜测页码。
+4. 使用受控环境变量运行采集器，生成不含凭据的`storage-consistency.json`；再独立用SQL/JQ复算章节映射和引用页码。任一不一致都保留为失败证据，不得把15/15词项覆盖替代页码正确性。
+5. 将r1启动失败、r2 DOCX协议失败、r3标题栈失败和r4修复后结果按因果顺序写入最终报告生成器；报告必须链接实际PDF/DOCX/Markdown、问题、召回引用与页码证据，并继续说明DOCX页语义未知的技术边界。
+
+#### r4页码金标、三端证据与报告执行结果
+
+- commit `27f9a19`重新打包成功，App JAR SHA-256=`41a45421998df3b4e035ef9d96f864352aae73e0713e2f6f54b980f5f5fb4d80`。第一次隔离启动因从`codex.md`按反引号列取MySQL/模型凭据时选错列，MySQL实际返回`Access denied`；应用未发业务请求。修正为精确字段后，本机MySQL TLS账号检查通过并重新启动同一JAR，该失败没有混入r4数据。
+- 正式run=`format-e2e-page-r4-27f9a19-minio`，manifest状态completed、资源runExitCode=0；Markdown/DOCX/PDF共15/15固定问题通过、0 error、0 degraded，三项摄取attempt均为1，摄取墙钟9824/13381/62539ms，child chunk为5/6/6。Docling真实HTTP为DOCX 2193ms、PDF 52368ms，已脱敏固化到run目录。
+- 三端一致性及页码门禁整体`passed=true`：三个格式的MinIO原件/解析产物大小与SHA、MySQL child/distinct point、Qdrant exact point全部一致。PDF逻辑页数=3，数据库6个可检索章节精确为文档标题1、Identity 1、Sensor 1、Emergency 2、Cross-page 2、Omissions 3；30条PDF查询citation全部与同一金标匹配，5/5问题均包含其指定证据章节及正确页码。
+- Markdown和DOCX pageCount字段为0只表示未知：其全部数据库child chunk页码与55条查询citation页码均为null，`databaseDoesNotGuessPages/citationsDoNotGuessPages=true`。DOCX标题仍保留文档标题父路径，这是Docling Markdown层级本身的输出；由于结构化`pages={}`，没有把它映射为假页号。
+- 页码金标SHA-256=`47a130a8d0a7350cab9c5cb43c8d2cd32931a95282fa3a5ee61b76bcb8d5919b`，存储/页码证据=`26b5d42768a0ea582bb0e85a50f5e1a5eaee4244f7c51df636ccdcc60734524c`，run manifest=`df71cbbacc594affc0d361d7a913c4af4b2e86e939cd0c4e03ea3b87ab6f8c6a`，15条查询=`79cc2deb4923076b1d65aa5cab851a798e3e8a1f11e9861f6aa57717274888d6`，资源manifest=`a063f5a87d1572acd04da00e7ed3751b511ed1b63fe47286a720a8a1f04b2f6f`。
+- 资源采样为38个远端、82个Java样本；峰值CPU Docling 426.08%、Reranker 414.53%、Embedding 407.94%、Qdrant 66.34%，Java 67.2%；Java RSS峰值758592KiB、线程87。该小样本仍只用于本轮观测，不替代r6正式性能口径；PDF Docling 52.368s占其62.539s摄取约83.7%，解析仍是直接可见主阶段。
+- 证据采集器首次因系统Python缺少`minio`包失败，随后仅在`/tmp`创建隔离venv并固定`minio=7.2.16/requests=2.32.4`重跑成功，没有修改系统Python。故意把Emergency金标从2篡改为3时采集器退出4，并同时把数据库章节、citation和问题证据三项判为false，证明门禁不是固定返回成功。
+- 最终报告生成器已把r4作为独立页码证据纳入总账，同时保留r6原始性能口径；r1启动字段错误、r2 DOCX空页协议、r3标题栈不匹配、r4恢复的因果链及三份对应源文档均显式展示。两个全新目录独立生成后JSON/Markdown字节级`cmp`一致；最终总账SHA-256=`30cf5622c69b4bab52985891044cbe6ad23ffd31984d33e67c4599a9287b75ff`，报告=`13bf4807fece731dc42db0c99760edab581f04573aab52f0e5aa8d315dab9046`。

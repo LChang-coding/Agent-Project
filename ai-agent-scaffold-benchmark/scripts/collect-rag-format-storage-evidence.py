@@ -30,6 +30,8 @@ def args() -> argparse.Namespace:
     parser.add_argument("--qdrant-url", default="http://127.0.0.1:16333")
     parser.add_argument("--qdrant-collection", required=True)
     parser.add_argument("--minio-endpoint", required=True)
+    parser.add_argument("--page-gold", type=Path)
+    parser.add_argument("--fixture", type=Path)
     return parser.parse_args()
 
 
@@ -66,6 +68,80 @@ def sha256_object(client: Minio, bucket: str, key: str) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def page_evidence(config: argparse.Namespace, version_id: str, format_name: str,
+                  page_count: int, page_gold: dict | None, fixture: dict | None) -> tuple[dict, dict]:
+    rows = mysql_rows(config, f"""
+SELECT chunk_id,section_path,IFNULL(page_from,''),IFNULL(page_to,'')
+FROM rag_chunk
+WHERE version_id='{version_id}' AND deleted=0 AND vector_point_id IS NOT NULL
+ORDER BY chunk_index
+""")
+    chunks = [{"chunkId": row[0], "headingPath": row[1],
+               "pageFrom": int(row[2]) if row[2] else None,
+               "pageTo": int(row[3]) if row[3] else None} for row in rows]
+    evidence = {"chunks": chunks, "queryCitations": []}
+    if page_gold is None:
+        return evidence, {}
+
+    format_gold = page_gold.get("formats", {}).get(format_name)
+    if not isinstance(format_gold, dict):
+        raise SystemExit(f"missing page gold for {format_name}")
+    semantics = format_gold.get("pageSemantics")
+    expected_count = int(format_gold.get("expectedPageCount", -1))
+    checks = {"pageCountMatchesGold": page_count == expected_count}
+    response_by_query = {}
+    for response_path in sorted(config.manifest.parent.joinpath(format_name).glob("format-q*.json")):
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        query_id = response_path.stem
+        citations = response.get("response", {}).get("data", {}).get("citations", [])
+        response_by_query[query_id] = citations
+        for citation in citations:
+            evidence["queryCitations"].append({
+                "queryId": query_id,
+                "citationId": citation.get("citationId"),
+                "headingPath": citation.get("headingPath"),
+                "pageNumber": citation.get("pageNumber"),
+                "rank": citation.get("rank"),
+            })
+
+    if semantics == "unknown":
+        checks["databaseDoesNotGuessPages"] = all(chunk["pageFrom"] is None and chunk["pageTo"] is None
+                                                    for chunk in chunks)
+        checks["citationsDoNotGuessPages"] = all(citation["pageNumber"] is None
+                                                  for citation in evidence["queryCitations"])
+        return evidence, checks
+    if semantics != "fixed":
+        raise SystemExit(f"unsupported page semantics for {format_name}")
+
+    sections = format_gold.get("sections")
+    if not isinstance(sections, dict) or not sections:
+        raise SystemExit(f"missing fixed-page sections for {format_name}")
+    actual_pages: dict[str, set[int]] = {}
+    for chunk in chunks:
+        if chunk["pageFrom"] is not None:
+            actual_pages.setdefault(chunk["headingPath"], set()).add(chunk["pageFrom"])
+    checks["databaseSectionsMatchGold"] = all(actual_pages.get(heading) == {int(page)}
+                                                for heading, page in sections.items())
+    checks["allCitationPagesMatchGold"] = bool(evidence["queryCitations"]) and all(
+        citation["headingPath"] in sections
+        and citation["pageNumber"] == int(sections[citation["headingPath"]])
+        for citation in evidence["queryCitations"])
+    observed = {citation["headingPath"] for citation in evidence["queryCitations"]}
+    checks["allGoldSectionsObservedInCitations"] = set(sections).issubset(observed)
+    if fixture is None:
+        raise SystemExit("fixture is required for fixed page evidence")
+    checks["questionEvidenceSectionsMatchGold"] = all(
+        any(citation.get("headingPath") == question["evidenceSection"]
+            and citation.get("pageNumber") == int(sections[question["evidenceSection"]])
+            for citation in response_by_query.get(question["queryId"], []))
+        for question in fixture.get("questions", []))
+    return evidence, checks
+
+
 def main() -> None:
     config = args()
     if config.out.exists():
@@ -73,6 +149,9 @@ def main() -> None:
     manifest = json.loads(config.manifest.read_text(encoding="utf-8"))
     if manifest.get("status") != "completed":
         raise SystemExit("format run is not completed")
+    page_gold = (json.loads(config.page_gold.read_text(encoding="utf-8"))
+                 if config.page_gold else None)
+    fixture = json.loads(config.fixture.read_text(encoding="utf-8")) if config.fixture else None
     username = require_id(manifest.get("syntheticUsername"), "username")
     formats = manifest.get("formatResults") or {}
     version_to_format = {
@@ -128,6 +207,8 @@ ORDER BY v.version_id
         count_response.raise_for_status()
         qdrant_count = int(count_response.json()["result"]["count"])
         expected_chunk_count = int(chunk_count)
+        pages, page_checks = page_evidence(config, version_id, version_to_format[version_id],
+                                            int(page_count), page_gold, fixture)
         checks = {
             "ready": status == "ready",
             "sourceSizeMatches": source_actual_size == int(source_size),
@@ -137,6 +218,7 @@ ORDER BY v.version_id
             "versionAndDocumentChunkCountMatch": expected_chunk_count == int(document_chunk_count),
             "childAndDistinctVectorPointCountMatch": int(child_chunks) == int(distinct_points),
             "mysqlAndQdrantCountMatch": expected_chunk_count == qdrant_count == int(distinct_points),
+            **page_checks,
         }
         results.append({
             "format": version_to_format[version_id], "tenantId": tenant_id,
@@ -152,6 +234,7 @@ ORDER BY v.version_id
                 "parsed": {"exists": True, "bytes": parsed_actual_size, "sha256": parsed_actual_hash},
             },
             "qdrant": {"exactPointCount": qdrant_count}, "checks": checks,
+            "pageMetadata": pages,
             "passed": all(checks.values()),
         })
     payload = {
@@ -160,6 +243,10 @@ ORDER BY v.version_id
         "runId": manifest["runId"], "collection": config.qdrant_collection,
         "results": sorted(results, key=lambda value: value["format"]),
     }
+    if config.page_gold:
+        payload["pageGold"] = {"path": config.page_gold.name, "sha256": sha256_file(config.page_gold)}
+    if config.fixture:
+        payload["fixture"] = {"path": config.fixture.name, "sha256": sha256_file(config.fixture)}
     payload["passed"] = all(value["passed"] for value in payload["results"])
     config.out.parent.mkdir(parents=True, exist_ok=True)
     config.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",

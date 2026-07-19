@@ -105,6 +105,15 @@ def main() -> None:
         "formatNoAnswerDocx": results / "format-e2e-r6/docx/format-na1.json",
         "formatNoAnswerPdf": results / "format-e2e-r6/pdf/format-na1.json",
         "fixture": root / "docs/rag/evaluation-data/format-e2e/fixture.json",
+        "pageManifest": results / "format-e2e-page-r4/manifest.json",
+        "pageQueries": results / "format-e2e-page-r4/query-results.jsonl",
+        "pageStorage": results / "format-e2e-page-r4/storage-consistency.json",
+        "pageDoclingEvents": results / "format-e2e-page-r4/docling-events.txt",
+        "pageResources": results / "format-e2e-page-r4-evidence/evidence-manifest.json",
+        "pageGold": root / "docs/rag/evaluation-data/format-e2e/page-gold.json",
+        "pageMarkdownDocument": root / "docs/rag/evaluation-data/format-e2e/format-fidelity.md",
+        "pageDocxDocument": root / "docs/rag/evaluation-data/format-e2e/format-fidelity.docx",
+        "pagePdfDocument": root / "docs/rag/evaluation-data/format-e2e/format-fidelity.pdf",
         "evaluationMethodology": root / "docs/rag/evaluation.md",
     }
     missing = [str(path) for path in paths.values() if not path.is_file()]
@@ -295,6 +304,47 @@ def main() -> None:
             "query": query_by_format[format_name],
         })
 
+    page_manifest = load_json(paths["pageManifest"])
+    page_queries = load_jsonl(paths["pageQueries"])
+    page_storage = load_json(paths["pageStorage"])
+    page_resource_manifest = load_json(paths["pageResources"])
+    assert_hashes(page_resource_manifest, paths["pageResources"].parent)
+    if page_manifest["status"] != "completed" or len(page_queries) != 15 or not page_storage["passed"]:
+        raise ValueError("page metadata E2E evidence is not complete")
+    page_docling_events = paths["pageDoclingEvents"].read_text(encoding="utf-8").splitlines()
+    if len(page_docling_events) != 2 or "wallMs=2193" not in page_docling_events[0] \
+            or "wallMs=52368" not in page_docling_events[1]:
+        raise ValueError("page metadata Docling event evidence mismatch")
+    if any(not row["passed"] or row["degraded"] for row in page_queries):
+        raise ValueError("page metadata E2E query evidence contains failure/degradation")
+    if page_storage["pageGold"]["sha256"] != sha256(paths["pageGold"]):
+        raise ValueError("page gold hash mismatch")
+    if page_storage["fixture"]["sha256"] != sha256(paths["fixture"]):
+        raise ValueError("page fixture hash mismatch")
+    if page_manifest["fixtureFiles"]["pdf"]["sha256"] != sha256(paths["pagePdfDocument"]):
+        raise ValueError("page PDF hash mismatch")
+    page_by_format = {row["format"]: row for row in page_storage["results"]}
+    pdf_page = page_by_format["pdf"]
+    required_page_checks = ("pageCountMatchesGold", "databaseSectionsMatchGold",
+                            "allCitationPagesMatchGold", "allGoldSectionsObservedInCitations",
+                            "questionEvidenceSectionsMatchGold")
+    if any(not pdf_page["checks"].get(name) for name in required_page_checks):
+        raise ValueError("PDF page evidence gate failed")
+    for name in ("markdown", "docx"):
+        if not page_by_format[name]["checks"].get("databaseDoesNotGuessPages") \
+                or not page_by_format[name]["checks"].get("citationsDoNotGuessPages"):
+            raise ValueError(f"unknown-page semantics gate failed: {name}")
+    page_rows = [{
+        "format": name,
+        "ingestElapsedMs": page_manifest["formatResults"][name]["ingestElapsedMs"],
+        "pageCount": row["mysql"]["pageCount"],
+        "childChunks": row["mysql"]["childChunkRows"],
+        "qdrantPoints": row["qdrant"]["exactPointCount"],
+        "checks": row["checks"],
+        "chunks": row["pageMetadata"]["chunks"],
+        "queryCitationCount": len(row["pageMetadata"]["queryCitations"]),
+    } for name, row in sorted(page_by_format.items())]
+
     fixture = load_json(paths["fixture"])
     no_answer = []
     for format_name in ("markdown", "docx", "pdf"):
@@ -344,6 +394,14 @@ def main() -> None:
             "resources": {"remote": remote_resources, "localJava": local_resources},
             "storageConsistencyPassed": format_storage["passed"],
         },
+        "pageMetadataE2E": {
+            "runId": page_manifest["runId"], "codeRevision": page_manifest["codeRevision"],
+            "appJarSha256": page_manifest["appJarSha256"],
+            "passedQueries": sum(1 for row in page_queries if row["passed"]),
+            "degradedQueries": sum(1 for row in page_queries if row["degraded"]),
+            "formats": page_rows, "storageConsistencyPassed": page_storage["passed"],
+            "goldSha256": page_storage["pageGold"]["sha256"],
+        },
         "bottlenecks": [
             {"rank": 1, "component": "Reranker CPU推理与排队", "fact": f"并发4出现{failed[0]['elapsedMs'] / 1000:.3f}s降级回退；稳定轮Rerank占完整链路绝大部分延迟。",
              "supportedHypothesis": "Top10按3/3/3/1串行子批是代码层候选解释；Semaphore等待与远端排队各自贡献尚未分段测量。",
@@ -354,9 +412,9 @@ def main() -> None:
             {"rank": 3, "component": "融合TopK/阈值召回损失", "fact": f"{internal_manifest['recordCount']}条内部诊断中{internal_manifest['firstObservedTotalLossCounts']['FUSION_THRESHOLD_OR_TOPK_LOSS']}条首个完全损失位于fusion threshold/TopK联合步骤。",
              "supportedHypothesis": "当前轨迹将threshold与TopK合并，尚不能进一步分离两者。", "impact": "部分Gold在原始候选存在但融合后消失。",
              "optimization": "拆分threshold与TopK轨迹，调大fusion候选并做按query类型的权重/阈值校准。"},
-            {"rank": 4, "component": "页级元数据缺口", "fact": "r6 DOCX/PDF均成功解析并召回，但数据库pageCount仍为0。",
-             "supportedHypothesis": "Docling结果到领域模型的页级元数据没有产出/映射闭环。", "impact": "不能把0解释为0页，页码引用与页级审计尚未被证明。",
-             "optimization": "解析响应保留页span并贯穿chunk/citation；增加多页PDF页码金标测试。"},
+            {"rank": 4, "component": "DOCX固定页语义缺失", "fact": "r4三页PDF的6个章节、30条查询citation和5个问题证据章节均通过页码金标；同轮DOCX的Docling pages为空，数据库与citation保持null。",
+             "supportedHypothesis": "流式DOCX在Docling 1.26.0响应中没有page provenance；当前证据不能把它解释为解析丢失或0页。", "impact": "PDF页码链路已闭环，但DOCX仍不能提供固定页审计。",
+             "optimization": "若业务刚需DOCX页码，先转换为固定版式PDF或引入能输出版式页span的解析器，再用同一金标门禁复测。"},
         ],
         "limitations": [
             "SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。",
@@ -364,7 +422,7 @@ def main() -> None:
             "无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。",
             "r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。",
             "内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。",
-            "fusion threshold与TopK尚未分开留痕；页数为未知而非0页。",
+            "fusion threshold与TopK尚未分开留痕；PDF页码已闭环，但Markdown和当前Docling DOCX的页数仍是未知而非0页。",
         ],
         "evidence": evidence_hashes,
     }
@@ -388,7 +446,8 @@ def main() -> None:
     add(f"2. Rerank保持Recall@10不变，却把MRR/nDCG/MAP分别提高{deltas['rerankVsHybrid']['mrrAt10']['absolute']:.6f}/{deltas['rerankVsHybrid']['ndcgAt10']['absolute']:.6f}/{deltas['rerankVsHybrid']['mapAt10']['absolute']:.6f}；代价是质量run p50从{hybrid_quality['elapsedMs']['p50'] / 1000:.3f}s升至{rerank_quality['elapsedMs']['p50'] / 1000:.3f}s。它改善{failure_counts['rerank_reorder_gain']}个query的排序，也伤害{failure_counts['rerank_reorder_harm']}个query；{internal_manifest['queryCount']}个内部复测代表中为{internal_manifest['rerankEffectCounts']['RERANK_ORDER_GAIN']}改善、{internal_manifest['rerankEffectCounts']['RERANK_ORDER_HARM']}伤害、{internal_manifest['rerankEffectCounts']['RERANK_NEUTRAL']}不变。")
     add(f"3. 在本次SciFact在线检索负载中，首个已证明的主导瓶颈是Reranker：并发4出现{failed[0]['elapsedMs'] / 1000:.3f}s fallback，Reranker CPU峰值{boundary_resources['rag-reranker']['cpuPeakPct']:.2f}%；稳定健康容量只证明到并发2。该结论不外推到大文件摄取或多租户全系统。")
     add(f"4. 三格式真实MinIO链路r6为{format_manifest['retrievalEvidencePassed']}/{format_manifest['retrievalEvidenceTotal']}检索证据词项覆盖、0降级；MySQL child chunk/distinct vector point与Qdrant exact point一致，MinIO哈希一致。PDF摄取{pdf_format['ingestElapsedMs'] / 1000:.3f}s，其中Docling HTTP 34.163s，是本轮摄取主导阶段。")
-    add("5. 尚不能宣告完整答案质量闭环：SciFact没有gold answer；无答案题虽然能召回“文档未提供该值”的段落，但检索层仍返回5～6条候选，Agent是否拒绝编造尚未黑盒评测。")
+    add(f"5. 页码链路已在独立r4真实复测中闭环：三页PDF的pageCount=3，6个章节数据库页码为1/1/1/2/2/3，{len(pdf_page['pageMetadata']['queryCitations'])}条查询citation全部与金标一致，5/5问题均召回其正确证据章节和页码。Markdown与当前Docling DOCX继续按页语义未知处理，没有猜页码。")
+    add("6. 尚不能宣告完整答案质量闭环：SciFact没有gold answer；无答案题虽然能召回“文档未提供该值”的段落，但检索层仍返回5～6条候选，Agent是否拒绝编造尚未黑盒评测。")
     add("")
     add("## 二、测试口径与有效数据")
     add("")
@@ -399,6 +458,7 @@ def main() -> None:
     add("| 稳定性能r1+r2 | 320 measured，另有warmup | 并发1/2、顺序反转 | 已验证健康容量和延迟范围 |")
     add(f"| 并发4边界 | 共{len(boundary_run)}条measured（并发1=80、2=80、4=39） | 容量失败定位 | 并发4不能作为稳定分位数，只作失败边界 |")
     add("| 三格式r6 | 3文件、15答案问题、3无答案探针 | 真实MinIO摄取/召回 | 格式功能、三端一致性、小文件单线程性能 |")
+    add("| 页码r4 | 同一3文件、15答案问题、PDF 6章节金标 | 真实MinIO重新摄取/召回 | PDF页码准确性、未知页语义不猜测 |")
     add("")
     add("## 三、RAG技术点前后差异")
     add("")
@@ -510,6 +570,30 @@ def main() -> None:
     add("")
     add(f"r6资源采样：{remote_resources['rag-docling']['samples']}个远端样本、{local_resources['samples']}个Java样本。Docling CPU峰值{remote_resources['rag-docling']['cpuPeakPct']:.2f}%，Reranker {remote_resources['rag-reranker']['cpuPeakPct']:.2f}%，Embedding {remote_resources['rag-embedding']['cpuPeakPct']:.2f}%；Java CPU峰值{local_resources['cpuPeakPct']:.1f}%、RSS峰值{local_resources['rssPeakKiB']}KiB，前后容器0重启、无OOM。单次PDF Docling日志为34163ms，因此其{pdf_format['ingestElapsedMs'] / 1000:.3f}s摄取耗时主要由解析占据。")
     add("")
+    add("### 页码修复前后与真实金标")
+    add("")
+    add("r1在业务上传前因测试启动脚本误取MinIO账号字段失败；r2在DOCX遇到`pages={}`时被错误判为非法；修正空页为未知后，r3完成15/15，但连续H2被旧标题栈错误嵌套，PDF只有文档标题能匹配页码。r4改用真实标题level出栈后重新摄取同一份PDF，以下结果全部来自MySQL chunk与原始HTTP citation，不是单元测试推断。")
+    add("")
+    add("| 格式 | r4摄取ms | pageCount语义 | child块/Qdrant点 | 查询citation | 页码门禁 | 对应文档 |")
+    add("|---|---:|---|---:|---:|---|---|")
+    page_document_links = {"markdown": "../../evaluation-data/format-e2e/format-fidelity.md",
+                           "docx": "../../evaluation-data/format-e2e/format-fidelity.docx",
+                           "pdf": "../../evaluation-data/format-e2e/format-fidelity.pdf"}
+    for row in page_rows:
+        semantics = (f"{row['pageCount']}页（固定）" if row["format"] == "pdf" else "未知（数据库/citation均null）")
+        gate = ("6章节、全部citation、5问题证据章节均匹配" if row["format"] == "pdf"
+                else "未猜测页码")
+        add(f"| {row['format']} | {row['ingestElapsedMs']} | {semantics} | {row['childChunks']}/{row['qdrantPoints']} | {row['queryCitationCount']} | {gate} | [源文档]({page_document_links[row['format']]}) |")
+    add("")
+    add("PDF章节金标与数据库实值：")
+    add("")
+    add("| 章节 | pageFrom/pageTo |")
+    add("|---|---:|")
+    for chunk in next(row for row in page_rows if row["format"] == "pdf")["chunks"]:
+        add(f"| {chunk['headingPath']} | {chunk['pageFrom']}/{chunk['pageTo']} |")
+    add("")
+    add("页码失败的因果链是：Docling JSON本身已有正确provenance → Java同时拿到Markdown H2与JSON level=1 → 旧代码按栈长度出栈，把连续H2错误嵌套 → 文本路径不等导致章节页码为null → r4按真实level弹栈后路径一致，数据库与citation金标全部恢复。DOCX则停在更早的解析输出阶段：Docling响应没有pages/provenance，因此系统保留null；这不是同一个标题栈问题。")
+    add("")
     add("无答案探针：")
     add("")
     add("| 格式 | 问题 | 返回citation数 | Top heading | 判定 |")
@@ -522,7 +606,7 @@ def main() -> None:
     add("1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。")
     add(f"2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense {dense_quality['recallAt10']:.6f}，同时报告MRR/延迟代价。")
     add("3. Docling按内容哈希缓存解析结果，并分离PDF重任务队列。门槛：真实多页/表格PDF至少30份，报告p50/p95、页面/表格保真和失败重试。")
-    add("4. 页span贯穿解析、chunk、Qdrant payload、citation和回源。门槛：多页PDF逐页金标，pageCount不再为未知，引用页码精确率单独报告。")
+    add("4. PDF页span已贯穿解析、chunk、Qdrant payload和citation并通过单份三页金标；下一门槛是至少30份多页/表格/扫描PDF以及引用回源黑盒。DOCX若刚需固定页码，需增加固定版式转换或替换解析器后用相同金标门禁。")
     add("5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。")
     add("")
     add("## 九、明确未测与证据限制")

@@ -1,0 +1,872 @@
+{
+  "capturedAt": "2026-07-19T23:31:20.405691Z",
+  "collection": "ai_agent_rag_e5_v1",
+  "fixture": {
+    "path": "fixture.json",
+    "sha256": "2d55a3baa532bded0b9b67e95afe15219da5f8b227eb57cfa12e1d2620753ad8"
+  },
+  "pageGold": {
+    "path": "page-gold.json",
+    "sha256": "47a130a8d0a7350cab9c5cb43c8d2cd32931a95282fa3a5ee61b76bcb8d5919b"
+  },
+  "passed": true,
+  "results": [
+    {
+      "checks": {
+        "childAndDistinctVectorPointCountMatch": true,
+        "citationsDoNotGuessPages": true,
+        "databaseDoesNotGuessPages": true,
+        "mysqlAndQdrantCountMatch": true,
+        "pageCountMatchesGold": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_3ad7df2eef57443386076a34cf2f9210",
+      "format": "docx",
+      "minio": {
+        "parsed": {
+          "bytes": 1428,
+          "exists": true,
+          "sha256": "c1af4a1e51bb1a8060cb126110596e63d287224845d90159661ff69a280f4b2b"
+        },
+        "source": {
+          "bytes": 10605,
+          "exists": true,
+          "sha256": "6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52"
+        }
+      },
+      "mysql": {
+        "characterCount": 1428,
+        "childChunkRows": 6,
+        "distinctVectorPointIds": 6,
+        "documentChunkCount": 6,
+        "documentPageCount": 0,
+        "pageCount": 0,
+        "physicalChunkRows": 12,
+        "versionChunkCount": 6
+      },
+      "pageMetadata": {
+        "chunks": [
+          {
+            "chunkId": "chk_8b61becb2c71dd44a038e50eea8fd40456d757a32dc4297a",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_748df76c4c38dbfa0246dd2a94745d7780eb0964f80c72d9",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_f78016e04780b4c1c3922073e987cd17efa3393a7fce9c13",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_4f068a58e5c3f0d67857263b7c9ccf70571ee5ed96f1fa77",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_04d09e61af4efb090fb8e33e82426f38e281ddbee4c74845",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_83c3a16ef0067ef0189e184b8ab64ae33528f66259989c54",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageFrom": null,
+            "pageTo": null
+          }
+        ],
+        "queryCitations": [
+          {
+            "citationId": "cite_7a87d41ac9b2def9ee0d3cc3",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_3063891899a4a3ce949e9add",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_07f049f4f87521c109f066e2",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_1d50521924ae1a0c4decf609",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_7eec6546ca08cbd82e90a025",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_1a056a80269ff43b1389d970",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_8d079e5aea0d8fae49005631",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_e3fcbf8c9e4009f8332f5fb6",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_3aeecefde8849086eaaf208f",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_967e28c8ffe8fc35d3743642",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_edb28e573298592f769ac922",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_c40211818657a755ddfc6336",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_82ceb6e7dc801bb09d3a7a98",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_aec7d978ac8426c9f8a6292f",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_b1d2bb8e400942b66a55d7a2",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_6cb085a9e1311b42e09a345c",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_6ca5fc7a85bcdc94bf70255b",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_3bdc70ab6440178363f917e2",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_162cb342d7c38439c5cc46d3",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_f360527ea8cc06ea9bc4ffd6",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_9d4038ee5fed524ec52f8927",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_d7c0ea4558534b532b1c5118",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_0f9b3c345e5c47602bfaaf62",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_fe6f1377760d7635d9910d11",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_a00660ea86b9278a1ca1701a",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_40a232da00fd5f8baecf03b8",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_a5e66560a1b3bf8243ad94e3",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_ba87d3f375c12637d44dc891",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_29d9642990ca399283f0e6b1",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_d3b48866dfd0c23c803fd2db",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 6
+          }
+        ]
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 6
+      },
+      "status": "ready",
+      "tenantId": "tenant_2299789e-2067-4f9d-96c1-c9539d05a0e9",
+      "versionId": "ragver_7f64f3b5460f4340bc2a45cc002fe4c2"
+    },
+    {
+      "checks": {
+        "childAndDistinctVectorPointCountMatch": true,
+        "citationsDoNotGuessPages": true,
+        "databaseDoesNotGuessPages": true,
+        "mysqlAndQdrantCountMatch": true,
+        "pageCountMatchesGold": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_1891b6a886a94c27873ee72ccedae169",
+      "format": "markdown",
+      "minio": {
+        "parsed": {
+          "bytes": 1232,
+          "exists": true,
+          "sha256": "a7183cdf343754c54a569a8e64b135dd55528e767973256383cafc57a56d898d"
+        },
+        "source": {
+          "bytes": 1233,
+          "exists": true,
+          "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+        }
+      },
+      "mysql": {
+        "characterCount": 1232,
+        "childChunkRows": 5,
+        "distinctVectorPointIds": 5,
+        "documentChunkCount": 5,
+        "documentPageCount": 0,
+        "pageCount": 0,
+        "physicalChunkRows": 10,
+        "versionChunkCount": 5
+      },
+      "pageMetadata": {
+        "chunks": [
+          {
+            "chunkId": "chk_33cc182444be283d088c4c8cf887cf107d6837c0061ec462",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_646d3b6d8e643e26196cd076ea858cf8c080693435852b5e",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_fefc71809ef78e92e5756827278e3eacf82b9faa5c06a569",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_f8f481f98e41950925d9e01feaaf5065c104613ab8934d26",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageFrom": null,
+            "pageTo": null
+          },
+          {
+            "chunkId": "chk_473c304ec44dfc7e4227d3ae24a3fc9ce0d0519c5863ef9f",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageFrom": null,
+            "pageTo": null
+          }
+        ],
+        "queryCitations": [
+          {
+            "citationId": "cite_7ff7328a93fb4da199c1642c",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_f540f30aa4ca77bf0526f8e4",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_faa254f14db60cf4a2e198b5",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_f0691768cbb3b1c698e96754",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_b7a691eb4b5148f57490022a",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q1",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_8248eba117289bec9ea13855",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_be6a8fcd68b1039dcc0cd187",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_bc1794cdc189df361a7b923a",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_ba9c9b5834a09f7be0efe1d3",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_fd3f6203e01c5c7377a64f99",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q2",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_63a9cdd035801293b514b1d9",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_d9a9c08d9905a47680407a10",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_d02c15e171cbf886f2c54075",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_15f578f1143fc71ed3753537",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_5cffb97aae455982c26838e4",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q3",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_8cbe2f639549afbef2be5a86",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_ac14c571c9d1de5772a0d91c",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_22bbaadac5c5cc352abba163",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_e3d86183750fc7654e1119ce",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_65f0fe33920a1307afc8410c",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q4",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_7d11593e0332788d0a9ca13f",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Identity and access",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_3b34279aff94aabe1620ff6b",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Cross-page continuity",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_9f64a7668e104a9b43353255",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Sensor limits",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_399a158c0cf72e60dbbc8106",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Emergency procedure",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_49aca52a3d82ef93fb948caa",
+            "headingPath": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+            "pageNumber": null,
+            "queryId": "format-q5",
+            "rank": 5
+          }
+        ]
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 5
+      },
+      "status": "ready",
+      "tenantId": "tenant_2299789e-2067-4f9d-96c1-c9539d05a0e9",
+      "versionId": "ragver_9d5550ce06ae411ca9e795405ac2fc24"
+    },
+    {
+      "checks": {
+        "allCitationPagesMatchGold": true,
+        "allGoldSectionsObservedInCitations": true,
+        "childAndDistinctVectorPointCountMatch": true,
+        "databaseSectionsMatchGold": true,
+        "mysqlAndQdrantCountMatch": true,
+        "pageCountMatchesGold": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "questionEvidenceSectionsMatchGold": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_7748121232cb4483916dc59a1280dae1",
+      "format": "pdf",
+      "minio": {
+        "parsed": {
+          "bytes": 1375,
+          "exists": true,
+          "sha256": "8bc95d8da17ef9f1c8344735c46226b2d65488f80a7a13cb452ef480c96dc929"
+        },
+        "source": {
+          "bytes": 4180,
+          "exists": true,
+          "sha256": "5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448"
+        }
+      },
+      "mysql": {
+        "characterCount": 1375,
+        "childChunkRows": 6,
+        "distinctVectorPointIds": 6,
+        "documentChunkCount": 6,
+        "documentPageCount": 3,
+        "pageCount": 3,
+        "physicalChunkRows": 12,
+        "versionChunkCount": 6
+      },
+      "pageMetadata": {
+        "chunks": [
+          {
+            "chunkId": "chk_73cfc5761f55ba392ad727c543e1b8e9359966c1ef76f10c",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageFrom": 1,
+            "pageTo": 1
+          },
+          {
+            "chunkId": "chk_453a534d787a946b2c4aa64056fc05121275aeb1182c70d6",
+            "headingPath": "Identity and access",
+            "pageFrom": 1,
+            "pageTo": 1
+          },
+          {
+            "chunkId": "chk_09ce9e342be5ac9f0112776fa5b182f385b3a56d9d2fdf04",
+            "headingPath": "Sensor limits",
+            "pageFrom": 1,
+            "pageTo": 1
+          },
+          {
+            "chunkId": "chk_18fbbb6455c8b2dea9e0eae3d77792acc1839ea014f79cdf",
+            "headingPath": "Emergency procedure",
+            "pageFrom": 2,
+            "pageTo": 2
+          },
+          {
+            "chunkId": "chk_b8c9f4b3d2a0b3209475db8068cbef95289faff5ab29b96c",
+            "headingPath": "Cross-page continuity",
+            "pageFrom": 2,
+            "pageTo": 2
+          },
+          {
+            "chunkId": "chk_fb9d21b61b3cc92d8c04fa5ac747ec683909d1414a00d2d5",
+            "headingPath": "Deliberate omissions",
+            "pageFrom": 3,
+            "pageTo": 3
+          }
+        ],
+        "queryCitations": [
+          {
+            "citationId": "cite_47c03f9ee47bca794bfc485b",
+            "headingPath": "Identity and access",
+            "pageNumber": 1,
+            "queryId": "format-q1",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_585ff462a144bf8277a91b8c",
+            "headingPath": "Cross-page continuity",
+            "pageNumber": 2,
+            "queryId": "format-q1",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_af54ec4248c940de1100e84e",
+            "headingPath": "Sensor limits",
+            "pageNumber": 1,
+            "queryId": "format-q1",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_23a7190e45267cd2538f62a4",
+            "headingPath": "Emergency procedure",
+            "pageNumber": 2,
+            "queryId": "format-q1",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_61fd45da3e919d9c8ffaba24",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": 1,
+            "queryId": "format-q1",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_505a8146991cae5c1c433e11",
+            "headingPath": "Deliberate omissions",
+            "pageNumber": 3,
+            "queryId": "format-q1",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_4f03cc37431bda9262ea3f5c",
+            "headingPath": "Sensor limits",
+            "pageNumber": 1,
+            "queryId": "format-q2",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_052856a98498e497c0a4125b",
+            "headingPath": "Emergency procedure",
+            "pageNumber": 2,
+            "queryId": "format-q2",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_5ac60947013cab96ec775743",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": 1,
+            "queryId": "format-q2",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_b46d84d9de2b4aa3f7b6a673",
+            "headingPath": "Identity and access",
+            "pageNumber": 1,
+            "queryId": "format-q2",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_2eb658496b17829e60025fbb",
+            "headingPath": "Cross-page continuity",
+            "pageNumber": 2,
+            "queryId": "format-q2",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_6cf9f4a0fc174efc690dd951",
+            "headingPath": "Deliberate omissions",
+            "pageNumber": 3,
+            "queryId": "format-q2",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_69618bbd8b5cd5832980dee5",
+            "headingPath": "Emergency procedure",
+            "pageNumber": 2,
+            "queryId": "format-q3",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_be90e28f616aa0946fbefbcb",
+            "headingPath": "Sensor limits",
+            "pageNumber": 1,
+            "queryId": "format-q3",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_6dcfb4324d8792d0c48e3073",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": 1,
+            "queryId": "format-q3",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_13810fe649a70858eda6944e",
+            "headingPath": "Cross-page continuity",
+            "pageNumber": 2,
+            "queryId": "format-q3",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_e945a6b902f690df90be42c4",
+            "headingPath": "Identity and access",
+            "pageNumber": 1,
+            "queryId": "format-q3",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_acf7ff7f7b08ca70acf831cd",
+            "headingPath": "Deliberate omissions",
+            "pageNumber": 3,
+            "queryId": "format-q3",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_24d0daffd0f7ead4d9ae2f78",
+            "headingPath": "Cross-page continuity",
+            "pageNumber": 2,
+            "queryId": "format-q4",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_e4e39aa4c6e21d1e7f5e9c40",
+            "headingPath": "Identity and access",
+            "pageNumber": 1,
+            "queryId": "format-q4",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_fd452643f3a23fb2a0aa88b6",
+            "headingPath": "Sensor limits",
+            "pageNumber": 1,
+            "queryId": "format-q4",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_2badfaf979bbe9f047a68659",
+            "headingPath": "Deliberate omissions",
+            "pageNumber": 3,
+            "queryId": "format-q4",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_c22e9cd6a6075775ff563854",
+            "headingPath": "Emergency procedure",
+            "pageNumber": 2,
+            "queryId": "format-q4",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_f1de9f17b60b494e801b9f36",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": 1,
+            "queryId": "format-q4",
+            "rank": 6
+          },
+          {
+            "citationId": "cite_90cb97deb0b8b787163fff62",
+            "headingPath": "Identity and access",
+            "pageNumber": 1,
+            "queryId": "format-q5",
+            "rank": 1
+          },
+          {
+            "citationId": "cite_b6018384aae4cb3a2b308bed",
+            "headingPath": "Cross-page continuity",
+            "pageNumber": 2,
+            "queryId": "format-q5",
+            "rank": 2
+          },
+          {
+            "citationId": "cite_1c14f701ade4345ca71e7760",
+            "headingPath": "RAG Format Fidelity Observatory Manual",
+            "pageNumber": 1,
+            "queryId": "format-q5",
+            "rank": 3
+          },
+          {
+            "citationId": "cite_001fb58e3989bb7c57eff5b1",
+            "headingPath": "Sensor limits",
+            "pageNumber": 1,
+            "queryId": "format-q5",
+            "rank": 4
+          },
+          {
+            "citationId": "cite_6e6f99ecf8c15997d7b6d931",
+            "headingPath": "Emergency procedure",
+            "pageNumber": 2,
+            "queryId": "format-q5",
+            "rank": 5
+          },
+          {
+            "citationId": "cite_c54124b12a5f1283e9e31c32",
+            "headingPath": "Deliberate omissions",
+            "pageNumber": 3,
+            "queryId": "format-q5",
+            "rank": 6
+          }
+        ]
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 6
+      },
+      "status": "ready",
+      "tenantId": "tenant_2299789e-2067-4f9d-96c1-c9539d05a0e9",
+      "versionId": "ragver_5e852468b73840c39fd92eb827cdecbc"
+    }
+  ],
+  "runId": "format-e2e-page-r4-27f9a19-minio",
+  "schemaVersion": 1
+}

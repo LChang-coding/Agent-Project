@@ -1,0 +1,22 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "bindingId": "binding_7cd5e12c03a44dc99ba3c621deece97c",
+      "knowledgeBaseId": "kb_843dc11ecb3b450f8d16387238e6d902",
+      "maxTokens": 4096,
+      "priority": 100,
+      "profileId": "profile_2d7c5e53ad874831b546130dff87ffdf",
+      "required": true,
+      "revision": 0,
+      "targetId": "format_format-e2e-page-r3-3b61921-minio_docx",
+      "targetType": "workflow"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 420,
+    "httpStatus": 200,
+    "responseBytes": 349
+  }
+}

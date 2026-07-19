@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourceDocument": "format-fidelity.pdf",
+  "formats": {
+    "markdown": {
+      "pageSemantics": "unknown",
+      "expectedPageCount": 0
+    },
+    "docx": {
+      "pageSemantics": "unknown",
+      "expectedPageCount": 0
+    },
+    "pdf": {
+      "pageSemantics": "fixed",
+      "expectedPageCount": 3,
+      "sections": {
+        "RAG Format Fidelity Observatory Manual": 1,
+        "Identity and access": 1,
+        "Sensor limits": 1,
+        "Emergency procedure": 2,
+        "Cross-page continuity": 2,
+        "Deliberate omissions": 3
+      }
+    }
+  }
+}
