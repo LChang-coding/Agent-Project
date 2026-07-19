@@ -1704,3 +1704,30 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 将该隔离DELETE任务真实改为DEAD、`attempt_count=3`并写入旧`finished_at`后，用过期`expectedRevision=0`重复DELETE；API返回`0000/pending`，数据库变为`pending / attempt_count=0 / finished_at=NULL / row_version=1`，证明幂等恢复忽略旧文档revision且Mapper确实清理旧终态时间。
 - 测试结束定向删除Outbox、task、chunk、version、binding、profile、KB、user_secret、tenant_user、user_account和tenant；第一次聚合残留核对为1，发现清理SQL漏掉`rag_document`，补删后该表残留为0，而其余九类表第一次已为0。8093随后优雅关闭；8091/8092未停止，临时Token和随机密码已从交互shell变量清除。
 - 本阶段仍未证明三项：登记事务在中途version CAS/Outbox失败时真实回滚；最终收口task stale-fence时version/document/chunk purge真实回滚；单Worker执行Qdrant、chunk、MinIO全链后完成删除。也未执行浏览器UI删除E2E。原因是当前共享库存在其他评测任务，启用新Worker会越过本次隔离范围；这些项目继续标为“未测试/证据不足”，不能用并发受理结果代替。
+
+#### Agent/Workflow RAG最终回答引用闭环切片计划（执行前）
+
+1. 先只读追踪检索贡献从`RagContextContributor`、Context Manager、ADK模型回调到流式/非流式响应和会话消息落库的完整数据路径，确认并发作用域、可用回调和现有表字段；不靠解析注入XML反推授权引用集合。
+2. 为一次模型调用保留结构化`retrievalId + allowedCitationIds`，最终答案只接受本次实际注入且属于当前tenant/user/session/run的citation ID；模型伪造、跨检索、重复和格式损坏的引用必须被Validator明确识别并留痕，不能当有效引用返回。
+3. 非流式响应与流式终态统一输出验证后的引用元数据；正文增量仍原样流式发送，只在完整答案形成后验证，避免对半截citation误判。Agent与Workflow复用同一闭环，不能只修一个入口。
+4. 保存assistant消息时持久化`retrievalId、allowed/used/invalid citation IDs`及验证状态；增加强租户授权的引用回源API，只返回当前用户仍有权访问且审计记录匹配的文档标题、版本、页码/标题路径和必要片段，不允许凭citationId跨租户枚举。
+5. 测试覆盖无RAG、有效引用、伪造引用、跨retrieval引用、重复引用、流式分片、并发run隔离、会话落库和授权回源；先跑Java 17定向测试，再跑全部RAG/Agent相关回归及可行的真实流式/非流式黑盒。
+6. 完成后在本计划追加实际代码、首次失败、最终通过数、真实未测边界和证据路径；只暂存本切片文件，使用中文本地提交。`agent-eval`技能的可复现原则用于固定commit、确定性judge与重复试验，`benchmark`技能用于延迟/构建口径，不将其误称为RAG质量评测器。
+
+#### RAG召回失败案例可复算报告切片计划（执行前）
+
+1. 在benchmark模块增加纯离线命令，输入固定为SciFact `queries.jsonl + qrels.tsv + 本地Markdown语料 + document-map.jsonl + r11 run.jsonl`；校验四变体每个query恰一条且无error/degraded/empty，禁止从不完整run产出“最终失败案例”。
+2. 程序化分类并确定性选择代表案例：Dense缺失/混合命中、Sparse缺失/混合命中、Rerank救回、Rerank伤害、关闭单路后失败、全变体持续漏召回、命中但错排；同类按指标差、queryId稳定排序，避免人工挑样本美化结论。
+3. 每个case输出完整问题、全部gold文档、标题和本地Markdown可核验片段、四变体Top10文档ID/标题/名次、逐query Recall/MRR/nDCG差值、首个“可观测”失败阶段，以及事实/推断/替代解释/反证实验。现有run没有逐候选分数或内部候选ID时必须显式写`证据未采集`，不得伪造。
+4. 同时生成机器可读JSON和面向用户的Markdown；写入输入SHA-256、生成器版本、分类规则、样本数和证据局限，并提供一键复算命令。测试覆盖分类、确定性、文档解析、hash、缺变体/重复/错误run拒绝和正文片段上限。
+5. 用当前r11原始产物真实生成报告，独立复核case的rank与qrels/正文一致；记录输出hash、各类别数量、实际缺失类别和失败轨迹，完成后中文提交。该切片先建立用户最终报告最核心的可审计证据，不代表前述Agent引用闭环已经完成。
+
+#### RAG召回失败案例可复算报告切片执行结果
+
+- benchmark CLI新增`failure-cases`离线命令和`RagFailureCaseReporter`；输入严格固定为queries、qrels、本地Markdown、document-map和完整run。它拒绝未知/重复/缺失四变体、error、degraded和空排名，禁止从不健康run生成看似完整的案例结论。
+- 分类由逐query Recall@10/MRR@10确定性完成，每类按指标差降序、queryId稳定排序，最多展示3个。r11全量计数：Dense miss→Hybrid hit 10，Sparse miss→Hybrid hit 81，Dense-only success 98，Sparse-only success 3，四变体persistent miss 45，Rerank reorder gain 67、reorder harm 29；严格Top10命中性口径下Rerank rescue/harm均为0，未为了满足预设类别捏造案例。
+- 机器JSON与Markdown共展示21个代表case；每个包含完整问题、全部gold文档ID/标题/本地heading/600字符内正文片段、四变体最终Top10文档ID/标题/名次、Recall/MRR/nDCG、阶段耗时和候选计数，并新增首个可观测失败步骤前三条非gold错误召回文档正文。原始run没有逐候选分数和内部Top100 ID，因此score为null/`not_captured_in_run_jsonl`，因果说明拆分为直接事实、可证伪推断、其他解释和反证实验。
+- 新增3项测试覆盖稳定生成/正文展示/分类、坏run拒绝和禁止覆盖证据；benchmark干净`mvn clean test package`最终40/40通过，0 failure/error/skipped，BUILD SUCCESS，4.177秒。
+- 真实生成后用第二个全新临时目录再次执行同一CLI，JSON和Markdown均字节级`cmp`相同；随后用独立`jq`断言复核300查询/1200记录、21 case、四变体集合、正文非空及各分类的success/MRR关系全部通过。
+- 失败轨迹如实保留：首次全局`git diff --check`被不属于本切片的现有运行日志尾随空格阻断，改为仅检查本切片文件后通过；第一次真实报告复算数值一致但字节`cmp`失败，根因是`Map.of/Map.copyOf`字段顺序不稳定，改为显式LinkedHashMap/按键排序后完整重跑并通过。未修改或暂存用户日志。
+- 最终报告JSON SHA-256=`61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0`，Markdown=`6da9cb37537682b733476eba8942418fb05dd226a6be08c933e8f1afbe3a4657`，CLI JAR=`8b667a993403eac4fb7b4d48d3fac213ae4d40bc8fea4313b46c350265e5f91d`。报告和复算命令已加入`docs/rag/evaluation.md`；这完成失败案例证据切片，但不代表PDF/DOCX E2E、内部候选分数留痕或Agent最终回答引用闭环已经完成。

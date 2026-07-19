@@ -190,6 +190,28 @@ java -jar ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar
 
 Rerank相对未重排Hybrid的MRR/nDCG/MAP分别提高约0.079398/0.058705/0.075396，Recall@10不变。但Dense在四项总体指标上仍略高，所以不能声称“组件越多质量必然越好”。CLI `score`生成独立`metrics-independent.json`，再用第二套标准库实现复算，最大绝对浮点差为`4.44e-16`。
 
+### 召回失败案例与因果边界
+
+项目内的[失败案例Markdown](evaluation-results/scifact-r11-failure-cases.md)和[机器可读JSON](evaluation-results/scifact-r11-failure-cases.json)由benchmark CLI直接读取上述r11 `run.jsonl`、本地queries/qrels、document-map和已固化Markdown语料生成。报告展示完整问题、gold标题与正文片段、四变体Top10/名次/逐query指标，并展示首个可观测失败步骤中前三条错误召回文档的标题与正文片段。
+
+全量300查询的确定性分类计数为：Dense未命中而Hybrid命中10，Sparse未命中而Hybrid命中81，Dense单路成功98，Sparse单路成功3，四变体持续Top10漏召回45，Rerank MRR改善67、MRR下降29。严格以Recall@10从0到1/1到0定义时，Rerank rescue和harm均为0；这与Hybrid和Rerank的Recall@10完全相同一致，说明本轮Rerank只改变候选名次，没有改变Top10文档集合的命中性。报告每类最多展示3个代表case，按指标差和queryId确定性排序，共21个case；两次独立生成已做字节级`cmp`。
+
+复算命令：
+
+```bash
+java -jar ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar failure-cases \
+  --queries docs/rag/evaluation-data/scifact/prepared/queries.jsonl \
+  --qrels docs/rag/evaluation-data/scifact/prepared/qrels.tsv \
+  --documents docs/rag/evaluation-data/scifact/prepared/documents/benchmark-0001.md \
+  --document-map docs/rag/evaluation-data/scifact/prepared/document-map.jsonl \
+  --run /tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-3d9510c-r11/run.jsonl \
+  --out-json /path/to/new-report.json \
+  --out-markdown /path/to/new-report.md \
+  --max-per-category 3
+```
+
+报告JSON SHA-256为`61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0`，Markdown为`6da9cb37537682b733476eba8942418fb05dd226a6be08c933e8f1afbe3a4657`，本次生成CLI JAR为`8b667a993403eac4fb7b4d48d3fac213ae4d40bc8fea4313b46c350265e5f91d`。原始run没有保存逐候选分数、Dense/Sparse Top100文档ID或RRF逐项贡献，所以报告明确把这些字段标为“未采集”；首个失效点是基于四个消融终态的首个可观测步骤，内部算子级因果仍需增加候选/分数留痕后复跑代表query，不能由当前结果编造。
+
 关键SHA-256：正式run `24331ecdbb58978e37a92bff9c1afad5c09d1abadba68b88fdbf4d0b0ee792a5`，metrics `e48c03a097ae8b02198b5af70cd6ff7703cf91daa4cf9fac0ba26ee046674c3e`，independent metrics `e3ac2eb39bb494df425de0140900bc47d0656f2b7c42989cbd80a06dc320b352`，CLI JAR `970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`，App JAR `484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。质量run由120/240秒客户策略的两个分段构成，其合并延迟不用作性能结论。
 
 ## 已验证的稳定容量结果

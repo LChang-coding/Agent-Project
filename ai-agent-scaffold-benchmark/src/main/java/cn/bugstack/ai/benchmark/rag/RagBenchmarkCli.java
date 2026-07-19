@@ -34,8 +34,21 @@ public final class RagBenchmarkCli {
             case "run" -> run(options);
             case "evaluate" -> evaluate(options);
             case "load" -> load(options);
+            case "failure-cases" -> failureCases(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
+    }
+
+    private static void failureCases(Map<String, String> options) throws IOException {
+        Path json = path(options, "out-json");
+        Path markdown = path(options, "out-markdown");
+        RagFailureCaseReporter reporter = new RagFailureCaseReporter(new ObjectMapper());
+        RagFailureCaseReporter.Report report = reporter.generate(new RagFailureCaseReporter.Configuration(
+                path(options, "queries"), path(options, "qrels"), path(options, "documents"),
+                path(options, "document-map"), path(options, "run"), integer(options, "max-per-category", 3)));
+        reporter.write(report, json, markdown);
+        System.out.printf("failure-cases completed queries=%d json=%s markdown=%s%n",
+                report.manifest().queryCount(), json, markdown);
     }
 
     private static void prepare(Map<String, String> options) throws IOException {
@@ -271,6 +284,9 @@ public final class RagBenchmarkCli {
         lines.add("evaluate --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
         lines.add("        --run-id ID --code-revision GIT_COMMIT [--warmup-queries 10 --seed 20260719]");
         lines.add("        [--resume-from FAILED_RUN_DIR --request-timeout-seconds 120]");
+        lines.add("failure-cases --queries queries.jsonl --qrels qrels.tsv --documents benchmark.md");
+        lines.add("        --document-map document-map.jsonl --run run.jsonl --out-json report.json");
+        lines.add("        --out-markdown report.md [--max-per-category 3]");
         lines.forEach(System.out::println);
     }
 
