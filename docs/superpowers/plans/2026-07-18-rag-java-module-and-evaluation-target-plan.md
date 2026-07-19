@@ -1485,3 +1485,18 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 2. 四变体在同一并发级别必须使用完全一致的20个query及频次，warmup亦配对；每级别严格先warmup后measured。任一error/degraded/empty/非法Rerank/传输证据缺失会立即停止并保留已flush原始行。
 3. 持续以2秒间隔采样本地App和远端8容器，验证前后restart/OOM/health、证据hash、manifest和原始文件hash。报告attempt/success吞吐、all/success latency、四变体分位数及主导stage，并保留closed-loop coordinated-omission限制。
 4. 若smoke通过，先追加完整实际结果并中文提交，再根据长尾、资源峰值与错误情况决定正式`1/2/4/8/16 × 3轮`的请求数和冷却时间；不预设或编造性能数据。
+
+###### 1/2/4/8并发性能smoke失败结果与瓶颈证据
+
+- run `scifact-load-smoke-ef7e906-r1`在并发4的measured阶段由内建门禁自动停止，manifest=failed/errorCode=`RAG_BENCHMARK_LOAD_GATE_FAILED`、reason=`degraded`；并发8未启动。评测器保留了1/2各20 warmup+80 measured、4并发20 warmup+39 measured，共259条原始记录；其中唯一坏样本是并发4 sequence=15/queryId=1024/Hybrid+Rerank，HTTP 200、10排名，但degraded=true且reason=`rerank_fallback:profile_9a6bf176635448799c5b219d7765bc46`。失败行按设计先flush留证再抛门禁，后续请求未继续凑数。
+- 失败样本elapsed=67190ms，Embedding=3248ms、Dense=2583ms、Sparse=1322ms、Rerank=0（fallback）。本地MySQL生产审计行`ret_322eec1f69344c5d9cb5a4ab7c8c084b`与原始记录完全一致：status=success但stage_metrics明确degraded/rerank_fallback，estimatedTokenCount=6124，total=67179ms。这是有结果的服务降级，不是完整Rerank成功。
+- 仅对严格健康的1/2并发段做原始诊断：Hybrid+Rerank在并发1的p50/p95/max为10787/20235/25030ms，Rerank stage p95=18095ms；并发2为22656/38209/38223ms，Rerank stage p95=35661ms。Dense p95仅1925/1996ms，Sparse为2245/2131ms，Hybrid为3730/4812ms。并发4仅3条Rerank measured就出现56108ms及67190ms fallback，不足以产生该级稳定分位数。
+- 远端210个2秒资源样本显示Reranker容器峰值CPU 566.50%、内存限额占比67.07%、PID 19；Embedding CPU 490.44%，Qdrant 310.35%，但后两者未产生错误或降级。本地435个样本峰值仅16.2% CPU、494.7MiB RSS、79线程。前后8容器均running、restart=0、OOM=false、健康状态未变；证据manifest exitCode=1且四文件hash已落盘。
+- 远端Reranker实际限制为4 CPU/3GiB、`max-concurrent-requests=8`、`max-client-batch-size=16`、`max-batch-tokens=8192`。当前App却是`maxConcurrency=2`、候选Top10、`requestBatchSize=3`，一次业务Rerank会串行发出3/3/3/1四个HTTP子批；并发4时其余请求在本地Semaphore和远端队列同时等待，60秒总deadline被耗尽。远端日志同期queue_time最高11.41s，门禁停止后已在服务端的子批仍继续完成，说明取消无法撤回已发出的远端推理。Rerank子批放大与排队是当前首个被证明的容量瓶颈。
+
+###### Rerank HTTP子批放大优化A/B计划（执行前）
+
+1. 不改Rerank模型/revision、Top10、profile、服务器4 CPU/3GiB限制、App `maxConcurrency=2`、60秒总deadline和20秒单请求时限；唯一变量是将本地benchmark App的`AI_RAG_RERANKER_REQUEST_BATCH_SIZE`从3调为10，使Top10从四个串行HTTP子批变为一个请求。10不超过TEI的client batch 16，当前失败样本估算6124 tokens也低于8192 batch token上限。
+2. 使用当前同一App JAR重启8092，核对新PID只改上述变量；先运行四变体各1 warmup+1 measured的8请求最小冒烟，并确认Rerank候选10、耗时为正、0降级，不直接进入大压测。
+3. 最小冒烟通过后，使用全新目录和同一`1,2,4,8`/5 warmup/20 measured配置做A/B后段；对比同查询配对下的Rerank p50/p95/max、降级点、吞吐、队列和资源峰值。若仍在4并发降级，不上调deadline掩盖容量问题，而是保留并发2为当前健康容量边界并评估模型/实例扩容。
+4. 只有A/B证据证明批次10更快且不降级，才把benchmark启动脚本默认值从3改为10并更新注释/测试/计划；否则恢复批次3。
