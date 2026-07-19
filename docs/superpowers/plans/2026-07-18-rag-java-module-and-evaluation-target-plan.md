@@ -964,3 +964,10 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增7候选按3/3/1分批、局部到全局映射、跨批全局排序，以及第二批429导致整次失败的协议测试；新增配置交叉约束测试。首次21项中配置9/9通过，协议12项因沙箱禁止绑定127.0.0.1全部启动失败；在允许本地端口的环境 clean 重跑后协议12/12、配置9/9通过。
 - 扩大RAG回归时通配符误把3个私有 `Fixture` 内部类当测试，157个真实测试全部通过但构建被3个初始化错误标红；改为32个精确测试类后157/157通过，0 failure/error/skipped，BUILD SUCCESS 3.274秒。随后Java 17完整依赖打包成功，BUILD SUCCESS 8.065秒；打包前确认旧8092进程已经退出，没有覆盖运行中JAR。
 - 下一步在提交后以该确切JAR启动8092，并用既有SciFact索引做真实Top-10冒烟。远端服务在连续过载后是否恢复仍需真实验证；代码测试通过不替代服务验收。
+
+###### Java 分批后的真实 Top-10 验收结果
+
+- 修复提交为 `252ae58 分批调用重排模型并统一候选排序`。新JAR在本机8092启动成功，PID=24955，Hikari建立新连接；运行参数保持Embedding batch=8、最多5次瞬态重试、600秒lease、30秒heartbeat，Reranker HTTP request batch明确为3。
+- 使用既有SciFact索引、同一首条test query和 `hybrid_rrf_rerank` 目标做真实生产HTTP冒烟：响应 `code=0000`、`degraded=false`、无降级原因、10条引用；dense/sparse/fusion/rerank候选数为100/100/10/10，证明10个候选均实际进入分批重排，没有走RRF fallback。
+- 该次耗时：embedding=7087ms、dense=2915ms、sparse=1590ms、rerank=15686ms、pipeline total=28895ms、configuration=311ms、hydration=1273ms、audit=1502ms、service=30399ms，客户端墙钟约31秒。正确性门禁通过，但CPU模型推理成为明确首要性能瓶颈；完整300×4评测预计持续数小时，不能用该单例延迟外推P95。
+- 下一步启动新的空目录复评分并保留1200条原始记录。JWT刷新凭据只存在进程环境，不写入manifest/日志/Git；要求最终恰有1200个唯一variant/query、0错误、0降级，才生成可发布质量指标。
