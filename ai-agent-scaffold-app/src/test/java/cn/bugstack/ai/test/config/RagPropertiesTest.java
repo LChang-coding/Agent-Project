@@ -81,6 +81,7 @@ public class RagPropertiesTest {
                 Map.entry("ai.rag.embedding.max-retries", "4"),
                 Map.entry("ai.rag.embedding.retry-initial-backoff", "100ms"),
                 Map.entry("ai.rag.embedding.retry-max-backoff", "1500ms"),
+                Map.entry("ai.rag.embedding.request-timeout", "1500ms"),
                 Map.entry("ai.rag.embedding.dimension", "768"),
                 Map.entry("ai.rag.qdrant.max-retries", "4"),
                 Map.entry("ai.rag.qdrant.retry-initial-backoff", "75ms"),
@@ -104,6 +105,7 @@ public class RagPropertiesTest {
         Assert.assertEquals(4, properties.getEmbedding().getMaxRetries());
         Assert.assertEquals(Duration.ofMillis(100), properties.getEmbedding().getRetryInitialBackoff());
         Assert.assertEquals(Duration.ofMillis(1500), properties.getEmbedding().getRetryMaxBackoff());
+        Assert.assertEquals(Duration.ofMillis(1500), properties.getEmbedding().getRequestTimeout());
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
         Assert.assertEquals(4, properties.getQdrant().getMaxRetries());
         Assert.assertEquals(Duration.ofMillis(75), properties.getQdrant().getRetryInitialBackoff());
@@ -128,6 +130,7 @@ public class RagPropertiesTest {
         properties.getEmbedding().setMaxRetries(-1);
         properties.getEmbedding().setRetryInitialBackoff(Duration.ofSeconds(2));
         properties.getEmbedding().setRetryMaxBackoff(Duration.ofSeconds(1));
+        properties.getEmbedding().setRequestTimeout(Duration.ofSeconds(3));
 
         Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
 

@@ -190,6 +190,10 @@ public class RagProperties {
         @Min(1)
         private int batchSize = 16;
 
+        /** 单次HTTP尝试时限；通用timeout作为整个Embedding操作总deadline。 */
+        @NotNull
+        private Duration requestTimeout = Duration.ofSeconds(10);
+
         /** 429/网关瞬态状态后的最大重试次数，不含首次请求。 */
         @Min(0)
         @Max(10)
@@ -210,10 +214,12 @@ public class RagProperties {
             setMaxConcurrency(2);
         }
 
-        /** 校验重试退避为正数且上限不小于初始值。 */
-        @AssertTrue(message = "Embedding 重试退避必须为正数且最大值不小于初始值")
+        /** 校验单次请求、总deadline和重试退避边界。 */
+        @AssertTrue(message = "Embedding单次时限和退避必须为正、单次时限不得超过总时限且退避上限不小于初始值")
         public boolean isRetryBackoffValid() {
-            return retryInitialBackoff != null && !retryInitialBackoff.isZero() && !retryInitialBackoff.isNegative()
+            return requestTimeout != null && !requestTimeout.isZero() && !requestTimeout.isNegative()
+                    && getTimeout() != null && requestTimeout.compareTo(getTimeout()) <= 0
+                    && retryInitialBackoff != null && !retryInitialBackoff.isZero() && !retryInitialBackoff.isNegative()
                     && retryMaxBackoff != null && !retryMaxBackoff.isZero() && !retryMaxBackoff.isNegative()
                     && retryMaxBackoff.compareTo(retryInitialBackoff) >= 0;
         }
@@ -223,7 +229,7 @@ public class RagProperties {
         public String toString() {
             return summary("Embedding") + ", modelRevision='" + modelRevision
                     + "', dimension=" + dimension + ", batchSize=" + batchSize
-                    + ", maxRetries=" + maxRetries + '}';
+                    + ", requestTimeout=" + requestTimeout + ", maxRetries=" + maxRetries + '}';
         }
     }
 

@@ -1027,3 +1027,32 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java 17六模块打包BUILD SUCCESS 7.194秒，旧PID 41109已TERM退出，新JAR在8092以PID 53930启动，显式使用3候选、10秒单次、2次重试、30秒总时限，Hikari连接成功。
 - 对queryId=880的 `hybrid_rrf_rerank` 连续真实请求10/10均业务码0000、`degraded=false`、10条引用；Rerank阶段耗时6744～16323ms，pipeline总耗时9309～22286ms。第6次Rerank为16323ms，明显跨过一个10秒单次挂起后由后续尝试恢复，且仍处于30秒总deadline内，直接证明真实瞬态故障恢复生效。
 - 失败run `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-3ab790f` 最终保留9条warmup、0 measured，其中1条Rerank降级；不与后续run合并。下一步提交本闭环后，以新提交号和全新目录再次启动完整复评分。
+
+###### SciFact 复评分第三次恢复计划（执行前）
+
+1. 使用提交 `44882f3`、当前PID 53930和新空目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-44882f3`；复用相同prepared数据、targets、四个profile及300条test query，唯一实验变化为Reranker瞬态重试。
+2. 仍执行10 query×4 variant warmup并实时核验；出现任一error/degraded/空引用立即中断并保留目录。通过40条后继续1200 measured，期间不迁移MySQL或调整服务器环境。
+3. 评测完成才运行行数、唯一键、错误、降级、空引用、hash和指标一致性核验；未完成前不发布任何Recall/MRR/nDCG/MAP或延迟结论。
+
+###### Embedding 瞬态不可用诊断计划（执行前）
+
+- 第三次run在检测时只有2条warmup并已立即中断。最初监控脚本误读不存在的 `.error` 字段而把失败行归类为“成功空结果”；核对原始JSON后，queryId=880 Dense实际为 `errorCode=RAG_EMBEDDING_UNAVAILABLE`、elapsed=31391ms、0候选，Sparse成功、sparse=100/fusion=10、9个唯一文档。后者由Top-10引用中同文档去重得到9个rankedDocumentIds，不是空引用或hydration少行。0 degraded、0 measured；目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-44882f3` 保留，不参与评分。
+- 修正后续门禁统计为读取 `.errorCode`；先审计 `TeiEmbeddingAdapter` 的连接/超时重试和deadline语义，再用正确Key连续直连单query合成请求，判断是否与Reranker相同的间歇0字节挂起。
+- 若当前30秒单次超时导致首次挂起直接消耗主要预算，则把Embedding改为“较短单次请求时限 + 有界总deadline”，仅重试超时、IO和429/502/503/504；响应格式、认证和确定性请求错误不重试。不能把业务失败伪装成空召回。
+- 修复或配置调整必须有协议测试、完整RAG回归、真实重复门禁和新空run；继续坚持0 `errorCode`、0 degraded、0空rankedDocumentIds。
+
+###### Embedding 有界总deadline恢复实现计划（执行前）
+
+- 正确Key连续8次单文本直连中，第1和第6次均20秒0字节超时，其余6次200且0.215～1.399秒、响应9520 bytes；与正式run的31秒 `RAG_EMBEDDING_UNAVAILABLE` 形态一致，确认模型网关存在间歇请求挂住且随后自行恢复，不是输入或MySQL问题。
+- 在 `RagProperties.Embedding` 新增 `requestTimeout=10s`；现有 `timeout` 从“每次尝试”明确为整个Embedding操作总deadline，评测环境保持30秒。已有最多5次重试和500ms～4s退避继续使用，但所有许可等待、HTTP尝试和退避必须受总deadline约束。
+- 适配器复用一次序列化body，每次尝试按 `min(requestTimeout, remaining)` 设置HTTP timeout；连接/读写IO、HttpTimeout及429/502/503/504可重试，401/其他状态、响应过大、JSON、数量、维度和非有限数立即失败。每次尝试独立释放Semaphore，退避不占permit。
+- 测试增加HttpTimeout后成功、IO耗尽、单次时限绑定/非法组合；保持既有429重试、401一次、超限、维度和中断测试。随后执行完整RAG回归、打包、真实连续Dense门禁和中文提交，再以新目录重启评分。
+
+###### Embedding 有界恢复实现与验收结果
+
+- `RagProperties.Embedding` 已增加 `requestTimeout=10s`，通用 `timeout` 明确为整个Embedding操作总deadline；评测运行值为30秒。配置校验单次时限必须为正且不大于总deadline，环境变量为 `AI_RAG_EMBEDDING_REQUEST_TIMEOUT`，脱敏摘要仅输出时限和重试次数。
+- `TeiEmbeddingAdapter` 现在一次序列化请求，按剩余deadline动态收敛每次HTTP timeout；HttpTimeout、连接/读写IO和429/502/503/504可在总deadline内重试，401/其他状态、响应过大、JSON、数量、维度和非有限数立即失败。每次网络尝试独立获取/释放Semaphore，退避不占permit且也消耗总deadline。
+- 新增真实HttpTimeout后第二次成功及连续IOException恰好3次耗尽测试；定向协议16项+配置11项为27/27通过。最终完整33类RAG回归168/168通过，0 failure/error/skipped，BUILD SUCCESS 3.892秒；本轮目标文件diff检查无格式错误。
+- Java 17六模块打包BUILD SUCCESS 7.134秒，旧PID 53930已TERM退出，新JAR在8092以PID 63487运行，显式使用Embedding 10秒单次、最多5次重试、500ms～4s退避和30秒总deadline，Hikari连接成功。
+- queryId=880 Dense生产链路连续10/10均业务码0000、`degraded=false`、10条引用；Embedding阶段129～424ms，pipeline总耗时1981～5480ms。本组未碰到新的10秒挂起，但直接公网8次探测已真实捕获2次20秒0字节超时，协议测试证明该异常会被有界重试，正式复评分继续作为长时间稳定性验收。
+- 失败run `run-scifact-quality-eval-44882f3` 保留2条warmup、0 measured，其中Dense为 `RAG_EMBEDDING_UNAVAILABLE`，Sparse成功；监控字段已纠正为 `errorCode`，后续不会再把业务错误误判为空结果。

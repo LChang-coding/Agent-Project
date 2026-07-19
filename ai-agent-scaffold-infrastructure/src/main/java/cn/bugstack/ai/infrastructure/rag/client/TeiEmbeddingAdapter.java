@@ -8,11 +8,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,37 +57,41 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
                     .map(input -> prefix(command.inputType(), input)).toList();
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("inputs", inputs);
-            HttpRequest request = HttpRequest.newBuilder(endpoint(config.getEndpoint(), "embed"))
-                    .timeout(config.getTimeout()).header("Authorization", "Bearer " + config.getApiKey())
-                    .header("Content-Type", "application/json").header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(objectMapper.writeValueAsBytes(payload))).build();
-            long backoffMs = Math.max(1L, config.getRetryInitialBackoff().toMillis());
-            long maxBackoffMs = Math.max(backoffMs, config.getRetryMaxBackoff().toMillis());
+            byte[] requestBody = objectMapper.writeValueAsBytes(payload);
+            long deadlineNanos = System.nanoTime() + config.getTimeout().toNanos();
             for (int attempt = 0; ; attempt++) {
-                acquire(concurrency, config.getTimeout(), "Embedding");
-                HttpResponse<InputStream> response;
-                byte[] body;
                 try {
-                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-                    body = readBounded(response.body(), MAX_RESPONSE_BYTES);
-                } finally {
-                    concurrency.release();
+                    RawResponse response = send(requestBody, deadlineNanos, config);
+                    if (response.statusCode() == 200) {
+                        List<List<Float>> vectors;
+                        try {
+                            vectors = objectMapper.readValue(response.body(), new TypeReference<>() { });
+                        } catch (IOException e) {
+                            throw new AppException("RAG_EMBEDDING_RESPONSE_INVALID",
+                                    "Embedding返回内容不是合法JSON", e);
+                        }
+                        validate(vectors, inputs.size(), config.getDimension());
+                        return new EmbeddingResult(vectors, config.getDimension(), config.getModelRevision());
+                    }
+                    boolean transientStatus = isTransientStatus(response.statusCode());
+                    if (!transientStatus || attempt >= config.getMaxRetries()) {
+                        throw new AppException(transientStatus
+                                ? "RAG_EMBEDDING_TRANSIENT_HTTP_ERROR" : "RAG_EMBEDDING_HTTP_ERROR",
+                                "Embedding 服务返回状态 " + response.statusCode()
+                                        + "，尝试次数 " + (attempt + 1));
+                    }
+                } catch (HttpTimeoutException e) {
+                    if (attempt >= config.getMaxRetries()) {
+                        throw new AppException("RAG_EMBEDDING_TIMEOUT",
+                                "Embedding单次请求超时，尝试次数 " + (attempt + 1), e);
+                    }
+                } catch (IOException e) {
+                    if (attempt >= config.getMaxRetries()) {
+                        throw new AppException("RAG_EMBEDDING_UNAVAILABLE",
+                                "Embedding调用失败，尝试次数 " + (attempt + 1), e);
+                    }
                 }
-                if (response.statusCode() == 200) {
-                    List<List<Float>> vectors = objectMapper.readValue(body, new TypeReference<>() { });
-                    validate(vectors, inputs.size(), config.getDimension());
-                    return new EmbeddingResult(vectors, config.getDimension(), config.getModelRevision());
-                }
-                boolean transientStatus = isTransientStatus(response.statusCode());
-                if (!transientStatus || attempt >= config.getMaxRetries()) {
-                    throw new AppException(transientStatus
-                            ? "RAG_EMBEDDING_TRANSIENT_HTTP_ERROR"
-                            : "RAG_EMBEDDING_HTTP_ERROR",
-                            "Embedding 服务返回状态 " + response.statusCode());
-                }
-                Thread.sleep(backoffMs);
-                backoffMs = Math.min(maxBackoffMs,
-                        backoffMs > maxBackoffMs / 2L ? maxBackoffMs : backoffMs * 2L);
+                backoff(attempt, deadlineNanos, config);
             }
         } catch (AppException e) {
             throw e;
@@ -95,6 +101,50 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         } catch (Exception e) {
             throw new AppException("RAG_EMBEDDING_UNAVAILABLE", "Embedding 服务调用失败", e);
         }
+    }
+
+    private RawResponse send(byte[] requestBody, long deadlineNanos, RagProperties.Embedding config)
+            throws Exception {
+        Duration remaining = remaining(deadlineNanos);
+        acquire(concurrency, remaining, "Embedding");
+        try {
+            Duration afterAcquire = remaining(deadlineNanos);
+            Duration requestTimeout = afterAcquire.compareTo(config.getRequestTimeout()) < 0
+                    ? afterAcquire : config.getRequestTimeout();
+            HttpRequest request = HttpRequest.newBuilder(endpoint(config.getEndpoint(), "embed"))
+                    .timeout(requestTimeout).header("Authorization", "Bearer " + config.getApiKey())
+                    .header("Content-Type", "application/json").header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody)).build();
+            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            return new RawResponse(response.statusCode(), readBounded(response.body(), MAX_RESPONSE_BYTES));
+        } finally {
+            concurrency.release();
+        }
+    }
+
+    private void backoff(int retryIndex, long deadlineNanos, RagProperties.Embedding config)
+            throws InterruptedException {
+        long multiplier = 1L << Math.min(retryIndex, 30);
+        long desiredNanos;
+        try {
+            desiredNanos = Math.multiplyExact(config.getRetryInitialBackoff().toNanos(), multiplier);
+        } catch (ArithmeticException ignored) {
+            desiredNanos = Long.MAX_VALUE;
+        }
+        desiredNanos = Math.min(desiredNanos, config.getRetryMaxBackoff().toNanos());
+        long remainingNanos = remaining(deadlineNanos).toNanos();
+        if (desiredNanos >= remainingNanos) {
+            throw new AppException("RAG_EMBEDDING_TIMEOUT", "Embedding请求超过总时限");
+        }
+        Thread.sleep(desiredNanos / 1_000_000L, (int) (desiredNanos % 1_000_000L));
+    }
+
+    private Duration remaining(long deadlineNanos) {
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        if (remainingNanos <= 0) {
+            throw new AppException("RAG_EMBEDDING_TIMEOUT", "Embedding请求超过总时限");
+        }
+        return Duration.ofNanos(remainingNanos);
     }
 
     private boolean isTransientStatus(int status) {
@@ -142,5 +192,8 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         if (apiKey == null || apiKey.isBlank()) {
             throw new AppException("RAG_REMOTE_AUTH_MISSING", "RAG 模型服务认证未配置");
         }
+    }
+
+    private record RawResponse(int statusCode, byte[] body) {
     }
 }

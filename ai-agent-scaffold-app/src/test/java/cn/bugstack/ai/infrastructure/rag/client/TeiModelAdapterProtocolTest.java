@@ -63,6 +63,7 @@ public class TeiModelAdapterProtocolTest {
         configure(properties.getReranker(), endpoint);
         properties.getEmbedding().setDimension(768);
         properties.getEmbedding().setBatchSize(2);
+        properties.getEmbedding().setRequestTimeout(Duration.ofSeconds(1));
         properties.getEmbedding().setRetryInitialBackoff(Duration.ofMillis(1));
         properties.getEmbedding().setRetryMaxBackoff(Duration.ofMillis(2));
         properties.getEmbedding().setModelRevision("embedding-revision");
@@ -180,6 +181,44 @@ public class TeiModelAdapterProtocolTest {
             interruptAfterResponseThread = null;
             Thread.interrupted();
         }
+    }
+
+    @Test
+    public void embeddingShouldRetryHttpTimeoutAndThenSucceed() throws Exception {
+        properties.getEmbedding().setMaxRetries(1);
+        HttpClient httpClient = Mockito.mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<java.io.InputStream> response = Mockito.mock(HttpResponse.class);
+        Mockito.when(response.statusCode()).thenReturn(200);
+        Mockito.when(response.body()).thenReturn(new ByteArrayInputStream(
+                objectMapper.writeValueAsBytes(List.of(vector(1F)))));
+        Mockito.when(httpClient.send(Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenThrow(new HttpTimeoutException("timeout"))
+                .thenReturn(response);
+        TeiEmbeddingAdapter adapter = new TeiEmbeddingAdapter(properties, objectMapper, httpClient);
+
+        EmbeddingResult result = adapter.embed(new EmbeddingCommand(
+                "tenant", "trace", EmbeddingInputType.QUERY, List.of("question")));
+
+        Assert.assertEquals(1, result.vectors().size());
+        Mockito.verify(httpClient, Mockito.times(2)).send(
+                Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any());
+    }
+
+    @Test
+    public void embeddingShouldBoundConnectionIoRetries() throws Exception {
+        properties.getEmbedding().setMaxRetries(2);
+        HttpClient httpClient = Mockito.mock(HttpClient.class);
+        Mockito.when(httpClient.send(Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenThrow(new IOException("connection reset"));
+        TeiEmbeddingAdapter adapter = new TeiEmbeddingAdapter(properties, objectMapper, httpClient);
+
+        AppException exception = expectAppException(() -> adapter.embed(new EmbeddingCommand(
+                "tenant", "trace", EmbeddingInputType.QUERY, List.of("question"))));
+
+        Assert.assertEquals("RAG_EMBEDDING_UNAVAILABLE", exception.getCode());
+        Mockito.verify(httpClient, Mockito.times(3)).send(
+                Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any());
     }
 
     @Test
