@@ -1523,3 +1523,10 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 全新run `scifact-load-batch8-micro-a454e57-r2`完成4 warmup+4 measured，manifest=completed/exitCode=0，四变体齐全且均为queryId=1，共8条0 error/degraded/empty；两条Rerank均返回10候选。采样器38条本地+18条8容器JSONL有效，前后快照running/restart=0/OOM=false，evidence exitCode=0。
 - 批次8的Rerank warmup为48669ms（stage=35413ms），measured为15215ms（stage=13906ms）；同query的批次3功能冒烟分别为14246/8930ms（stage=14246/7857ms）。单样本受当时队列和模型抖动影响，不足以声称批次8显著回归，但它至少没有展示改默认值所需的明确收益，因此暂不采用。
 - 继续仅调整`requestBatchSize=5`，将Top10拆为5/5两批；它既低于permit=8，又比批次8降低单次推理量。同一JAR重启后先做相同8请求最小冒烟；通过才允许做多样本A/B，失败则恢复已知可用的批次3。
+
+###### Rerank批次5冒烟结果与稳定容量复测计划（执行前）
+
+- run `scifact-load-batch5-micro-3f18668-r1`以4 warmup+4 measured完成，8条0 error/degraded/empty，两条Rerank均为10候选；evidence exitCode=0，前后容器快照无restart/OOM。Rerank warmup/measured分别为26539/19439ms（stage 24242/18210ms），同query的批次3为14246/8930ms，批次8为48669/15215ms。小样本不能排除时序抖动，但批次5/8均没有显示更好的延迟，而批次10协议必然失败；因此恢复批次3，不提交任何默认值改动。
+- 原`ef7e906-r1`已完整产生一轮并发1/2的四变体各20 measured健康数据，但整个manifest因后续并发4降级而failed；该前缀作为容量发现和诊断轮，不伪装为completed基线。
+- 恢复批次3并核对新PID后，使用两个全新独立run补做并发1/2，每轮每变体5 warmup+20 measured；第一轮顺序`2,1`、第二轮`1,2`，降低固定升序与热身时序混杂。两轮必须各自completed、0降级/错误/空结果才纳入正式统计。
+- 最终将两轮completed结果分轮报告，并可另附上原诊断轮的20样本做三轮方向性交叉验证；不将三个目录拼接成伪单轮，不把每组40或60样本的p99冒充稳定尾分位数。并发4已有可复现容量门禁，不再为“跑完表格”盲目重试。
