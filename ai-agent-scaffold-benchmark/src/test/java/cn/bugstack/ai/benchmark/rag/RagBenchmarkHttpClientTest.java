@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -62,6 +63,43 @@ class RagBenchmarkHttpClientTest {
         RagBenchmarkHttpClient client = client(1024);
         assertThrows(RagBenchmarkHttpClient.BenchmarkProtocolException.class,
                 () -> client.debug("target-1", "query"));
+    }
+
+    @Test
+    void shouldRefreshOnceAndReplayRequestAfterUnauthorized() throws Exception {
+        server.removeContext("/api/v1/rag/retrieval-debug");
+        AtomicInteger requests = new AtomicInteger();
+        AtomicInteger refreshes = new AtomicInteger();
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> {
+            String auth = exchange.getRequestHeaders().getFirst("Authorization");
+            int attempt = requests.incrementAndGet();
+            if (attempt == 1) {
+                assertEquals("Bearer expired-token", auth);
+                respond(exchange, 401, "{}");
+            } else {
+                assertEquals("Bearer renewed-token", auth);
+                respond(exchange, 200, success("""
+                        {"retrievalId":"ret-renewed","degraded":false,"degradationReasons":[],
+                         "metrics":{},"citations":[{"headingPath":"%s — title"}]}
+                        """.formatted(RagBenchmarkArtifactWriter.marker("doc-1"))));
+            }
+        });
+        RagBenchmarkHttpClient.BearerTokenProvider provider = new RagBenchmarkHttpClient.BearerTokenProvider() {
+            private volatile String token = "expired-token";
+            @Override public String currentToken() { return token; }
+            @Override public synchronized String refresh(String rejectedToken) {
+                refreshes.incrementAndGet();
+                token = "renewed-token";
+                return token;
+            }
+        };
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(),
+                new ObjectMapper(), base, provider, Duration.ofSeconds(5), 1024 * 1024);
+
+        assertEquals("ret-renewed", client.debug("target-1", "query").retrievalId());
+        assertEquals(2, requests.get());
+        assertEquals(1, refreshes.get());
     }
 
     private RagBenchmarkHttpClient client(int maxBytes) {

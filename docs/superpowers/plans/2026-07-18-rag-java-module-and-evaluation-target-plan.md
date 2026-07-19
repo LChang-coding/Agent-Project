@@ -884,3 +884,23 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 首轮定向测试中协议适配器10/10通过，Worker 的4个 error 均为旧 Surefire fork JVM 未收到 Mockito attach 参数。使用 `-DargLine=-Djdk.attach.allowAttachSelf=true` clean 重跑后，`TeiModelAdapterProtocolTest` 10/10、`RagIngestWorkerTest` 6/6，共16/16通过，0 failure/error/skipped，BUILD SUCCESS 9.394秒；随后 app `package -DskipTests` BUILD SUCCESS 7.674秒。
 - 旧 benchmark JVM在保持暂停的前提下收到中断并退出（exit 130），不会把已清空版本误用于评分；batch=12旧 app已优雅停止。新修复 JAR以 batch=8、最多5次HTTP重试、500ms到4s退避、600秒 lease、30秒 heartbeat 启动，PID=81885，8092健康且 MySQL连接池成功建连。
 - `codex.md` 的凭据表已按用户本阶段明确提供的 MySQL 值修正；第一次脱敏校验仍误匹配到上方“中间件用途”表的同名行而失败，追加“用户名列包含应用配置说明”的唯一条件后 `SELECT 1` 成功。该歧义只影响临时校验命令，未把凭据打印到输出。
+- 修复闭环已提交 `dba0df8 修复向量背压误判并保全摄取重试`。新 app JAR SHA-256=`2dc85c4467f632117183be64960a63a57f006934cda7510f93f74709dabda986`，323,829,932 bytes，构建时间2026-07-19 05:50:40+08:00；运行 manifest 的 `codeRevision=dba0df8b462f7d4243537e452fa23e98662c4eca` 与本次源代码修复提交一致。
+- 全新 runId `scifact-quality-recover-dba0df8`、输出目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-recover-dba0df8` 已从0启动，摄取超时14400秒、warmup=10，其余质量消融参数不变。新任务 `ragtask_02f68e795feb4f6fa9c196332032de6f`、version `ragver_d968b63fefc04e78baf2cbd4bf8e4b68` 在 attempt=1/fence=1 下从0推进到224/7548，错误码为空且心跳/600秒 lease 正常；稍后 Qdrant tenant+version 精确计数为232，时点差来自下一批向量已写入而 checkpoint CAS 尚未落库。
+- 数据库该 version 的 `rag_chunk` 已为12749行，这是分块阶段一次性持久化的父子块总数，并非实时向量数；后续完整度核验以 checkpoint `vectorUpsertIndex`、Qdrant精确计数及最终 verification 为准。新的本机资源采样文件 `/tmp/rag-quality-scifact-20260719/local-process-stats-recover.tsv` 每5秒记录 app PID 81885 与 benchmark PID 85515 的 CPU/RSS/VSZ；旧服务器容器采样会按新 run 时间边界裁剪。
+
+#### 质量查询 JWT 过期恢复计划（执行前）
+
+1. 保留已完成索引和首次1200条查询产物。首次运行虽正常退出并写齐1200行，但前三组各281次、Rerank组280次 `RAG_BENCHMARK_HTTP_401`；只把它视为认证失效实验，不发布其中被失败分母污染的低质量指标。
+2. benchmark HTTP 客户端改为可注入 token provider。请求遇到401时，只允许刷新一次并重放一次；并发场景按“被拒 token 是否仍是当前 token”合并刷新，防止负载测试登录风暴。其他HTTP状态不重放，Bearer、用户名、密码和登录响应都不进入异常、manifest或结果。
+3. CLI从独立环境变量读取刷新用用户名/密码；脚本继续生成临时评测账号并导出凭据，退出时清理。增加401→重新登录→成功、刷新失败、非401不刷新及敏感值不泄漏测试。
+4. 新增只读复评分入口：读取既有 `targets.json`、prepared queries/qrels 与同一已完成知识库绑定，执行 warmup+300×4 查询并重新生成独立 run/metrics，不重新上传或摄取7548块。入口必须校验4个固定 variant、目标ID唯一、prepared哈希和目标文件哈希并写入manifest。
+5. 修复测试与打包通过后，以新runId复用 `scifact-quality-recover-dba0df8/targets.json` 完整执行1200查询；要求0个401、1200个唯一 variant/query，再据此报告 Recall/Precision/MRR/nDCG/MAP/Success 和延迟。若出现新的系统错误，继续按真实失败处理，不用首轮19个成功样本外推。
+6. 首轮脚本按旧逻辑退出时已删除临时明文凭据，无法通过登录刷新既有 benchmark tenant。为避免重新摄取7548块，只对该明确的 benchmark tenant 管理员执行一次条件密码重置：先核对用户名/角色/租户和唯一影响行，使用随机临时密码的 BCrypt 哈希更新，完成复评分后该隔离租户仍仅用于 benchmark；不触碰正常租户、知识库归属或索引数据。凭据只存在受限临时目录/环境变量，绝不写入计划、日志、manifest或Git。
+
+##### JWT 过期根因与恢复实现结果
+
+- 首轮索引最终 completed，7548/7548，任务 attempt/fence=2/2、错误码为空；run 输出恰有1200行。但逐行归类证明 dense/sparse/hybrid_rrf 各281个、hybrid_rrf_rerank 280个 `RAG_BENCHMARK_HTTP_401`，仅前19/19/19/20条成功。manifest 从21:55到23:55约2小时，和JWT生命周期吻合，因此该轮 metrics 仅是失败分母验证，不作为质量结论。
+- `RagBenchmarkHttpClient` 已支持 token provider：401时读取被拒token，执行一次并发安全刷新并重建 Authorization 后重放；第二次仍失败即按真实HTTP错误返回，非401不刷新。`RefreshingLoginTokenProvider` 对同一过期token串行刷新、对已被其他线程更新的token直接复用，登录响应有界读取，异常不包含凭据或响应正文。
+- CLI可从独立用户名/密码环境变量启用刷新；脚本在受限临时认证目录之外只导出进程环境，并在退出trap中清除。新增 `evaluate` 模式可读取严格四变体唯一targets、同一prepared数据与独立空输出目录，只执行warmup、1200查询和评分；manifest记录targets SHA-256及复评分模式，不重新上传/摄取。
+- 新增401→刷新→重放测试，验证首请求使用过期token、第二请求使用新token、只刷新一次且返回正常引用。benchmark全量14/14通过，0 failure/error/skipped，BUILD SUCCESS 3.027秒；`bash -n`通过，随后含依赖CLI打包再次14/14通过，BUILD SUCCESS 2.501秒。
+- 既有benchmark tenant只存在一个active owner；其 `user_secret` 恰有一条active password记录和一条refresh_token记录，password hash长度60。后续密码条件更新将限定tenant/user/secret_type/status/deleted并核对影响1行。

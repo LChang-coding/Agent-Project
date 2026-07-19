@@ -80,8 +80,9 @@ public final class RagBenchmarkRunner {
             List<Query> queries = readQueries(prepared.queriesFile());
             List<Query> shuffled = new ArrayList<>(queries);
             Collections.shuffle(shuffled, new Random(configuration.seed()));
-            runWarmup(configuration, targets, shuffled);
-            executeMeasured(configuration, targets, shuffled);
+            runWarmup(configuration.runId(), configuration.runDirectory(), configuration.warmupQueries(),
+                    targets, shuffled);
+            executeMeasured(configuration.runId(), configuration.runDirectory(), targets, shuffled);
 
             Map<String, Map<String, List<String>>> runs = new RagBenchmarkRunIO(objectMapper)
                     .read(configuration.runDirectory().resolve("run.jsonl"));
@@ -115,6 +116,57 @@ public final class RagBenchmarkRunner {
         }
     }
 
+    /** 复用已经完成摄取和绑定的 targets，只重新执行查询与评分。 */
+    public Result evaluate(EvaluationConfiguration configuration) throws IOException, InterruptedException {
+        PreparedDataset prepared = validatePreparedDataset(configuration.preparedDirectory());
+        Map<String, String> targets = readTargets(configuration.targetsFile());
+        prepareEmptyDirectory(configuration.runDirectory());
+        Configuration manifestConfiguration = new Configuration(configuration.runId(), configuration.baseUrl(),
+                configuration.credentialSource(), configuration.codeRevision(), configuration.preparedDirectory(),
+                configuration.runDirectory(), configuration.seed(), configuration.warmupQueries(),
+                Duration.ofMillis(1), Duration.ofSeconds(1));
+        Map<String, Object> manifest = initialManifest(manifestConfiguration, prepared, Instant.now());
+        manifest.put("mode", "evaluate_existing_targets");
+        manifest.put("targetsSha256", sha256(configuration.targetsFile()));
+        manifest.put("sourceTargetsFile", configuration.targetsFile().getFileName().toString());
+        writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
+        writeAtomic(configuration.runDirectory().resolve("targets.json"), Map.of(
+                "schemaVersion", 1, "sourceSha256", sha256(configuration.targetsFile()), "targets", targets));
+        try {
+            List<Query> queries = readQueries(prepared.queriesFile());
+            List<Query> shuffled = new ArrayList<>(queries);
+            Collections.shuffle(shuffled, new Random(configuration.seed()));
+            runWarmup(configuration.runId(), configuration.runDirectory(), configuration.warmupQueries(),
+                    targets, shuffled);
+            executeMeasured(configuration.runId(), configuration.runDirectory(), targets, shuffled);
+            RagBenchmarkRunIO runIO = new RagBenchmarkRunIO(objectMapper);
+            Map<String, Map<String, List<String>>> runs = runIO.read(
+                    configuration.runDirectory().resolve("run.jsonl"));
+            Map<String, RagBenchmarkRunStatistics.VariantStatistics> statistics =
+                    new RagBenchmarkRunStatistics().aggregate(runIO.readRecords(
+                            configuration.runDirectory().resolve("run.jsonl")));
+            Map<String, RagRetrievalScorer.AggregateMetrics> metrics = new LinkedHashMap<>();
+            RagRetrievalScorer scorer = new RagRetrievalScorer();
+            targets.keySet().forEach(variant -> metrics.put(variant,
+                    scorer.scoreAll(prepared.qrels(), runs.getOrDefault(variant, Map.of()))));
+            runIO.writeReport(configuration.runDirectory().resolve("metrics.json"), metrics,
+                    Map.of("runId", configuration.runId(), "answerMetrics", "not_evaluated_no_gold_answers",
+                            "percentileMethod", "nearest-rank", "runStatistics", statistics,
+                            "targetsSha256", sha256(configuration.targetsFile())));
+            manifest.put("status", "completed");
+            manifest.put("finishedAt", Instant.now().toString());
+            manifest.put("queryCount", queries.size());
+            writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
+            return new Result(configuration.runId(), "existing", "existing", metrics, statistics);
+        } catch (RuntimeException | IOException | InterruptedException exception) {
+            manifest.put("status", "failed");
+            manifest.put("finishedAt", Instant.now().toString());
+            manifest.put("errorType", exception.getClass().getSimpleName());
+            writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
+            throw exception;
+        }
+    }
+
     private RagBenchmarkHttpClient.IngestTask waitForTask(String taskId, Configuration configuration)
             throws IOException, InterruptedException {
         long deadline = System.nanoTime() + configuration.ingestTimeout().toNanos();
@@ -133,31 +185,53 @@ public final class RagBenchmarkRunner {
                 "benchmark摄取任务超时，最后状态=" + (latest == null ? "unknown" : latest.status()));
     }
 
-    private void runWarmup(Configuration configuration, Map<String, String> targets, List<Query> queries)
+    private void runWarmup(String runId, Path runDirectory, int warmupQueries,
+                           Map<String, String> targets, List<Query> queries)
             throws IOException, InterruptedException {
-        int count = Math.min(configuration.warmupQueries(), queries.size());
+        int count = Math.min(warmupQueries, queries.size());
         RagBenchmarkRunIO runIO = new RagBenchmarkRunIO(objectMapper);
-        Path warmup = configuration.runDirectory().resolve("warmup.jsonl");
+        Path warmup = runDirectory.resolve("warmup.jsonl");
         for (int index = 0; index < count; index++) {
             Query query = queries.get(index);
             for (Map.Entry<String, String> target : targets.entrySet()) {
-                runIO.append(warmup, execute(configuration.runId(), target.getKey(), target.getValue(), query));
+                runIO.append(warmup, execute(runId, target.getKey(), target.getValue(), query));
             }
         }
     }
 
-    private void executeMeasured(Configuration configuration, Map<String, String> targets, List<Query> queries)
+    private void executeMeasured(String runId, Path runDirectory,
+                                 Map<String, String> targets, List<Query> queries)
             throws IOException, InterruptedException {
         RagBenchmarkRunIO runIO = new RagBenchmarkRunIO(objectMapper);
-        Path runFile = configuration.runDirectory().resolve("run.jsonl");
+        Path runFile = runDirectory.resolve("run.jsonl");
         List<String> variants = new ArrayList<>(targets.keySet());
         for (int queryIndex = 0; queryIndex < queries.size(); queryIndex++) {
             Query query = queries.get(queryIndex);
             for (int offset = 0; offset < variants.size(); offset++) {
                 String variant = variants.get((queryIndex + offset) % variants.size());
-                runIO.append(runFile, execute(configuration.runId(), variant, targets.get(variant), query));
+                runIO.append(runFile, execute(runId, variant, targets.get(variant), query));
             }
         }
+    }
+
+    private Map<String, String> readTargets(Path path) throws IOException {
+        if (path == null || !Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("benchmark targets文件不存在");
+        }
+        JsonNode values = objectMapper.readTree(path.toFile()).path("targets");
+        Map<String, String> targets = new LinkedHashMap<>();
+        RagBenchmarkHttpClient.ProfileDefinition.ablations().forEach(definition -> {
+            String targetId = values.path(definition.variant()).asText();
+            if (targetId.isBlank() || !targetId.matches("[A-Za-z0-9_.-]{1,120}")) {
+                throw new IllegalArgumentException("benchmark targets缺少合法变体: " + definition.variant());
+            }
+            targets.put(definition.variant(), targetId);
+        });
+        if (!values.isObject() || values.size() != targets.size()
+                || targets.values().stream().distinct().count() != targets.size()) {
+            throw new IllegalArgumentException("benchmark targets必须恰好包含4个唯一目标");
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<>(targets));
     }
 
     private RagBenchmarkRunIO.RunRecord execute(String runId, String variant, String targetId, Query query)
@@ -309,6 +383,18 @@ public final class RagBenchmarkRunner {
                     || pollInterval.isZero() || pollInterval.isNegative() || ingestTimeout == null
                     || ingestTimeout.isZero() || ingestTimeout.isNegative()) {
                 throw new IllegalArgumentException("benchmark runner配置非法");
+            }
+        }
+    }
+    public record EvaluationConfiguration(String runId, java.net.URI baseUrl, String credentialSource,
+                                          String codeRevision, Path preparedDirectory, Path targetsFile,
+                                          Path runDirectory, long seed, int warmupQueries) {
+        public EvaluationConfiguration {
+            if (runId == null || !runId.matches("[A-Za-z0-9_.-]{1,64}") || baseUrl == null
+                    || credentialSource == null || credentialSource.isBlank() || codeRevision == null
+                    || codeRevision.isBlank() || preparedDirectory == null || targetsFile == null
+                    || runDirectory == null || warmupQueries < 0) {
+                throw new IllegalArgumentException("benchmark复评分配置非法");
             }
         }
     }

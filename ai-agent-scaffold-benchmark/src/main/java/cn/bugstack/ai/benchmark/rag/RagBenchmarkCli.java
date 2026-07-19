@@ -32,6 +32,7 @@ public final class RagBenchmarkCli {
             case "prepare" -> prepare(options);
             case "score" -> score(options);
             case "run" -> run(options);
+            case "evaluate" -> evaluate(options);
             case "load" -> load(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
@@ -120,6 +121,19 @@ public final class RagBenchmarkCli {
                 result.records().size(), configuration.concurrencyLevels(), configuration.outputDirectory());
     }
 
+    private static void evaluate(Map<String, String> options) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Remote remote = remote(options, objectMapper);
+        RagBenchmarkRunner.EvaluationConfiguration configuration =
+                new RagBenchmarkRunner.EvaluationConfiguration(required(options, "run-id"), remote.baseUrl(),
+                        remote.credentialSource(), required(options, "code-revision"), path(options, "prepared"),
+                        path(options, "targets"), path(options, "out"), number(options, "seed", 20260719L),
+                        nonNegativeInteger(options, "warmup-queries", 10));
+        RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, remote.client())
+                .evaluate(configuration);
+        System.out.printf("completed evaluate runId=%s out=%s%n", result.runId(), configuration.runDirectory());
+    }
+
     private static Remote remote(Map<String, String> options, ObjectMapper objectMapper) {
         String tokenEnvironment = options.getOrDefault("token-env", "RAG_BENCHMARK_ACCESS_TOKEN");
         if (!tokenEnvironment.matches("[A-Z][A-Z0-9_]{2,127}")) {
@@ -135,10 +149,21 @@ public final class RagBenchmarkCli {
         }
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(
                 integer(options, "connect-timeout-seconds", 10))).build();
-        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
-                Duration.ofSeconds(integer(options, "request-timeout-seconds", 120)),
-                integer(options, "max-response-bytes", 8 * 1024 * 1024));
-        return new Remote(baseUrl, "environment:" + tokenEnvironment, client);
+        Duration requestTimeout = Duration.ofSeconds(integer(options, "request-timeout-seconds", 120));
+        int maxResponseBytes = integer(options, "max-response-bytes", 8 * 1024 * 1024);
+        String usernameEnvironment = options.getOrDefault("username-env", "RAG_BENCHMARK_USERNAME");
+        String passwordEnvironment = options.getOrDefault("password-env", "RAG_BENCHMARK_PASSWORD");
+        String username = System.getenv(usernameEnvironment);
+        String password = System.getenv(passwordEnvironment);
+        boolean refreshEnabled = username != null && !username.isBlank() && password != null && !password.isBlank();
+        RagBenchmarkHttpClient client = refreshEnabled
+                ? new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl,
+                new RefreshingLoginTokenProvider(httpClient, objectMapper, baseUrl, token, username, password,
+                        requestTimeout, maxResponseBytes), requestTimeout, maxResponseBytes)
+                : new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
+                requestTimeout, maxResponseBytes);
+        return new Remote(baseUrl, "environment:" + tokenEnvironment
+                + (refreshEnabled ? ";refresh=enabled" : ";refresh=disabled"), client);
     }
 
     private static Map<String, String> options(String[] args) {
@@ -223,6 +248,8 @@ public final class RagBenchmarkCli {
         lines.add("        --run-id ID --code-revision GIT_COMMIT");
         lines.add("        [--concurrency-levels 1,10 --warmup-per-variant 10 --requests-per-variant 100]");
         lines.add("        [--phase-timeout-seconds 1800 --request-timeout-seconds 120]");
+        lines.add("evaluate --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
+        lines.add("        --run-id ID --code-revision GIT_COMMIT [--warmup-queries 10 --seed 20260719]");
         lines.forEach(System.out::println);
     }
 

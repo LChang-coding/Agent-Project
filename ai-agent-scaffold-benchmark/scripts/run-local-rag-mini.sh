@@ -15,6 +15,7 @@ LOAD_WARMUP_PER_VARIANT="${RAG_BENCHMARK_LOAD_WARMUP_PER_VARIANT:-10}"
 LOAD_REQUESTS_PER_VARIANT="${RAG_BENCHMARK_LOAD_REQUESTS_PER_VARIANT:-100}"
 WARMUP_QUERIES="${RAG_BENCHMARK_WARMUP_QUERIES:-0}"
 INGEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_INGEST_TIMEOUT_SECONDS:-900}"
+EXISTING_TARGETS="${RAG_BENCHMARK_EXISTING_TARGETS:-}"
 CLI_JAR="$PROJECT_ROOT/ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar"
 
 for command_name in curl jq openssl java git; do
@@ -34,7 +35,7 @@ if [[ ! -r "$CLI_JAR" || ! -d "$PREPARED_DIR" || -e "$OUTPUT_DIR"
 fi
 
 auth_dir="$(mktemp -d /tmp/rag-benchmark-auth.XXXXXX)"
-trap 'rm -rf "$auth_dir"; unset RAG_BENCHMARK_ACCESS_TOKEN' EXIT
+trap 'rm -rf "$auth_dir"; unset RAG_BENCHMARK_ACCESS_TOKEN RAG_BENCHMARK_USERNAME RAG_BENCHMARK_PASSWORD' EXIT
 
 suffix="$(date +%s)-$RANDOM"
 username="rag_bench_$suffix"
@@ -71,18 +72,29 @@ if [[ "$(jq -r '.code // empty' "$auth_dir/login-response.json")" != "0000" ]]; 
   exit 3
 fi
 export RAG_BENCHMARK_ACCESS_TOKEN="$(jq -er '.data.token' "$auth_dir/login-response.json")"
+export RAG_BENCHMARK_USERNAME="$username"
+export RAG_BENCHMARK_PASSWORD="$password"
 code_revision="$(git -C "$PROJECT_ROOT" rev-parse HEAD)"
 
 printf 'starting runId=%s prepared=%s out=%s\n' "$RUN_ID" "$PREPARED_DIR" "$OUTPUT_DIR"
-java -jar "$CLI_JAR" run \
+command_name=run
+extra_arguments=(--poll-ms 1000 --ingest-timeout-seconds "$INGEST_TIMEOUT_SECONDS")
+if [[ -n "$EXISTING_TARGETS" ]]; then
+  if [[ ! -r "$EXISTING_TARGETS" ]]; then
+    printf 'existing targets file is unavailable\n' >&2
+    exit 2
+  fi
+  command_name=evaluate
+  extra_arguments=(--targets "$EXISTING_TARGETS")
+fi
+java -jar "$CLI_JAR" "$command_name" \
   --base-url "$BASE_URL" \
   --prepared "$PREPARED_DIR" \
   --out "$OUTPUT_DIR" \
   --run-id "$RUN_ID" \
   --code-revision "$code_revision" \
   --warmup-queries "$WARMUP_QUERIES" \
-  --poll-ms 1000 \
-  --ingest-timeout-seconds "$INGEST_TIMEOUT_SECONDS" \
+  "${extra_arguments[@]}" \
   --request-timeout-seconds 120
 
 if [[ "$LOAD_ENABLED" == "true" ]]; then

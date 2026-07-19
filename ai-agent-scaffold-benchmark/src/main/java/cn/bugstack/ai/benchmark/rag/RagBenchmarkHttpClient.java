@@ -29,7 +29,7 @@ public final class RagBenchmarkHttpClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final URI baseUri;
-    private final String bearerToken;
+    private final BearerTokenProvider tokenProvider;
     private final Duration timeout;
     private final int maxResponseBytes;
 
@@ -43,7 +43,22 @@ public final class RagBenchmarkHttpClient {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.baseUri = URI.create(baseUri.toString().replaceAll("/+$", ""));
-        this.bearerToken = bearerToken;
+        this.tokenProvider = BearerTokenProvider.fixed(bearerToken);
+        this.timeout = timeout;
+        this.maxResponseBytes = maxResponseBytes;
+    }
+
+    RagBenchmarkHttpClient(HttpClient httpClient, ObjectMapper objectMapper, URI baseUri,
+                           BearerTokenProvider tokenProvider, Duration timeout, int maxResponseBytes) {
+        if (httpClient == null || objectMapper == null || baseUri == null || tokenProvider == null
+                || tokenProvider.currentToken() == null || tokenProvider.currentToken().isBlank()
+                || timeout == null || timeout.isZero() || timeout.isNegative() || maxResponseBytes < 1024) {
+            throw new IllegalArgumentException("benchmark HTTP客户端参数非法");
+        }
+        this.httpClient = httpClient;
+        this.objectMapper = objectMapper;
+        this.baseUri = URI.create(baseUri.toString().replaceAll("/+$", ""));
+        this.tokenProvider = tokenProvider;
         this.timeout = timeout;
         this.maxResponseBytes = maxResponseBytes;
     }
@@ -159,6 +174,15 @@ public final class RagBenchmarkHttpClient {
     private JsonNode send(HttpRequest request) throws IOException, InterruptedException {
         HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         byte[] body = readBounded(response.body());
+        if (response.statusCode() == 401) {
+            String rejectedToken = authorizationToken(request);
+            String refreshedToken = tokenProvider.refresh(rejectedToken);
+            HttpRequest retry = HttpRequest.newBuilder(request,
+                            (name, value) -> !"Authorization".equalsIgnoreCase(name))
+                    .header("Authorization", "Bearer " + refreshedToken).build();
+            response = httpClient.send(retry, HttpResponse.BodyHandlers.ofInputStream());
+            body = readBounded(response.body());
+        }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new BenchmarkProtocolException("RAG_BENCHMARK_HTTP_" + response.statusCode(),
                     "RAG接口HTTP状态异常");
@@ -183,7 +207,13 @@ public final class RagBenchmarkHttpClient {
 
     private HttpRequest.Builder request(String path) {
         return HttpRequest.newBuilder(URI.create(baseUri + path)).timeout(timeout)
-                .header("Accept", "application/json").header("Authorization", "Bearer " + bearerToken);
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer " + tokenProvider.currentToken());
+    }
+
+    private String authorizationToken(HttpRequest request) {
+        String value = request.headers().firstValue("Authorization").orElse("");
+        return value.startsWith("Bearer ") ? value.substring(7) : value;
     }
 
     private byte[] readBounded(InputStream input) throws IOException {
@@ -237,6 +267,19 @@ public final class RagBenchmarkHttpClient {
     public record DebugResult(String retrievalId, List<String> rankedDocumentIds, List<String> citationHeadings,
                               boolean degraded, List<String> degradationReasons, Map<String, Long> timingsMs,
                               Map<String, Integer> candidateCounts) {}
+
+    interface BearerTokenProvider {
+        String currentToken();
+        String refresh(String rejectedToken) throws IOException, InterruptedException;
+
+        static BearerTokenProvider fixed(String token) {
+            return new BearerTokenProvider() {
+                @Override public String currentToken() { return token; }
+                @Override public String refresh(String rejectedToken) { return token; }
+                @Override public String toString() { return "FixedBearerTokenProvider"; }
+            };
+        }
+    }
     public record ProfileDefinition(String variant, String mode, boolean denseEnabled,
                                     boolean sparseEnabled, boolean rerankEnabled) {
         public static List<ProfileDefinition> ablations() {
