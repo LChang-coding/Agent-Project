@@ -1517,3 +1517,9 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 初始远端inspect现以`.tmp`写入并最多尝试3次，只在SSH+8容器输出整体成功后`mv`为正式快照；三次全失败则明确退出1。Load包装的ready循环新增collector存活检查，子进程提前退出会立即收口而非固定空等20秒。
 - 两个脚本`bash -n`通过；真实采样器回归产生9行完整inspect、12条本地JSONL和6条8容器JSONL，逐行`jq`与字段数门禁通过，远端错误文件为空。回归采样器已通过SIGINT执行自身cleanup，没有残留SSH/docker stats子进程。
+
+###### Rerank批次8最小冒烟结果与批次5计划（执行前）
+
+- 全新run `scifact-load-batch8-micro-a454e57-r2`完成4 warmup+4 measured，manifest=completed/exitCode=0，四变体齐全且均为queryId=1，共8条0 error/degraded/empty；两条Rerank均返回10候选。采样器38条本地+18条8容器JSONL有效，前后快照running/restart=0/OOM=false，evidence exitCode=0。
+- 批次8的Rerank warmup为48669ms（stage=35413ms），measured为15215ms（stage=13906ms）；同query的批次3功能冒烟分别为14246/8930ms（stage=14246/7857ms）。单样本受当时队列和模型抖动影响，不足以声称批次8显著回归，但它至少没有展示改默认值所需的明确收益，因此暂不采用。
+- 继续仅调整`requestBatchSize=5`，将Top10拆为5/5两批；它既低于permit=8，又比批次8降低单次推理量。同一JAR重启后先做相同8请求最小冒烟；通过才允许做多样本A/B，失败则恢复已知可用的批次3。
