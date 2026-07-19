@@ -918,3 +918,25 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 第二次复评分无效 run `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-63ae2a0` 只产生3条warmup：Sparse成功，Dense/Hybrid报 `RAG_EMBEDDING_UNAVAILABLE`，未产生 measured；该进程已中断并保留现场。旧本机 app 同时出现远程 MySQL stale connection/Hikari 通信失败，已优雅停止并用相同批次、重试、lease、heartbeat参数启动新 JVM，Tomcat 8092 与新 Hikari 连接均恢复。
 - 服务器日志进一步证明 Reranker 对16候选请求稳定在约7–8秒返回429，而不是容器退出或Qdrant故障。为让 `finalTopK=10` 的全部指标仍有完整候选空间，同时不超过当前重排服务的令牌/许可容量，本轮把新 profile 的 `fusionTopK` 与 `rerankTopK` 从16收敛为10；Dense/Sparse各自召回100、最终Top‑10、语料、qrels及其余变量保持不变。
 - 调整后的 benchmark 全量测试14/14通过，0 failure/error/skipped，BUILD SUCCESS 3.325秒，含依赖CLI JAR已重新生成。下一步只更新本次 SciFact 既有4个专用 profile（带 revision 乐观锁），逐组做真实debug；必须四组均 `error=null`、`degraded=false`，且Rerank实际候选数和耗时大于0，才启动新的1200条复评分。
+
+###### Reranker Top-10 仍降级的追加诊断计划
+
+1. 4个专用profile已通过正式PUT接口从16更新为10，数据库核验 `fusion_top_k=10/rerank_top_k=10/final_top_k=10`；逐组真实debug中Dense、Sparse、Hybrid均成功且未降级，Rerank仍在17.343秒后以 `rerank_fallback` 降级，候选数和耗时均为0。因此不启动正式复评分。
+2. 只读检查 Reranker 容器启动参数、资源限制和本次请求附近日志，区分单请求token上限、客户端批次上限、并发permit和超时；同时检查Java适配器是否把10个候选一次性封装为服务契约允许的请求。禁止仅凭猜测把Top-10评测改成Top-8。
+3. 若服务启动参数低于当前模型可承受的单请求Top-10，只调整RAG环境中间件的最小必要容量参数并验证内存峰值；若契约本身要求分批，则在Java适配器实现有界分批、合并原始分数再统一排序，并增加边界/错误/超时测试。
+4. 修复后仍以同一查询逐组冒烟，Rerank必须 `degraded=false`、`rerankCandidateCount>0`、`rerankMs>0` 且返回10条引用；否则继续保留失败证据，不发布Rerank质量指标。
+
+###### 旧业务服务器中间件迁移评估计划（执行前）
+
+1. 用户允许在旧服务器资源/网络成为瓶颈时，把MySQL及经评估适合的中间件迁往新RAG服务器。先只读采集两台服务器的网络RTT、CPU/内存/Swap/磁盘、容器工作集与MySQL容量/连接/缓冲池/数据量，不因“服务器比较烂”的主观判断直接搬库。
+2. 分开判断两条故障链：Reranker 429属于新RAG服务器模型服务容量；远程MySQL往返属于旧服务器/公网数据库路径。迁移MySQL不能修复Reranker，调整Reranker也不能消除数据库审计和引用装载延迟。
+3. 迁移候选按依赖和数据一致性评估：优先考虑MySQL是否能与Qdrant共置；Kafka、MinIO、Nacos、XXL-JOB、Grafana/Loki默认不一起迁移，除非测量证明收益且新机内存、磁盘、故障域仍满足要求。尤其禁止把15GiB主机的容器资源上限简单相加当成可用容量。
+4. 若MySQL迁移收益成立，先在新机部署版本一致、受限内存和非公网暴露的从库/恢复实例，完成全量备份校验、增量追平、表/行数与关键hash核验；再安排明确停写窗口、最终追平、应用/Nacos连接切换和端到端验证。旧库保留只读回滚窗口，不做不可逆删除。
+5. 切换验收至少覆盖登录、会话历史、RAG配置/摄取/checkpoint、检索审计、定时任务和消息链路；记录切换前后P50/P95、错误率和资源峰值。任一关键核验失败立即回切，不用双主写入制造分叉。
+
+###### 2026-07-19 Reranker 进一步诊断结果
+
+- 前一次直连401来自临时诊断脚本误取凭据表第4列“用户名”，正确API Key在第5列；这不是服务器Key失效，Java启动脚本一直按第5列读取，因此不影响业务冒烟结论。错误探测已停止且没有输出密钥。
+- 使用正确Key和无敏感合成文本直连：3候选返回200、1.713秒、3条分数；10个每条80字符的短候选返回429 `Model is overloaded`、0.788秒；10个每条1200字符的候选返回同一429、15.153秒。证明Reranker在线，但当前批处理/permit能力无法稳定承接Top-10，而非MySQL导致重排调用失败。
+- 随后从4候选开始的临界点探测首请求在60秒内0字节并超时，说明连续过载后服务未及时恢复，不能用单一“最多N条”解释。当前更可能是CPU推理积压/permit未释放或进程失活；正式1200条复评分继续禁止启动。
+- `codex.md` 记录的RAG SSH密码当前被服务器拒绝，无法进入容器核对日志或执行最小重启；该凭据状态与API Key列解析问题相互独立。在SSH恢复前，继续完成本机代码和旧服务器只读迁移评估，不伪造远端容器证据。
