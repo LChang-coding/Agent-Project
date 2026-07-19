@@ -1585,3 +1585,13 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 3. 前端首次进入、切换知识库和手动刷新时恢复服务端任务；显示多任务、真实终态图标、`errorCode/cancelReason`和轮询失败反馈，每行独立取消。
 4. 单元/契约测试覆盖tenant+kb过滤、limit边界、跨租户不可见、管理员门禁与响应脱敏；运行Java 17定向RAG回归和前端生产构建。
 5. 完成后追加实际文件、测试数和限制，仅暂存本切片文件并用中文本地提交。
+
+#### 摄取任务历史与刷新恢复切片执行结果
+
+- `IRagRepository`、`IRagIngestTaskDao`、`RagRepository`和MyBatis增加`tenant_id + kb_id + deleted=0`的最新任务列表查询，固定`ORDER BY id DESC`并将limit限制1–200；全球Worker任务扫描契约未改动。
+- `GET /api/v1/rag/knowledge-bases/{knowledgeBaseId}/ingest-tasks?limit=100`经知识库owner/admin管理权限后返回脱敏`RagIngestTaskResponseDTO`；响应不含leaseOwner、leaseUntil、fencingToken、checkpoint JSON、对象键或内部errorMessage。`docs/rag/api.md`已追加契约。
+- RAG页面进入、整体刷新和切换知识库时会同时恢复文档与任务；最多100条任务在有界滚动区显示，运行态置顶。每条显示operation、stage、chunk进度、attempt、稳定errorCode/cancelReason和正确成功/失败图标，可独立取消；失败/取消且无totalChunks时不再误画100%进度。
+- 任务轮询仍以2.5秒执行，但不再静默丢弃`Promise.allSettled`失败；任一查询失败会明确告知失败数和手动刷新恢复方式，其他成功任务仍正常更新。
+- Java 17首轮定向`RagDocumentControllerTest,RagDocumentManagementServiceTest,RagRepositoryTest` 20/20通过。随后新增Mapper契约测试，执行`mvn clean test -pl ai-agent-scaffold-app -am -DskipTests=false -Dtest='*Rag*Test' -Dsurefire.failIfNoSpecifiedTests=false`，134/134通过，0 failure/error/skipped，六模块BUILD SUCCESS，10.043秒。
+- 前端`npm run build`在最终修改后通过`vue-tsc --noEmit`和Vite生产构建，1916 modules transformed，884ms；RAG页面JS 33.16kB（gzip 10.95kB）。Java全reactor跳过重复测试的package成功，App JAR SHA-256为`6ab19821da2b55732552598afa065ce2ba8709ed2280c9917db2a8402223614a`。
+- 本切片没有重启正在服务的旧8092评测应用，因此不把Controller/前端的单元契约和生产构建写成真实浏览器E2E；新JAR的运行时黑盒验证与后续PDF/DOCX三格式E2E合并执行，避免为一个只读新端点单独中断当前服务。

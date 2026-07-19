@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -98,6 +99,20 @@ public class RagDocumentController {
         try {
             return success(taskResponse(managementService.requireTask(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(), taskId)));
+        } catch (AppException e) {
+            return failure(e);
+        }
+    }
+
+    /** 查询知识库最新摄取任务。 */
+    @GetMapping("/knowledge-bases/{knowledgeBaseId}/ingest-tasks")
+    public Response<List<RagIngestTaskResponseDTO>> tasks(@PathVariable String knowledgeBaseId,
+                                                           @RequestParam(defaultValue = "100") int limit) {
+        try {
+            return success(managementService.listTasks(TenantContextHolder.getTenantId(),
+                            TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(),
+                            knowledgeBaseId, limit)
+                    .stream().map(this::taskResponse).toList());
         } catch (AppException e) {
             return failure(e);
         }

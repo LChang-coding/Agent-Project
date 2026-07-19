@@ -54,6 +54,16 @@ public class RagDocumentManagementService {
         return task;
     }
 
+    /** 查询知识库最新摄取任务，用于页面刷新后恢复进度。 */
+    public List<RagIngestJobEntity> listTasks(String tenantId, String userId, String roleCode,
+                                              String knowledgeBaseId, int limit) {
+        requireManageable(tenantId, userId, roleCode, knowledgeBaseId);
+        if (limit < 1 || limit > 200) {
+            throw new AppException("RAG_TASK_LIMIT_INVALID", "任务查询数量必须在1到200之间");
+        }
+        return repository.listIngestJobs(tenantId, knowledgeBaseId, limit);
+    }
+
     /**
      * 请求取消任务。未持有 Worker 租约的任务同步关闭；运行中任务只建立取消屏障，由 Worker 清理副作用。
      */

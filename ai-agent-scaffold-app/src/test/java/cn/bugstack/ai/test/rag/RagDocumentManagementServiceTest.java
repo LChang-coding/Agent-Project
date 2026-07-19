@@ -18,18 +18,45 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** 摄取任务取消状态与 CAS 次数测试。 */
 public class RagDocumentManagementServiceTest {
+
+    @Test
+    public void shouldListBoundedKnowledgeBaseTasksAfterAdministratorAuthorization() {
+        IRagRepository repository = repository();
+        when(repository.listIngestJobs("tenant-a", "kb-a", 50)).thenReturn(List.of(pending()));
+
+        List<RagIngestJobEntity> result = service(repository).listTasks(
+                "tenant-a", "admin-a", "admin", "kb-a", 50);
+
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals("task-a", result.get(0).jobId());
+        verify(repository).listIngestJobs("tenant-a", "kb-a", 50);
+    }
+
+    @Test
+    public void shouldRejectInvalidTaskListLimitBeforeRepositoryQuery() {
+        IRagRepository repository = repository();
+
+        AppException error = Assert.assertThrows(AppException.class, () -> service(repository).listTasks(
+                "tenant-a", "admin-a", "admin", "kb-a", 201));
+
+        Assert.assertEquals("RAG_TASK_LIMIT_INVALID", error.getCode());
+        verify(repository, never()).listIngestJobs(any(), any(), anyInt());
+    }
 
     @Test
     public void shouldSynchronouslyCancelUnleasedPendingTaskWithOneLifecycleTransaction() {

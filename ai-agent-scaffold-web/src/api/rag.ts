@@ -173,6 +173,14 @@ export function queryRagIngestTask(taskId: string) {
   });
 }
 
+export function queryRagIngestTasks(knowledgeBaseId: string, limit = 100) {
+  return request<RagIngestTask[]>({
+    url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/ingest-tasks`,
+    method: 'GET',
+    params: { limit },
+  });
+}
+
 export function cancelRagIngestTask(taskId: string, reason: string) {
   return request<RagIngestTask>({
     url: `/v1/rag/ingest-tasks/${encodeURIComponent(taskId)}/cancel`,

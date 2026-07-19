@@ -104,25 +104,33 @@
           <div><strong>{{ pendingFileName }}</strong><em>{{ uploadProgress }}%</em></div>
         </div>
 
-        <article v-if="activeTask" class="task-card" :class="`task-card--${statusTone(activeTask.status)}`">
-          <div class="task-orbit"><LoaderCircle v-if="isTaskRunning(activeTask.status)" class="spin" :size="22" /><CircleCheck v-else :size="22" /></div>
-          <div class="task-main">
-            <span>摄取任务 · {{ statusText(activeTask.status) }} / {{ taskStageText(activeTask.stage) }} · {{ shortId(activeTask.taskId) }}</span>
-            <strong>{{ documentName(activeTask.documentId) }}</strong>
-            <div class="task-progress"><span :style="{ width: `${taskPercent(activeTask)}%` }" /></div>
-            <small>{{ activeTask.processedChunks }}/{{ activeTask.totalChunks || '—' }} chunks · 尝试 {{ activeTask.attemptCount }}/{{ activeTask.maxAttempts }}</small>
-          </div>
-          <button
-            v-if="isAdministrator && isTaskRunning(activeTask.status)"
-            class="rag-button rag-button--danger"
-            type="button"
-            :disabled="cancelBusy"
-            @click="cancelActiveTask"
-          >
-            <LoaderCircle v-if="cancelBusy" class="spin" :size="15" />
-            {{ cancelBusy ? '正在取消' : '取消任务' }}
-          </button>
-        </article>
+        <section v-if="selectedTasks.length" class="task-list" aria-label="摄取任务">
+          <article v-for="task in selectedTasks" :key="task.taskId" class="task-card" :class="`task-card--${statusTone(task.status)}`">
+            <div class="task-orbit">
+              <LoaderCircle v-if="isTaskRunning(task.status)" class="spin" :size="22" />
+              <CircleAlert v-else-if="statusTone(task.status) === 'danger'" :size="22" />
+              <CircleCheck v-else :size="22" />
+            </div>
+            <div class="task-main">
+              <span>{{ operationText(task.operation) }} · {{ statusText(task.status) }} / {{ taskStageText(task.stage) }} · {{ shortId(task.taskId) }}</span>
+              <strong>{{ documentName(task.documentId) }}</strong>
+              <div class="task-progress"><span :style="{ width: `${taskPercent(task)}%` }" /></div>
+              <small>{{ task.processedChunks }}/{{ task.totalChunks || '—' }} chunks · 尝试 {{ task.attemptCount }}/{{ task.maxAttempts }}</small>
+              <small v-if="task.errorCode" class="task-error">错误码·{{ task.errorCode }}</small>
+              <small v-if="task.cancelReason" class="task-error">取消原因·{{ task.cancelReason }}</small>
+            </div>
+            <button
+              v-if="isAdministrator && isTaskRunning(task.status)"
+              class="rag-button rag-button--danger"
+              type="button"
+              :disabled="cancelBusyTaskId === task.taskId"
+              @click="cancelTask(task)"
+            >
+              <LoaderCircle v-if="cancelBusyTaskId === task.taskId" class="spin" :size="15" />
+              {{ cancelBusyTaskId === task.taskId ? '正在取消' : '取消任务' }}
+            </button>
+          </article>
+        </section>
 
         <div v-if="documentLoading" class="document-skeleton">
           <span v-for="item in 4" :key="item" />
@@ -303,7 +311,7 @@ import { queryAgentConfigManagement } from '@/api/agent';
 import {
   cancelRagIngestTask, createKnowledgeBase, createRagBinding, createRagRetrievalProfile,
   debugRagRetrieval, deleteRagBinding, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
-  queryRagIngestTask, queryRagRetrievalProfiles, updateRagRetrievalProfile, uploadRagDocument,
+  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, updateRagRetrievalProfile, uploadRagDocument,
   type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase,
   type RagRetrievalDebugResult, type RagRetrievalProfile, type RagRetrievalProfilePayload,
   type RagTargetType,
@@ -329,7 +337,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const uploadBusy = ref(false);
 const uploadProgress = ref(0);
 const pendingFileName = ref('');
-const cancelBusy = ref(false);
+const cancelBusyTaskId = ref('');
 const createKnowledgeBaseBusy = ref(false);
 const showCreateKnowledgeBase = ref(false);
 const knowledgeBaseForm = reactive({ name: '', description: '' });
@@ -351,7 +359,9 @@ let taskTimer: number | undefined;
 const labTabs = [{ id: 'debug' as const, label: '调试' }, { id: 'profiles' as const, label: '策略' }, { id: 'bindings' as const, label: '绑定' }];
 const isAdministrator = computed(() => ['owner', 'admin'].includes(authStore.roleCode.toLowerCase()));
 const selectedKnowledgeBase = computed(() => knowledgeBases.value.find((item) => item.knowledgeBaseId === selectedKnowledgeBaseId.value));
-const activeTask = computed(() => Object.values(taskById.value).find((task) => task.knowledgeBaseId === selectedKnowledgeBaseId.value && isTaskRunning(task.status)) || Object.values(taskById.value).find((task) => task.knowledgeBaseId === selectedKnowledgeBaseId.value));
+const selectedTasks = computed(() => Object.values(taskById.value)
+  .filter((task) => task.knowledgeBaseId === selectedKnowledgeBaseId.value)
+  .sort((left, right) => Number(isTaskRunning(right.status)) - Number(isTaskRunning(left.status))));
 const selectedBinding = computed(() => bindings.value.find((item) => item.bindingId === debugForm.bindingId));
 const targetOptions = computed(() => bindingForm.targetType === 'agent' ? agentTargets.value : workflowTargets.value);
 const canCreateBinding = computed(() => Boolean(bindingForm.targetId && bindingForm.knowledgeBaseId && bindingForm.profileId && bindingForm.maxTokens > 0));
@@ -372,7 +382,8 @@ async function reloadAll() {
     const bases = await queryKnowledgeBases();
     knowledgeBases.value = bases;
     if (!bases.some((item) => item.knowledgeBaseId === selectedKnowledgeBaseId.value)) selectedKnowledgeBaseId.value = bases[0]?.knowledgeBaseId || '';
-    if (selectedKnowledgeBaseId.value) await loadDocuments();
+    if (selectedKnowledgeBaseId.value) await loadKnowledgeBaseData();
+    else { documents.value = []; taskById.value = {}; }
     if (isAdministrator.value) {
       const [profileValues, bindingValues] = await Promise.all([queryRagRetrievalProfiles(), queryRagBindings()]);
       profiles.value = profileValues;
@@ -397,7 +408,12 @@ async function selectKnowledgeBase(id: string) {
   selectedKnowledgeBaseId.value = id;
   bindingForm.knowledgeBaseId = id;
   debugResult.value = null;
-  await loadDocuments();
+  await loadKnowledgeBaseData();
+}
+
+async function loadKnowledgeBaseData() {
+  await Promise.all([loadDocuments(), loadTasks()]);
+  startTaskPolling();
 }
 
 async function loadDocuments() {
@@ -406,6 +422,21 @@ async function loadDocuments() {
   try { documents.value = await queryRagDocuments(selectedKnowledgeBaseId.value); }
   catch (error) { documents.value = []; showError(error, '文档列表加载失败'); }
   finally { documentLoading.value = false; }
+}
+
+async function loadTasks() {
+  const knowledgeBaseId = selectedKnowledgeBaseId.value;
+  if (!knowledgeBaseId || !isAdministrator.value) {
+    taskById.value = {};
+    return;
+  }
+  try {
+    const tasks = await queryRagIngestTasks(knowledgeBaseId);
+    taskById.value = Object.fromEntries(tasks.map((task) => [task.taskId, task]));
+  } catch (error) {
+    taskById.value = {};
+    showError(error, '摄取任务加载失败');
+  }
 }
 
 function openFilePicker() { fileInput.value?.click(); }
@@ -436,22 +467,26 @@ function startTaskPolling() {
     if (!running.length) { window.clearInterval(taskTimer); taskTimer = undefined; return; }
     const settled = await Promise.allSettled(running.map((task) => queryRagIngestTask(task.taskId)));
     settled.forEach((item) => { if (item.status === 'fulfilled') taskById.value = { ...taskById.value, [item.value.taskId]: item.value }; });
+    const failedCount = settled.filter((item) => item.status === 'rejected').length;
+    if (failedCount) {
+      notice.value = { kind: 'error', message: `${failedCount} 个摄取任务进度同步失败，可点击“刷新数据”重试。` };
+    }
     if (settled.some((item) => item.status === 'fulfilled' && !isTaskRunning(item.value.status))) await loadDocuments();
   }, 2500);
 }
 
-async function cancelActiveTask() {
-  if (!activeTask.value || !window.confirm('确定取消当前摄取任务？未激活的向量和分块将被清理。')) return;
-  cancelBusy.value = true;
+async function cancelTask(target: RagIngestTask) {
+  if (!window.confirm(`确定取消任务 ${shortId(target.taskId)}？未激活的向量和分块将被清理。`)) return;
+  cancelBusyTaskId.value = target.taskId;
   try {
-    const task = await cancelRagIngestTask(activeTask.value.taskId, '租户管理员在知识编辑室中取消');
+    const task = await cancelRagIngestTask(target.taskId, '租户管理员在知识编辑室中取消');
     taskById.value = { ...taskById.value, [task.taskId]: task };
     await loadDocuments();
     notice.value = { kind: 'success', message: task.status === 'cancelled'
       ? '摄取任务已取消，未激活的文档版本已关闭。'
       : '取消请求已记录，Worker 将在下一个外部调用前停止并清理未激活数据。' };
   } catch (error) { showError(error, '任务取消失败'); }
-  finally { cancelBusy.value = false; }
+  finally { cancelBusyTaskId.value = ''; }
 }
 
 async function saveKnowledgeBase() {
@@ -530,7 +565,7 @@ function defaultProfile(): RagRetrievalProfilePayload {
 
 function showError(error: unknown, fallback: string) { const candidate = error as { info?: string; message?: string }; notice.value = { kind: 'error', message: candidate?.info || candidate?.message || fallback }; }
 function isTaskRunning(status: string) { return ['pending', 'running', 'retrying', 'cancel_requested'].includes(status); }
-function taskPercent(task: RagIngestTask) { if (!task.totalChunks) return isTaskRunning(task.status) ? 12 : 100; return Math.min(100, Math.round((task.processedChunks / task.totalChunks) * 100)); }
+function taskPercent(task: RagIngestTask) { if (!task.totalChunks) return task.status === 'completed' ? 100 : isTaskRunning(task.status) ? 12 : 0; return Math.min(100, Math.round((task.processedChunks / task.totalChunks) * 100)); }
 function shortId(value?: string) { if (!value) return '—'; return value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-4)}` : value; }
 function formatBytes(value: number) { if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`; return `${(value / 1024 / 1024).toFixed(1)} MiB`; }
 function fileType(name: string) { return name.split('.').pop()?.toUpperCase() || 'DOC'; }
@@ -541,7 +576,8 @@ function targetLabel(type: RagTargetType, id: string) { const target = (type ===
 function scoreText(value?: number) { return Number.isFinite(value) ? Number(value).toFixed(3) : '—'; }
 function statusTone(status: string) { if (['active', 'ready', 'completed'].includes(status)) return 'success'; if (['failed', 'dead', 'cancelled'].includes(status)) return 'danger'; if (['pending', 'running', 'retrying', 'cancel_requested', 'processing'].includes(status)) return 'working'; return 'neutral'; }
 function statusText(status: string) { return ({ active: '可用', ready: '已就绪', completed: '已完成', failed: '失败', dead: '已终止', cancelled: '已取消', pending: '等待中', running: '处理中', retrying: '等待重试', cancel_requested: '取消中', processing: '处理中' } as Record<string, string>)[status] || status; }
-function taskStageText(stage: string) { return ({ queued: '排队', downloading: '下载原文档', parsing: '解析结构', chunking: '切分语义块', embedding: '生成向量', indexing: '写入索引', verifying: '验证完整性', completed: '已完成' } as Record<string, string>)[stage] || stage; }
+function taskStageText(stage: string) { return ({ received: '已受理', queued: '排队', downloading: '下载原文档', parsing: '解析结构', chunking: '切分语义块', embedding: '生成向量', indexing: '写入索引', verifying: '验证完整性', completed: '已完成' } as Record<string, string>)[stage] || stage; }
+function operationText(operation: string) { return ({ ingest: '摄取', rebuild: '重建', delete: '删除' } as Record<string, string>)[operation] || operation; }
 </script>
 
 <style scoped>
@@ -581,7 +617,7 @@ function taskStageText(stage: string) { return ({ queued: '排队', downloading:
 .rail-empty, .document-empty, .lab-locked { display: grid; place-items: center; color: var(--muted); text-align: center; }.rail-empty { margin: 40px 8px; gap: 8px; }.rail-empty strong,.document-empty strong,.lab-locked strong { color: var(--ink-soft); }.rail-empty span { font-size: 12px; line-height: 1.5; }
 .document-stage { background: rgba(255,255,252,.78); }.sr-file { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .upload-progress { position: relative; margin: -6px 0 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }.upload-progress > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent-soft), rgba(169,121,57,.22)); transition: width .2s; }.upload-progress div { position: relative; display: flex; justify-content: space-between; padding: 9px 11px; font-size: 11px; }.upload-progress em { font-style: normal; font-weight: 700; }
-.task-card { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; margin-bottom: 14px; padding: 14px; gap: 12px; border: 1px solid rgba(169,121,57,.24); border-radius: 14px; background: linear-gradient(105deg, var(--gold-soft), #fffaf0); }.task-card--danger { border-color: rgba(155,62,62,.2); background: var(--danger-soft); }.task-orbit { display: grid; width: 42px; height: 42px; color: var(--gold); border-radius: 50%; background: rgba(255,255,255,.7); place-items: center; }.task-main span,.task-main small { display: block; color: var(--muted); font-size: 10px; }.task-main strong { display: block; margin: 3px 0 7px; font-size: 12px; }.task-progress { height: 3px; margin-bottom: 6px; overflow: hidden; border-radius: 3px; background: rgba(23,33,43,.1); }.task-progress span { display: block; height: 100%; background: var(--gold); transition: width .35s; }
+.task-list { display: grid; max-height: 330px; margin-bottom: 14px; gap: 8px; overflow-y: auto; }.task-card { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; padding: 14px; gap: 12px; border: 1px solid rgba(169,121,57,.24); border-radius: 14px; background: linear-gradient(105deg, var(--gold-soft), #fffaf0); }.task-card--danger { border-color: rgba(155,62,62,.2); background: var(--danger-soft); }.task-orbit { display: grid; width: 42px; height: 42px; color: var(--gold); border-radius: 50%; background: rgba(255,255,255,.7); place-items: center; }.task-card--danger .task-orbit,.task-error { color: var(--danger) !important; }.task-main span,.task-main small { display: block; color: var(--muted); font-size: 10px; }.task-main strong { display: block; margin: 3px 0 7px; font-size: 12px; }.task-progress { height: 3px; margin-bottom: 6px; overflow: hidden; border-radius: 3px; background: rgba(23,33,43,.1); }.task-progress span { display: block; height: 100%; background: var(--gold); transition: width .35s; }.task-error { margin-top: 4px; overflow-wrap: anywhere; }
 .document-list { display: grid; gap: 9px; }.document-row { display: grid; grid-template-columns: 48px minmax(0,1fr) 76px auto; align-items: center; min-height: 76px; padding: 11px 13px; gap: 12px; border: 1px solid var(--line); border-radius: 13px; background: #fff; transition: transform var(--motion-fast), box-shadow var(--motion-fast); }.document-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }.file-mark { display: grid; width: 42px; height: 48px; color: var(--accent-deep); border-radius: 7px 13px 7px 7px; background: var(--accent-soft); font: 800 9px monospace; place-items: center; }.file-mark[data-type="PDF"] { color: var(--danger); background: var(--danger-soft); }.file-mark[data-type="DOCX"] { color: #315d91; background: #e3ebf5; }.document-copy { min-width: 0; }.document-copy strong,.document-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.document-copy strong { font-size: 13px; }.document-copy span { margin-top: 5px; color: var(--muted); font: 10px monospace; }.document-generation small,.document-generation strong { display: block; text-align: center; }.document-generation small { color: var(--muted); font: 8px monospace; letter-spacing: .08em; }.document-generation strong { margin-top: 4px; font: 700 14px monospace; }.status-pill { padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }.status-pill--success { color: var(--success); background: var(--success-soft); }.status-pill--working { color: var(--warning); background: var(--warning-soft); }.status-pill--danger { color: var(--danger); background: var(--danger-soft); }.status-pill--neutral { color: var(--muted); background: var(--surface-muted); }
 .document-empty { min-height: 430px; }.document-empty p { max-width: 360px; margin: 8px auto; font-size: 12px; line-height: 1.65; }.empty-illustration { position: relative; display: grid; width: 88px; height: 88px; margin-bottom: 17px; color: var(--accent); border: 1px solid var(--line); border-radius: 25px; background: var(--surface-muted); place-items: center; transform: rotate(-3deg); }.empty-illustration span { position: absolute; right: -8px; bottom: -8px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold-soft); }
 .lab-heading svg { color: var(--gold); }.lab-tabs { display: grid; grid-template-columns: repeat(3,1fr); margin-bottom: 18px; padding: 3px; border-radius: 10px; background: var(--bg-strong); }.lab-tabs button { padding: 8px; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 700; background: transparent; }.lab-tabs button.active { color: var(--ink); background: #fff; box-shadow: 0 4px 12px rgba(23,33,43,.07); }

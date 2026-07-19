@@ -63,6 +63,9 @@ public interface IRagRepository {
     /** 按租户查询摄取任务。 */
     Optional<RagIngestJobEntity> findIngestJob(String tenantId, String jobId);
 
+    /** 按租户和知识库查询最新摄取任务，实现必须限制返回数量。 */
+    List<RagIngestJobEntity> listIngestJobs(String tenantId, String knowledgeBaseId, int limit);
+
     /** 按租户和幂等键查询摄取任务。 */
     Optional<RagIngestJobEntity> findIngestJobByIdempotencyKey(String tenantId, String idempotencyKey);
 

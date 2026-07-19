@@ -157,6 +157,17 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    public List<RagIngestJobEntity> listIngestJobs(String tenantId, String knowledgeBaseId, int limit) {
+        requireText(tenantId, "tenantId");
+        requireText(knowledgeBaseId, "knowledgeBaseId");
+        if (limit < 1 || limit > 200) {
+            throw new IllegalArgumentException("RAG摄取任务查询数量必须在1到200之间");
+        }
+        return ingestTaskDao.queryListByTenantAndKnowledgeBaseId(tenantId, knowledgeBaseId, limit).stream()
+                .map(mapper::toIngestJob).toList();
+    }
+
+    @Override
     public Optional<RagIngestJobEntity> findIngestJobByIdempotencyKey(String tenantId, String idempotencyKey) {
         return Optional.ofNullable(mapper.toIngestJob(ingestTaskDao.queryByTenantAndTaskKey(
                 requireText(tenantId, "tenantId"), requireText(idempotencyKey, "idempotencyKey"))));

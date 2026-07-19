@@ -16,6 +16,7 @@
 | GET | `/api/v1/rag/knowledge-bases` | 查询当前租户知识库 | 不接受 tenantId |
 | POST | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents` | 上传文档 | `multipart/form-data` 的 `file`；业务策略支持 PDF、DOCX、MD/Markdown且上限50 MiB；Servlet限制、Nacos下发覆盖和反向代理请求体限制必须分别对齐 |
 | GET | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents` | 查询知识库文档 | 返回 active/target generation 和状态 |
+| GET | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/ingest-tasks?limit=100` | 查询最新摄取任务 | 仅owner/admin；`limit` 1–200，按最新在前返回，不暴露lease、fencing、checkpoint或内部错误消息 |
 | GET | `/api/v1/rag/ingest-tasks/{taskId}` | 查询摄取任务 | 返回 operation、stage、状态、chunk 进度、attempt 和稳定错误码 |
 | POST | `/api/v1/rag/ingest-tasks/{taskId}/cancel` | 请求取消 | 可选 `reason`；未领取任务同步关闭，持有租约的任务进入取消屏障 |
 | POST | `/api/v1/rag/retrieval-profiles` | 创建检索策略 | 模式、融合、候选数、Rerank、邻接窗口、Token 预算等 |

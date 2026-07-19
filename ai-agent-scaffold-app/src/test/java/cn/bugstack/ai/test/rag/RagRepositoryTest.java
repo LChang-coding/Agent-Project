@@ -119,6 +119,21 @@ public class RagRepositoryTest {
     }
 
     @Test
+    public void shouldListKnowledgeBaseTasksWithTenantAndBoundedLimit() {
+        Mockito.when(ingestTaskDao.queryListByTenantAndKnowledgeBaseId("tenant-a", "kb-1", 100))
+                .thenReturn(List.of(runningTask(Instant.parse("2026-07-18T15:01:00Z"))));
+
+        List<RagIngestJobEntity> result = repository.listIngestJobs("tenant-a", "kb-1", 100);
+
+        Assert.assertEquals(1, result.size());
+        Mockito.verify(ingestTaskDao).queryListByTenantAndKnowledgeBaseId("tenant-a", "kb-1", 100);
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> repository.listIngestJobs("tenant-a", "kb-1", 0));
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> repository.listIngestJobs("tenant-a", "kb-1", 201));
+    }
+
+    @Test
     public void shouldNotReadTaskWhenAtomicClaimLosesRace() {
         Instant now = Instant.parse("2026-07-18T15:00:00Z");
         Instant leaseUntil = now.plusSeconds(30);

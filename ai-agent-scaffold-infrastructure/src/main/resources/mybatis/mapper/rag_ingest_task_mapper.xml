@@ -67,6 +67,13 @@
         WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryListByTenantAndKnowledgeBaseId" resultMap="RagIngestTaskMap">
+        SELECT <include refid="Columns"/> FROM rag_ingest_task
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+
     <select id="queryByTenantAndTaskKey" resultMap="RagIngestTaskMap">
         SELECT <include refid="Columns"/> FROM rag_ingest_task
         WHERE tenant_id = #{tenantId} AND task_key = #{taskKey} AND deleted = 0 LIMIT 1

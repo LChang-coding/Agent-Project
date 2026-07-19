@@ -20,6 +20,11 @@ public interface IRagIngestTaskDao {
     RagIngestTaskPO queryByTenantAndTaskId(@Param("tenantId") String tenantId,
                                           @Param("taskId") String taskId);
 
+    /** 按租户和知识库查询最新摄取任务。 */
+    List<RagIngestTaskPO> queryListByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                                              @Param("knowledgeBaseId") String knowledgeBaseId,
+                                                              @Param("limit") int limit);
+
     /** 按租户和幂等任务键查询。 */
     RagIngestTaskPO queryByTenantAndTaskKey(@Param("tenantId") String tenantId,
                                            @Param("taskKey") String taskKey);

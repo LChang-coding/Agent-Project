@@ -2,6 +2,8 @@ package cn.bugstack.ai.test.rag;
 
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentUploadCommand;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentUploadResult;
+import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.service.RagDocumentManagementService;
 import cn.bugstack.ai.domain.rag.service.RagDocumentUploadService;
 import cn.bugstack.ai.trigger.http.RagDocumentController;
@@ -14,6 +16,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -52,5 +56,30 @@ public class RagDocumentControllerTest {
         Assert.assertEquals("kb-a", command.getValue().knowledgeBaseId());
         Assert.assertFalse("Controller finally 必须删除暂存文件",
                 java.nio.file.Files.exists(command.getValue().file().path()));
+    }
+
+    @Test
+    public void shouldListTasksUsingTrustedContextAndPublicProjection() {
+        RagDocumentUploadService uploadService = mock(RagDocumentUploadService.class);
+        RagDocumentManagementService managementService = mock(RagDocumentManagementService.class);
+        var task = RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a", "task-a",
+                "task-key", RagIngestOperation.INGEST, 1, 3);
+        when(managementService.listTasks("tenant-a", "admin-a", "admin", "kb-a", 25))
+                .thenReturn(List.of(task));
+        RagDocumentController controller = new RagDocumentController(uploadService, managementService);
+        TenantContextHolder.set(TenantContext.builder().tenantId("tenant-a").userId("admin-a")
+                .roleCode("admin").build());
+
+        var response = controller.tasks("kb-a", 25);
+
+        Assert.assertEquals("0000", response.getCode());
+        Assert.assertEquals(1, response.getData().size());
+        Assert.assertEquals("task-a", response.getData().get(0).getTaskId());
+        List<String> publicFields = Arrays.stream(response.getData().get(0).getClass().getDeclaredFields())
+                .map(java.lang.reflect.Field::getName).toList();
+        Assert.assertFalse(publicFields.contains("leaseOwner"));
+        Assert.assertFalse(publicFields.contains("fencingToken"));
+        Assert.assertFalse(publicFields.contains("errorMessage"));
+        verify(managementService).listTasks("tenant-a", "admin-a", "admin", "kb-a", 25);
     }
 }
