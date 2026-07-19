@@ -210,7 +210,13 @@ public class RagProperties {
 
         /** 单批重排候选数量。 */
         @Min(1)
+        @Max(16)
         private int batchSize = 16;
+
+        /** 单次 HTTP 请求携带的候选数量；小于业务批次可规避模型服务 permit 过载。 */
+        @Min(1)
+        @Max(16)
+        private int requestBatchSize = 3;
 
         /** 创建 Reranker 默认配置。 */
         public Reranker() {
@@ -219,11 +225,17 @@ public class RagProperties {
             setMaxConcurrency(2);
         }
 
+        /** 校验传输批次不能超过一次业务重排的候选上限。 */
+        @AssertTrue(message = "Reranker HTTP请求批次不能超过业务候选上限")
+        public boolean isRequestBatchWithinCandidateLimit() {
+            return requestBatchSize <= batchSize;
+        }
+
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Reranker 配置。 */
         @Override
         public String toString() {
             return summary("Reranker") + ", modelRevision='" + modelRevision
-                    + "', batchSize=" + batchSize + '}';
+                    + "', batchSize=" + batchSize + ", requestBatchSize=" + requestBatchSize + '}';
         }
     }
 

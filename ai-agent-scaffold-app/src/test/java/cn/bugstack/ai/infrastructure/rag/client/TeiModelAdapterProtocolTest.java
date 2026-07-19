@@ -38,6 +38,7 @@ public class TeiModelAdapterProtocolTest {
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicInteger status = new AtomicInteger(200);
     private final ConcurrentLinkedQueue<Integer> responseStatuses = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<byte[]> responseBodies = new ConcurrentLinkedQueue<>();
     private volatile byte[] responseBody;
     private volatile Thread interruptAfterResponseThread;
     private HttpServer server;
@@ -61,6 +62,7 @@ public class TeiModelAdapterProtocolTest {
         properties.getEmbedding().setRetryMaxBackoff(Duration.ofMillis(2));
         properties.getEmbedding().setModelRevision("embedding-revision");
         properties.getReranker().setBatchSize(3);
+        properties.getReranker().setRequestBatchSize(3);
         properties.getReranker().setModelRevision("reranker-revision");
         embeddingAdapter = new TeiEmbeddingAdapter(properties, objectMapper);
         rerankerAdapter = new TeiRerankerAdapter(properties, objectMapper);
@@ -198,6 +200,52 @@ public class TeiModelAdapterProtocolTest {
     }
 
     @Test
+    public void rerankerShouldSplitTransportBatchesAndGloballyRankScores() {
+        properties.getReranker().setBatchSize(7);
+        properties.getReranker().setRequestBatchSize(3);
+        queueJson("[{\"index\":1,\"score\":0.4},{\"index\":0,\"score\":0.9},{\"index\":2,\"score\":0.2}]");
+        queueJson("[{\"index\":2,\"score\":0.95},{\"index\":0,\"score\":0.8},{\"index\":1,\"score\":0.1}]");
+        queueJson("[{\"index\":0,\"score\":0.7}]");
+        List<Candidate> candidates = List.of(
+                new Candidate("chunk-1", "text 1"), new Candidate("chunk-2", "text 2"),
+                new Candidate("chunk-3", "text 3"), new Candidate("chunk-4", "text 4"),
+                new Candidate("chunk-5", "text 5"), new Candidate("chunk-6", "text 6"),
+                new Candidate("chunk-7", "text 7"));
+
+        RerankResult result = rerankerAdapter.rerank(
+                new RerankCommand("tenant", "trace", "query", candidates, 4));
+
+        Assert.assertEquals(List.of("chunk-6", "chunk-1", "chunk-4", "chunk-7"),
+                result.candidates().stream().map(candidate -> candidate.chunkId()).toList());
+        Assert.assertEquals(List.of(1, 2, 3, 4),
+                result.candidates().stream().map(candidate -> candidate.rank()).toList());
+        Assert.assertEquals(3, requests.size());
+        Assert.assertEquals(List.of("text 1", "text 2", "text 3"), textArray(requests.get(0).body(), "texts"));
+        Assert.assertEquals(List.of("text 4", "text 5", "text 6"), textArray(requests.get(1).body(), "texts"));
+        Assert.assertEquals(List.of("text 7"), textArray(requests.get(2).body(), "texts"));
+    }
+
+    @Test
+    public void rerankerShouldFailWholeOperationWhenLaterBatchFails() {
+        properties.getReranker().setBatchSize(4);
+        properties.getReranker().setRequestBatchSize(3);
+        queueJson("[{\"index\":0,\"score\":0.9},{\"index\":1,\"score\":0.8},{\"index\":2,\"score\":0.7}]");
+        queueJson("{\"error\":\"" + RESPONSE_SECRET + "\"}");
+        responseStatuses.add(200);
+        responseStatuses.add(429);
+        List<Candidate> candidates = List.of(
+                new Candidate("chunk-1", "text 1"), new Candidate("chunk-2", "text 2"),
+                new Candidate("chunk-3", "text 3"), new Candidate("chunk-4", "text 4"));
+
+        AppException exception = expectAppException(() -> rerankerAdapter.rerank(
+                new RerankCommand("tenant", "trace", "query", candidates, 2)));
+
+        Assert.assertEquals("RAG_RERANK_HTTP_ERROR", exception.getCode());
+        Assert.assertEquals(2, requests.size());
+        assertSensitiveValuesHidden(exception);
+    }
+
+    @Test
     public void rerankerShouldRejectDuplicateOutOfBoundsAndMissingIndexes() {
         assertInvalidRerank("[{\"index\":0,\"score\":0.9},{\"index\":0,\"score\":0.8}]");
         assertInvalidRerank("[{\"index\":3,\"score\":0.9}]");
@@ -244,7 +292,9 @@ public class TeiModelAdapterProtocolTest {
                 exchange.getRequestHeaders().getFirst("Authorization"),
                 exchange.getRequestHeaders().getFirst("Content-Type"),
                 exchange.getRequestHeaders().getFirst("Accept"), body));
-        byte[] currentResponse = responseBody == null ? new byte[0] : responseBody;
+        byte[] queuedBody = responseBodies.poll();
+        byte[] currentResponse = queuedBody != null ? queuedBody
+                : responseBody == null ? new byte[0] : responseBody;
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         Integer queuedStatus = responseStatuses.poll();
         int responseStatus = queuedStatus == null ? status.get() : queuedStatus;
@@ -264,6 +314,10 @@ public class TeiModelAdapterProtocolTest {
 
     private void respondJson(String json) {
         responseBody = json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private void queueJson(String json) {
+        responseBodies.add(json.getBytes(StandardCharsets.UTF_8));
     }
 
     private List<Float> vector(float firstValue) {

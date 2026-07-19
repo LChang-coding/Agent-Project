@@ -131,6 +131,19 @@ public class RagPropertiesTest {
                 "embedding.retryBackoffValid".equals(violation.getPropertyPath().toString())));
     }
 
+    /** 校验重排HTTP分批不得超过业务候选上限。 */
+    @Test
+    public void shouldRejectRerankerRequestBatchLargerThanCandidateLimit() {
+        RagProperties properties = enabledProperties();
+        properties.getReranker().setBatchSize(4);
+        properties.getReranker().setRequestBatchSize(5);
+
+        Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
+
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "reranker.requestBatchWithinCandidateLimit".equals(violation.getPropertyPath().toString())));
+    }
+
     /** 校验日志脱敏；验证 toString 只输出密钥已配置状态。 */
     @Test
     public void shouldNotExposeSecretsInToString() {

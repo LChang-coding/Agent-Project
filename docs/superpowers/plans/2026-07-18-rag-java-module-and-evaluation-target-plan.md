@@ -940,3 +940,27 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 使用正确Key和无敏感合成文本直连：3候选返回200、1.713秒、3条分数；10个每条80字符的短候选返回429 `Model is overloaded`、0.788秒；10个每条1200字符的候选返回同一429、15.153秒。证明Reranker在线，但当前批处理/permit能力无法稳定承接Top-10，而非MySQL导致重排调用失败。
 - 随后从4候选开始的临界点探测首请求在60秒内0字节并超时，说明连续过载后服务未及时恢复，不能用单一“最多N条”解释。当前更可能是CPU推理积压/permit未释放或进程失活；正式1200条复评分继续禁止启动。
 - `codex.md` 记录的RAG SSH密码当前被服务器拒绝，无法进入容器核对日志或执行最小重启；该凭据状态与API Key列解析问题相互独立。在SSH恢复前，继续完成本机代码和旧服务器只读迁移评估，不伪造远端容器证据。
+
+###### Java Reranker 有界分批修复计划（执行前）
+
+1. 当前TEI以 `max-concurrent-requests=8`、`max-client-batch-size=16` 部署，但实测单个10候选请求会返回 `Model is overloaded`，说明“业务候选上限”和“单次传输批次”不能再共用一个配置。保留 `batchSize=16` 作为单次业务重排总候选上限，新增更小的 `requestBatchSize`，默认取已真实成功并保留容量余量的3。
+2. 适配器在同一个30秒总deadline内按候选原序串行分批，禁止并行批次再次耗尽permit；每批解析并校验TEI局部index，映射为全局候选。Cross-Encoder每个query/document pair独立产生分数，全部批次汇总后按原始score统一降序、用原始候选序号稳定打破同分，再截取业务topK。
+3. 任一批出现非200、超时、缺失/重复/越界index或非有限分数，整个重排失败并由既有领域层显式fallback；不混合“部分已重排+部分RRF”结果。总deadline包含本地Semaphore等待和全部HTTP批次，不能变成 `批次数 × timeout` 的隐式长尾。
+4. 配置增加 `AI_RAG_RERANKER_REQUEST_BATCH_SIZE`，校验1～16且不大于业务 `batchSize`，脱敏摘要只输出数值。测试覆盖3候选单请求兼容、7候选按3/3/1分批、局部index映射和全局排序、后续批失败时整次失败、非法配置拒绝及敏感信息不泄漏。
+5. 执行Java 17定向协议/配置测试和RAG相关回归，再重打包并重启本机8092。远端Reranker需先恢复到3候选稳定200；随后用同一真实查询做Top-10冒烟，只有10个实际重排候选且不降级才恢复1200条评分。
+
+###### 旧 MySQL 迁移可行性阶段结果
+
+- 旧机为7.5GiB RAM，已用约3.9GiB、available约3.2GiB、Swap已用42MiB，根盘30GiB中已用14GiB。业务 `mysqld` RSS约966MiB，另有XXL-JOB独立MySQL约432MiB；Kafka两个Java进程各约658–678MiB，Nacos约327MiB，MinIO约288MiB。旧机负载0.20/0.19/0.16，不是CPU打满。
+- 本机8次ICMP：旧机平均77.712ms，新RAG机平均57.004ms；新机平均少20.708ms，但标准差31.669ms且有138.290ms尖峰。旧MySQL 12次新连接+`SELECT 1` 为0.500～1.600秒、平均0.683秒，公网握手和服务抖动明显。
+- 业务库MySQL 8.0.46，库体仅15.30MiB/34表，buffer pool仅128MiB，max connections=151；运行6天累计3348连接、1117次Aborted_connects、15当前连接、2运行线程、16条slow query。数据体很小，迁移与校验成本低，但连接健康明显需要治理。
+- performance_schema显示服务器内部多数配置/审计SQL均值为亚毫秒到数十毫秒，而一次完整检索观测到配置读取约0.27秒、审计0.8～2.5秒，证明多次公网往返是主要放大器；同时少数大chunk查询均值可达2.636秒、最大21.634秒，迁库不能替代SQL/载荷优化。
+- 初步结论：只迁业务MySQL在容量上可行，预估增加约1GiB常驻内存；不迁XXL-JOB MySQL、Kafka、MinIO、Nacos和观测栈。由于新机模型服务当前过载且SSH不可用，尚不满足迁移实施门槛；恢复SSH和Reranker后再做受限从库演练，不能直接停旧库切换。
+
+###### Java Reranker 有界分批实现与测试结果
+
+- `RagProperties.Reranker` 现在把业务候选上限 `batchSize=16` 与HTTP传输批次 `requestBatchSize=3` 分离，后者可由 `AI_RAG_RERANKER_REQUEST_BATCH_SIZE` 配置；两者均限制1～16，并通过Bean Validation保证传输批次不大于业务上限，脱敏摘要只显示数值。
+- `TeiRerankerAdapter` 在一个总deadline内串行执行3候选子批次；每批要求响应条数与请求完全一致，拒绝缺失、重复、越界和非有限分数。局部index映射成全局index后，按cross-encoder原始分数统一排序、原候选序号稳定打破同分，再截取业务TopK；任一子批失败都会使整次重排失败，不产生部分重排结果。
+- 新增7候选按3/3/1分批、局部到全局映射、跨批全局排序，以及第二批429导致整次失败的协议测试；新增配置交叉约束测试。首次21项中配置9/9通过，协议12项因沙箱禁止绑定127.0.0.1全部启动失败；在允许本地端口的环境 clean 重跑后协议12/12、配置9/9通过。
+- 扩大RAG回归时通配符误把3个私有 `Fixture` 内部类当测试，157个真实测试全部通过但构建被3个初始化错误标红；改为32个精确测试类后157/157通过，0 failure/error/skipped，BUILD SUCCESS 3.274秒。随后Java 17完整依赖打包成功，BUILD SUCCESS 8.065秒；打包前确认旧8092进程已经退出，没有覆盖运行中JAR。
+- 下一步在提交后以该确切JAR启动8092，并用既有SciFact索引做真实Top-10冒烟。远端服务在连续过载后是否恢复仍需真实验证；代码测试通过不替代服务验收。
