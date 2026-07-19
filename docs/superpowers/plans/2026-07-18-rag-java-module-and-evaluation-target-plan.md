@@ -1471,3 +1471,17 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `TargetSet`现要求`sourceRunId`/`sourceSha256`恰好一个有效；run id限定为1～128位安全字符，source hash限定为64位小写十六进制。manifest新增`targetsSourceRunId`/`targetsSourceSha256`并保留`targetsSha256`，可区分“原来是谁”与“当前文件是什么”。
 - 测试夹具改为真实existing-targets SHA协议，并新增无溯源/双溯源在0次HTTP调用前拒绝的回归。首次测试编译暴露Java泛型推断错误，显式指定`Map<String,Object>`后进入测试；第二次失败是测试错误期待门禁前不创建输出目录，生产Runner实际会先创建空目录再验证输入；断言改为“目录存在但恰0文件”，未放宽生产协议。
 - 最终benchmark全量37/37通过、0 failure/error/skipped，package成功，限定diff check通过；新CLI JAR SHA-256为`f1deb4d207d916827ebb4e673a196786e73520fafd42fecbda960c4ccd74559d`。
+
+###### 性能链路最小冒烟执行结果
+
+- 使用提交`96a7b76`和新CLI，全新目录`/tmp/rag-load-smoke-96a7b76-r2`完成concurrency=1、四变体各1次warmup+1次measured；CLI退出0，manifest=completed，warmup/load各4条，四变体齐全且使用同一queryId=1。共8条0 error、0 degraded/reason、0 empty、0非2xx/空响应证据；两条Rerank均为10候选，rerankMs分别为14246/7857ms。
+- manifest诚实绑定code revision `96a7b76ba0d8ac59b2b167ce46b0ffbf070d6b7d`、CLI `f1deb4d2…59d`、App `484270ca…75eb`、targets source `70273080…ffd`、当前targets `ca953fb2…50f4`和queries `331f88f9…35ad`。warmup/load实际hash与manifest的`cdb1f577…95c6`/`81f0a93a…6651`一致。
+- 资源证据目录`/tmp/rag-load-smoke-96a7b76-r2-evidence`的manifest为exitCode=0，四个文件实际hash全部与清单一致；本地17个样本的最大线程76、最大RSS 498544KiB，远端8个样本均含8个唯一容器，前后快照均running/restart=0/OOM=false。远端单样本最高Docker CPU 416.53%、最高内存占容器限额67.00%；该CPU是多核Docker百分比，不是全机416%超载结论。
+- measured单样本延迟为Dense 706ms、Sparse 616ms、Hybrid 1132ms、Hybrid+Rerank 8930ms，仅作功能冒烟。每变体只有1条，p50/p95/p99完全相同，严禁将其当作延迟基线或SLA。
+
+###### 1/2/4/8并发性能smoke计划（执行前）
+
+1. 使用同一提交/JAR/App/prepared/targets和全新run/evidence目录，并发顺序显式为`1,2,4,8`；每级别每变体5次warmup、20次measured，共80条warmup+320条measured。这是smoke而非最终三轮基线。
+2. 四变体在同一并发级别必须使用完全一致的20个query及频次，warmup亦配对；每级别严格先warmup后measured。任一error/degraded/empty/非法Rerank/传输证据缺失会立即停止并保留已flush原始行。
+3. 持续以2秒间隔采样本地App和远端8容器，验证前后restart/OOM/health、证据hash、manifest和原始文件hash。报告attempt/success吞吐、all/success latency、四变体分位数及主导stage，并保留closed-loop coordinated-omission限制。
+4. 若smoke通过，先追加完整实际结果并中文提交，再根据长尾、资源峰值与错误情况决定正式`1/2/4/8/16 × 3轮`的请求数和冷却时间；不预设或编造性能数据。
