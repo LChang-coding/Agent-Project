@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -27,6 +28,9 @@ import java.util.Random;
 
 /** 通过生产 HTTP API 执行单知识库、四消融组的黑盒检索评测。 */
 public final class RagBenchmarkRunner {
+
+    static final String REQUEST_TIMEOUT_ERROR_CODE = "RAG_BENCHMARK_REQUEST_TIMEOUT";
+    static final String IO_ERROR_CODE = "RAG_BENCHMARK_IO";
 
     private final ObjectMapper objectMapper;
     private final RagBenchmarkHttpClient client;
@@ -111,11 +115,7 @@ public final class RagBenchmarkRunner {
             manifest.put("status", "failed");
             manifest.put("finishedAt", Instant.now().toString());
             manifest.put("errorType", exception.getClass().getSimpleName());
-            if (exception instanceof RagBenchmarkHttpClient.BenchmarkApiException api) manifest.put("errorCode", api.code());
-            if (exception instanceof RagBenchmarkHttpClient.BenchmarkProtocolException protocol) manifest.put("errorCode", protocol.code());
-            if (exception instanceof RagBenchmarkWarmupGate.WarmupGateException gate) {
-                manifest.put("errorCode", gate.code());
-            }
+            putManifestErrorCode(manifest, exception);
             writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
             throw exception;
         }
@@ -169,11 +169,23 @@ public final class RagBenchmarkRunner {
             manifest.put("status", "failed");
             manifest.put("finishedAt", Instant.now().toString());
             manifest.put("errorType", exception.getClass().getSimpleName());
-            if (exception instanceof RagBenchmarkWarmupGate.WarmupGateException gate) {
-                manifest.put("errorCode", gate.code());
-            }
+            putManifestErrorCode(manifest, exception);
             writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
             throw exception;
+        }
+    }
+
+    private void putManifestErrorCode(Map<String, Object> manifest, Exception exception) {
+        if (exception instanceof RagBenchmarkHttpClient.BenchmarkApiException api) {
+            manifest.put("errorCode", api.code());
+        } else if (exception instanceof RagBenchmarkHttpClient.BenchmarkProtocolException protocol) {
+            manifest.put("errorCode", protocol.code());
+        } else if (exception instanceof RagBenchmarkWarmupGate.WarmupGateException gate) {
+            manifest.put("errorCode", gate.code());
+        } else if (exception instanceof HttpTimeoutException) {
+            manifest.put("errorCode", REQUEST_TIMEOUT_ERROR_CODE);
+        } else if (exception instanceof IOException) {
+            manifest.put("errorCode", IO_ERROR_CODE);
         }
     }
 

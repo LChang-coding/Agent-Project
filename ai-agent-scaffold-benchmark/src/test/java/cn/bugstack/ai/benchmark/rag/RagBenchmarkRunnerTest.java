@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,9 +29,13 @@ class RagBenchmarkRunnerTest {
 
     @TempDir Path temporary;
     private HttpServer server;
+    private CountDownLatch responseRelease;
 
     @AfterEach
-    void stopServer() { if (server != null) server.stop(0); }
+    void stopServer() {
+        if (responseRelease != null) responseRelease.countDown();
+        if (server != null) server.stop(0);
+    }
 
     @Test
     void shouldExecuteFourAblationsAndPersistAuditableArtifacts() throws Exception {
@@ -123,6 +128,56 @@ class RagBenchmarkRunnerTest {
         JsonNode manifest = mapper.readTree(output.resolve("run-manifest.json").toFile());
         assertEquals("failed", manifest.path("status").asText());
         assertEquals(RagBenchmarkWarmupGate.ERROR_CODE, manifest.path("errorCode").asText());
+    }
+
+    @Test
+    void evaluateShouldClassifyRequestTimeoutBeforeCreatingMeasuredRun() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path fixture = Path.of("../docs/test-fixtures/rag/beir-mini").toAbsolutePath().normalize();
+        RagBenchmarkDataset dataset = new BeirDatasetLoader(mapper).load(fixture.resolve("corpus.jsonl"),
+                fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv"),
+                BeirDatasetLoader.Limits.defaults());
+        Path prepared = temporary.resolve("prepared-timeout");
+        new RagBenchmarkArtifactWriter(mapper).write(dataset, prepared,
+                new RagBenchmarkArtifactWriter.Configuration("mini", "https://example.invalid/mini", "rev-1",
+                        "fixture-only", "full", 7, 1024 * 1024),
+                new RagBenchmarkArtifactWriter.SourceFiles(fixture.resolve("corpus.jsonl"),
+                        fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv")));
+        Path targets = temporary.resolve("timeout-targets.json");
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "targets", Map.of(
+                "dense", "target-dense", "sparse", "target-sparse", "hybrid_rrf", "target-hybrid",
+                "hybrid_rrf_rerank", "target-rerank")));
+
+        responseRelease = new CountDownLatch(1);
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            try {
+                responseRelease.await();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
+                "test-token", Duration.ofMillis(100), 1024 * 1024);
+        Path output = temporary.resolve("timed-out-evaluation");
+
+        assertThrows(java.net.http.HttpTimeoutException.class,
+                () -> new RagBenchmarkRunner(mapper, client).evaluate(
+                        new RagBenchmarkRunner.EvaluationConfiguration("timeout-run", base,
+                                "environment:TEST_TOKEN", "commit-abc", prepared, targets, output,
+                                20260719L, 1)));
+        responseRelease.countDown();
+
+        assertFalse(Files.exists(output.resolve("run.jsonl")));
+        JsonNode manifest = mapper.readTree(output.resolve("run-manifest.json").toFile());
+        assertEquals("failed", manifest.path("status").asText());
+        assertEquals("HttpTimeoutException", manifest.path("errorType").asText());
+        assertEquals(RagBenchmarkRunner.REQUEST_TIMEOUT_ERROR_CODE, manifest.path("errorCode").asText());
     }
 
     private void handle(HttpExchange exchange, AtomicInteger profiles, AtomicInteger bindings) throws IOException {

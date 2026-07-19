@@ -15,6 +15,7 @@ LOAD_WARMUP_PER_VARIANT="${RAG_BENCHMARK_LOAD_WARMUP_PER_VARIANT:-10}"
 LOAD_REQUESTS_PER_VARIANT="${RAG_BENCHMARK_LOAD_REQUESTS_PER_VARIANT:-100}"
 WARMUP_QUERIES="${RAG_BENCHMARK_WARMUP_QUERIES:-0}"
 INGEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_INGEST_TIMEOUT_SECONDS:-900}"
+REQUEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS:-120}"
 EXISTING_TARGETS="${RAG_BENCHMARK_EXISTING_TARGETS:-}"
 EXISTING_USERNAME="${RAG_BENCHMARK_USERNAME:-}"
 EXISTING_PASSWORD="${RAG_BENCHMARK_PASSWORD:-}"
@@ -28,6 +29,10 @@ for command_name in curl jq openssl java git; do
 done
 if [[ "$LOAD_ENABLED" != "true" && "$LOAD_ENABLED" != "false" ]]; then
   printf 'RAG_BENCHMARK_LOAD_ENABLED must be true or false\n' >&2
+  exit 2
+fi
+if [[ ! "$REQUEST_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ || "$REQUEST_TIMEOUT_SECONDS" -gt 3600 ]]; then
+  printf 'RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS must be an integer between 1 and 3600\n' >&2
   exit 2
 fi
 if [[ ! -r "$CLI_JAR" || ! -d "$PREPARED_DIR" || -e "$OUTPUT_DIR"
@@ -106,7 +111,7 @@ java -jar "$CLI_JAR" "$command_name" \
   --code-revision "$code_revision" \
   --warmup-queries "$WARMUP_QUERIES" \
   "${extra_arguments[@]}" \
-  --request-timeout-seconds 120
+  --request-timeout-seconds "$REQUEST_TIMEOUT_SECONDS"
 
 if [[ "$LOAD_ENABLED" == "true" ]]; then
   printf 'starting load runId=%s levels=%s warmup=%s measured=%s out=%s\n' \
@@ -123,5 +128,5 @@ if [[ "$LOAD_ENABLED" == "true" ]]; then
     --warmup-per-variant "$LOAD_WARMUP_PER_VARIANT" \
     --requests-per-variant "$LOAD_REQUESTS_PER_VARIANT" \
     --phase-timeout-seconds 1800 \
-    --request-timeout-seconds 120
+    --request-timeout-seconds "$REQUEST_TIMEOUT_SECONDS"
 fi

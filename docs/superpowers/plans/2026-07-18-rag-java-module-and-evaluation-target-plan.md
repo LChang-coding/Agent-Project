@@ -1294,3 +1294,19 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 本地副本中隔离用户的唯一active password行按username/userId/tenantId同时匹配更新，影响严格为1；随机密码只进入受限临时文件和前台评测子进程环境，不在输出、manifest、计划或Git中出现。
 - 新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-ea5631a-r7`写满40条warmup后，CLI内部门禁通过：40个唯一variant/query组合，Dense/Sparse/Hybrid-RRF/Hybrid-RRF+Rerank各10，0 error、0 degraded、0空`rankedDocumentIds`、0非法Rerank；10条Rerank均有正候选数和正`rerankMs`。
 - 门禁期间持续核对正式`run.jsonl`不存在；第40条验证通过后CLI才创建正式文件并开始measured，首次观察为3条，manifest仍为running。当前只证明预热门禁闭环，不代表1200条完成；正式阶段继续逐条监控，禁止将该状态作为最终质量结果。
+
+###### SciFact 第七次正式阶段外层超时结果与第八次修复计划（执行前）
+
+- 第七次正式阶段在553条后由benchmark Java HTTP客户端抛`HttpTimeoutException: request timed out`并退出；manifest为failed/errorType=`HttpTimeoutException`，正式553条均唯一、0 error、0 degraded、0 empty，最后已落盘记录为Hybrid-RRF成功。该目录原样保留，不评分、不续写、不与后续run拼接。
+- 按确定性的轮转顺序，下一条是同query的Hybrid-RRF+Rerank。CLI在`2026-07-19T14:42:57Z`达到120秒外层请求上限；后端并未失败，而是在约12秒后写入独立审计记录：status=success、10最终引用、无降级、总耗时131803ms，其中Embedding=65637ms、Dense=11159ms、Sparse=408ms、Rerank=54586ms、assemble=5ms。远端模型网关/TEI同时记录Rerank子批200，容器healthy、无OOM；本地MySQL当前真实查询正常。日志中21:52的Connection refused来自此前故意`kickstart -k`重启本地MySQL的恢复测试，不是本次14:42Z失败根因。
+- 根因是benchmark外层120秒小于一次Hybrid+Rerank可能累加的合法组件预算与传输长尾：Embedding总deadline 30秒、Qdrant总deadline 30秒、Rerank总deadline 60秒，加配置/数据库/响应开销后理论边界已不低于120秒；本次后端完整成功的131.8秒是直接反例。不能把该成功响应误记为检索质量失败，也不能用已写数据库审计行手工补入run。
+- 代码修复一：`run`/`evaluate` manifest对`HttpTimeoutException`写稳定`RAG_BENCHMARK_REQUEST_TIMEOUT`，其他未分类`IOException`写`RAG_BENCHMARK_IO`；仍原样抛出并终止整轮，不能把传输异常变成空排名后继续评分。补本地慢HTTP集成测试，断言failed manifest、稳定错误码且正式文件不存在。
+- 脚本修复二：`run-local-rag-mini.sh`增加正整数`RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS`，默认保留120；第八次显式使用240秒，给120秒后端预算留100%外层余量。只改变评测客户端等待完整响应的上限，不修改App、Profile、TopK、模型、索引、并发或任何结果排序。
+- 修复测试、重建CLI、中文提交后，以新提交/JAR SHA/全新空目录启动第八次40+1200；第七次553条只作为公网长尾与评测器边界证据，不进入任何指标聚合。
+
+###### 评测外层超时分类与配置执行结果
+
+- `RagBenchmarkRunner.run`与`evaluate`现共用同一错误码归类方法，优先保留业务API、协议和预热门禁错误；`HttpTimeoutException`稳定写入`RAG_BENCHMARK_REQUEST_TIMEOUT`，其他未分类`IOException`写入`RAG_BENCHMARK_IO`。异常仍原样向上抛出并把整轮manifest标记failed，没有把传输失败伪造成空召回或可继续评分的样本。
+- `run-local-rag-mini.sh`新增`RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS`，默认值仍为120，run/evaluate与可选load阶段统一使用；仅接受1～3600的十进制正整数，非法值在登录和创建输出前以退出码2失败。第八次将显式使用240，不改变应用侧组件deadline。
+- 新增本地慢HTTP集成回归：服务端接收请求后由Latch阻塞而不发送响应，100ms客户端超时后断言原始`HttpTimeoutException`、manifest=`failed`、errorType=`HttpTimeoutException`、稳定errorCode，且正式`run.jsonl`不存在；测试结束显式释放Latch并关闭服务端，不依赖固定长sleep。
+- benchmark全量测试两次均为21/21通过、0 failure/error/skipped；`mvn package`成功生成fat CLI。脚本`bash -n`通过，非法超时0的真实脚本检查得到退出码2和预期错误摘要；拟提交文件`git diff --check`通过。新CLI JAR SHA-256为`b2b0d499843c3fce1da68f2577a5a1bb3d2af68e21c7c477ab20cb2db158d0ea`。
