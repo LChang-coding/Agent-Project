@@ -1403,7 +1403,32 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 
 - 可靠性修复已以中文提交`3d9510c`闭环；旧8092应用收到SIGINT退出，虽然Spring关闭钩子出现既有Logback类卸载告警，但端口释放成功。新JAR SHA-256 `484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`以Temurin 17、PID 45587启动，MySQL为127.0.0.1:13307，Qdrant为127.0.0.1:16333隧道。Loki隧道仍未就绪但启动脚本按既有策略继续，不影响检索链。
 - 同一隔离账号条件更新严格匹配1/影响1，queryId=783真实四变体全部code=0000、0降级、10引用：Dense total=5106ms/100候选，Sparse total=3223ms/100候选，Hybrid-RRF total=4274ms/双路各100，Hybrid-RRF+Rerank total=13985ms/Rerank候选10、rerankMs=7499。四个retrievalId均不同且数据库审计由生产链生成，证明新JAR与隧道可完成全链路；该4次只作为冒烟，不进入质量指标。
-- 第十一次使用提交`3d9510c`、App上述新hash、CLI仍为`970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`；全新输出目录固定为`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-3d9510c-r11`，恢复源仍是第七次40条warmup+553条严格健康正式前缀，不使用第九次污染文件或第十次未启动目录。
+- 第十一次生产代码提交为`3d9510c`、当前HEAD为仅追加计划记录的`8f5df55`，App使用上述新hash，CLI仍为`970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`；全新输出目录固定为`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-3d9510c-r11`，恢复源仍是第七次40条warmup+553条严格健康正式前缀，不使用第九次污染文件或第十次未启动目录。manifest的`codeRevision`应诚实记录启动时HEAD `8f5df55`，不能伪写成生产代码提交。
 - 启动前再次核验App健康、实际进程环境中的Qdrant隧道/20秒单次/90秒总时限/5次重试、MySQL、prepared四hash、targets hash和源四hash；隔离账号密码仍执行唯一条件更新。保持seed、query顺序、四targets、模型、索引、profile、240秒benchmark外层超时与load关闭不变。
 - Resume Gate应零重发复制553条，并从全局第554条queryId=783/Rerank开始；Measured Gate在任何错误/降级/空或非法结果写入前立即终止。运行中只读监测manifest、记录总数/唯一性、分组数和8092/Qdrant/MySQL健康，不修改产物。
 - 完成条件仍为1200条、1200唯一variant/query、各变体300、0错误/降级/空、全部Rerank字段有效、manifest=completed和metrics存在；随后必须用独立`score`基于prepared qrels复算并校验hash，才可报告Recall/MRR/nDCG/MAP。分段质量run的延迟不作为统一性能结论。
+
+###### 第十一次续跑完成结果与独立复评分计划（执行前）
+
+- Resume Gate实际复制553条后只请求647条；前台CLI最终退出码0并输出completed。正式`run.jsonl`恰1200行，`run-manifest.json`为completed、无errorCode、finishedAt=`2026-07-19T16:40:21.723420Z`，`metrics.json`存在；运行中每个检查点均为0 error/degraded/empty，未发生服务重启或配置切换。
+- 在接受质量结论前执行三重后置门禁：第一，独立审计程序按prepared queries/Java确定性shuffle/固定变体轮转重建1200期望顺序，核对queryId/query hash/variant、1200唯一组合、retrievalId跨warmup+正式全局唯一、document-map范围、0错误/降级/空/重复排名、所有数值及Rerank字段；第二，CLI `score`以相同qrels和run输出到全新`metrics-independent.json`；第三，用独立实现重新计算Recall@10、MRR@10、nDCG@10、MAP@10并逐variant对齐两份CLI报告。
+- 固定并记录prepared manifest/queries/qrels/document-map、source manifest/targets/warmup/run、r11 manifest/targets/warmup/run/metrics、CLI JAR及App JAR SHA-256。任何行数、顺序、指标或hash不一致都标记本轮失败，不进入性能评测。
+- 复评分只读原run并新增独立指标文件，不调用检索接口、不修改数据库/Qdrant/账号；质量指标按四变体分别报告。r7旧段120秒、r11新段240秒且App传输配置变化，因此两段合并的延迟分位数只保留诊断意义，不能作为统一性能/SLA结果。
+
+###### SciFact 1200 条质量评测与独立复评分执行结果
+
+- 三重门禁全部通过：1200条正式记录/1200唯一variant-query，Dense、Sparse、Hybrid-RRF、Hybrid-RRF+Rerank各300；0 error、0 degraded、0 empty、0重复排名、1200正式retrievalId唯一。40 warmup+1200正式共1240个retrievalId全局唯一，全部排名文档均属于5183条document-map；300条Rerank全部候选数与rerankMs为正。
+- 独立审计按seed=20260719重建warmup和正式顺序，逐条0 mismatch；前553条与r7源run逐字节一致且runId属于旧segment，后647条属于r11 segment。源manifest/run/warmup/targets hash与resume lineage全部一致，prepared四文件及Markdown hash也与manifest一致。
+- 质量结果：Dense Recall@10=`0.797944`、MRR@10=`0.655835`、nDCG@10=`0.683385`、MAP@10=`0.641088`；Sparse依次为`0.487778/0.321922/0.355442/0.310521`；Hybrid-RRF为`0.750667/0.566630/0.604539/0.552843`；Hybrid-RRF+Rerank为`0.750667/0.646028/0.663244/0.628238`。Rerank相对未重排Hybrid不改变Recall@10，但MRR/nDCG/MAP分别提高约0.079398/0.058705/0.075396；当前Dense在四项总体指标上仍略高于Rerank Hybrid，不能宣称“组件越多质量必然越好”。
+- CLI `score`新增`metrics-independent.json`，两个报告的四组summary完全相等；逐query数组仅顺序不同，按variant/queryId规范化后1200个per-query对象0 mismatch。另用独立Python标准库实现重算四个核心指标，最大绝对浮点差`4.44e-16`。全量独立重算runStatistics也为0 mismatch。
+- 最终关键hash：r11 manifest `2f4f41ac…6c4f`、run `24331ecd…92a5`、warmup `f93a196d…f414`、targets `ca953fb2…50f4`、metrics `e48c03a0…c3e`、independent metrics `e3ac2eb3…352`；CLI JAR `970621ed…932d`，App JAR `484270ca…75eb`。质量结果可发布，但组合延迟因旧/新segment超时策略与App传输配置不同，只能作为诊断数据。
+
+###### 性能评测器口径修复计划（执行前）
+
+1. 在启动任何load前先修评测器，当前r11已completed且无run/evaluate/load进程，保证性能阶段不与质量阶段争抢资源。修改只限benchmark模块、测试、脚本与文档，不改检索算法、profile、索引或模型。
+2. 修正查询配对：每个iteration先选择同一条确定性query，再与四variant做笛卡尔积，随后只随机请求发出顺序；100 requests/variant时四组必须使用完全相同的100个query，测试断言query集合与频次一致，消除query难度混淆。
+3. 增加warmup与measured严格门禁：任何error、degraded/reason、成功空结果、重复排名、非法数值或伪Rerank立即将phase/run标记failed；warmup未通过不得进入measured，失败样本及其前缀要即时持久化，不能等整阶段结束丢证据。
+4. 修正统计口径：失败不重复计入successful-empty；同时报告attempt与success请求数/吞吐，all-attempt与success-only延迟，按errorCode分组；现有字段保留明确兼容语义或升级schema，测试覆盖成功+降级+失败混合样本。
+5. 增强审计字段：每条记录增加startedAt/finishedAt、HTTP状态和响应字节（不可得时显式null）；manifest记录request timeout、CLI/App JAR hash由启动包装显式传入、prepared/targets hash及资源证据文件约定。不得记录token、密码、query正文。
+6. 保留closed-loop coordinated-omission警告。并发级别不再静默排序，严格保留调用方顺序且拒绝重复；正式运行采用每级别独立目录与预先固定顺序/冷却，由外层计划执行三轮，避免把热漂移绑定到升序并发。
+7. Java 17下补齐runner/statistics/CLI回归并全量跑benchmark测试、打包、脚本语法和diff门禁；中文本地提交后只先做1/2/4/8、5 warmup×4+20 measured×4的smoke。smoke严格0错误/降级/成功空/超时且资源健康后，再制定正式1/2/4/8/16三轮计划。
