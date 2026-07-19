@@ -1432,3 +1432,22 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 5. 增强审计字段：每条记录增加startedAt/finishedAt、HTTP状态和响应字节（不可得时显式null）；manifest记录request timeout、CLI/App JAR hash由启动包装显式传入、prepared/targets hash及资源证据文件约定。不得记录token、密码、query正文。
 6. 保留closed-loop coordinated-omission警告。并发级别不再静默排序，严格保留调用方顺序且拒绝重复；正式运行采用每级别独立目录与预先固定顺序/冷却，由外层计划执行三轮，避免把热漂移绑定到升序并发。
 7. Java 17下补齐runner/statistics/CLI回归并全量跑benchmark测试、打包、脚本语法和diff门禁；中文本地提交后只先做1/2/4/8、5 warmup×4+20 measured×4的smoke。smoke严格0错误/降级/成功空/超时且资源健康后，再制定正式1/2/4/8/16三轮计划。
+
+###### 性能评测器口径与资源证据链执行记录
+
+- Load Runner已改为每个iteration对同一query生成四个变体，仅打乱请求发出顺序；并发级别保留调用方顺序并拒绝重复值。warmup/measured均按完成顺序逐条落原始JSONL，任一业务错误、降级、空/重复排名、非法数值、伪Rerank或缺失传输证据立即中止；warmup未通过时不会创建measured样本。
+- 统计同时输出attempt/success数量与吞吐、all-attempt/success-only延迟、按errorCode分组的失败；失败不再被重复当作successful-empty，stage分位数只统计成功请求。单条记录新增startedAt/finishedAt、HTTP status和响应字节；manifest新增请求/连接/阶段超时、CLI/App JAR SHA-256、查询配对策略、严格门禁和资源证据引用。
+- 新增性能评测独立包装脚本和5秒资源采样器，本地记录App进程CPU/RSS/线程/GC，远端记录8个RAG容器的CPU/内存/PID/网络/IO及运行前后restart/OOM/health/image快照。容器快照由超大单行`docker inspect` JSON改为紧凑文本，避免SSH管道上的无必要解析延迟。
+- 采样器独立实测通过：`remote-inspect-before.txt`为1条UTC时间+8个容器，本地JSONL每条threadCount为69且包含App进程/GC，远端JSONL每条恰含8个唯一容器，错误日志为空。采样期间容器均running，7个健康检查为healthy，node-exporter为not_configured，restart=0、OOM=false。该目录仅作采样器功能验证，不冒充性能结果。
+
+###### 性能评测器回归与提交计划（执行前）
+
+1. 删除Runner中已不再使用的批量写文件方法，检查本次benchmark Java/shell完整diff，不纳入运行日志和其他未跟踪目录。
+2. 在Java 17下运行benchmark全量测试两次，执行package、两个新脚本的`bash -n`、限定作用域`git diff --check`，并核对新CLI可执行产物与SHA-256。
+3. 将测试数量、错误数、脚本门禁和JAR hash追加至本文档；若全部通过，用中文提交形成评测器小闭环。
+
+###### 性能评测器回归执行结果
+
+- 删除了Runner中已失去调用点的批量JSONL写入方法；原始样本只保留逐条flush通道。限定benchmark模块与本计划文档的`git diff --check`通过，未将App/根目录运行日志及其他未跟踪文件纳入改动。
+- Temurin Java 17下benchmark全量测试连续两次均为36/36通过、0 failure/error/skipped；随后跳过重复测试的package成功产生fat CLI。三个shell脚本均通过`bash -n`。
+- 新CLI JAR SHA-256为`d293aa2f416738fd45249065cbb6b41b5c992ac0f6cfa5c4aeba0e12b633f93e`；当前App JAR仍为`484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。下一阶段性能smoke会显式把两个hash写入manifest，不引用此前质量run的混合延迟。

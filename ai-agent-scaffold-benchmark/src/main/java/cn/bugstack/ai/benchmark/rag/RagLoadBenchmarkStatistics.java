@@ -20,26 +20,35 @@ public final class RagLoadBenchmarkStatistics {
         Map<Integer, ConcurrencyStatistics> result = new LinkedHashMap<>();
         byConcurrency.forEach((concurrency, values) -> {
             long elapsedMs = requiredElapsed(phaseElapsedMs, concurrency);
+            long successCount = values.stream().filter(value -> !value.failed()).count();
             Map<String, VariantStatistics> variants = new LinkedHashMap<>();
             values.stream().map(RagLoadBenchmarkRunner.LoadRecord::variant).distinct().sorted().forEach(variant ->
                     variants.put(variant, summarize(values.stream()
                             .filter(value -> variant.equals(value.variant())).toList())));
-            result.put(concurrency, new ConcurrencyStatistics(concurrency, values.size(), elapsedMs,
-                    throughput(values.size(), elapsedMs), Map.copyOf(variants)));
+            double attemptThroughput = throughput(values.size(), elapsedMs);
+            result.put(concurrency, new ConcurrencyStatistics(concurrency, values.size(), values.size(),
+                    successCount, elapsedMs, attemptThroughput, attemptThroughput,
+                    throughput(successCount, elapsedMs), Map.copyOf(variants)));
         });
         return Map.copyOf(result);
     }
 
     private VariantStatistics summarize(List<RagLoadBenchmarkRunner.LoadRecord> records) {
-        long errors = records.stream().filter(RagLoadBenchmarkRunner.LoadRecord::failed).count();
-        long degraded = records.stream().filter(RagLoadBenchmarkRunner.LoadRecord::degraded).count();
-        long empty = records.stream().filter(value -> value.rankedDocumentIds().isEmpty()).count();
+        List<RagLoadBenchmarkRunner.LoadRecord> successes = records.stream()
+                .filter(value -> !value.failed()).toList();
+        long errors = records.size() - successes.size();
+        long degraded = successes.stream().filter(RagLoadBenchmarkRunner.LoadRecord::degraded).count();
+        long successfulEmpty = successes.stream().filter(value -> value.rankedDocumentIds().isEmpty()).count();
+        Map<String, Long> errorCodeCounts = new LinkedHashMap<>();
+        records.stream().filter(RagLoadBenchmarkRunner.LoadRecord::failed)
+                .map(RagLoadBenchmarkRunner.LoadRecord::errorCode).sorted()
+                .forEach(errorCode -> errorCodeCounts.merge(errorCode, 1L, Long::sum));
         Map<String, Distribution> stages = new LinkedHashMap<>();
-        records.stream().flatMap(value -> value.stageTimingsMs().keySet().stream()).distinct().sorted()
-                .forEach(stage -> stages.put(stage, distribution(records.stream()
+        successes.stream().flatMap(value -> value.stageTimingsMs().keySet().stream()).distinct().sorted()
+                .forEach(stage -> stages.put(stage, distribution(successes.stream()
                         .filter(value -> value.stageTimingsMs().containsKey(stage))
                         .map(value -> value.stageTimingsMs().get(stage)).toList())));
-        List<Long> outsideReportedService = records.stream().filter(value -> !value.failed())
+        List<Long> outsideReportedService = successes.stream()
                 .map(value -> Math.max(0L, value.elapsedMs()
                         - reportedServiceMs(value.stageTimingsMs()))).toList();
         if (!outsideReportedService.isEmpty()) {
@@ -50,10 +59,15 @@ public final class RagLoadBenchmarkStatistics {
                 .max(Comparator.<Map.Entry<String, Distribution>>comparingDouble(entry -> entry.getValue().mean())
                         .thenComparing(Map.Entry::getKey))
                 .map(Map.Entry::getKey).orElse("unavailable");
-        return new VariantStatistics(records.size(), errors, ratio(errors, records.size()), degraded,
-                ratio(degraded, records.size()), empty, ratio(empty, records.size()),
-                distribution(records.stream().map(RagLoadBenchmarkRunner.LoadRecord::elapsedMs).toList()),
-                Map.copyOf(stages), dominant);
+        Distribution allAttemptElapsed = distribution(records.stream()
+                .map(RagLoadBenchmarkRunner.LoadRecord::elapsedMs).toList());
+        Distribution successOnlyElapsed = distribution(successes.stream()
+                .map(RagLoadBenchmarkRunner.LoadRecord::elapsedMs).toList());
+        return new VariantStatistics(records.size(), records.size(), successes.size(), errors,
+                Map.copyOf(errorCodeCounts), ratio(errors, records.size()), degraded,
+                ratio(degraded, successes.size()), successfulEmpty, ratio(successfulEmpty, successes.size()),
+                successfulEmpty, ratio(successfulEmpty, successes.size()), allAttemptElapsed,
+                allAttemptElapsed, successOnlyElapsed, Map.copyOf(stages), dominant);
     }
 
     private long reportedServiceMs(Map<String, Long> timings) {
@@ -88,12 +102,25 @@ public final class RagLoadBenchmarkStatistics {
     }
 
     public record Distribution(long count, double mean, long p50, long p95, long p99, long max) {}
-    public record VariantStatistics(long requestCount, long errorCount, double errorRate,
+
+    /**
+     * variant统计；requestCount是attemptCount的兼容别名，emptyResult与successfulEmpty同义，
+     * elapsedMs是allAttemptElapsedMs的兼容别名。degraded/empty比率以成功请求为分母。
+     */
+    public record VariantStatistics(long requestCount, long attemptCount, long successCount,
+                                    long errorCount, Map<String, Long> errorCodeCounts, double errorRate,
                                     long degradedCount, double degradedRate, long emptyResultCount,
-                                    double emptyResultRate, Distribution elapsedMs,
+                                    double emptyResultRate, long successfulEmptyCount,
+                                    double successfulEmptyRate, Distribution elapsedMs,
+                                    Distribution allAttemptElapsedMs, Distribution successOnlyElapsedMs,
                                     Map<String, Distribution> stageTimingsMs,
                                     String observedDominantLatencyComponent) {}
-    public record ConcurrencyStatistics(int concurrency, long requestCount, long elapsedMs,
+
+    /** requestCount/throughputRequestsPerSecond分别是attempt口径计数和吞吐的兼容别名。 */
+    public record ConcurrencyStatistics(int concurrency, long requestCount, long attemptCount,
+                                        long successCount, long elapsedMs,
                                         double throughputRequestsPerSecond,
+                                        double attemptThroughputRequestsPerSecond,
+                                        double successThroughputRequestsPerSecond,
                                         Map<String, VariantStatistics> variants) {}
 }

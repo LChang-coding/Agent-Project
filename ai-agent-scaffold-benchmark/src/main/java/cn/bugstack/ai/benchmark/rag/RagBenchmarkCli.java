@@ -115,7 +115,11 @@ public final class RagBenchmarkCli {
                 positiveIntegers(options.getOrDefault("concurrency-levels", "1,10"), "concurrency-levels"),
                 nonNegativeInteger(options, "warmup-per-variant", 10),
                 integer(options, "requests-per-variant", 100),
-                Duration.ofSeconds(integer(options, "phase-timeout-seconds", 1800)));
+                Duration.ofSeconds(integer(options, "phase-timeout-seconds", 1800)),
+                Duration.ofSeconds(remote.requestTimeoutSeconds()),
+                Duration.ofSeconds(remote.connectTimeoutSeconds()),
+                sha256Value(options, "cli-jar-sha256"), sha256Value(options, "app-jar-sha256"),
+                required(options, "resource-evidence"));
         RagLoadBenchmarkRunner.Result result = new RagLoadBenchmarkRunner(objectMapper, remote.client())
                 .run(configuration);
         System.out.printf("completed load runId=%s requests=%d levels=%s out=%s%n", result.runId(),
@@ -149,8 +153,9 @@ public final class RagBenchmarkCli {
         if (!List.of("http", "https").contains(baseUrl.getScheme())) {
             throw new IllegalArgumentException("--base-url 只允许 http/https");
         }
+        int connectTimeoutSeconds = integer(options, "connect-timeout-seconds", 10);
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(
-                integer(options, "connect-timeout-seconds", 10))).build();
+                connectTimeoutSeconds)).build();
         Duration requestTimeout = Duration.ofSeconds(integer(options, "request-timeout-seconds", 120));
         int maxResponseBytes = integer(options, "max-response-bytes", 8 * 1024 * 1024);
         String usernameEnvironment = options.getOrDefault("username-env", "RAG_BENCHMARK_USERNAME");
@@ -166,7 +171,7 @@ public final class RagBenchmarkCli {
                 requestTimeout, maxResponseBytes);
         return new Remote(baseUrl, "environment:" + tokenEnvironment
                 + (refreshEnabled ? ";refresh=enabled" : ";refresh=disabled"), client,
-                Math.toIntExact(requestTimeout.toSeconds()));
+                Math.toIntExact(requestTimeout.toSeconds()), connectTimeoutSeconds);
     }
 
     private static Map<String, String> options(String[] args) {
@@ -193,6 +198,13 @@ public final class RagBenchmarkCli {
     private static String required(Map<String, String> values, String name) {
         String value = values.get(name);
         if (value == null || value.isBlank()) throw new IllegalArgumentException("缺少参数 --" + name);
+        return value;
+    }
+    private static String sha256Value(Map<String, String> values, String name) {
+        String value = required(values, name);
+        if (!value.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("--" + name + " 必须是小写SHA-256");
+        }
         return value;
     }
     private static int integer(Map<String, String> values, String name, int fallback) {
@@ -252,7 +264,8 @@ public final class RagBenchmarkCli {
         lines.add("        [--token-env RAG_BENCHMARK_ACCESS_TOKEN --warmup-queries 10 --seed 20260719]");
         lines.add("        [--poll-ms 1000 --ingest-timeout-seconds 3600 --request-timeout-seconds 120]");
         lines.add("load    --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
-        lines.add("        --run-id ID --code-revision GIT_COMMIT");
+        lines.add("        --run-id ID --code-revision GIT_COMMIT --cli-jar-sha256 SHA256 --app-jar-sha256 SHA256");
+        lines.add("        --resource-evidence FILE_OR_REFERENCE");
         lines.add("        [--concurrency-levels 1,10 --warmup-per-variant 10 --requests-per-variant 100]");
         lines.add("        [--phase-timeout-seconds 1800 --request-timeout-seconds 120]");
         lines.add("evaluate --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
@@ -262,5 +275,5 @@ public final class RagBenchmarkCli {
     }
 
     private record Remote(URI baseUrl, String credentialSource, RagBenchmarkHttpClient client,
-                          int requestTimeoutSeconds) {}
+                          int requestTimeoutSeconds, int connectTimeoutSeconds) {}
 }

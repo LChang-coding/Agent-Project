@@ -80,13 +80,13 @@ public final class RagBenchmarkHttpClient {
                 HttpRequest.BodyPublishers.ofFile(file), bytes("\r\n--" + boundary + "--\r\n"));
         HttpRequest request = request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents")
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary).POST(body).build();
-        JsonNode data = send(request);
+        JsonNode data = send(request).data();
         return new Upload(requiredText(data, "documentId"), requiredText(data, "taskId"),
                 requiredText(data, "status"), data.path("deduplicated").asBoolean(false));
     }
 
     public IngestTask getTask(String taskId) throws IOException, InterruptedException {
-        JsonNode data = send(request("/v1/rag/ingest-tasks/" + encodePath(taskId)).GET().build());
+        JsonNode data = send(request("/v1/rag/ingest-tasks/" + encodePath(taskId)).GET().build()).data();
         return new IngestTask(requiredText(data, "taskId"), requiredText(data, "status"),
                 requiredText(data, "stage"), data.path("processedChunks").asInt(),
                 data.path("totalChunks").asInt(), optionalText(data, "errorCode"), data.path("revision").asLong());
@@ -94,7 +94,7 @@ public final class RagBenchmarkHttpClient {
 
     public Document getDocument(String knowledgeBaseId, String documentId) throws IOException, InterruptedException {
         JsonNode data = send(request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents")
-                .GET().build());
+                .GET().build()).data();
         if (!data.isArray()) throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "文档列表不是数组");
         for (JsonNode value : data) {
             if (documentId.equals(optionalText(value, "documentId"))) {
@@ -136,8 +136,9 @@ public final class RagBenchmarkHttpClient {
     }
 
     public DebugResult debug(String targetId, String query) throws IOException, InterruptedException {
-        JsonNode data = postJson("/v1/rag/retrieval-debug", Map.of("targetType", "workflow",
+        ApiResponse response = postJsonDetailed("/v1/rag/retrieval-debug", Map.of("targetType", "workflow",
                 "targetId", targetId, "query", query, "maxContextTokens", 32768));
+        JsonNode data = response.data();
         Set<String> uniqueDocuments = new LinkedHashSet<>();
         List<String> headings = new ArrayList<>();
         for (JsonNode citation : data.path("citations")) {
@@ -162,16 +163,20 @@ public final class RagBenchmarkHttpClient {
         data.path("degradationReasons").forEach(value -> reasons.add(value.asText()));
         return new DebugResult(requiredText(data, "retrievalId"), List.copyOf(uniqueDocuments),
                 List.copyOf(headings), data.path("degraded").asBoolean(false), List.copyOf(reasons),
-                Map.copyOf(timings), Map.copyOf(candidates));
+                Map.copyOf(timings), Map.copyOf(candidates), response.httpStatus(), response.responseBytes());
     }
 
     private JsonNode postJson(String path, Object payload) throws IOException, InterruptedException {
+        return postJsonDetailed(path, payload).data();
+    }
+
+    private ApiResponse postJsonDetailed(String path, Object payload) throws IOException, InterruptedException {
         byte[] body = objectMapper.writeValueAsBytes(payload);
         return send(request(path).header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build());
     }
 
-    private JsonNode send(HttpRequest request) throws IOException, InterruptedException {
+    private ApiResponse send(HttpRequest request) throws IOException, InterruptedException {
         HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         byte[] body = readBounded(response.body());
         if (response.statusCode() == 401) {
@@ -185,24 +190,26 @@ public final class RagBenchmarkHttpClient {
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new BenchmarkProtocolException("RAG_BENCHMARK_HTTP_" + response.statusCode(),
-                    "RAG接口HTTP状态异常");
+                    "RAG接口HTTP状态异常", response.statusCode(), body.length);
         }
         JsonNode envelope;
         try {
             envelope = objectMapper.readTree(body);
         } catch (RuntimeException exception) {
-            throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "RAG接口响应不是合法JSON");
+            throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "RAG接口响应不是合法JSON",
+                    response.statusCode(), body.length);
         }
         String code = optionalText(envelope, "code");
         if (!SUCCESS_CODE.equals(code)) {
             throw new BenchmarkApiException(code.isBlank() ? "RAG_BENCHMARK_API_FAILED" : code,
-                    optionalText(envelope, "info"));
+                    optionalText(envelope, "info"), response.statusCode(), body.length);
         }
         JsonNode data = envelope.get("data");
         if (data == null || data.isNull()) {
-            throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "RAG接口成功响应缺少data");
+            throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "RAG接口成功响应缺少data",
+                    response.statusCode(), body.length);
         }
-        return data;
+        return new ApiResponse(data, response.statusCode(), body.length);
     }
 
     private HttpRequest.Builder request(String path) {
@@ -266,7 +273,9 @@ public final class RagBenchmarkHttpClient {
     public record Binding(String bindingId, String targetId, long revision) {}
     public record DebugResult(String retrievalId, List<String> rankedDocumentIds, List<String> citationHeadings,
                               boolean degraded, List<String> degradationReasons, Map<String, Long> timingsMs,
-                              Map<String, Integer> candidateCounts) {}
+                              Map<String, Integer> candidateCounts, int httpStatus, int responseBytes) {}
+
+    private record ApiResponse(JsonNode data, int httpStatus, int responseBytes) {}
 
     interface BearerTokenProvider {
         String currentToken();
@@ -292,15 +301,36 @@ public final class RagBenchmarkHttpClient {
 
     public static class BenchmarkApiException extends RuntimeException {
         private final String code;
+        private final Integer httpStatus;
+        private final Integer responseBytes;
         public BenchmarkApiException(String code, String message) {
+            this(code, message, null, null);
+        }
+        public BenchmarkApiException(String code, String message, Integer httpStatus, Integer responseBytes) {
             super(message == null || message.isBlank() ? "RAG接口返回业务错误" : message);
             this.code = code;
+            this.httpStatus = httpStatus;
+            this.responseBytes = responseBytes;
         }
         public String code() { return code; }
+        public Integer httpStatus() { return httpStatus; }
+        public Integer responseBytes() { return responseBytes; }
     }
     public static class BenchmarkProtocolException extends RuntimeException {
         private final String code;
-        public BenchmarkProtocolException(String code, String message) { super(message); this.code = code; }
+        private final Integer httpStatus;
+        private final Integer responseBytes;
+        public BenchmarkProtocolException(String code, String message) {
+            this(code, message, null, null);
+        }
+        public BenchmarkProtocolException(String code, String message, Integer httpStatus, Integer responseBytes) {
+            super(message);
+            this.code = code;
+            this.httpStatus = httpStatus;
+            this.responseBytes = responseBytes;
+        }
         public String code() { return code; }
+        public Integer httpStatus() { return httpStatus; }
+        public Integer responseBytes() { return responseBytes; }
     }
 }

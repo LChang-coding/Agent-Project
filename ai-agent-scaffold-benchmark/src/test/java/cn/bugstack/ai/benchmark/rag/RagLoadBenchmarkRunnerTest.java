@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RagLoadBenchmarkRunnerTest {
@@ -79,14 +81,83 @@ class RagLoadBenchmarkRunnerTest {
         assertTrue(maximum.get() <= 3);
         assertEquals(32, Files.readAllLines(output.resolve("load.jsonl")).size());
         assertEquals(8, Files.readAllLines(output.resolve("warmup.jsonl")).size());
+        Map<String, Map<String, Integer>> queriesByVariant = new HashMap<>();
+        for (String line : Files.readAllLines(output.resolve("load.jsonl"))) {
+            JsonNode record = mapper.readTree(line);
+            queriesByVariant.computeIfAbsent(record.path("variant").asText(), ignored -> new HashMap<>())
+                    .merge(record.path("queryId").asText(), 1, Integer::sum);
+            assertTrue(record.path("httpStatus").asInt() >= 200);
+            assertTrue(record.path("responseBytes").asInt() > 0);
+            assertFalse(record.path("startedAt").asText().isBlank());
+            assertFalse(record.path("finishedAt").asText().isBlank());
+        }
+        assertEquals(1, queriesByVariant.values().stream().distinct().count());
         JsonNode report = mapper.readTree(output.resolve("load-report.json").toFile());
         assertEquals(32, report.path("levels").path("1").path("requestCount").asInt()
                 + report.path("levels").path("3").path("requestCount").asInt());
         assertTrue(report.path("levels").path("3").path("throughputRequestsPerSecond").asDouble() > 0);
         JsonNode manifest = mapper.readTree(output.resolve("load-manifest.json").toFile());
         assertEquals("completed", manifest.path("status").asText());
-        assertEquals("not_collected_by_client", manifest.path("serverResourceEvidence").asText());
+        assertEquals("same-deterministic-query-per-variant-v1", manifest.path("queryPairing").asText());
+        assertEquals("completion-order-flush-per-record-v1", manifest.path("rawPersistence").asText());
+        assertEquals(120000, manifest.path("requestTimeoutMs").asLong());
+        assertEquals(List.of(3, 1), mapper.convertValue(manifest.path("concurrencyLevels"), List.class));
+        assertEquals("not_collected_by_test_client", manifest.path("serverResourceEvidence").asText());
         assertFalse(manifest.toString().contains("secret-token"));
+    }
+
+    @Test
+    void shouldRejectDuplicateConcurrencyLevelsInsteadOfSilentlyNormalizingThem() {
+        assertThrows(IllegalArgumentException.class, () -> new RagLoadBenchmarkRunner.Configuration(
+                "load-duplicate", URI.create("http://127.0.0.1:8092/api"), "environment:TEST_TOKEN",
+                "commit-1", temporary, temporary.resolve("targets.json"), temporary.resolve("out"), 7L,
+                List.of(2, 1, 2), 1, 2, Duration.ofSeconds(10)));
+    }
+
+    @Test
+    void shouldPersistFailedWarmupAndNeverStartMeasuredPhase() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path prepared = temporary.resolve("prepared-failed");
+        Files.createDirectories(prepared);
+        Files.writeString(prepared.resolve("queries.jsonl"),
+                "{\"queryId\":\"q1\",\"text\":\"alpha query\"}\n", StandardCharsets.UTF_8);
+        Path targets = temporary.resolve("targets-failed.json");
+        Map<String, String> targetValues = new LinkedHashMap<>();
+        RagBenchmarkHttpClient.ProfileDefinition.ablations().forEach(definition ->
+                targetValues.put(definition.variant(), "target-" + definition.variant()));
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "sourceRunId", "quality-run",
+                "targets", targetValues));
+        AtomicInteger requests = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> {
+            requests.incrementAndGet();
+            String data = "{\"retrievalId\":\"ret-failed\",\"degraded\":true,"
+                    + "\"degradationReasons\":[\"rerank_unavailable\"],\"metrics\":{},"
+                    + "\"citations\":[{\"headingPath\":\""
+                    + RagBenchmarkArtifactWriter.marker("doc-alpha") + " — Alpha\"}]}";
+            respond(exchange, 200, "{\"code\":\"0000\",\"info\":\"success\",\"data\":" + data + "}");
+        });
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, baseUrl,
+                "secret-token", Duration.ofSeconds(5), 1024 * 1024);
+        Path output = temporary.resolve("load-failed");
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> new RagLoadBenchmarkRunner(mapper, client).run(
+                        new RagLoadBenchmarkRunner.Configuration("load-failed", baseUrl,
+                                "environment:TEST_TOKEN", "commit-1", prepared, targets, output, 7L,
+                                List.of(1), 1, 2, Duration.ofSeconds(10))));
+
+        assertEquals("RAG_BENCHMARK_LOAD_GATE_FAILED", failure.getMessage());
+        assertTrue(requests.get() >= 1 && requests.get() <= 4);
+        assertEquals(1, Files.readAllLines(output.resolve("warmup.jsonl")).size());
+        assertEquals(0, Files.readAllLines(output.resolve("load.jsonl")).size());
+        JsonNode manifest = mapper.readTree(output.resolve("load-manifest.json").toFile());
+        assertEquals("failed", manifest.path("status").asText());
+        assertEquals("RAG_BENCHMARK_LOAD_GATE_FAILED", manifest.path("errorCode").asText());
+        assertEquals("warmup", manifest.path("failedSample").path("phase").asText());
+        assertFalse(manifest.toString().contains("alpha query"));
     }
 
     private void handleDebug(HttpExchange exchange, AtomicInteger active, AtomicInteger maximum,

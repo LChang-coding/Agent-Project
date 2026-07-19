@@ -122,6 +122,8 @@ java -jar "$CLI_JAR" "$command_name" \
   --request-timeout-seconds "$REQUEST_TIMEOUT_SECONDS"
 
 if [[ "$LOAD_ENABLED" == "true" ]]; then
+  cli_jar_sha256="$(shasum -a 256 "$CLI_JAR" | awk '{print $1}')"
+  app_jar_sha256="$(shasum -a 256 "$PROJECT_ROOT/ai-agent-scaffold-app/target/ai-agent-scaffold-app.jar" | awk '{print $1}')"
   printf 'starting load runId=%s levels=%s warmup=%s measured=%s out=%s\n' \
     "$LOAD_RUN_ID" "$LOAD_CONCURRENCY_LEVELS" "$LOAD_WARMUP_PER_VARIANT" \
     "$LOAD_REQUESTS_PER_VARIANT" "$LOAD_OUTPUT_DIR"
@@ -132,6 +134,9 @@ if [[ "$LOAD_ENABLED" == "true" ]]; then
     --out "$LOAD_OUTPUT_DIR" \
     --run-id "$LOAD_RUN_ID" \
     --code-revision "$code_revision" \
+    --cli-jar-sha256 "$cli_jar_sha256" \
+    --app-jar-sha256 "$app_jar_sha256" \
+    --resource-evidence "$LOAD_OUTPUT_DIR/resource-evidence.jsonl" \
     --concurrency-levels "$LOAD_CONCURRENCY_LEVELS" \
     --warmup-per-variant "$LOAD_WARMUP_PER_VARIANT" \
     --requests-per-variant "$LOAD_REQUESTS_PER_VARIANT" \

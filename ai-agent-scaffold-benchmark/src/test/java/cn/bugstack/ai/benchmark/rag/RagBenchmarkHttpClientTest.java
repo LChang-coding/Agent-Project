@@ -54,6 +54,8 @@ class RagBenchmarkHttpClientTest {
         assertEquals(java.util.List.of("doc-1"), result.rankedDocumentIds());
         assertEquals(7, result.timingsMs().get("totalMs"));
         assertEquals(12, result.candidateCounts().get("denseCandidateCount"));
+        assertEquals(200, result.httpStatus());
+        assertTrue(result.responseBytes() > 2000);
         assertTrue(result.toString().indexOf("secret-token") < 0);
         assertTrue(client.getDocument("kb-1", "doc-1").ready());
     }
