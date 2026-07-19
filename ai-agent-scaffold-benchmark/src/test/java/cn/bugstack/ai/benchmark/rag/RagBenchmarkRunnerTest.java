@@ -16,9 +16,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RagBenchmarkRunnerTest {
@@ -69,6 +72,57 @@ class RagBenchmarkRunnerTest {
         assertEquals("environment:TEST_TOKEN", manifest.path("credentialSource").asText());
         assertEquals("commit-abc", manifest.path("codeRevision").asText());
         assertTrue(manifest.toString().indexOf("test-token") < 0);
+    }
+
+    @Test
+    void evaluateShouldFailWarmupBeforeCreatingMeasuredRun() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path fixture = Path.of("../docs/test-fixtures/rag/beir-mini").toAbsolutePath().normalize();
+        RagBenchmarkDataset dataset = new BeirDatasetLoader(mapper).load(fixture.resolve("corpus.jsonl"),
+                fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv"),
+                BeirDatasetLoader.Limits.defaults());
+        Path prepared = temporary.resolve("prepared-gate");
+        new RagBenchmarkArtifactWriter(mapper).write(dataset, prepared,
+                new RagBenchmarkArtifactWriter.Configuration("mini", "https://example.invalid/mini", "rev-1",
+                        "fixture-only", "full", 7, 1024 * 1024),
+                new RagBenchmarkArtifactWriter.SourceFiles(fixture.resolve("corpus.jsonl"),
+                        fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv")));
+        Path targets = temporary.resolve("targets.json");
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "targets", Map.of(
+                "dense", "target-dense", "sparse", "target-sparse", "hybrid_rrf", "target-hybrid",
+                "hybrid_rrf_rerank", "target-rerank")));
+
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            String data = "{\"retrievalId\":\"ret\",\"degraded\":true,"
+                    + "\"degradationReasons\":[\"rerank_fallback\"],\"metrics\":{\"embeddingMs\":1,"
+                    + "\"denseMs\":1,\"sparseMs\":1,\"fusionMs\":1,\"rerankMs\":1,\"totalMs\":5,"
+                    + "\"denseCandidateCount\":3,\"sparseCandidateCount\":3,"
+                    + "\"fusionCandidateCount\":3,\"rerankCandidateCount\":3},\"citations\":[{"
+                    + "\"headingPath\":\"" + RagBenchmarkArtifactWriter.marker("doc-alpha")
+                    + " — Alpha\"}]}";
+            respond(exchange, 200, "{\"code\":\"0000\",\"info\":\"success\",\"data\":" + data + "}");
+        });
+        server.start();
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
+                "test-token", Duration.ofSeconds(5), 1024 * 1024);
+        Path output = temporary.resolve("failed-evaluation");
+
+        RagBenchmarkWarmupGate.WarmupGateException exception = assertThrows(
+                RagBenchmarkWarmupGate.WarmupGateException.class,
+                () -> new RagBenchmarkRunner(mapper, client).evaluate(
+                        new RagBenchmarkRunner.EvaluationConfiguration("gate-run", base,
+                                "environment:TEST_TOKEN", "commit-abc", prepared, targets, output,
+                                20260719L, 1)));
+
+        assertEquals(RagBenchmarkWarmupGate.ERROR_CODE, exception.code());
+        assertEquals(4, Files.readAllLines(output.resolve("warmup.jsonl")).size());
+        assertFalse(Files.exists(output.resolve("run.jsonl")));
+        JsonNode manifest = mapper.readTree(output.resolve("run-manifest.json").toFile());
+        assertEquals("failed", manifest.path("status").asText());
+        assertEquals(RagBenchmarkWarmupGate.ERROR_CODE, manifest.path("errorCode").asText());
     }
 
     private void handle(HttpExchange exchange, AtomicInteger profiles, AtomicInteger bindings) throws IOException {

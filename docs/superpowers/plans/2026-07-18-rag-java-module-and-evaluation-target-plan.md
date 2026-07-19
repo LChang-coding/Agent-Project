@@ -1264,3 +1264,17 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - benchmark启动脚本把Rerank参数改为可由环境覆盖，默认仍保持3候选有界子批与最多2次重试，但单批时限由10秒调到20秒、四子批共享总deadline由30秒调到60秒。此改动只作用隔离评测启动脚本，不冒充线上生产默认；延长单次等待可避免已在服务端完成的推理因公网响应略超10秒被取消并重复计算。
 - 旧PID 11511优雅TERM退出，新PID 27659继续连接本地13307启动，实际Rerank环境为`requestBatchSize=3`、`requestTimeout=20s`、`timeout=60s`、`maxRetries=2`。同一query重新完整执行四组，依次为Dense `1981ms/100+0`、Sparse `1813ms/0+100`、Hybrid `4004ms/100+100`、Hybrid+Rerank `14988ms/100+100`；四组均HTTP 200、code 0000、10引用、0降级，Rerank真实`candidateCount=10`、`rerankMs=14061`，完整门禁通过。
 - 强制`launchctl kickstart -k`后本地MySQL PID由10442切换为28980，ensure真实查询恢复；应用账号30/30次loopback查询均返回22个租户，8092应用PID仍为27659并在数据库重启后完成login+`/auth/me`，证明Hikari连接池恢复。本地数据库准备/健康脚本语法、plist lint、可执行权限和dump hash均通过；全仓`git diff --check`只命中未纳入本次提交的运行日志既有尾随空格，后续提交门禁必须对拟提交文件做作用域检查。
+
+###### Benchmark 内建预热门禁实现计划（执行前）
+
+1. 当前`RagBenchmarkRunner`在`runWarmup`写完后无校验就立即创建正式`run.jsonl`，外部轮询只能在正式阶段已开始后抢占中断，不能证明“门禁通过前零正式样本”。在`run`与`evaluate`两条路径中统一增加内部预热门禁，warmup=0保持显式跳过。
+2. 门禁要求预热记录数严格等于`min(warmupQueries, queryCount) × 4`、variant/query组合唯一且四变体计数相同、无`errorCode`、无降级、排名非空；`hybrid_rrf_rerank`还必须有正`rerankCandidateCount`和正`rerankMs`，防止Rerank fallback伪装成有引用的成功响应。
+3. 任一条件失败抛出带稳定错误码/摘要的异常，由既有manifest失败路径留痕；异常摘要只给计数，不包含query文本、token或凭据，并确保正式`run.jsonl`尚不存在。通过后才允许进入measured。
+4. 补单元测试覆盖有效40条通过、错误/降级/空排名/重复组合/伪Rerank分别失败，以及`evaluate`门禁失败时manifest为failed且正式文件不存在；运行benchmark全量测试、重建CLI、记录新JAR SHA并中文提交后，再制定第七次独立复评分计划。
+
+###### Benchmark 内建预热门禁实现与验收结果
+
+- 新增`RagBenchmarkWarmupGate`，在`run`和`evaluate`两条路径的`runWarmup`之后、`executeMeasured`之前统一执行；warmup=0显式跳过，保留原有无预热调用语义。门禁严格校验期望记录数、唯一variant/query组合、四组均衡计数、合法variant、错误、降级、空排名，以及Rerank组正候选数和正`rerankMs`。
+- 门禁失败抛稳定错误码`RAG_BENCHMARK_WARMUP_GATE_FAILED`，异常消息只包含expected/actual/unique/balanced和各失败计数，不包含query文本、JWT或凭据；两种Runner manifest失败路径都会写入该errorCode后原样抛出，禁止继续评分。
+- 新增5个门禁测试，覆盖10×4健康样本、错误+降级+空排名、重复组合、缺失变体、以及“排名非空但Rerank候选/耗时为0”的fallback；原Runner warmup=0测试继续通过。新增`evaluate`真实本地HTTP集成测试，4条降级预热后断言异常、manifest=`failed`/errorCode正确、`warmup.jsonl=4`且正式`run.jsonl`不存在，直接证明没有外部轮询竞态。
+- benchmark全量20/20测试通过，0 failure/error/skipped，BUILD SUCCESS；随后跳过重复测试重建fat CLI成功，新JAR SHA-256为`d797138759c5656d647abbc3a024f0a128fefd9becc52c7cdf1b69aeafa90c06`。拟提交Java/测试/计划文件的`git diff --check`通过。

@@ -82,6 +82,8 @@ public final class RagBenchmarkRunner {
             Collections.shuffle(shuffled, new Random(configuration.seed()));
             runWarmup(configuration.runId(), configuration.runDirectory(), configuration.warmupQueries(),
                     targets, shuffled);
+            validateWarmup(configuration.runDirectory(), configuration.warmupQueries(), shuffled.size(),
+                    targets.keySet());
             executeMeasured(configuration.runId(), configuration.runDirectory(), targets, shuffled);
 
             Map<String, Map<String, List<String>>> runs = new RagBenchmarkRunIO(objectMapper)
@@ -111,6 +113,9 @@ public final class RagBenchmarkRunner {
             manifest.put("errorType", exception.getClass().getSimpleName());
             if (exception instanceof RagBenchmarkHttpClient.BenchmarkApiException api) manifest.put("errorCode", api.code());
             if (exception instanceof RagBenchmarkHttpClient.BenchmarkProtocolException protocol) manifest.put("errorCode", protocol.code());
+            if (exception instanceof RagBenchmarkWarmupGate.WarmupGateException gate) {
+                manifest.put("errorCode", gate.code());
+            }
             writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
             throw exception;
         }
@@ -138,6 +143,8 @@ public final class RagBenchmarkRunner {
             Collections.shuffle(shuffled, new Random(configuration.seed()));
             runWarmup(configuration.runId(), configuration.runDirectory(), configuration.warmupQueries(),
                     targets, shuffled);
+            validateWarmup(configuration.runDirectory(), configuration.warmupQueries(), shuffled.size(),
+                    targets.keySet());
             executeMeasured(configuration.runId(), configuration.runDirectory(), targets, shuffled);
             RagBenchmarkRunIO runIO = new RagBenchmarkRunIO(objectMapper);
             Map<String, Map<String, List<String>>> runs = runIO.read(
@@ -162,6 +169,9 @@ public final class RagBenchmarkRunner {
             manifest.put("status", "failed");
             manifest.put("finishedAt", Instant.now().toString());
             manifest.put("errorType", exception.getClass().getSimpleName());
+            if (exception instanceof RagBenchmarkWarmupGate.WarmupGateException gate) {
+                manifest.put("errorCode", gate.code());
+            }
             writeAtomic(configuration.runDirectory().resolve("run-manifest.json"), manifest);
             throw exception;
         }
@@ -197,6 +207,15 @@ public final class RagBenchmarkRunner {
                 runIO.append(warmup, execute(runId, target.getKey(), target.getValue(), query));
             }
         }
+    }
+
+    private void validateWarmup(Path runDirectory, int warmupQueries, int queryCount, java.util.Set<String> variants)
+            throws IOException {
+        int expectedQueries = Math.min(warmupQueries, queryCount);
+        if (expectedQueries == 0) return;
+        List<RagBenchmarkRunIO.RunRecord> records = new RagBenchmarkRunIO(objectMapper)
+                .readRecords(runDirectory.resolve("warmup.jsonl"));
+        new RagBenchmarkWarmupGate().validate(records, expectedQueries, variants);
     }
 
     private void executeMeasured(String runId, Path runDirectory,
