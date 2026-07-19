@@ -1500,3 +1500,9 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 2. 使用当前同一App JAR重启8092，核对新PID只改上述变量；先运行四变体各1 warmup+1 measured的8请求最小冒烟，并确认Rerank候选10、耗时为正、0降级，不直接进入大压测。
 3. 最小冒烟通过后，使用全新目录和同一`1,2,4,8`/5 warmup/20 measured配置做A/B后段；对比同查询配对下的Rerank p50/p95/max、降级点、吞吐、队列和资源峰值。若仍在4并发降级，不上调deadline掩盖容量问题，而是保留并发2为当前健康容量边界并评估模型/实例扩容。
 4. 只有A/B证据证明批次10更快且不降级，才把benchmark启动脚本默认值从3改为10并更新注释/测试/计划；否则恢复批次3。
+
+###### Rerank批次10 A/B失败结果与批次8计划（执行前）
+
+- 旧App优雅停机后，同一JAR以新PID 59923启动；进程环境核对MySQL/Qdrant/Rerank endpoint、timeout/retry全部未变，唯一变量为`requestBatchSize=10`。最小冒烟的第一条warmup恰为Hybrid+Rerank，在59257ms后以HTTP 200返回8条fusion fallback排名，degraded/reason=`rerank_fallback`、rerankCandidate=0/rerankMs=0；严格门禁立即停止，剩7次请求未发送。
+- 远端Reranker日志在三个重试时间点均明确报`try_acquire_permit: no permits available`；一个10文本client batch超过了服务器`max-concurrent-requests=8`可分配permit，因此不是单纯“耗时超过20秒”，而是该批次对当前TEI配置必然不可执行。证据目录正常收口且manifest exitCode=1；批次10方案明确否决，不会设为默认。
+- 下一个单变量改为`requestBatchSize=8`：恰不超过permit=8，Top10变为8/2两个串行HTTP子批，相对基线3/3/3/1仍减少一半子批数。重启同一JAR后仍先只跑8次最小冒烟；任一permit/超时/降级立即否决，不直接做大压测。
