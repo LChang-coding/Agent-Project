@@ -54,6 +54,9 @@ public class RagDocumentUploadService {
                         command.knowledgeBaseId())
                 .orElseThrow(() -> new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在或无权访问"));
         authorizationService.requireManageable(command.tenantId(), command.userId(), command.roleCode(), knowledgeBase);
+        if (!knowledgeBase.status().searchable()) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "知识库当前不能接收新文档");
+        }
         RagValidatedUploadFile file = filePolicy.validate(command.file());
 
         String documentId = id("doc");

@@ -2001,3 +2001,27 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - DELETE失败/死信通过同一API恢复，保留现有删除checkpoint、清除错误并重置attempt，由MySQL到期扫描重新唤醒；前端不再通过重新调用删除登记接口模拟重试。管理员界面对INGEST显示“重新执行”、DELETE显示“继续删除”，进行中显示“重新入队中”，REBUILD不展示无效按钮。
 - 首次定向执行共40项，其中38项通过、2项在运行时出现`Unresolved compilation problem: RagIngestJobStatus`；根因是新增测试漏import，而旧Maven增量testCompile没有重新编译该类。补齐import并使用Java 17 `clean test`强制干净构建后40/40通过，0 failure/error/skipped。
 - 随后按真实文件名执行36个RAG测试类，全部192/192通过，0 failure/error/skipped，六模块BUILD SUCCESS；前端`npm run build`通过，`vue-tsc --noEmit`无类型错误，Vite 1916 modules transformed并成功输出生产包。当前仅证明代码/事务编排，真实MySQL故障制造与恢复、MinIO/Qdrant副作用复核仍属于下一阶段，未把Mock测试写成E2E。
+
+#### 知识库可恢复级联删除计划（执行前）
+
+1. 审计知识库、绑定、文档、版本、摄取任务、Outbox及Qdrant/MinIO现有表和Repository能力，明确删除聚合锁、状态迁移和重启恢复入口；禁止用逐个HTTP调用拼接事务，也禁止先标DELETED再异步尽力清理。
+2. 删除受理要求可信租户owner/admin和知识库expectedRevision；在一个短事务内锁定知识库，拒绝活动INGEST/REBUILD或先建立其取消屏障，将知识库推进DELETING使上传、检索、调试和新绑定立即失效，并停用现有绑定。重复请求必须返回同一删除操作状态。
+3. 为知识库删除建立独立可租约、可重试、有checkpoint的任务账本，或在现有任务表能够无歧义表达时扩展operation；任务逐文档复用单文档删除不变量，保存已完成document/version集合，任何外部调用前检查取消/租约/fencing。知识库删除本身不可取消，失败/死信允许管理员从checkpoint恢复。
+4. 收口条件必须同时满足：知识库所有文档为DELETED、所有版本源对象与解析对象不存在、Qdrant对应版本点数为0、业务分块已清理、活动绑定为0、活动摄取任务为0；随后CAS将知识库改为DELETED并保留最小审计墓碑。任一条件未证实保持DELETING/FAILED，不得在列表隐藏成成功。
+5. 前端增加危险区、二次确认、revision、进行中阶段和失败恢复入口；删除过程中禁用上传、策略绑定和调试并解释原因。普通成员无入口，移动端不能因rail footer隐藏而丢失管理能力。
+6. 覆盖空知识库、多文档多版本、已有删除任务、活动摄取、重复点击、跨租户、revision冲突、Worker崩溃接管、MinIO/Qdrant部分失败及最终一致性；完成Java 17回归、前端构建和真实隔离E2E后再宣告闭环，过程和证据继续追加并中文提交。
+
+#### 知识库级联删除架构审计结果
+
+- 现有`rag_ingest_task`强制绑定非空documentId/versionId，operation语义和Worker分支只覆盖单文档INGEST/REBUILD/DELETE；用伪document/version承载知识库删除会破坏范围校验、幂等键和完成事务，因此不能复用该表伪造知识库任务。
+- 单文档DELETE已经具备需要的外部副作用闭环：文档先进入DELETING退出检索，Worker按版本删除Qdrant点、业务分块、MinIO原件与解析产物，最后事务核对完整版本集合并关闭墓碑；失败/死信可保留checkpoint续跑。知识库编排应调用其内部登记能力并等待真实COMPLETED，不能复制一套低质量清理逻辑。
+- 知识库状态DELETING已天然阻断检索、调试、新绑定和本轮新增的失败INGEST恢复，但上传服务目前只做manageable鉴权、没有检查知识库状态；级联删除受理前必须先补上传`searchable()`门禁，否则删除事务后仍可能创建新文档。
+- 绑定表只有逐条revision软删除，没有按knowledgeBase批量停用能力；摄取任务DAO只有按document查询活动任务，没有按knowledgeBase统计/加锁能力。删除登记事务需要新增按知识库锁定活动任务、批量停用绑定和知识库状态CAS，避免“检查后插入”的竞态。
+- 最小正确架构需要独立知识库删除任务账本：tenantId/kbId/taskId/status/checkpoint/attempt/maxAttempts/nextRetryAt/lease/fencing/revision/error；短事务受理后由单独协调器扫描接管，逐文档登记现有DELETE任务并等待完成，全部文档和绑定收口后才能把知识库置DELETED。空知识库可由同一账本立即收口，重复请求按tenant+kb唯一键返回原任务。
+- 下一实现顺序确定为：先补所有入口的DELETING门禁和聚合DAO；再落独立任务表、领域状态机和受理事务；随后实现协调器、统一查询/重试API及前端危险区；最后执行真实多文档故障恢复。当前审计没有开放任何知识库删除API。
+
+#### 知识库删除入口屏障阶段结果
+
+- 修复上传服务只校验管理员而未校验知识库生命周期的问题：在文件类型校验和MinIO写入前要求知识库`status.searchable()`；DELETING/DELETED/DISABLED/INDEXING统一返回`RAG_KNOWLEDGE_BASE_UNAVAILABLE`，因此知识库删除事务一旦建立DELETING屏障，就不会再产生新的源对象、文档、版本、任务或Outbox。
+- 新增删除中知识库测试，验证错误码稳定且ObjectStorage `putFile`、删除补偿和注册事务均无调用；Java 17定向`RagDocumentUploadServiceTest`为5/5通过，0 failure/error/skipped，六模块BUILD SUCCESS。
+- 该屏障只是级联删除的必要前置，不代表知识库删除已开放；独立任务账本、聚合受理事务、协调器、最终一致性验证和前端危险区仍未实现。

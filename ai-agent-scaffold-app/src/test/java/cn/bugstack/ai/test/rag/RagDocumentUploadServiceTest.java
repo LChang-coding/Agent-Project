@@ -94,6 +94,22 @@ public class RagDocumentUploadServiceTest {
         verify(fixture.storage, never()).putFile(any());
     }
 
+    @Test
+    public void shouldRejectDeletingKnowledgeBaseBeforeStorageSideEffect() throws Exception {
+        Fixture fixture = fixture();
+        when(fixture.repository.findKnowledgeBase("tenant-a", "kb-a")).thenReturn(Optional.of(
+                new RagKnowledgeBaseEntity("tenant-a", "owner", "kb-a", "知识库", null,
+                        RagVisibility.TENANT, RagKnowledgeBaseStatus.DELETING, null, 768,
+                        "collection", 1, 2)));
+
+        AppException error = Assert.assertThrows(AppException.class,
+                () -> fixture.service.upload(command(markdown(), "admin")));
+
+        Assert.assertEquals("RAG_KNOWLEDGE_BASE_UNAVAILABLE", error.getCode());
+        verify(fixture.storage, never()).putFile(any());
+        verify(fixture.registration, never()).register(any(), any());
+    }
+
     private Fixture fixture() {
         IRagRepository repository = mock(IRagRepository.class);
         RagUploadRegistrationPort registration = mock(RagUploadRegistrationPort.class);
