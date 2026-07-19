@@ -21,12 +21,27 @@ if [[ -e "$OUTPUT_DIR" ]]; then
 fi
 mkdir -p "$OUTPUT_DIR"
 
-{
-  date -u +%Y-%m-%dT%H:%M:%SZ
-  ssh -o BatchMode=yes -o ConnectTimeout=10 RAG-Server \
-    "docker inspect --format '{{.Name}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}not_configured{{end}}|{{.Config.Image}}' \
-      rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter"
-} >"$OUTPUT_DIR/remote-inspect-before.txt"
+inspect_path="$OUTPUT_DIR/remote-inspect-before.txt"
+inspect_temporary="$inspect_path.tmp"
+inspect_captured=false
+for attempt in 1 2 3; do
+  if {
+    date -u +%Y-%m-%dT%H:%M:%SZ
+    ssh -o BatchMode=yes -o ConnectTimeout=10 RAG-Server \
+      "docker inspect --format '{{.Name}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}not_configured{{end}}|{{.Config.Image}}' \
+        rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter"
+  } >"$inspect_temporary"; then
+    mv "$inspect_temporary" "$inspect_path"
+    inspect_captured=true
+    break
+  fi
+  printf 'remote inspect attempt %d of 3 failed\n' "$attempt" >&2
+  sleep 1
+done
+if [[ "$inspect_captured" != "true" ]]; then
+  printf 'remote inspect did not become ready after 3 attempts\n' >&2
+  exit 1
+fi
 
 local_sampler() {
   while kill -0 "$APP_PID" 2>/dev/null; do

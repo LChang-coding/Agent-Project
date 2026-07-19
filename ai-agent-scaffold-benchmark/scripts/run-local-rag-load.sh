@@ -91,9 +91,14 @@ trap cleanup EXIT INT TERM
 collector_pid=$!
 for _ in {1..20}; do
   [[ -s "$EVIDENCE_DIR/local-process.jsonl" && -s "$EVIDENCE_DIR/remote-containers.jsonl" ]] && break
+  kill -0 "$collector_pid" 2>/dev/null || break
   sleep 1
 done
 if [[ ! -s "$EVIDENCE_DIR/local-process.jsonl" || ! -s "$EVIDENCE_DIR/remote-containers.jsonl" ]]; then
+  if ! kill -0 "$collector_pid" 2>/dev/null; then
+    wait "$collector_pid" 2>/dev/null || true
+    collector_pid=""
+  fi
   printf 'resource sampler did not become ready\n' >&2
   exit 1
 fi

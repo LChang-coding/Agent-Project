@@ -1506,3 +1506,14 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 旧App优雅停机后，同一JAR以新PID 59923启动；进程环境核对MySQL/Qdrant/Rerank endpoint、timeout/retry全部未变，唯一变量为`requestBatchSize=10`。最小冒烟的第一条warmup恰为Hybrid+Rerank，在59257ms后以HTTP 200返回8条fusion fallback排名，degraded/reason=`rerank_fallback`、rerankCandidate=0/rerankMs=0；严格门禁立即停止，剩7次请求未发送。
 - 远端Reranker日志在三个重试时间点均明确报`try_acquire_permit: no permits available`；一个10文本client batch超过了服务器`max-concurrent-requests=8`可分配permit，因此不是单纯“耗时超过20秒”，而是该批次对当前TEI配置必然不可执行。证据目录正常收口且manifest exitCode=1；批次10方案明确否决，不会设为默认。
 - 下一个单变量改为`requestBatchSize=8`：恰不超过permit=8，Top10变为8/2两个串行HTTP子批，相对基线3/3/3/1仍减少一半子批数。重启同一JAR后仍先只跑8次最小冒烟；任一permit/超时/降级立即否决，不直接做大压测。
+
+###### 批次8首次采样器安全失败与重试修复计划（执行前）
+
+- 同一JAR已以PID 62760和`requestBatchSize=8`健康启动。首次最小冒烟在Load Runner启动前被包装脚本拒绝：远端inspect首次SSH连接失败，evidence目录只有21字节UTC时间且无本地/容器JSONL，20秒ready门禁返回`resource sampler did not become ready`。load输出目录未创建、0次debug检索，该失败不是批次8性能结果。
+- 采样器初始inspect增加3次有界重试，每次写入临时文件，只在时间+8容器完整成功后原子替换正式快照；避免失败尝试留下伪完整文件。包装脚本ready循环同时检查collector PID，子进程提前退出时立即失败，不空等20秒。
+- 补shell语法、采样器真实启停与证据结构回归，记录后中文提交；使用全新run/evidence目录重试同样批次8最小冒烟，不复用仅含时间戳的失败目录。
+
+###### 采样器初始化重试修复执行结果
+
+- 初始远端inspect现以`.tmp`写入并最多尝试3次，只在SSH+8容器输出整体成功后`mv`为正式快照；三次全失败则明确退出1。Load包装的ready循环新增collector存活检查，子进程提前退出会立即收口而非固定空等20秒。
+- 两个脚本`bash -n`通过；真实采样器回归产生9行完整inspect、12条本地JSONL和6条8容器JSONL，逐行`jq`与字段数门禁通过，远端错误文件为空。回归采样器已通过SIGINT执行自身cleanup，没有残留SSH/docker stats子进程。
