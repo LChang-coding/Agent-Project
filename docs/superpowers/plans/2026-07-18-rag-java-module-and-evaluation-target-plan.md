@@ -1182,3 +1182,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 第一次用新脚本启动时出现`Access denied`，根因不是数据库：`read_table_cell '| MySQL |' 5`先匹配到组件资源表，把35字符的资源描述当密码；进程值与9字符真实凭据不一致。脚本已改为只匹配“root或应用配置中的数据库用户”凭据行，随后进程密码等值核验通过。
 - 修正后应用PID 71769通过自动隧道启动，Hikari成功建连；实际进程环境为本机13306、TLS REQUIRED、连接/Socket时限5/15秒，连接池min/max为1/6、idle/maxLifetime/keepalive为120/600/60秒。queryId=716的Hybrid+Rerank再次真实成功，10引用、无降级、服务端总耗时19216ms。
 - 用户随后使用数据库客户端公网直连，服务端已识别账号但客户端未启用安全连接，返回`caching_sha2_password`要求secure connection。当前按用户直连需要暂保留公网3306，仅允许`223.104.79.0/24`且强制客户端`SSL Mode=REQUIRED`；项目运行仍默认自动隧道。公网关闭项延后到用户确认不再需要直连，不能把计划目标误记为已执行。
+
+###### SciFact 第六次独立复评分计划（执行前）
+
+1. 以配置/脚本提交`5e49f30`、当前8092应用PID 71769和全新空目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-5e49f30-r6`启动；应用JAR对应Java功能提交仍单独记录，不把配置提交冒充JAR源码提交。复用已校验的prepared、同一隔离租户及四个既有targets，不重新摄取或修改Qdrant数据。
+2. 通过自动SSH隧道连接新MySQL，只对用户名、用户ID、租户ID同时匹配且唯一active的原benchmark用户做一次条件密码摘要更新；随机明文仅存在于当前受限shell及子进程环境，不写计划、日志、manifest或Git。更新影响行数不等于1即停止。
+3. 固定10个query×4个variant的40条warmup，load关闭、单请求上限120秒。预热门禁要求四组各10条、唯一组合40、0业务错误、0降级、0空排名；任一条件不满足立即终止进程并原样保留失败run，禁止进入measured。
+4. warmup通过后才允许继续300个query×4个variant的1200条measured；运行中周期检查唯一组合、错误、降级、空结果、8092存活及新MySQL断链日志，不变更远端服务、索引、模型参数或并发度。
+5. 只有1200条完整且所有门禁通过后才执行独立`score`重算和hash绑定，产出Recall@K、MRR@K、nDCG@K、错误/降级率及分阶段延迟。该轮提交前产生的计划追加将在运行结果明确后与结果一起中文提交。
+
+###### SciFact 第六次预热门禁执行结果
+
+- MySQL切换与自动隧道闭环已由提交`5e49f30 迁移业务MySQL并增加自动安全隧道`固化；提交只包含启动脚本、ensure脚本、LaunchAgent plist和本计划，未暂存运行日志或用户其他未跟踪文件。`codex.md`按仓库约定由`.git/info/exclude`排除，服务器与凭据说明已在本机受控文件更新但未强行纳入Git。
+- 启动前核验8092应用PID 71769仍存活、本机13306隧道可连、没有其他benchmark evaluator；prepared四个生成文件hash与其manifest一致。targets SHA-256为`70273080edaa9507a03c4cb9e14099505034349c4cdcc07e7cc12e1eccfe5ffd`，CLI JAR SHA-256为`fde246d77f5b457216b1851feb3691302ef1488cefa143a393750c6d5a597b0d`，App JAR SHA-256为`e6d59dde66e35af42610446983739d6ace566fed6b5eb3a4f698ffb8ef044cfb`。manifest中的`codeRevision=5e49f30`只代表启动时工作树提交，不冒充两个JAR的构建revision。
+- 通过新MySQL的TLS SSH隧道对原隔离benchmark用户做用户名、用户ID、租户ID、secret类型、active状态与未删除条件更新，实际影响严格为1行；随机密码和JWT只存在于托管shell/子进程环境，未输出或落盘。
+- 第六次run使用全新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-5e49f30-r6`，保持warmup query=10、四个variant、load关闭、请求上限120秒和原targets。历史成功/失败目录均未删除、覆盖或拼接。
+- 预热最终恰好40条：Dense/Sparse/Hybrid-RRF/Hybrid-RRF+Rerank各10条，40个唯一variant/query组合，0业务错误、0降级、0空`rankedDocumentIds`；10条Rerank组均有正候选数和正`rerankMs`。门禁命令退出码0，随后正式measured开始写入。
+- 当前只证明“迁移后预热稳定性门禁通过”，不代表1200条正式质量评测完成；评测继续由前台托管会话运行，任何业务错误、降级、空结果或重复组合仍将触发停止并保留失败证据。
