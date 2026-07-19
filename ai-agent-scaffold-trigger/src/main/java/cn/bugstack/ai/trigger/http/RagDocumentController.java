@@ -151,6 +151,17 @@ public class RagDocumentController {
         }
     }
 
+    /** 重新执行失败或死信任务。 */
+    @PostMapping("/ingest-tasks/{taskId}/retry")
+    public Response<RagIngestTaskResponseDTO> retry(@PathVariable String taskId) {
+        try {
+            return success(taskResponse(managementService.retryTask(TenantContextHolder.getTenantId(),
+                    TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(), taskId)));
+        } catch (AppException e) {
+            return failure(e);
+        }
+    }
+
     private RagDocumentResponseDTO documentResponse(RagDocumentEntity value) {
         return RagDocumentResponseDTO.builder().documentId(value.documentId())
                 .knowledgeBaseId(value.knowledgeBaseId()).displayName(value.displayName())

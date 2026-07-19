@@ -109,4 +109,24 @@ public class RagDocumentControllerTest {
         Assert.assertEquals("delete", response.getData().getOperation());
         verify(deletionService).deleteDocument("tenant-a", "owner-a", "owner", "kb-a", "doc-a", 7L);
     }
+
+    @Test
+    public void shouldRetryTaskUsingTrustedContext() {
+        RagDocumentUploadService uploadService = mock(RagDocumentUploadService.class);
+        RagDocumentManagementService managementService = mock(RagDocumentManagementService.class);
+        RagDocumentDeletionService deletionService = mock(RagDocumentDeletionService.class);
+        RagIngestJobEntity task = RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a",
+                "task-a", "task-key", RagIngestOperation.INGEST, 1, 3);
+        when(managementService.retryTask("tenant-a", "admin-a", "admin", "task-a")).thenReturn(task);
+        RagDocumentController controller = new RagDocumentController(uploadService, managementService,
+                deletionService);
+        TenantContextHolder.set(TenantContext.builder().tenantId("tenant-a").userId("admin-a")
+                .roleCode("admin").build());
+
+        var response = controller.retry("task-a");
+
+        Assert.assertEquals("0000", response.getCode());
+        Assert.assertEquals("task-a", response.getData().getTaskId());
+        verify(managementService).retryTask("tenant-a", "admin-a", "admin", "task-a");
+    }
 }

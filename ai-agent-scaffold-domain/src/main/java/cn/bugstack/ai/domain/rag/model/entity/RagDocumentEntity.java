@@ -66,6 +66,16 @@ public record RagDocumentEntity(String tenantId,
                 pageCount, chunkCount);
     }
 
+    /** 重试失败摄取，恢复同一目标generation且保留旧活动版本。 */
+    public RagDocumentEntity retryProcessing(long generation) {
+        if (status != RagDocumentStatus.FAILED || targetGeneration != null || generation < 1) {
+            throw new AppException("RAG_INGEST_DOCUMENT_RETRY_STATE_INVALID", "文档当前不能恢复摄取");
+        }
+        return new RagDocumentEntity(tenantId, ownerUserId, visibility, knowledgeBaseId, documentId,
+                displayName, activeVersionId, activeGeneration, generation, RagDocumentStatus.PROCESSING,
+                revision + 1, pageCount, chunkCount);
+    }
+
     /** 建立删除墓碑，使该文档立即退出可检索范围。 */
     public RagDocumentEntity requestDeletion() {
         if (status == RagDocumentStatus.DELETING || status == RagDocumentStatus.DELETED) return this;

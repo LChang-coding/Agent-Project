@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.domain.rag.service.RagDocumentManagementService;
@@ -125,6 +126,69 @@ public class RagDocumentManagementServiceTest {
         }
     }
 
+    @Test
+    public void shouldAtomicallyRequeueFailedIngestVersionAndDocument() {
+        IRagRepository repository = repository();
+        RagIngestJobEntity failed = failed(RagIngestOperation.INGEST);
+        RagIngestJobEntity requeued = failed.requeueIngest();
+        when(repository.findIngestJob("tenant-a", "task-a"))
+                .thenReturn(Optional.of(failed), Optional.of(requeued));
+        when(repository.findDocumentVersion("tenant-a", "ver-a")).thenReturn(Optional.of(failedVersion()));
+        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(failedDocument()));
+
+        RagIngestJobEntity result = service(repository).retryTask(
+                "tenant-a", "admin-a", "admin", "task-a");
+
+        Assert.assertEquals(RagIngestJobStatus.PENDING, result.status());
+        Assert.assertEquals(0, result.attemptCount());
+        verify(repository).requeueFailedIngestJob(eq("tenant-a"), any(), eq(failed.revision()),
+                any(), eq(0L), any(), eq(0L), eq(0L));
+        verify(repository, never()).insertIngestJob(any(), any());
+    }
+
+    @Test
+    public void shouldResumeFailedDeleteCheckpointThroughUnifiedRetry() {
+        IRagRepository repository = repository();
+        RagIngestJobEntity failed = failed(RagIngestOperation.DELETE);
+        RagIngestJobEntity requeued = failed.requeueDeletion();
+        when(repository.findIngestJob("tenant-a", "task-a"))
+                .thenReturn(Optional.of(failed), Optional.of(requeued));
+        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(
+                new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                        "document.md", "ver-a", 1, null, RagDocumentStatus.DELETING, 3)));
+        when(repository.updateIngestJob("tenant-a", requeued, failed.revision())).thenReturn(1);
+
+        RagIngestJobEntity result = service(repository).retryTask(
+                "tenant-a", "owner-a", "owner", "task-a");
+
+        Assert.assertEquals(RagIngestJobStatus.PENDING, result.status());
+        verify(repository).updateIngestJob("tenant-a", requeued, failed.revision());
+        verify(repository, never()).requeueFailedIngestJob(any(), any(), anyLong(), any(), anyLong(),
+                any(), anyLong(), anyLong());
+    }
+
+    @Test
+    public void shouldRejectRetryForActiveCancelledAndRebuildTasks() {
+        IRagRepository activeRepository = repository();
+        when(activeRepository.findIngestJob("tenant-a", "task-a")).thenReturn(Optional.of(pending()));
+        assertAppException("RAG_INGEST_RETRY_STATE_INVALID", () -> service(activeRepository).retryTask(
+                "tenant-a", "admin-a", "admin", "task-a"));
+
+        IRagRepository rebuildRepository = repository();
+        when(rebuildRepository.findIngestJob("tenant-a", "task-a"))
+                .thenReturn(Optional.of(failed(RagIngestOperation.REBUILD)));
+        assertAppException("RAG_REBUILD_NOT_IMPLEMENTED", () -> service(rebuildRepository).retryTask(
+                "tenant-a", "admin-a", "admin", "task-a"));
+
+        IRagRepository memberRepository = repository();
+        when(memberRepository.findIngestJob("tenant-a", "task-a"))
+                .thenReturn(Optional.of(failed(RagIngestOperation.INGEST)));
+        assertAppException("RAG_ADMIN_REQUIRED", () -> service(memberRepository).retryTask(
+                "tenant-a", "member-a", "member", "task-a"));
+        verify(memberRepository, never()).requeueFailedIngestJob(any(), any(), anyLong(), any(), anyLong(),
+                any(), anyLong(), anyLong());
+    }
+
     private IRagRepository repository() {
         IRagRepository repository = mock(IRagRepository.class);
         when(repository.findKnowledgeBase("tenant-a", "kb-a")).thenReturn(Optional.of(
@@ -151,5 +215,30 @@ public class RagDocumentManagementServiceTest {
     private RagIngestJobEntity pending() {
         return RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a", "task-a",
                 "task-key", RagIngestOperation.INGEST, 1, 3);
+    }
+
+    private RagIngestJobEntity failed(RagIngestOperation operation) {
+        Instant now = Instant.parse("2026-07-20T08:00:00Z");
+        return RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a", "task-a",
+                        "task-key", operation, 1, 3)
+                .claim("worker-a", 1, now, Duration.ofMinutes(1))
+                .failTerminal("worker-a", 1, now.plusSeconds(1), "RAG_TEST_FAILURE", "测试失败");
+    }
+
+    private RagDocumentVersionEntity failedVersion() {
+        return new RagDocumentVersionEntity("tenant-a", "kb-a", "doc-a", "ver-a", 1, 1,
+                "rag", "object", "rag", "parsed", "document.md", "sha256", "text/markdown", 10,
+                RagDocumentVersionStatus.FAILED, "parser", "chunker", "embedding", 0,
+                2, 100, 3, java.util.Map.of("old", "metric"));
+    }
+
+    private RagDocumentEntity failedDocument() {
+        return new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                "document.md", null, 0, null, RagDocumentStatus.FAILED, 0);
+    }
+
+    private void assertAppException(String code, Runnable action) {
+        AppException error = Assert.assertThrows(AppException.class, action::run);
+        Assert.assertEquals(code, error.getCode());
     }
 }

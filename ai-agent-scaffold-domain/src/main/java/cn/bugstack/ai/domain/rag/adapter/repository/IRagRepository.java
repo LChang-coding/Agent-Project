@@ -72,6 +72,12 @@ public interface IRagRepository {
     /** 按任务 revision 做 CAS 更新。 */
     int updateIngestJob(String tenantId, RagIngestJobEntity job, long expectedRevision);
 
+    /** 原子恢复失败摄取任务、不可变版本和逻辑文档，知识库状态在同一事务中加锁校验。 */
+    void requeueFailedIngestJob(String tenantId, RagIngestJobEntity requeuedJob,
+                                long expectedTaskRevision, RagDocumentVersionEntity queuedVersion,
+                                long expectedVersionRevision, RagDocumentEntity processingDocument,
+                                long expectedDocumentRevision, long expectedKnowledgeBaseRevision);
+
     /**
      * 扫描全局到期任务的最小候选投影。
      * <p>这是唯一不以 tenantId 为首参的 Worker 发现方法；它不返回任务内容，

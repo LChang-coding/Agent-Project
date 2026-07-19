@@ -133,14 +133,14 @@
               {{ cancelBusyTaskId === task.taskId ? '正在取消' : '取消任务' }}
             </button>
             <button
-              v-else-if="isAdministrator && task.operation === 'delete' && ['failed', 'dead'].includes(task.status)"
+              v-else-if="isAdministrator && task.operation !== 'rebuild' && ['failed', 'dead'].includes(task.status)"
               class="rag-button rag-button--danger"
               type="button"
               :disabled="retryBusyTaskId === task.taskId"
-              @click="retryDeleteTask(task)"
+              @click="retryTask(task)"
             >
               <LoaderCircle v-if="retryBusyTaskId === task.taskId" class="spin" :size="15" />
-              {{ retryBusyTaskId === task.taskId ? '重新入队中' : '继续删除' }}
+              {{ retryBusyTaskId === task.taskId ? '重新入队中' : task.operation === 'delete' ? '继续删除' : '重新执行' }}
             </button>
           </article>
         </section>
@@ -336,7 +336,7 @@ import { queryAgentConfigManagement } from '@/api/agent';
 import {
   cancelRagIngestTask, createKnowledgeBase, createRagBinding, createRagRetrievalProfile,
   debugRagRetrieval, deleteRagBinding, deleteRagDocument, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
-  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, updateKnowledgeBase,
+  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, retryRagIngestTask, updateKnowledgeBase,
   updateRagRetrievalProfile, uploadRagDocument,
   type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase,
   type RagRetrievalDebugResult, type RagRetrievalProfile, type RagRetrievalProfilePayload,
@@ -537,20 +537,17 @@ async function removeDocument(document: RagDocument) {
   finally { deletingDocumentId.value = ''; }
 }
 
-async function retryDeleteTask(task: RagIngestTask) {
-  const document = documents.value.find((item) => item.documentId === task.documentId);
-  if (!document || document.status !== 'deleting' || !selectedKnowledgeBaseId.value) {
-    notice.value = { kind: 'error', message: '删除墓碑已变化，请刷新数据后再试。' };
-    return;
-  }
+async function retryTask(task: RagIngestTask) {
   retryBusyTaskId.value = task.taskId;
   try {
-    const requeued = await deleteRagDocument(selectedKnowledgeBaseId.value,
-      document.documentId, document.revision);
+    const requeued = await retryRagIngestTask(task.taskId);
     taskById.value = { ...taskById.value, [requeued.taskId]: requeued };
+    await loadDocuments();
     startTaskPolling();
-    notice.value = { kind: 'success', message: `“${document.displayName}”已从上次检查点继续清理。` };
-  } catch (error) { showError(error, '删除任务重试失败'); }
+    notice.value = { kind: 'success', message: requeued.operation === 'delete'
+      ? '删除任务已从上次检查点继续清理。'
+      : '摄取任务已安全重置，将从原始文档重新解析和建立索引。' };
+  } catch (error) { showError(error, '任务重新执行失败'); }
   finally { retryBusyTaskId.value = ''; }
 }
 

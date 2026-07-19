@@ -188,6 +188,49 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void requeueFailedIngestJob(String tenantId, RagIngestJobEntity requeuedJob,
+                                       long expectedTaskRevision, RagDocumentVersionEntity queuedVersion,
+                                       long expectedVersionRevision, RagDocumentEntity processingDocument,
+                                       long expectedDocumentRevision, long expectedKnowledgeBaseRevision) {
+        requireTenant(tenantId, requeuedJob == null ? null : requeuedJob.tenantId());
+        requireTenant(tenantId, queuedVersion == null ? null : queuedVersion.tenantId());
+        requireTenant(tenantId, processingDocument == null ? null : processingDocument.tenantId());
+        requireRevision(expectedTaskRevision);
+        requireRevision(expectedVersionRevision);
+        requireRevision(expectedDocumentRevision);
+        requireRevision(expectedKnowledgeBaseRevision);
+        if (requeuedJob.operation() != RagIngestOperation.INGEST
+                || requeuedJob.status() != RagIngestJobStatus.PENDING
+                || queuedVersion.status() != RagDocumentVersionStatus.QUEUED
+                || processingDocument.status() != RagDocumentStatus.PROCESSING
+                || !requeuedJob.knowledgeBaseId().equals(queuedVersion.knowledgeBaseId())
+                || !requeuedJob.knowledgeBaseId().equals(processingDocument.knowledgeBaseId())
+                || !requeuedJob.documentId().equals(queuedVersion.documentId())
+                || !requeuedJob.documentId().equals(processingDocument.documentId())
+                || !requeuedJob.versionId().equals(queuedVersion.versionId())
+                || requeuedJob.generation() != queuedVersion.generation()
+                || processingDocument.targetGeneration() == null
+                || processingDocument.targetGeneration() != requeuedJob.generation()) {
+            throw new IllegalArgumentException("失败摄取恢复范围非法");
+        }
+        RagKnowledgeBaseEntity lockedKnowledgeBase = mapper.toKnowledgeBase(
+                knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
+                        tenantId, requeuedJob.knowledgeBaseId()));
+        if (lockedKnowledgeBase == null || !lockedKnowledgeBase.status().searchable()
+                || lockedKnowledgeBase.revision() != expectedKnowledgeBaseRevision) {
+            throw new AppException("RAG_INGEST_RETRY_KNOWLEDGE_BASE_CHANGED",
+                    "知识库状态已变化，请刷新后重试");
+        }
+        requireChanged(documentVersionDao.updateByTenantAndRevision(tenantId,
+                mapper.toDocumentVersionPo(queuedVersion), expectedVersionRevision));
+        requireChanged(documentDao.updateByTenantAndRevision(tenantId,
+                mapper.toDocumentPo(processingDocument), expectedDocumentRevision));
+        requireChanged(ingestTaskDao.updateByTenantAndRevision(tenantId,
+                mapper.toIngestTaskPo(requeuedJob), expectedTaskRevision));
+    }
+
+    @Override
     public List<RagIngestJobCandidate> listDueIngestJobCandidates(Instant now, int limit) {
         if (now == null) throw new IllegalArgumentException("now不能为空");
         if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit必须在1到1000之间");

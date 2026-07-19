@@ -139,9 +139,32 @@ public class RagIngestJobEntityTest {
         Assert.assertEquals(7L, running.generation());
     }
 
+    @Test
+    public void shouldRequeueFailedIngestFromInitialCheckpointAndResetAttempts() {
+        RagIngestJobEntity running = ingestPending(3).claim("worker-a", 1L, NOW, LEASE);
+        RagIngestJobEntity parsing = running.advance("worker-a", 1L, NOW.plusSeconds(1),
+                checkpoint(RagIngestStage.PARSING, 0, 0, 0, 0));
+        RagIngestJobEntity failed = parsing.failTerminal("worker-a", 1L, NOW.plusSeconds(2),
+                "RAG_DOCLING_FAILED", "解析失败");
+
+        RagIngestJobEntity requeued = failed.requeueIngest();
+
+        Assert.assertEquals(RagIngestJobStatus.PENDING, requeued.status());
+        Assert.assertEquals(RagIngestStage.RECEIVED, requeued.checkpoint().stage());
+        Assert.assertEquals(0, requeued.attemptCount());
+        Assert.assertNull(requeued.errorCode());
+        Assert.assertEquals(failed.fencingToken(), requeued.fencingToken());
+        assertAppException("RAG_INGEST_REQUEUE_STATE_INVALID", () -> ingestPending(3).requeueIngest());
+    }
+
     private RagIngestJobEntity pending(int maxAttempts) {
         return RagIngestJobEntity.pending("tenant-a", "kb-1", "doc-1", "version-1",
                 "job-1", "tenant-a:doc-1:version-1", RagIngestOperation.REBUILD, 7L, maxAttempts);
+    }
+
+    private RagIngestJobEntity ingestPending(int maxAttempts) {
+        return RagIngestJobEntity.pending("tenant-a", "kb-1", "doc-1", "version-1",
+                "job-1", "tenant-a:doc-1:version-1", RagIngestOperation.INGEST, 7L, maxAttempts);
     }
 
     private RagIngestCheckpoint checkpoint(RagIngestStage stage, int processed, int total,

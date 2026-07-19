@@ -6,6 +6,8 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,6 +90,58 @@ public class RagDocumentManagementService {
         repository.cancelUnclaimedIngestJob(tenantId, cancelled, current.revision(),
                 version.revision(), document.revision());
         return repository.findIngestJob(tenantId, taskId).orElse(cancelled);
+    }
+
+    /** 安全恢复失败或死信任务；数据库恢复扫描负责唤醒，不依赖Kafka投递成功。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RagIngestJobEntity retryTask(String tenantId, String userId, String roleCode, String taskId) {
+        RagIngestJobEntity current = requireTask(tenantId, userId, roleCode, taskId);
+        if (current.status() != RagIngestJobStatus.FAILED && current.status() != RagIngestJobStatus.DEAD) {
+            throw new AppException("RAG_INGEST_RETRY_STATE_INVALID", "只有失败或死信任务可以重新执行");
+        }
+        if (current.operation() == RagIngestOperation.REBUILD) {
+            throw new AppException("RAG_REBUILD_NOT_IMPLEMENTED", "知识库重建链路尚未实现");
+        }
+        if (current.operation() == RagIngestOperation.DELETE) {
+            return retryDelete(tenantId, current);
+        }
+        RagKnowledgeBaseEntity knowledgeBase = requireManageable(
+                tenantId, userId, roleCode, current.knowledgeBaseId());
+        if (!knowledgeBase.status().searchable()) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "当前知识库不能恢复摄取任务");
+        }
+        RagDocumentVersionEntity version = requireVersion(tenantId, current.versionId());
+        RagDocumentEntity document = requireDocument(tenantId, current.documentId());
+        requireRetryScope(current, version, document);
+        RagIngestJobEntity requeued = current.requeueIngest();
+        RagDocumentVersionEntity queuedVersion = version.retryQueued();
+        RagDocumentEntity processingDocument = document.retryProcessing(current.generation());
+        repository.requeueFailedIngestJob(tenantId, requeued, current.revision(), queuedVersion,
+                version.revision(), processingDocument, document.revision(), knowledgeBase.revision());
+        return repository.findIngestJob(tenantId, taskId).orElse(requeued);
+    }
+
+    private RagIngestJobEntity retryDelete(String tenantId, RagIngestJobEntity current) {
+        RagDocumentEntity document = requireDocument(tenantId, current.documentId());
+        if (!current.knowledgeBaseId().equals(document.knowledgeBaseId())
+                || document.status() != RagDocumentStatus.DELETING) {
+            throw new AppException("RAG_DELETE_STATE_MISMATCH", "删除任务与文档墓碑状态不一致");
+        }
+        RagIngestJobEntity requeued = current.requeueDeletion();
+        requireUpdated(repository.updateIngestJob(tenantId, requeued, current.revision()));
+        return repository.findIngestJob(tenantId, current.jobId()).orElse(requeued);
+    }
+
+    private void requireRetryScope(RagIngestJobEntity task, RagDocumentVersionEntity version,
+                                   RagDocumentEntity document) {
+        if (!task.knowledgeBaseId().equals(version.knowledgeBaseId())
+                || !task.knowledgeBaseId().equals(document.knowledgeBaseId())
+                || !task.documentId().equals(version.documentId())
+                || !task.documentId().equals(document.documentId())
+                || !task.versionId().equals(version.versionId())
+                || task.generation() != version.generation()) {
+            throw new AppException("RAG_INGEST_RETRY_SCOPE_MISMATCH", "任务、文档和版本范围不一致");
+        }
     }
 
     private RagIngestJobEntity reconcileUnclaimedCancellation(String tenantId, RagIngestJobEntity current) {

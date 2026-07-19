@@ -234,6 +234,21 @@ public record RagIngestJobEntity(String tenantId,
                 fencingToken, null, null, null);
     }
 
+    /** 将已清理副作用的失败摄取任务从头重新排队。 */
+    public RagIngestJobEntity requeueIngest() {
+        if (operation == RagIngestOperation.REBUILD) {
+            throw domainError("RAG_REBUILD_NOT_IMPLEMENTED", "知识库重建链路尚未实现");
+        }
+        if (operation != RagIngestOperation.INGEST) {
+            throw domainError("RAG_INGEST_REQUEUE_OPERATION_INVALID", "只有摄取任务可以从头重新排队");
+        }
+        if (status != RagIngestJobStatus.FAILED && status != RagIngestJobStatus.DEAD) {
+            throw domainError("RAG_INGEST_REQUEUE_STATE_INVALID", "摄取任务当前不能重新排队");
+        }
+        return copy(RagIngestJobStatus.PENDING, RagIngestCheckpoint.initial(), 0,
+                null, null, fencingToken, null, null, null);
+    }
+
     /** 记录可重试故障；达到最大尝试次数后进入 DEAD。 */
     public RagIngestJobEntity failRetryable(String leaseOwner, long expectedFencingToken, Instant now,
                                             Instant retryAt, String code, String message) {

@@ -48,6 +48,12 @@
         LIMIT 1
     </select>
 
+    <select id="queryByTenantAndKnowledgeBaseIdForUpdate" resultMap="RagKnowledgeBaseMap">
+        SELECT <include refid="Columns"/> FROM rag_knowledge_base
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0
+        LIMIT 1 FOR UPDATE
+    </select>
+
     <select id="queryListByTenantId" resultMap="RagKnowledgeBaseMap">
         SELECT <include refid="Columns"/> FROM rag_knowledge_base
         WHERE tenant_id = #{tenantId} AND deleted = 0 ORDER BY id DESC

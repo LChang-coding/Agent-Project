@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 
 /**
  * RAG Repository 租户参数和任务原子领取编排测试。
@@ -388,6 +389,69 @@ public class RagRepositoryTest {
                 Mockito.eq(11L), Mockito.eq(LocalDateTime.ofInstant(now, ZoneOffset.UTC)));
         Mockito.verify(ingestTaskDao).updateByTenantAndRevision(
                 Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(9L));
+    }
+
+    @Test
+    public void shouldLockKnowledgeBaseAndAtomicallyRequeueFailedIngestAggregate() {
+        RagIngestJobEntity failed = terminalJob(RagIngestJobStatus.FAILED);
+        RagIngestJobEntity requeued = failed.requeueIngest();
+        RagDocumentVersionEntity failedVersion = new RagDocumentVersionEntity(
+                "tenant-a", "kb-1", "doc-1", "version-1", 1, 2L,
+                "rag", "source/document.md", "rag", parsedKey(), "document.md", "a".repeat(64),
+                "text/markdown", 10L, RagDocumentVersionStatus.FAILED,
+                "parser", "chunker", "embedding", 3L, 2, 100L, 3, Map.of());
+        RagDocumentVersionEntity queuedVersion = failedVersion.retryQueued();
+        RagDocumentEntity failedDocument = new RagDocumentEntity("tenant-a", "owner-a",
+                RagVisibility.TENANT, "kb-1", "doc-1", "document.md", null, 0L,
+                null, RagDocumentStatus.FAILED, 4L);
+        RagDocumentEntity processingDocument = failedDocument.retryProcessing(2L);
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1"))
+                .thenReturn(knowledgeBasePo());
+        Mockito.when(documentVersionDao.updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(3L))).thenReturn(1);
+        Mockito.when(documentDao.updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(4L))).thenReturn(1);
+        Mockito.when(ingestTaskDao.updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(8L))).thenReturn(1);
+
+        repository.requeueFailedIngestJob("tenant-a", requeued, 8L, queuedVersion, 3L,
+                processingDocument, 4L, 0L);
+
+        Mockito.verify(knowledgeBaseDao).queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1");
+        Mockito.verify(documentVersionDao).updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.argThat(value -> "queued".equals(value.getStatus())
+                        && value.getParsedObjectKey() == null), Mockito.eq(3L));
+        Mockito.verify(documentDao).updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.argThat(value -> "processing".equals(value.getStatus())
+                        && Long.valueOf(2L).equals(value.getTargetGeneration())), Mockito.eq(4L));
+        Mockito.verify(ingestTaskDao).updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.argThat(value -> "pending".equals(value.getStatus())
+                        && value.getAttemptCount() == 0), Mockito.eq(8L));
+    }
+
+    @Test
+    public void shouldRejectRequeueWhenLockedKnowledgeBaseRevisionChanged() {
+        RagIngestJobEntity requeued = terminalJob(RagIngestJobStatus.FAILED).requeueIngest();
+        RagDocumentVersionEntity version = new RagDocumentVersionEntity(
+                "tenant-a", "kb-1", "doc-1", "version-1", 1, 2L,
+                "rag", "source/document.md", null, null, "document.md", "a".repeat(64),
+                "text/markdown", 10L, RagDocumentVersionStatus.FAILED,
+                null, null, null, 3L).retryQueued();
+        RagDocumentEntity document = new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT,
+                "kb-1", "doc-1", "document.md", null, 0L, null,
+                RagDocumentStatus.FAILED, 4L).retryProcessing(2L);
+        RagKnowledgeBasePO changed = knowledgeBasePo();
+        changed.setRevision(1L);
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1"))
+                .thenReturn(changed);
+
+        cn.bugstack.ai.types.exception.AppException error = Assert.assertThrows(
+                cn.bugstack.ai.types.exception.AppException.class,
+                () -> repository.requeueFailedIngestJob("tenant-a", requeued, 8L, version, 3L,
+                        document, 4L, 0L));
+
+        Assert.assertEquals("RAG_INGEST_RETRY_KNOWLEDGE_BASE_CHANGED", error.getCode());
+        Mockito.verifyNoInteractions(documentVersionDao, documentDao, ingestTaskDao);
     }
 
     private RagKnowledgeBasePO knowledgeBasePo() {

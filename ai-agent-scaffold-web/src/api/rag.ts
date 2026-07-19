@@ -209,6 +209,13 @@ export function cancelRagIngestTask(taskId: string, reason: string) {
   });
 }
 
+export function retryRagIngestTask(taskId: string) {
+  return request<RagIngestTask>({
+    url: `/v1/rag/ingest-tasks/${encodeURIComponent(taskId)}/retry`,
+    method: 'POST',
+  });
+}
+
 export function queryRagRetrievalProfiles() {
   return request<RagRetrievalProfile[]>({ url: '/v1/rag/retrieval-profiles', method: 'GET' });
 }

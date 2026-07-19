@@ -1975,3 +1975,29 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 前端知识库弹窗复用于创建和编辑，显式显示“正在保存/保存修改”，保存期间禁止关闭；编辑入口位于当前知识库摘要区，成功后只替换对应列表项并保留选中知识库及文档。Workflow绑定下拉同时收紧为`status=published && publishedVersion>0`，与后端目标可用性规则一致，避免先展示草稿再由后端拒绝。
 - Java 17定向门禁首次即通过：3类测试10/10，0 failure/error/skipped；随后按真实文件名生成36个RAG测试类清单，全部185/185通过，0 failure/error/skipped，六模块BUILD SUCCESS。前端`npm run build`通过，`vue-tsc --noEmit`无类型错误，Vite 1916 modules transformed并成功产出生产包。
 - 本阶段未开放知识库删除API，也未宣告任务通用手工重试完成；原因是级联删除必须把活动/失败任务、向量、分块、MinIO对象和绑定清理闭环，后续仍按本计划独立实现与故障注入，不能以列表隐藏代替删除成功。
+
+#### 失败与死信摄取任务安全手工恢复计划（执行前）
+
+1. 审计`RagIngestJobEntity`、任务Repository/Mapper、Worker claim/lease/fencing、上传/重建/删除注册服务和现有Controller；绘制各operation可恢复状态与既有幂等键，先证明当前自动重试和删除续跑语义，再决定是CAS复用原任务还是创建新attempt。
+2. 手工恢复只允许可信租户owner/admin操作本租户任务；仅FAILED/DEAD且业务实体仍允许该operation时受理。CANCEL_REQUESTED/CANCELLED、COMPLETED、活动租约、已被新版本取代的INGEST/REBUILD及已完成删除的任务必须返回稳定拒绝码，权限校验和状态校验均在任何Kafka/MinIO/Qdrant调用前完成。
+3. 恢复动作必须原子推进revision、清除可重试错误和nextAttemptAt、保留attemptCount/checkpoint/幂等身份，并通过现有outbox可靠发布；若现有架构只能安全创建替代任务，则新任务必须显式关联原任务且旧fencing token永远不能提交。数据库CAS是竞态最终门禁。
+4. 前端只对后端允许恢复的失败/死信任务显示“重新执行/继续清理”，点击后显示进行中状态和明确结果；不能沿用“重新调用删除文档接口”来假装通用重试，也不能对取消任务展示恢复按钮。
+5. 增加状态机、Service、Repository/Mapper、Controller和前端类型/构建测试，覆盖INGEST/REBUILD/DELETE、重复点击、跨租户、普通成员、取消/完成/活动任务、旧版本、CAS冲突、outbox失败与租约接管。Java 17运行定向及全部RAG回归，前端执行生产构建。
+6. 若可安全隔离，用故意不可达依赖制造FAILED/DEAD后恢复并验证MySQL任务、outbox、Qdrant/MinIO副作用及attempt/checkpoint；不能完成的故障注入明确记为未测。所有实际结果和首次失败追加到本节，闭环后中文本地提交。
+
+#### 失败与死信任务恢复审计阶段结果
+
+- 当前自动恢复链路以MySQL任务账本为真相源：Dispatcher每2秒扫描pending、到期retrying、租约过期running及待清理cancel_requested，Kafka仅负责唤醒；领取SQL原子增加attempt、fencing token和row revision，旧Worker后续写入受租约/fencing/revision三重门禁。
+- DELETE已经具备失败/死信续跑的领域方法和服务内隐式入口：再次调用文档删除会把FAILED/DEAD任务重置为PENDING、attempt归零、保留删除checkpoint，数据库扫描随后继续；但前端通过重新调用删除接口实现，缺少统一任务恢复API和明确权限/状态响应，仍需收口。
+- INGEST终止失败后Worker先删除该版本Qdrant向量和业务分块，再在一个事务中把版本关闭为FAILED、逻辑文档清空targetGeneration并标记FAILED、任务关闭为FAILED/DEAD；原始MinIO源对象保留。故不能只把任务状态改回PENDING，否则Worker会因版本非QUEUED/PROCESSING、文档无targetGeneration或checkpoint指向已删除分块而失败。
+- 安全恢复INGEST必须在单事务内把任务checkpoint重置为RECEIVED、attempt归零并清错，把失败版本重新排队且清除旧解析指标，把逻辑文档恢复PROCESSING并重新设置同一generation；该事务还要逐项校验tenant/kb/document/version/generation和三方revision。当前Repository没有此原子端口，下一步按此最小闭环实现。
+- `RagIngestOperation.REBUILD`虽然存在于枚举和实体测试，但当前Worker会稳定抛出“仅支持INGEST”，生产侧也没有重建登记服务/API；因此本切片不能把REBUILD标为可恢复。统一恢复接口应先返回稳定`RAG_REBUILD_NOT_IMPLEMENTED`，待完整generation重建链路另行实现，避免制造必失败任务。
+
+#### 失败与死信任务安全恢复实现结果
+
+- 新增统一`POST /api/v1/rag/ingest-tasks/{taskId}/retry`。接口沿用可信TenantContext和知识库manageable权限，只接受FAILED/DEAD；PENDING/RUNNING/RETRYING/CANCEL_REQUESTED/CANCELLED/COMPLETED均返回`RAG_INGEST_RETRY_STATE_INVALID`，REBUILD返回`RAG_REBUILD_NOT_IMPLEMENTED`，所有拒绝发生在Worker和外部中间件调用前。
+- INGEST恢复不创建新任务、不修改幂等键，也不复用脏checkpoint：任务恢复为PENDING、attempt归零、checkpoint回到RECEIVED、清除旧错误并保留单调fencing token；失败版本恢复QUEUED且清除解析产物引用、组件版本与旧指标；逻辑文档恢复PROCESSING并重新设置原generation，同时保留可能存在的旧活动版本。
+- 三方恢复由Repository新事务一次完成。事务先`SELECT ... FOR UPDATE`锁定同租户知识库并核验ACTIVE和预期revision，再分别以tenant+revision CAS更新版本、文档和任务；任一步变化抛`RAG_LIFECYCLE_CONFLICT`并整体回滚。任务、知识库、文档、版本ID及generation在进入DAO前再次交叉校验，避免跨范围组合。
+- DELETE失败/死信通过同一API恢复，保留现有删除checkpoint、清除错误并重置attempt，由MySQL到期扫描重新唤醒；前端不再通过重新调用删除登记接口模拟重试。管理员界面对INGEST显示“重新执行”、DELETE显示“继续删除”，进行中显示“重新入队中”，REBUILD不展示无效按钮。
+- 首次定向执行共40项，其中38项通过、2项在运行时出现`Unresolved compilation problem: RagIngestJobStatus`；根因是新增测试漏import，而旧Maven增量testCompile没有重新编译该类。补齐import并使用Java 17 `clean test`强制干净构建后40/40通过，0 failure/error/skipped。
+- 随后按真实文件名执行36个RAG测试类，全部192/192通过，0 failure/error/skipped，六模块BUILD SUCCESS；前端`npm run build`通过，`vue-tsc --noEmit`无类型错误，Vite 1916 modules transformed并成功输出生产包。当前仅证明代码/事务编排，真实MySQL故障制造与恢复、MinIO/Qdrant副作用复核仍属于下一阶段，未把Mock测试写成E2E。

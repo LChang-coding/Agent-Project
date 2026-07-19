@@ -109,6 +109,17 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.FAILED, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
+    /** 失败副作用已清理后，将同一不可变源文件版本重新排队。 */
+    public RagDocumentVersionEntity retryQueued() {
+        if (status != RagDocumentVersionStatus.FAILED) {
+            throw new AppException("RAG_INGEST_VERSION_RETRY_STATE_INVALID", "只有失败版本可以重新排队");
+        }
+        return new RagDocumentVersionEntity(tenantId, knowledgeBaseId, documentId, versionId, versionNumber,
+                generation, objectBucket, objectKey, null, null, fileName, sha256, mimeType, sizeBytes,
+                RagDocumentVersionStatus.QUEUED, null, null, null, revision + 1,
+                0, 0L, 0, Map.of());
+    }
+
     /** 将任意已停止写入的版本转为删除中；重复调用保持幂等。 */
     public RagDocumentVersionEntity requestDeletion() {
         if (status == RagDocumentVersionStatus.DELETING || status == RagDocumentVersionStatus.DELETED) return this;

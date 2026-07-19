@@ -19,6 +19,10 @@ public interface IRagKnowledgeBaseDao {
     RagKnowledgeBasePO queryByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                        @Param("knowledgeBaseId") String knowledgeBaseId);
 
+    /** 在生命周期事务中锁定知识库，串行化删除、恢复和激活。 */
+    RagKnowledgeBasePO queryByTenantAndKnowledgeBaseIdForUpdate(@Param("tenantId") String tenantId,
+                                                                @Param("knowledgeBaseId") String knowledgeBaseId);
+
     /** 查询租户知识库列表。 */
     List<RagKnowledgeBasePO> queryListByTenantId(@Param("tenantId") String tenantId);
 
