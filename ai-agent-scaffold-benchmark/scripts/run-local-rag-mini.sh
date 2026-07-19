@@ -16,6 +16,8 @@ LOAD_REQUESTS_PER_VARIANT="${RAG_BENCHMARK_LOAD_REQUESTS_PER_VARIANT:-100}"
 WARMUP_QUERIES="${RAG_BENCHMARK_WARMUP_QUERIES:-0}"
 INGEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_INGEST_TIMEOUT_SECONDS:-900}"
 EXISTING_TARGETS="${RAG_BENCHMARK_EXISTING_TARGETS:-}"
+EXISTING_USERNAME="${RAG_BENCHMARK_USERNAME:-}"
+EXISTING_PASSWORD="${RAG_BENCHMARK_PASSWORD:-}"
 CLI_JAR="$PROJECT_ROOT/ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar"
 
 for command_name in curl jq openssl java git; do
@@ -33,32 +35,41 @@ if [[ ! -r "$CLI_JAR" || ! -d "$PREPARED_DIR" || -e "$OUTPUT_DIR"
   printf 'CLI/prepared input is unavailable or output already exists\n' >&2
   exit 2
 fi
+if [[ -n "$EXISTING_TARGETS" && (-z "$EXISTING_USERNAME" || -z "$EXISTING_PASSWORD") ]]; then
+  printf 'existing targets require RAG_BENCHMARK_USERNAME and RAG_BENCHMARK_PASSWORD for the original tenant\n' >&2
+  exit 2
+fi
 
 auth_dir="$(mktemp -d /tmp/rag-benchmark-auth.XXXXXX)"
 trap 'rm -rf "$auth_dir"; unset RAG_BENCHMARK_ACCESS_TOKEN RAG_BENCHMARK_USERNAME RAG_BENCHMARK_PASSWORD' EXIT
 
-suffix="$(date +%s)-$RANDOM"
-username="rag_bench_$suffix"
-password="$(openssl rand -hex 18)Aa1!"
-email="$username@example.invalid"
-phone="9$(printf '%010d' "$((RANDOM * RANDOM % 10000000000))")"
+if [[ -n "$EXISTING_TARGETS" ]]; then
+  username="$EXISTING_USERNAME"
+  password="$EXISTING_PASSWORD"
+else
+  suffix="$(date +%s)-$RANDOM"
+  username="rag_bench_$suffix"
+  password="$(openssl rand -hex 18)Aa1!"
+  email="$username@example.invalid"
+  phone="9$(printf '%010d' "$((RANDOM * RANDOM % 10000000000))")"
 
-jq -nc \
-  --arg tenant "RAG Benchmark $suffix" \
-  --arg username "$username" \
-  --arg password "$password" \
-  --arg email "$email" \
-  --arg phone "$phone" \
-  '{tenantName:$tenant,username:$username,password:$password,nickname:"RAG Benchmark",email:$email,phone:$phone}' \
-  >"$auth_dir/register-request.json"
+  jq -nc \
+    --arg tenant "RAG Benchmark $suffix" \
+    --arg username "$username" \
+    --arg password "$password" \
+    --arg email "$email" \
+    --arg phone "$phone" \
+    '{tenantName:$tenant,username:$username,password:$password,nickname:"RAG Benchmark",email:$email,phone:$phone}' \
+    >"$auth_dir/register-request.json"
 
-curl --silent --show-error --fail-with-body --max-time 30 \
-  -H 'Content-Type: application/json' \
-  --data-binary "@$auth_dir/register-request.json" \
-  "$BASE_URL/v1/auth/register" >"$auth_dir/register-response.json"
-if [[ "$(jq -r '.code // empty' "$auth_dir/register-response.json")" != "0000" ]]; then
-  jq -c '{code,info}' "$auth_dir/register-response.json" >&2
-  exit 3
+  curl --silent --show-error --fail-with-body --max-time 30 \
+    -H 'Content-Type: application/json' \
+    --data-binary "@$auth_dir/register-request.json" \
+    "$BASE_URL/v1/auth/register" >"$auth_dir/register-response.json"
+  if [[ "$(jq -r '.code // empty' "$auth_dir/register-response.json")" != "0000" ]]; then
+    jq -c '{code,info}' "$auth_dir/register-response.json" >&2
+    exit 3
+  fi
 fi
 
 jq -nc --arg username "$username" --arg password "$password" \

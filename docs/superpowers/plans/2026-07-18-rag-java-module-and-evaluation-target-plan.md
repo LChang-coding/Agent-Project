@@ -1056,3 +1056,89 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java 17六模块打包BUILD SUCCESS 7.134秒，旧PID 53930已TERM退出，新JAR在8092以PID 63487运行，显式使用Embedding 10秒单次、最多5次重试、500ms～4s退避和30秒总deadline，Hikari连接成功。
 - queryId=880 Dense生产链路连续10/10均业务码0000、`degraded=false`、10条引用；Embedding阶段129～424ms，pipeline总耗时1981～5480ms。本组未碰到新的10秒挂起，但直接公网8次探测已真实捕获2次20秒0字节超时，协议测试证明该异常会被有界重试，正式复评分继续作为长时间稳定性验收。
 - 失败run `run-scifact-quality-eval-44882f3` 保留2条warmup、0 measured，其中Dense为 `RAG_EMBEDDING_UNAVAILABLE`，Sparse成功；监控字段已纠正为 `errorCode`，后续不会再把业务错误误判为空结果。
+
+###### SciFact 复评分第四次恢复计划（执行前）
+
+1. 使用提交 `1e9ebbf`、PID 63487和全新目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-1e9ebbf`；复用相同prepared、targets、profiles与300条query，冻结MySQL和远端部署，不引入其他实验变量。
+2. warmup门禁读取真实字段 `errorCode`，要求40条中0 errorCode、0 degraded、0空rankedDocumentIds，且四个variant各10条；未满足即中断且不生成measured结论。
+3. warmup通过后继续1200 measured并周期检查累计错误/降级/空结果；最终才生成质量与延迟指标，并核验300×4唯一组合、hash、组件候选计数和Rerank实际执行。
+
+###### SciFact 复评分第四次运行进展（2026-07-19 19:07）
+
+- PID 63487 的应用与 PID 66356 的评测器均持续运行；40条warmup已完整通过，四个variant各10条，`errorCode`、降级和空结果均为0。
+- 正式评分已写入67/1200条，形成67个唯一variant/query组合；Dense/Sparse/Hybrid-RRF各17条、Hybrid-RRF-Rerank 16条，当前仍为0错误、0降级、0空结果。最新记录为queryId=1298的Hybrid-RRF，端到端8415ms、9个去重文档。
+- 当前长耗时的直接原因是四种方案串行执行及远端CPU Embedding/Reranker的推理波动；7548是5183篇文档切块后的Qdrant子块总数，不是并发、线程或待执行任务数。业务MySQL容量约15.3MiB，其迁移只能改善跨公网配置、审计和hydration往返，不能消除模型推理的10～30秒间歇挂起。
+- 为保持同一实验条件，本轮评分完成前不迁移MySQL、不调整远端资源。评分闭环后单独建立迁移前基线、备份恢复与回滚计划；不默认把Kafka、MinIO、Nacos、XXL-JOB或观测组件一并迁到RAG推理机，避免与模型抢占CPU、内存和IO。
+
+###### 长跑评测期间的最终闭环缺口审计计划（执行前）
+
+1. 不修改、重启或并发压测PID 63487及远端RAG中间件，只读核对阶段0～8的验收项、现有测试、浏览器留痕、真实运行产物和运维文档，形成“已证明/部分证明/缺失”的证据矩阵。
+2. 重点核查三格式真实摄取、Agent回答引用、租户越权、任务取消竞态、质量消融、摄取与查询性能、资源采样、上线/回滚文档；不能用单元测试替代尚未执行的真实E2E，也不能把mini数据结论外推为SciFact结果。
+3. 将不影响本轮评分的后续切片按依赖排序。评分未结束前只准备计划、fixture和离线验证，不触发模型、Qdrant、远程MySQL写入或服务器变更。
+4. 评分完成并通过1200条门禁后，先固化质量报告与中文提交，再分别进入三格式摄取/Agent E2E、受控性能复测、数据库迁移演练和最终上线审计；每个切片仍单独先计划后执行。
+
+###### 最终闭环缺口审计阶段结果（一）
+
+| 验收域 | 当前权威证据 | 判定 | 后续闭环 |
+|---|---|---|---|
+| Java领域、强租户持久化、摄取状态机、外部客户端 | 迁移、领域/仓储/协议测试和当前168项精确RAG回归已通过；SciFact 7548子块真实索引并可检索 | 已证明核心实现；尚非最终上线审计 | 最终代码冻结后重跑相关模块及全量可运行测试，复核迁移/回滚 |
+| PDF/DOCX/Markdown格式支持 | 三格式安全校验与解析协议有测试；PDF/DOCX曾直连Docling真实成功；生产HTTP全链摄取已真实完成Markdown | 部分证明 | 分别用唯一PDF、DOCX、Markdown经生产上传→Worker→READY→Qdrant→查询，核对MySQL/Qdrant版本和数量 |
+| 取消、幂等、租约与副作用屏障 | 单元/持久化测试覆盖CAS、fencing、无租约取消；浏览器真实验证Markdown上传幂等和未领取任务取消 | 部分证明 | 增加运行中任务在外部调用前取消、租约接管和重建/删除的真实故障注入E2E |
+| 检索、引用与Agent集成 | `RagContextContributor`把带`citation_id`的非可信参考注入模型调用前上下文，required错误fail-closed；检索调试和真实引用可回溯 | 代码与检索已证明，Agent回答尚未证明 | 绑定真实Agent/Workflow，完成流式与非流式回答E2E并核对回答中的citation与审计记录 |
+| 前端租户管理员控制台 | 前端构建通过；桌面/移动浏览器验证知识库、上传、取消、状态反馈和检索调试布局 | 核心UI已证明 | 用三格式READY文档跑上传、查询、错误/空态及权限关键路径，保留最终截图/控制台证据 |
+| 公开数据集与四组件消融 | SciFact官方数据已准备并完整摄取；当前第四次复评分warmup 40/40，正式记录运行中 | 未完成 | 必须1200条唯一组合、0错误/降级/空结果并由程序生成质量/阶段延迟指标，失败run不得拼接 |
+| 性能与瓶颈 | mini真实并发1/2/4/10 pilot、分段计时和批量hydration前后对照已留痕；模型间歇挂起、远程MySQL往返已有实证 | 部分证明 | 补三格式摄取性能、当前SciFact查询分布、受控并发复测和资源同步采样；区分模型与数据库瓶颈 |
+| 数据库与部署 | 现业务MySQL可用且容量很小；迁移可行性、备份/追平/回滚步骤已设计 | 迁移未执行且不是当前评分前提 | 评分完成后恢复新机SSH，先做受限恢复实例和前后基线；是否切换以资源竞争和实测收益决定 |
+| 运维、API、评测与最终报告 | 主要事实集中在本计划及架构文档；计划约定的`docs/rag/`当前不存在，原始大产物主要在受控`/tmp`目录 | 未完成 | 固化脱敏API/运维/评测/容量/回滚文档、产物索引与hash，完成阶段8逐项上线审计 |
+
+- 本轮审计没有把“存在代码/单测”替代真实E2E，也没有把mini小样本性能数字替代完整SciFact结论。下一优先级仍是保持当前评分不受扰动并完成1200条质量闭环。
+
+###### RAG 运维与评测文档切片计划（执行前）
+
+1. 在不触碰运行中应用、评测器和远端服务的前提下建立`docs/rag/`，以当前代码、`codex.md`、架构文档、计划执行记录和真实run manifest为事实源，不从记忆补写端点、参数或结果。
+2. 编写入口README、运行配置/故障恢复文档和评测复现文档；账号、密码、API Key、Bearer和公网敏感信息只引用`codex.md`的受控凭据位置，不复制到新文档。
+3. 评测文档固定记录数据来源、哈希、格式、线程/并发、warmup/measured、四组参数、指标定义、失败run隔离和最终1200条验收命令；当前质量数值保持“运行中”，待`metrics.json`完成后从程序产物回填。
+4. 用源码和CLI帮助输出复核所有命令、环境变量与API路径，执行Markdown链接/格式检查；再以无会话背景的读者视角检查歧义、隐含前提和相互矛盾，修复后追加实际结果。本切片与完整评分结果一起形成中文本地提交，避免单独提交半成品数字。
+
+###### 评测启动与复评分安全语义修复计划（执行前）
+
+1. 修复本地隔离启动脚本只关闭Nacos discovery却仍导入/动态刷新Nacos config的问题：显式关闭Nacos config，保留命令行冻结的RAG/Worker/存储参数；当前运行中PID不重启，本次只做脚本语法/源码验证，真实启动回归放在完整评分结束后。
+2. 修复`RAG_BENCHMARK_EXISTING_TARGETS`仍注册新租户并用新租户访问旧targets的逻辑错误：fresh run继续创建一次性隔离租户；existing-target evaluate模式禁止注册新租户，必须由调用方通过环境安全注入原租户用户名/密码并重新登录，以支持长时JWT刷新。缺少凭据立即失败，不能跨租户请求后再把404当检索结果。
+3. 文档将服务端benchmark资源从“可复跑”改为“保留审计”；复评分需要同租户安全凭据或受控密码恢复，当前没有通用资源清理API。完整门禁限定evaluate模式的targets来源hash必须非null；fresh run只记录生成targets文件hash，不能执行`null==null`假校验。
+4. 增加独立`score`重算：产物manifest必须绑定实际run/qrels SHA-256，四组质量JSON必须与Runner生成的`metrics.json`一致，queryCount=300且missingRunCount=0。完成shell语法、脱敏扫描和读者复测后追加实际结果。
+
+###### RAG 运维文档与评测脚本安全语义阶段结果
+
+- 新建`docs/rag/README.md`、`api.md`、`operations.md`和`evaluation.md`，明确Java业务代码与RAG服务器中间件职责、强租户/引用边界、管理API、配置/恢复/回滚、SciFact数据哈希、四组消融、质量与closed-loop性能方法；没有复制IP、密码、API Key或Bearer，凭据继续只指向受控`codex.md`。
+- 评测门禁实际检查1200条唯一variant/query、四组各300、0 error/degraded/empty、Rerank候选与正耗时、prepared全部文件hash、targets来源hash和300条qrels覆盖；随后独立执行`score`，以run/qrels SHA-256绑定重算产物并要求四组质量JSON与Runner产物一致、queryCount=300、missingRunCount=0。Bash块启用`set -euo pipefail`，避免早期断言或管道失败被末尾成功命令掩盖。
+- 三轮无背景读者测试依次发现并推动修复：模型网关明文HTTP安全遗漏、targets `null==null`假门禁、metrics未重算、Nacos config仍可刷新、旧targets跨租户复用、MySQL未显式选库、服务端资源并未可复跑，以及门禁未fail-fast。最终读者复测实证hash mismatch与上游jq失败均能传播非零状态，结论为“读者测试通过”。
+- `start-local-rag-benchmark-app.sh`新增环境变量和命令行双重`spring.cloud.nacos.config.enabled=false`，继续关闭discovery；文档明确真实启动日志仍须证明没有远端导入。`run-local-rag-mini.sh`的existing-target模式不再注册新租户，强制从环境注入原租户用户名/密码；缺少任一项在任何认证/写入前稳定退出2。
+- 两个脚本`bash -n`通过；本机没有shellcheck。缺少原租户凭据的负向验证输出稳定错误摘要、退出码2且未创建run目录；目标路径`git diff --check`和文档敏感值扫描通过。真实重启验证延后到当前评分终止后的独立切片，不用源码检查冒充Nacos隔离已运行通过。
+
+###### SciFact 第四次复评分 Qdrant 失败诊断计划（执行前）
+
+1. 第四次run在正式记录增长到227条时已立即TERM停止评测器；唯一失败为queryId=1278的Hybrid-RRF，耗时32368ms、`RAG_QDRANT_UNAVAILABLE`、0候选/0排名；其余226条无错误或降级。目录、run.jsonl和仍显示running的异常终止manifest原样保留，不手改completed、不参与聚合。
+2. 保持PID 63487应用和远端环境不变，先直连核验Qdrant health/collection及连续最小查询的HTTP状态、耗时与0字节超时；再安全恢复同一隔离tenant认证，对queryId=1278依次做Dense、Sparse、Hybrid各至少10次真实debug，不输出查询正文或凭据。
+3. 同时按失败时间窗读取应用稳定错误码/异常类型和Qdrant客户端重试路径，区分公网TCP/HTTP间歇挂起、服务429/5xx、单次3秒超时、总deadline、Semaphore等待或确定性请求/schema错误。只有直接证据支持时才改代码/配置。
+4. 若是单次公网连接偶发超时且随后恢复，评估在不放大并发的前提下增加Qdrant重试机会、抖动退避或采用更短单次时限；所有尝试仍受单操作总deadline，401/4xx/schema不得重试。若相同query稳定失败，则修复请求/filter/响应逻辑而不是扩大超时。
+5. 任一修复须补协议/配置测试、完整RAG回归、Java17打包及同query连续门禁，再使用新提交/新空目录重跑；本次227条永不拼接。MySQL迁移和并发压测继续冻结。
+
+###### Qdrant 短单次尝试与更多恢复机会计划（执行前）
+
+- 直接公网探测已证明Qdrant在线但间歇挂起：12次health均200、0.110～2.172秒；8次collection读取前7次200，第8次TCP已连但8秒0字节超时；16次同tenant/version精确count中14次200、1次8秒0字节超时、1次约5秒empty reply。不是queryId=1278的确定性filter/schema错误。
+- 安全恢复原benchmark tenant密码后，同queryId=1278的Dense/Sparse/Hybrid各10次全部业务码0000、10条引用、无降级。Dense Qdrant阶段却从243ms波动到20799ms，证明连续挂起可被当前重试偶尔恢复，但仍有机会耗尽。
+- 运行进程环境权威核验为：Qdrant单次timeout=10s、最多2次重试、100ms～1s退避、总deadline=30s。正式失败耗时32368ms与“首次+2次尝试各消耗约10s并耗尽总deadline”完全一致；启动脚本的10秒覆盖抵消了代码默认3秒单次的快速恢复设计。
+- 本切片只把隔离benchmark启动脚本固定为单次3秒、最多5次重试、100ms～1s退避、总deadline30秒；最坏网络尝试与退避仍在总deadline内，重试串行且每次独立释放Semaphore，不增加并发。生产默认暂不因公网联调直接改变。
+- 当前第四次run的Embedding batch=8、单次/总时限10/30秒、最多5次重试与500ms～4s退避，Reranker request batch=3、10/30秒、最多2次重试，以及Worker 600秒lease/30秒heartbeat此前由启动外层环境注入。为避免重启或他人复现时静默回到类默认值，隔离benchmark脚本同时显式冻结这些已验收参数，不改变本轮实验变量。
+- 修改后先跑脚本语法、`RagPropertiesTest`和`QdrantVectorStoreAdapterProtocolTest`，再重启8092并从进程环境核对实际值；同query三组各10次必须0错误，随后追加至少30次直接count门禁。只有通过才中文提交并以新提交号开启第五次空目录复评分。
+
+###### Qdrant 短单次尝试与运维文档切片执行结果
+
+- 第四次run `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-1e9ebbf` 已在首次业务错误后停止并原样保留：227条measured、227个唯一组合、1个错误、0降级、1个空排名。唯一失败为queryId=1278的`hybrid_rrf`，耗时32368ms、错误码`RAG_QDRANT_UNAVAILABLE`；异常终止后的manifest仍为`running`，不手工伪造完成状态，也不与后续run拼接。
+- 公网只读探测证实故障位于Qdrant链路：health 12/12返回200（0.110～2.172秒）；collection读取7/8返回200，第8次TCP连接后8秒0字节超时；同租户/版本精确count 14/16返回200，另有1次8秒0字节超时和1次约5秒empty reply。相同query的Dense/Sparse/Hybrid各10次均业务码0000、10条引用且无降级，但Dense的Qdrant阶段波动至20799ms，排除固定filter/schema错误和MySQL原因。
+- 隔离评测启动脚本现固定Qdrant单次3秒、最多5次重试、100ms～1秒退避和30秒总deadline，并显式冻结此前已验收的Embedding、Reranker、Worker参数；Nacos config/discovery均以环境变量和命令行关闭。新应用PID 21567在8092启动，进程环境逐项核对与脚本一致；19:42启动时间窗没有新的Nacos远端配置加载记录，只有日志适配器初始化信息。
+- queryId=1278在新配置下Dense/Sparse/Hybrid各10次均成功、每次10条引用且无降级；其中Hybrid一次Qdrant阶段14176ms仍由有界重试恢复。随后连续30次直接filtered count全部HTTP 200，耗时约0.216～0.601秒。
+- 正确定向测试为`RagPropertiesTest` 11项和`QdrantVectorStoreAdapterProtocolTest` 9项，共20/20通过；最终选定32个RAG测试类共173/173通过，0 failure/error/skipped，BUILD SUCCESS 3.928秒。此前一次因协议测试类名写错只运行11项配置测试，不作为最终验收数字。
+- 两个脚本`bash -n`通过；existing-target模式缺失原租户凭据时在认证或写入前退出2且不创建run目录。本机未安装shellcheck，未把缺失工具冒充检查通过。
+- 本轮没有修改Java源码，当前JAR仍对应代码提交`1e9ebbf`；脚本、文档和本计划将在本地中文提交后，以该新提交号和全新空目录启动第五次独立复评分。
+- 关于迁移决策：7548是5183篇SciFact文档切分后的Qdrant子块数。现有MySQL约15.3MiB，迁移可改善跨公网配置、审计与hydration往返，但不能修复Qdrant/模型公网链路的间歇0字节挂起；第五次同条件评分期间继续冻结迁移，闭环后再用迁移前后基线决定是否切换。Kafka、MinIO、Nacos、XXL-JOB和观测组件不默认迁到RAG推理机，避免与Qdrant和CPU模型争抢资源。
