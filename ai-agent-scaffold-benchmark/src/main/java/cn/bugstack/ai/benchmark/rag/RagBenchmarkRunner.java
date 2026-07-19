@@ -188,6 +188,9 @@ public final class RagBenchmarkRunner {
             manifest.put("errorCode", gate.code());
         } else if (exception instanceof RagBenchmarkResumeGate.ResumeGateException gate) {
             manifest.put("errorCode", gate.code());
+        } else if (exception instanceof RagBenchmarkMeasuredGate.MeasuredGateException gate) {
+            manifest.put("errorCode", gate.code());
+            manifest.put("failedSample", gate.sample());
         } else if (exception instanceof HttpTimeoutException) {
             manifest.put("errorCode", REQUEST_TIMEOUT_ERROR_CODE);
         } else if (exception instanceof IOException) {
@@ -313,7 +316,9 @@ public final class RagBenchmarkRunner {
             for (int offset = 0; offset < variants.size(); offset++) {
                 String variant = variants.get((queryIndex + offset) % variants.size());
                 if (recordIndex++ < completedRecords) continue;
-                runIO.append(runFile, execute(runId, variant, targets.get(variant), query));
+                RagBenchmarkRunIO.RunRecord record = execute(runId, variant, targets.get(variant), query);
+                new RagBenchmarkMeasuredGate().validate(record);
+                runIO.append(runFile, record);
             }
         }
     }

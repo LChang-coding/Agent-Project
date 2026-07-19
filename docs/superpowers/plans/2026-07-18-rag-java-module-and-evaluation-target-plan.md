@@ -1344,3 +1344,26 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 只读独立审计再次从prepared重建1200顺序：第七次40条warmup和553条正式记录逐条0 mismatch；553条为Dense 138、Sparse 138、Hybrid-RRF 139、Rerank 138，0错误/降级/空/重复文档，所有文档ID存在document-map，593个retrievalId跨warmup/run唯一。第553条是queryId=783的Hybrid-RRF，第554条必须是同query的Rerank，不能重发第553条。源文件hash为manifest `c37f0fd548427944df06eb85337817a3c8b3a43bf849f2801053e71935185157`、targets-copy `bfd079e4b05cd739f5b7bea8600693cea57b72feea016f209f4db63206759f69`、warmup `f93a196d9c574af5b2503b3b4909fa66ea4ad6d2c31140c7467b9603eeb4f414`、run `e012c0a78d39ad0b8a027e454f86817dfe4e5cf95d038a4908e2e07f1e4b74fe`。
 - 外部语义门禁补充：四target当前binding/profile规范化指纹为`3361f9162eb059c40f05a2696dac4f02ec0db65552f4ffd73701322bb32998bb`且恰4行；KB/document/active version规范化指纹为`a6e65d48e7fe5431747712f9a7a61938222cdbae8103972c858ad8f99933fce3`且恰1行；benchmark Qdrant物理collection为green、总7563点，目标tenant/kb/generation精确7548点；App JAR仍为`c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，四个远端容器镜像/健康组合指纹为`68a6d2d0fd5b173e8f14b9437ab70e3cd4de71b30703926820692e8c13a1bbb5`。首次生成数据库指纹时误把带参数mysql命令存为zsh标量，shell把整串当文件名并产生空文件；该结果明确作废，改用命令数组后得到上述有效行数和hash。
 - 质量前缀可以复用，但第七次使用120秒外层策略、续段使用240秒，且第554次曾有一次未落run的删失超时。最终分段run只用于Recall/MRR/nDCG/MAP质量指标；其合并延迟、P95/P99和“0错误率”不得冒充统一策略性能结论，后续性能/SLA必须另跑同一超时与并发配置。
+
+###### SciFact 第九次严格断点续评分计划（执行前）
+
+1. 使用提交`861a0f7`、CLI SHA-256 `5d8fe7a3cef96e205f58e43a029b03e8d6856699f87bd83bc531ae0e1e488e4f`和全新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-861a0f7-r9`；源目录固定为第七次failed目录，不使用第八次7条warmup目录。源四文件预期hash、prepared四文件hash、targets原始hash及外部target/index/runtime指纹必须在启动前复核。
+2. 新run显式`RAG_BENCHMARK_RESUME_FROM=<r7>`、`RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS=240`、原username/tenant、同targets/prepared/seed/warmup，load关闭；重新生成一次随机密码并只条件更新唯一active密码行，明文只存在评测前台进程。
+3. Resume Gate必须在任何retrieval-debug调用前确认40条warmup与553条正式记录是当前1200计划的严格健康前缀，复制后hash相同，并在manifest写`resumedRecordCount=553`、`nextRecordIndex=553`和source segment。若失败则零检索请求停止，不绕过门禁。
+4. 第一条新记录必须是全局第554条：queryId=783、variant=`hybrid_rrf_rerank`、query SHA-256 `7c5e879fbe1e0c88c84e784c17869bd96f0c8541600c8afb92373dfea1fee56d`；先观察run由553增长到554并核对该条，再让前台会话继续剩余646条。运行中监测总数/唯一组合/错误/降级/空排名、Rerank有效性及App/MySQL/模型健康。
+5. 完成条件为正式1200条、1200唯一variant/query、四组各300、0错误/降级/空结果、全部Rerank有效、manifest=completed且metrics存在；然后执行独立`score`复算并绑定run/qrels hash。该分段结果只用于检索质量，性能统计另行评测。
+
+###### SciFact 第九次瞬态 Qdrant 失败结果与正式样本快速失败计划（执行前）
+
+- Resume Gate成功复制40+553，manifest精确记录源四hash、`resumedRecordCount=553`、source segment、240秒和legacy prepared兼容标记；第一条新增确为第554条queryId=783/Rerank，成功且无降级，Rerank候选10、rerankMs=33632、totalMs=40886。证明断点没有重发第553条。
+- 只读监测在总566条时发现1 error+1 empty并立即发送SIGINT；停止落盘时总567条。唯一无效记录位于第558行：queryId=560、Dense、`RAG_QDRANT_UNAVAILABLE`、elapsed=21511ms。数据库审计对应`ret_23574a2781b24caf8a1a35e011dff284`、status=failed、同错误码、Qdrant阶段尚未产生候选；其前557条健康，后559～567虽然成功但跨越失败洞，全部不得复用。Qdrant随后仍green且精确7548点，本地MySQL/App正常，属于一次远端Qdrant调用瞬态失败，不是索引丢失或质量负例。
+- 当前Runner会把业务API错误转换为RunRecord后继续，外部监测因此来不及阻止后续9次调用。新增`RagBenchmarkMeasuredGate`：每次正式HTTP返回后、append前验证retrievalId、errorCode、degraded/reasons、非空且唯一排名、正totalMs和Rerank正候选/耗时；失败记录不得写入run，立即以稳定`RAG_BENCHMARK_MEASURED_GATE_FAILED`结束并在manifest留下不含query正文的failed sample摘要。
+- Resume Gate允许上述Measured Gate失败源继续，因为源run只含严格健康前缀；补单测证明API业务错误不会创建/追加失败行、manifest稳定失败且不再发下一请求，以及降级/空排名/伪Rerank均在append前拒绝。不能直接续第九次：它由旧CLI产生running manifest且已经把第558条错误写入文件。第十次仍从第七次553条恢复，只重复第九次第554～557四条健康调用，不从头重跑553条，也不手工删除第九次错误行。
+- 暂不因单次瞬态错误修改Qdrant的3秒单请求/5次重试/30秒总deadline，以免在同一质量run中再次改变应用传输参数；先用相同App JAR和配置重试。若同位置/组件重复出现，再基于服务端日志和故障率制定有证据的Qdrant传输预算调整。
+
+###### 正式样本快速失败实现与验收结果
+
+- 新增`RagBenchmarkMeasuredGate`并接入`executeMeasured`的HTTP执行后、JSONL append前；业务错误、降级及原因、空/重复排名、非法数值、非正totalMs或伪Rerank均抛`RAG_BENCHMARK_MEASURED_GATE_FAILED`。失败样本不会污染健康前缀，manifest同时记录variant、queryId、原始sampleErrorCode、degraded和rankedCount，不记录query正文或凭据。
+- `run`与`evaluate`共用原有manifest异常路径；Resume Gate把Measured Gate错误加入可恢复终态，因为其源文件只可能停在失败样本之前。后续若相同Qdrant瞬态再次出现，CLI会在第一条失败处自身终止，不再依赖5秒轮询和人工SIGINT，也不会多发后续请求。
+- 新增4个Gate测试覆盖健康、业务错误、降级/空结果和“有排名但Rerank候选/耗时为0”；新增Runner真实HTTP集成测试让服务端返回HTTP 200业务错误码，断言仅1次debug调用、无`run.jsonl`、failed manifest和原始错误摘要。测试第一次使用HTTP 503时客户端按协议记录通用`RAG_BENCHMARK_HTTP_503`而非响应体业务码，断言正确失败；夹具改为与生产本次响应一致的HTTP 200业务错误信封后通过，没有修改客户端错误语义。
+- benchmark全量34/34测试通过、0 failure/error/skipped；`mvn package`再次34/34并生成fat CLI，SHA-256为`970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`。作用域diff check通过。

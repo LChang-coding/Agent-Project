@@ -23,6 +23,7 @@ final class RagBenchmarkResumeGate {
     static final String ERROR_CODE = "RAG_BENCHMARK_RESUME_GATE_FAILED";
     private static final String REQUEST_TIMEOUT_ERROR_CODE = "RAG_BENCHMARK_REQUEST_TIMEOUT";
     private static final String IO_ERROR_CODE = "RAG_BENCHMARK_IO";
+    private static final String MEASURED_GATE_ERROR_CODE = "RAG_BENCHMARK_MEASURED_GATE_FAILED";
     private static final String RERANK_VARIANT = "hybrid_rrf_rerank";
     private static final long MAX_METADATA_BYTES = 10L * 1024 * 1024;
     private static final long MAX_WARMUP_BYTES = 128L * 1024 * 1024;
@@ -74,7 +75,8 @@ final class RagBenchmarkResumeGate {
         String sourceErrorType = sourceManifest.path("errorType").asText();
         boolean requestTimeout = REQUEST_TIMEOUT_ERROR_CODE.equals(sourceErrorCode)
                 || "HttpTimeoutException".equals(sourceErrorType);
-        boolean resumableIo = requestTimeout || IO_ERROR_CODE.equals(sourceErrorCode);
+        boolean resumableIo = requestTimeout || IO_ERROR_CODE.equals(sourceErrorCode)
+                || MEASURED_GATE_ERROR_CODE.equals(sourceErrorCode);
         if (!"failed".equals(sourceStatus) || !resumableIo) {
             throw new ResumeGateException("source_termination_not_request_timeout");
         }

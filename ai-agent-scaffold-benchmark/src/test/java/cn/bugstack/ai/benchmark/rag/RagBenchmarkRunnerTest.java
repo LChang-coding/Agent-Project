@@ -346,6 +346,54 @@ class RagBenchmarkRunnerTest {
         assertFalse(Files.exists(output.resolve("run.jsonl")));
     }
 
+    @Test
+    void evaluateShouldFailMeasuredGateWithoutPersistingBusinessError() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path fixture = Path.of("../docs/test-fixtures/rag/beir-mini").toAbsolutePath().normalize();
+        RagBenchmarkDataset dataset = new BeirDatasetLoader(mapper).load(fixture.resolve("corpus.jsonl"),
+                fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv"),
+                BeirDatasetLoader.Limits.defaults());
+        Path prepared = temporary.resolve("prepared-measured-gate");
+        new RagBenchmarkArtifactWriter(mapper).write(dataset, prepared,
+                new RagBenchmarkArtifactWriter.Configuration("mini", "https://example.invalid/mini", "rev-1",
+                        "fixture-only", "full", 7, 1024 * 1024),
+                new RagBenchmarkArtifactWriter.SourceFiles(fixture.resolve("corpus.jsonl"),
+                        fixture.resolve("queries.jsonl"), fixture.resolve("qrels.tsv")));
+        Path targets = temporary.resolve("measured-gate-targets.json");
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "targets", Map.of(
+                "dense", "target-dense", "sparse", "target-sparse", "hybrid_rrf", "target-hybrid",
+                "hybrid_rrf_rerank", "target-rerank")));
+
+        AtomicInteger debugCalls = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            debugCalls.incrementAndGet();
+            respond(exchange, 200, "{\"code\":\"RAG_QDRANT_UNAVAILABLE\",\"info\":\"unavailable\"}");
+        });
+        server.start();
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
+                "test-token", Duration.ofSeconds(5), 1024 * 1024);
+        Path output = temporary.resolve("measured-gate-output");
+
+        RagBenchmarkMeasuredGate.MeasuredGateException exception = assertThrows(
+                RagBenchmarkMeasuredGate.MeasuredGateException.class,
+                () -> new RagBenchmarkRunner(mapper, client).evaluate(
+                        new RagBenchmarkRunner.EvaluationConfiguration("measured-gate", base,
+                                "environment:TEST_TOKEN", "current-code", prepared, targets, output,
+                                20260719L, 0)));
+
+        assertEquals(RagBenchmarkMeasuredGate.ERROR_CODE, exception.code());
+        assertEquals(1, debugCalls.get());
+        assertFalse(Files.exists(output.resolve("run.jsonl")));
+        JsonNode manifest = mapper.readTree(output.resolve("run-manifest.json").toFile());
+        assertEquals("failed", manifest.path("status").asText());
+        assertEquals(RagBenchmarkMeasuredGate.ERROR_CODE, manifest.path("errorCode").asText());
+        assertEquals("RAG_QDRANT_UNAVAILABLE",
+                manifest.path("failedSample").path("sampleErrorCode").asText());
+    }
+
     private RagBenchmarkRunIO.RunRecord healthySourceRecord(String runId, String variant,
                                                              QueryFixture query, int retrievalSequence) {
         return new RagBenchmarkRunIO.RunRecord(runId, variant, query.queryId(), sha256(query.text()),
