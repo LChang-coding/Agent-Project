@@ -169,6 +169,25 @@ public class DoclingDocumentParserAdapterProtocolTest {
     }
 
     @Test
+    public void pdfShouldTreatConsecutiveSkippedLevelHeadingsAsSiblings() throws Exception {
+        String markdown = "## First\none\n## Second\ntwo";
+        respondPageSuccess(markdown, Map.of(
+                "1", Map.of("page_no", 1),
+                "2", Map.of("page_no", 2)), List.of(
+                header("First", 1, 1),
+                header("Second", 1, 2)));
+        Path path = write("skipped-level.pdf", "%PDF-skipped-level".getBytes(StandardCharsets.US_ASCII));
+
+        ParsedDocument result = adapter.parse(command(path, "skipped-level.pdf", "application/pdf", false));
+
+        Assert.assertEquals(2, result.sections().size());
+        Assert.assertEquals("First", result.sections().get(0).headingPath());
+        Assert.assertEquals(Integer.valueOf(1), result.sections().get(0).pageNumber());
+        Assert.assertEquals("Second", result.sections().get(1).headingPath());
+        Assert.assertEquals(Integer.valueOf(2), result.sections().get(1).pageNumber());
+    }
+
+    @Test
     public void pdfShouldKeepUnknownSectionPageAndRejectMalformedPageMetadata() throws Exception {
         respondPageSuccess("# Actual\nbody", Map.of("1", Map.of("page_no", 1)),
                 List.of(header("Different", 1, 1)));

@@ -1907,3 +1907,18 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `format-e2e-page-r2-3f7c779-minio`完成Markdown摄取与6次查询后，在DOCX解析阶段以`RAG_DOCLING_PAGE_METADATA_INVALID`失败；资源manifest exitCode=1，未进入PDF。真实DOCX协议摘要证明`json_content`存在，但`pages={}`且所有标题`prov=[]`；这是Docling对流式版式DOCX没有页级provenance，不是非法页号。
 - 保持“非法非空页集合fail closed”，把空`pages`对象重新定义为“页级信息未知”，返回`pageCount=0`且章节页码`null`；禁止从DOCX显式分页符、字数或标题顺序估算页面。增加空页对象回归后重新执行Java门禁、提交修复、以新JAR和全新r3目录重跑。
 - PDF真实响应仍有1～3连续页和标题provenance，r3必须证明PDF页数及至少一个citation页码；DOCX若继续无页信息，最终结论必须写成“当前Docling 1.26.0对该DOCX不提供固定页语义”，不能宣告DOCX页码闭环。
+
+#### PDF章节页码真实复测结果与标题层级修正计划（执行前）
+
+- 修正空页协议后的Java定向11/11、全部RAG 176/176通过；提交`3b61921`后构建App JAR SHA-256=`29eb48ad697416186bca38d5031bcb14355ba7d39623a5052d396cf63869eddb`。全新`format-e2e-page-r3-3b61921-minio`为completed/exitCode=0，Markdown/DOCX/PDF共15/15固定查询证据词项覆盖、0降级，三项摄取attempt均为1；摄取墙钟分别11114/16276/57695ms。
+- r3证明PDF `pageCount=3`已贯穿Worker和文档列表；Markdown/DOCX仍为0（页语义未知）。但PDF q1的6条citation只有文档标题页码=1，其余章节页码为null，没有达到章节页码闭环。
+- 真实响应对齐显示：Docling PDF Markdown把文档标题和全部章节都输出成连续H2，结构化JSON则把同一批`section_header`全部标记为level=1，并提供页号1/1/1/2/2/3。当前章节解析按“路径列表长度”而不是标题实际level出栈，导致从H2开头的连续H2被错误嵌套；JSON侧又形成顶级路径，二者无法精确匹配。
+- 修正标题栈为显式保存`level + text`，遇到新标题时弹出所有`level >= currentLevel`的节点；跳级H2可以作为根，连续H2互为兄弟，H2→H3仍形成父子。同一算法同时用于Markdown章节路径和Docling结构化标题路径，但不强行要求两端level数值相同，只要求规范化后的完整文本路径和出现顺序一致。
+- 增加“Markdown从H2开始、结构化标题level=1”的协议回归以及既有H1→H2嵌套回归；Java门禁、提交和新JAR完成后，用全新r4再次执行真实MinIO三格式E2E。r4必须验证PDF各命中章节的页码与fixture金标1/2/3一致，不能只验证非空。
+
+#### PDF标题层级修正执行结果
+
+- Markdown章节解析和Docling JSON标题解析均改为保存真实`level + text`的标题栈；新标题会弹出所有层级大于等于自身的节点。连续H2现在是兄弟章节，H2后接H3仍为父子，避免原先用路径长度模拟标题层级造成的错误嵌套。
+- 新增真实协议形态回归：Markdown为连续H2、结构化JSON为连续level=1，并分别带第1、2页provenance；断言章节路径为`First`/`Second`且页码为1/2。既有H1→H2、重复标题、非法页对象和DOCX空页语义测试继续保留。
+- Java 17定向`DoclingDocumentParserAdapterProtocolTest`为12/12通过；按文件名精确生成的全部RAG测试为176/176通过，0 failure/error/skipped，六模块BUILD SUCCESS。首次执行`git diff --check`被既有运行日志尾随空格挡住；改为仅校验本切片两个源文件后通过，没有修改或暂存这些运行日志。
+- 本节只证明算法与回归门禁，尚未把单元结果写成真实PDF页码结论；下一步提交本切片、重新打包并在全新r4目录执行真实MinIO摄取和页码金标核对。

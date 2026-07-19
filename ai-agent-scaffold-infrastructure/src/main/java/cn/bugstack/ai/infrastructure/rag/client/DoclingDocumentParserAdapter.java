@@ -355,7 +355,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
     private List<ParsedSection> sections(String markdown, HeadingPageResolver headingPages) {
         List<ParsedSection> result = new ArrayList<>();
-        List<String> headingPath = new ArrayList<>();
+        List<Heading> headingPath = new ArrayList<>();
         String currentPath = "";
         Integer currentPage = null;
         StringBuilder content = new StringBuilder();
@@ -369,11 +369,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 continue;
             }
             addSection(result, currentPath, currentPage, content);
-            while (headingPath.size() >= heading.level()) {
-                headingPath.remove(headingPath.size() - 1);
-            }
-            headingPath.add(heading.text());
-            currentPath = String.join(" / ", headingPath);
+            currentPath = pushHeading(headingPath, heading);
             currentPage = headingPages.nextPage(currentPath);
         }
         addSection(result, currentPath, currentPage, content);
@@ -434,7 +430,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
 
         List<HeadingPage> headings = new ArrayList<>();
-        List<String> headingPath = new ArrayList<>();
+        List<Heading> headingPath = new ArrayList<>();
         JsonNode texts = jsonContent.get("texts");
         if (texts != null && !texts.isNull()) {
             if (!texts.isArray()) {
@@ -450,14 +446,26 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 if (headingText.isBlank() || level < 1 || level > 6 || pageNumber == null) {
                     continue;
                 }
-                while (headingPath.size() >= level) {
-                    headingPath.remove(headingPath.size() - 1);
-                }
-                headingPath.add(headingText);
-                headings.add(new HeadingPage(String.join(" / ", headingPath), pageNumber));
+                String path = pushHeading(headingPath, new Heading(level, headingText));
+                headings.add(new HeadingPage(path, pageNumber));
             }
         }
         return new PageMetadata(pageNumbers.size(), new HeadingPageResolver(headings));
+    }
+
+    private String pushHeading(List<Heading> path, Heading heading) {
+        while (!path.isEmpty() && path.get(path.size() - 1).level() >= heading.level()) {
+            path.remove(path.size() - 1);
+        }
+        path.add(heading);
+        StringBuilder value = new StringBuilder();
+        for (Heading node : path) {
+            if (!value.isEmpty()) {
+                value.append(" / ");
+            }
+            value.append(node.text());
+        }
+        return value.toString();
     }
 
     private Integer provenancePage(JsonNode provenance, Set<Integer> pageNumbers) {
