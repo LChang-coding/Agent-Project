@@ -53,7 +53,7 @@ class RagLoadBenchmarkRunnerTest {
         Map<String, String> targetValues = new LinkedHashMap<>();
         RagBenchmarkHttpClient.ProfileDefinition.ablations().forEach(definition ->
                 targetValues.put(definition.variant(), "target-" + definition.variant()));
-        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "sourceRunId", "quality-run",
+        mapper.writeValue(targets.toFile(), Map.of("schemaVersion", 1, "sourceSha256", "a".repeat(64),
                 "targets", targetValues));
 
         AtomicInteger active = new AtomicInteger();
@@ -100,6 +100,8 @@ class RagLoadBenchmarkRunnerTest {
         assertEquals("completed", manifest.path("status").asText());
         assertEquals("same-deterministic-query-per-variant-v1", manifest.path("queryPairing").asText());
         assertEquals("completion-order-flush-per-record-v1", manifest.path("rawPersistence").asText());
+        assertEquals("a".repeat(64), manifest.path("targetsSourceSha256").asText());
+        assertTrue(manifest.path("targetsSourceRunId").isNull());
         assertEquals(120000, manifest.path("requestTimeoutMs").asLong());
         assertEquals(List.of(3, 1), mapper.convertValue(manifest.path("concurrencyLevels"), List.class));
         assertEquals("not_collected_by_test_client", manifest.path("serverResourceEvidence").asText());
@@ -112,6 +114,46 @@ class RagLoadBenchmarkRunnerTest {
                 "load-duplicate", URI.create("http://127.0.0.1:8092/api"), "environment:TEST_TOKEN",
                 "commit-1", temporary, temporary.resolve("targets.json"), temporary.resolve("out"), 7L,
                 List.of(2, 1, 2), 1, 2, Duration.ofSeconds(10)));
+    }
+
+    @Test
+    void shouldRejectMissingOrAmbiguousTargetProvenanceBeforeHttpCalls() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Path prepared = temporary.resolve("prepared-provenance");
+        Files.createDirectories(prepared);
+        Files.writeString(prepared.resolve("queries.jsonl"),
+                "{\"queryId\":\"q1\",\"text\":\"alpha query\"}\n", StandardCharsets.UTF_8);
+        Map<String, String> targetValues = new LinkedHashMap<>();
+        RagBenchmarkHttpClient.ProfileDefinition.ablations().forEach(definition ->
+                targetValues.put(definition.variant(), "target-" + definition.variant()));
+        AtomicInteger requests = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> requests.incrementAndGet());
+        server.start();
+        URI baseUrl = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, baseUrl,
+                "secret-token", Duration.ofSeconds(5), 1024 * 1024);
+
+        for (Map<String, Object> provenance : List.of(
+                Map.<String, Object>of(),
+                Map.<String, Object>of("sourceRunId", "quality-run", "sourceSha256", "a".repeat(64)))) {
+            Path targets = temporary.resolve("targets-provenance-" + provenance.size() + ".json");
+            Map<String, Object> artifact = new LinkedHashMap<>();
+            artifact.put("schemaVersion", 1);
+            artifact.putAll(provenance);
+            artifact.put("targets", targetValues);
+            mapper.writeValue(targets.toFile(), artifact);
+            Path output = temporary.resolve("load-provenance-" + provenance.size());
+            assertThrows(IllegalArgumentException.class, () -> new RagLoadBenchmarkRunner(mapper, client).run(
+                    new RagLoadBenchmarkRunner.Configuration("load-provenance", baseUrl,
+                            "environment:TEST_TOKEN", "commit-1", prepared, targets, output, 7L,
+                            List.of(1), 1, 1, Duration.ofSeconds(10))));
+            assertTrue(Files.isDirectory(output));
+            try (var files = Files.list(output)) {
+                assertEquals(0, files.count());
+            }
+        }
+        assertEquals(0, requests.get());
     }
 
     @Test

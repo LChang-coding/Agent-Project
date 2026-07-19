@@ -1451,3 +1451,23 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 删除了Runner中已失去调用点的批量JSONL写入方法；原始样本只保留逐条flush通道。限定benchmark模块与本计划文档的`git diff --check`通过，未将App/根目录运行日志及其他未跟踪文件纳入改动。
 - Temurin Java 17下benchmark全量测试连续两次均为36/36通过、0 failure/error/skipped；随后跳过重复测试的package成功产生fat CLI。三个shell脚本均通过`bash -n`。
 - 新CLI JAR SHA-256为`d293aa2f416738fd45249065cbb6b41b5c992ac0f6cfa5c4aeba0e12b633f93e`；当前App JAR仍为`484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。下一阶段性能smoke会显式把两个hash写入manifest，不引用此前质量run的混合延迟。
+
+###### 性能链路最小冒烟计划（执行前）
+
+1. 基于已完成且严格健康的r11质量目录及`prepared`输入，使用提交`2a7f787`的CLI、当前8092 App和现有Qdrant本地隧道；不改profile、索引、模型或检索逻辑。
+2. 只运行concurrency=1、每变体1次warmup+1次measured，共8次检索请求。它只验证登录、四变体调用、逐条落盘、严格门禁、统计产物与本地/远端资源证据闭环，不将该4条measured冒充性能基线。
+3. 仅对隔离benchmark账号生成一次性随机密码，以username/userId/tenantId/活动状态/密钥类型联合条件确保唯一更新；明文不打印、不写Git，只在当次包装脚本环境中传递。
+4. 成功门禁为：manifest=completed，warmup/load各4条且四变体齐全，0 error/degraded/empty/重复排名，Rerank证据为正；证据manifest四个文件hash与实际一致，资源采样JSONL逐行合法，前后快照无restart/OOM。任一门禁失败即保留原始证据并不进入更大smoke。
+
+###### 性能链路最小冒烟首次安全失败与targets溯源修复计划（执行前）
+
+- 隔离账号密码联合条件匹配1且更新1，登录和Qdrant隧道门禁通过；Load Runner在发出任一debug检索请求前拒绝r11 `targets.json`，错误为“targets文件版本或来源run非法”。输出目录未创建load manifest/warmup/load；资源证据目录完整记录`loadExitCode=1`、前后快照与采样hash，作为失败证据保留。
+- 根因是初始create-targets文件用`sourceRunId`溯源，而existing-targets/断点续跑拷贝用`sourceSha256`绑定原始targets；r11是后者，Load Runner只接受前者。这不是质量数据或targets损坏，而是评测器没有覆盖正式existing-targets产物协议。
+- 修复`TargetSet`为严格接受二选一溯源：非空且格式合法的`sourceRunId`，或64位小写SHA-256 `sourceSha256`；两者同时存在或同时缺失均拒绝。manifest分字段保留该溯源，并始终另存当前targets文件自身hash。
+- 增加测试覆盖existing-targets SHA正向执行、双溯源/无溯源零HTTP调用拒绝；运行benchmark全量测试与package，中文提交后使用全新run/evidence目录重跑同样8次最小冒烟，不复用首次失败目录。
+
+###### targets溯源协议修复执行结果
+
+- `TargetSet`现要求`sourceRunId`/`sourceSha256`恰好一个有效；run id限定为1～128位安全字符，source hash限定为64位小写十六进制。manifest新增`targetsSourceRunId`/`targetsSourceSha256`并保留`targetsSha256`，可区分“原来是谁”与“当前文件是什么”。
+- 测试夹具改为真实existing-targets SHA协议，并新增无溯源/双溯源在0次HTTP调用前拒绝的回归。首次测试编译暴露Java泛型推断错误，显式指定`Map<String,Object>`后进入测试；第二次失败是测试错误期待门禁前不创建输出目录，生产Runner实际会先创建空目录再验证输入；断言改为“目录存在但恰0文件”，未放宽生产协议。
+- 最终benchmark全量37/37通过、0 failure/error/skipped，package成功，限定diff check通过；新CLI JAR SHA-256为`f1deb4d207d916827ebb4e673a196786e73520fafd42fecbda960c4ccd74559d`。

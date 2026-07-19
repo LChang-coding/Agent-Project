@@ -269,7 +269,11 @@ public final class RagLoadBenchmarkRunner {
     private TargetSet readTargets(Path path) throws IOException {
         if (path == null || !Files.isRegularFile(path)) throw new IllegalArgumentException("targets文件不存在");
         JsonNode root = objectMapper.readTree(path.toFile());
-        if (root.path("schemaVersion").asInt() != 1 || root.path("sourceRunId").asText().isBlank()) {
+        String sourceRunId = root.path("sourceRunId").asText();
+        String sourceSha256 = root.path("sourceSha256").asText();
+        boolean validRunId = sourceRunId.matches("[A-Za-z0-9_.-]{1,128}");
+        boolean validSourceSha256 = sourceSha256.matches("[0-9a-f]{64}");
+        if (root.path("schemaVersion").asInt() != 1 || validRunId == validSourceSha256) {
             throw new IllegalArgumentException("targets文件版本或来源run非法");
         }
         JsonNode targetNode = root.path("targets");
@@ -283,7 +287,7 @@ public final class RagLoadBenchmarkRunner {
         Set<String> actual = new LinkedHashSet<>();
         targetNode.fieldNames().forEachRemaining(actual::add);
         if (!actual.equals(targets.keySet())) throw new IllegalArgumentException("targets包含未知variant");
-        return new TargetSet(root.path("sourceRunId").asText(),
+        return new TargetSet(validRunId ? sourceRunId : null, validSourceSha256 ? sourceSha256 : null,
                 Collections.unmodifiableMap(new LinkedHashMap<>(targets)), sha256(path));
     }
 
@@ -317,6 +321,8 @@ public final class RagLoadBenchmarkRunner {
         values.put("credentialSource", configuration.credentialSource());
         values.put("codeRevision", configuration.codeRevision());
         values.put("sourceRunId", targets.sourceRunId());
+        values.put("targetsSourceRunId", targets.sourceRunId());
+        values.put("targetsSourceSha256", targets.sourceSha256());
         values.put("targetsSha256", targets.sha256());
         values.put("queriesSha256", sha256(configuration.preparedDirectory().resolve("queries.jsonl")));
         values.put("queryCount", queries.size());
@@ -395,7 +401,7 @@ public final class RagLoadBenchmarkRunner {
 
     private record Query(String queryId, String text) {}
     private record RequestSpec(long sequence, String variant, String targetId, Query query) {}
-    private record TargetSet(String sourceRunId, Map<String, String> targets, String sha256) {}
+    private record TargetSet(String sourceRunId, String sourceSha256, Map<String, String> targets, String sha256) {}
     private record PhaseResult(List<LoadRecord> records, long elapsedMs) {}
 
     public record Configuration(String runId, URI baseUrl, String credentialSource, String codeRevision,
