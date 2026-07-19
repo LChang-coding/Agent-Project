@@ -72,17 +72,21 @@ public class RagPropertiesTest {
     /** 校验 Spring Boot 类型绑定；验证端点、时长和数值不以原始字符串流入业务代码。 */
     @Test
     public void shouldBindTypedConfigurationValues() {
-        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
-                "ai.rag.enabled", "true",
-                "ai.rag.embedding.endpoint", "https://rag.internal.example/embed",
-                "ai.rag.embedding.timeout", "2500ms",
-                "ai.rag.embedding.max-concurrency", "3",
-                "ai.rag.embedding.batch-size", "24",
-                "ai.rag.embedding.max-retries", "4",
-                "ai.rag.embedding.retry-initial-backoff", "100ms",
-                "ai.rag.embedding.retry-max-backoff", "1500ms",
-                "ai.rag.embedding.dimension", "768",
-                "ai.rag.kafka.listener-enabled", "true"
+        MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.ofEntries(
+                Map.entry("ai.rag.enabled", "true"),
+                Map.entry("ai.rag.embedding.endpoint", "https://rag.internal.example/embed"),
+                Map.entry("ai.rag.embedding.timeout", "2500ms"),
+                Map.entry("ai.rag.embedding.max-concurrency", "3"),
+                Map.entry("ai.rag.embedding.batch-size", "24"),
+                Map.entry("ai.rag.embedding.max-retries", "4"),
+                Map.entry("ai.rag.embedding.retry-initial-backoff", "100ms"),
+                Map.entry("ai.rag.embedding.retry-max-backoff", "1500ms"),
+                Map.entry("ai.rag.embedding.dimension", "768"),
+                Map.entry("ai.rag.qdrant.max-retries", "4"),
+                Map.entry("ai.rag.qdrant.retry-initial-backoff", "75ms"),
+                Map.entry("ai.rag.qdrant.retry-max-backoff", "800ms"),
+                Map.entry("ai.rag.qdrant.total-timeout", "12s"),
+                Map.entry("ai.rag.kafka.listener-enabled", "true")
         ));
 
         RagProperties properties = new Binder(source).bind("ai.rag", RagProperties.class)
@@ -97,6 +101,10 @@ public class RagPropertiesTest {
         Assert.assertEquals(Duration.ofMillis(100), properties.getEmbedding().getRetryInitialBackoff());
         Assert.assertEquals(Duration.ofMillis(1500), properties.getEmbedding().getRetryMaxBackoff());
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
+        Assert.assertEquals(4, properties.getQdrant().getMaxRetries());
+        Assert.assertEquals(Duration.ofMillis(75), properties.getQdrant().getRetryInitialBackoff());
+        Assert.assertEquals(Duration.ofMillis(800), properties.getQdrant().getRetryMaxBackoff());
+        Assert.assertEquals(Duration.ofSeconds(12), properties.getQdrant().getTotalTimeout());
         Assert.assertTrue(properties.getKafka().isListenerEnabled());
     }
 
@@ -142,6 +150,23 @@ public class RagPropertiesTest {
 
         Assert.assertTrue(violations.stream().anyMatch(violation ->
                 "reranker.requestBatchWithinCandidateLimit".equals(violation.getPropertyPath().toString())));
+    }
+
+    /** 校验Qdrant有限重试与总时限的联合边界。 */
+    @Test
+    public void shouldRejectInvalidQdrantRetryBoundaries() {
+        RagProperties properties = enabledProperties();
+        properties.getQdrant().setMaxRetries(6);
+        properties.getQdrant().setRetryInitialBackoff(Duration.ofSeconds(2));
+        properties.getQdrant().setRetryMaxBackoff(Duration.ofSeconds(1));
+        properties.getQdrant().setTotalTimeout(Duration.ofSeconds(1));
+
+        Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
+
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "qdrant.maxRetries".equals(violation.getPropertyPath().toString())));
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "qdrant.retryBoundaryValid".equals(violation.getPropertyPath().toString())));
     }
 
     /** 校验日志脱敏；验证 toString 只输出密钥已配置状态。 */

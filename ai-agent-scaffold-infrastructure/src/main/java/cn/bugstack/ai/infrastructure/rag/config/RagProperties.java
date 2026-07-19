@@ -130,6 +130,23 @@ public class RagProperties {
         @Min(1)
         private int prefetchMultiplier = 4;
 
+        /** 瞬态网络或网关错误后的最大重试次数，不含首次请求。 */
+        @Min(0)
+        @Max(5)
+        private int maxRetries = 2;
+
+        /** 首次重试退避时长。 */
+        @NotNull
+        private Duration retryInitialBackoff = Duration.ofMillis(100);
+
+        /** 指数退避时长上限。 */
+        @NotNull
+        private Duration retryMaxBackoff = Duration.ofSeconds(1);
+
+        /** 单次Qdrant业务操作的总时限，包含许可等待、全部请求和退避。 */
+        @NotNull
+        private Duration totalTimeout = Duration.ofSeconds(30);
+
         /** 创建 Qdrant 默认配置。 */
         public Qdrant() {
             setEndpoint(URI.create("http://127.0.0.1:6333"));
@@ -137,11 +154,22 @@ public class RagProperties {
             setMaxConcurrency(4);
         }
 
+        /** 校验退避和总时限边界。 */
+        @AssertTrue(message = "Qdrant重试退避必须为正数、上限不小于初始值且总时限不小于单次超时")
+        public boolean isRetryBoundaryValid() {
+            return retryInitialBackoff != null && !retryInitialBackoff.isZero() && !retryInitialBackoff.isNegative()
+                    && retryMaxBackoff != null && !retryMaxBackoff.isZero() && !retryMaxBackoff.isNegative()
+                    && retryMaxBackoff.compareTo(retryInitialBackoff) >= 0
+                    && totalTimeout != null && !totalTimeout.isZero() && !totalTimeout.isNegative()
+                    && getTimeout() != null && totalTimeout.compareTo(getTimeout()) >= 0;
+        }
+
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Qdrant 配置。 */
         @Override
         public String toString() {
             return summary("Qdrant") + ", collection='" + collection + "', batchSize=" + batchSize
-                    + ", sparseOnDisk=" + sparseOnDisk + ", maxSearchTopK=" + maxSearchTopK + '}';
+                    + ", sparseOnDisk=" + sparseOnDisk + ", maxSearchTopK=" + maxSearchTopK
+                    + ", maxRetries=" + maxRetries + ", totalTimeout=" + totalTimeout + '}';
         }
     }
 

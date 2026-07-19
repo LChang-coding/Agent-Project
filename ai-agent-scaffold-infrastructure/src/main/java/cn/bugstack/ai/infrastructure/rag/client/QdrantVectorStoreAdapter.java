@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.rag.adapter.port.SparseEncoderPort;
 import cn.bugstack.ai.domain.rag.adapter.port.VectorStorePort;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -11,6 +12,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -313,17 +315,61 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
 
     private JsonResponse exchange(String method, String path, String query, JsonNode body, boolean allowNotFound) {
         RagProperties.Qdrant config = properties.getQdrant();
-        TeiEmbeddingAdapter.acquire(concurrency, config.getTimeout(), "Qdrant");
         try {
             URI uri = endpoint(config.getEndpoint(), path, query);
-            HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(config.getTimeout())
-                    .header("Accept", "application/json");
-            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
-                builder.header("api-key", config.getApiKey());
-            }
             byte[] requestBytes = body == null ? null : objectMapper.writeValueAsBytes(body);
             if (requestBytes != null && requestBytes.length > config.getMaxRequestBytes()) {
                 throw new AppException("RAG_QDRANT_REQUEST_TOO_LARGE", "Qdrant请求超过安全上限");
+            }
+            long deadlineNanos = System.nanoTime() + config.getTotalTimeout().toNanos();
+            int attempt = 0;
+            while (true) {
+                try {
+                    RawResponse response = send(uri, method, requestBytes, deadlineNanos, config);
+                    if (allowNotFound && (response.statusCode() == 404 || response.statusCode() == 409)) {
+                        return new JsonResponse(response.statusCode(), null);
+                    }
+                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                        try {
+                            return new JsonResponse(response.statusCode(), objectMapper.readTree(response.body()));
+                        } catch (JsonProcessingException e) {
+                            throw new AppException("RAG_QDRANT_RESPONSE_INVALID", "Qdrant响应不是合法JSON", e);
+                        }
+                    }
+                    if (!isTransient(response.statusCode()) || attempt >= config.getMaxRetries()) {
+                        throw new AppException("RAG_QDRANT_HTTP_ERROR",
+                                "Qdrant返回状态 " + response.statusCode() + "，尝试次数 " + (attempt + 1));
+                    }
+                } catch (IOException e) {
+                    if (attempt >= config.getMaxRetries()) {
+                        throw new AppException("RAG_QDRANT_UNAVAILABLE",
+                                "Qdrant调用失败，尝试次数 " + (attempt + 1), e);
+                    }
+                }
+                backoff(attempt++, deadlineNanos, config);
+            }
+        } catch (AppException e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AppException("RAG_QDRANT_INTERRUPTED", "Qdrant请求被中断", e);
+        } catch (Exception e) {
+            throw new AppException("RAG_QDRANT_UNAVAILABLE", "Qdrant调用失败", e);
+        }
+    }
+
+    private RawResponse send(URI uri, String method, byte[] requestBytes, long deadlineNanos,
+                             RagProperties.Qdrant config) throws Exception {
+        Duration remaining = remaining(deadlineNanos);
+        TeiEmbeddingAdapter.acquire(concurrency, remaining, "Qdrant");
+        try {
+            Duration afterAcquire = remaining(deadlineNanos);
+            Duration requestTimeout = afterAcquire.compareTo(config.getTimeout()) < 0
+                    ? afterAcquire : config.getTimeout();
+            HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(requestTimeout)
+                    .header("Accept", "application/json");
+            if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
+                builder.header("api-key", config.getApiKey());
             }
             if (requestBytes != null) builder.header("Content-Type", "application/json");
             switch (method) {
@@ -333,25 +379,42 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
                 default -> throw new IllegalArgumentException("不支持的HTTP方法");
             }
             HttpResponse<InputStream> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
-            byte[] responseBytes = TeiEmbeddingAdapter.readBounded(response.body(), config.getMaxResponseBytes());
-            if (allowNotFound && (response.statusCode() == 404 || response.statusCode() == 409)) {
-                return new JsonResponse(response.statusCode(), null);
-            }
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new AppException("RAG_QDRANT_HTTP_ERROR", "Qdrant返回状态 " + response.statusCode());
-            }
-            JsonNode responseBody = objectMapper.readTree(responseBytes);
-            return new JsonResponse(response.statusCode(), responseBody);
-        } catch (AppException e) {
-            throw e;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AppException("RAG_QDRANT_INTERRUPTED", "Qdrant请求被中断", e);
-        } catch (Exception e) {
-            throw new AppException("RAG_QDRANT_UNAVAILABLE", "Qdrant调用失败", e);
+            return new RawResponse(response.statusCode(),
+                    TeiEmbeddingAdapter.readBounded(response.body(), config.getMaxResponseBytes()));
         } finally {
             concurrency.release();
         }
+    }
+
+    private boolean isTransient(int statusCode) {
+        return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+    }
+
+    private void backoff(int retryIndex, long deadlineNanos, RagProperties.Qdrant config)
+            throws InterruptedException {
+        long multiplier = 1L << Math.min(retryIndex, 30);
+        long desiredNanos;
+        try {
+            desiredNanos = Math.multiplyExact(config.getRetryInitialBackoff().toNanos(), multiplier);
+        } catch (ArithmeticException ignored) {
+            desiredNanos = Long.MAX_VALUE;
+        }
+        desiredNanos = Math.min(desiredNanos, config.getRetryMaxBackoff().toNanos());
+        long remainingNanos = remaining(deadlineNanos).toNanos();
+        if (desiredNanos >= remainingNanos) {
+            throw new AppException("RAG_QDRANT_TIMEOUT", "Qdrant操作超过总时限");
+        }
+        long millis = desiredNanos / 1_000_000L;
+        int nanos = (int) (desiredNanos % 1_000_000L);
+        Thread.sleep(millis, nanos);
+    }
+
+    private Duration remaining(long deadlineNanos) {
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        if (remainingNanos <= 0) {
+            throw new AppException("RAG_QDRANT_TIMEOUT", "Qdrant操作超过总时限");
+        }
+        return Duration.ofNanos(remainingNanos);
     }
 
     private void requireOk(JsonResponse response, String code) {
@@ -402,5 +465,6 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     private void requireText(String value, String field) { if (value == null || value.isBlank()) throw invalid(field + "不能为空"); }
     private AppException invalid(String message) { return new AppException("RAG_QDRANT_REQUEST_INVALID", message); }
     private AppException responseInvalid(String message) { return new AppException("RAG_QDRANT_RESPONSE_INVALID", message); }
+    private record RawResponse(int statusCode, byte[] body) {}
     private record JsonResponse(int statusCode, JsonNode body) {}
 }

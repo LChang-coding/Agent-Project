@@ -55,6 +55,10 @@ ai:
       max-response-bytes: ${AI_RAG_QDRANT_MAX_RESPONSE_BYTES:16777216}
       max-search-top-k: ${AI_RAG_QDRANT_MAX_SEARCH_TOP_K:200}
       prefetch-multiplier: ${AI_RAG_QDRANT_PREFETCH_MULTIPLIER:4}
+      max-retries: ${AI_RAG_QDRANT_MAX_RETRIES:2}
+      retry-initial-backoff: ${AI_RAG_QDRANT_RETRY_INITIAL_BACKOFF:100ms}
+      retry-max-backoff: ${AI_RAG_QDRANT_RETRY_MAX_BACKOFF:1s}
+      total-timeout: ${AI_RAG_QDRANT_TOTAL_TIMEOUT:30s}
     embedding:
       endpoint: ${AI_RAG_EMBEDDING_ENDPOINT:http://127.0.0.1:8081}
       api-key: ${AI_RAG_EMBEDDING_API_KEY:}

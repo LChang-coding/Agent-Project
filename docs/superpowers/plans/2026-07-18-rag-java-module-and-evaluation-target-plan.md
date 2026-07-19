@@ -971,3 +971,28 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 使用既有SciFact索引、同一首条test query和 `hybrid_rrf_rerank` 目标做真实生产HTTP冒烟：响应 `code=0000`、`degraded=false`、无降级原因、10条引用；dense/sparse/fusion/rerank候选数为100/100/10/10，证明10个候选均实际进入分批重排，没有走RRF fallback。
 - 该次耗时：embedding=7087ms、dense=2915ms、sparse=1590ms、rerank=15686ms、pipeline total=28895ms、configuration=311ms、hydration=1273ms、audit=1502ms、service=30399ms，客户端墙钟约31秒。正确性门禁通过，但CPU模型推理成为明确首要性能瓶颈；完整300×4评测预计持续数小时，不能用该单例延迟外推P95。
 - 下一步启动新的空目录复评分并保留1200条原始记录。JWT刷新凭据只存在进程环境，不写入manifest/日志/Git；要求最终恰有1200个唯一variant/query、0错误、0降级，才生成可发布质量指标。
+
+###### 完整复评分 Warmup 的 Qdrant 瞬态错误诊断计划（执行前）
+
+1. run `scifact-quality-eval-21a5d1b` 在14条warmup后被主动中断：前三个query的四组均完成且Rerank未降级，第4个queryId=880的Dense与Sparse均出现 `RAG_QDRANT_UNAVAILABLE`。按warmup零错误门禁，不允许继续进入measured；目录和14条记录保留。
+2. 先核验Qdrant `/healthz`、`/readyz`、collection状态及公网耗时，再对同一queryId=880的Dense/Sparse各重复3次，判断是稳定的查询数据/请求边界错误还是网络/服务瞬态错误。输出只含queryId、组别、稳定错误码、候选数和耗时，不输出查询正文。
+3. 若同查询稳定失败，检查Qdrant请求体、filter、稀疏向量与响应边界并新增协议测试；若仅偶发连接/超时，则为Qdrant客户端增加仅针对连接异常和429/502/503/504的有限退避重试，总deadline有界，400/401/业务错误不重试。
+4. 修复后先执行至少10轮同查询×Dense/Sparse无错误验证，再新建空输出目录完整复评分；旧失败run不覆盖、不与新run拼接。
+
+###### Qdrant 瞬态错误诊断结果与客户端恢复计划（执行前）
+
+- 中断评测后立即直连核验：`/healthz` 返回200/0.119秒，`/readyz` 返回200/0.139秒，目标collection读取返回200/0.161秒；Qdrant并未持续宕机。
+- 对失败点 queryId=880 的Dense、Sparse各重复3次，6/6均返回业务码0000、`degraded=false`且10条引用。Dense业务耗时3.527～4.760秒、其中Qdrant 0.484～0.783秒；Sparse业务耗时4.066～4.224秒、其中Qdrant 0.946～1.372秒。由此判定为公网连接或Qdrant瞬态故障，不是稳定的查询数据、filter或向量格式错误。
+- 本轮为Qdrant配置增加最大重试次数、首次/最大退避和单次操作总时限；默认最多2次重试，退避100ms～1s，总时限30s。单次HTTP timeout仍保持3s，防止某次连接独占全部预算。
+- 客户端只重试连接/读写IO异常和HTTP 429/502/503/504；400、401、其他HTTP错误、响应过大、JSON/schema/业务响应错误均不重试。每次网络尝试独立获取并释放并发许可，退避期间不占permit；许可等待、全部请求与退避共同消费总deadline。
+- 单元测试覆盖503后成功、持续503耗尽、401不重试和配置边界；随后执行Qdrant协议测试、RAG精确回归与Java 17打包。重启8092后至少完成10轮同查询Dense/Sparse真实验证，全部成功才重新开启1200条评测。
+- MySQL迁移与该修复分开处理：仅业务MySQL保留为迁移候选；恢复新RAG服务器SSH、确认模型和Qdrant稳定并完成可回滚恢复演练之前，不进行正式切换，也不迁移Kafka、MinIO、Nacos、XXL-JOB数据库或观测组件。
+
+###### Qdrant 有界恢复实现与真实门禁结果
+
+- `RagProperties.Qdrant` 新增 `maxRetries=2`、100ms～1s指数退避和30秒 `totalTimeout`；单次HTTP超时仍独立配置。Bean Validation限制重试不超过5次、退避必须为正且最大值不小于初始值、总时限不得小于单次超时；`application.yml` 已提供对应四个环境变量，脱敏摘要不输出API Key。
+- `QdrantVectorStoreAdapter` 现在复用一次序列化结果，仅对连接/读写IO异常和429/502/503/504执行有限重试；401及其他HTTP状态、非法JSON、响应过大、schema或业务响应错误均立即失败。每次网络尝试独立获取/释放Semaphore，退避不占permit；许可等待、请求和退避共享同一操作deadline，耗尽后返回明确的timeout/unavailable/http错误。
+- 首次定向测试因测试数据扩展到14组键值后仍使用只支持最多10组的 `Map.of`，导致1个测试编译错误；改为 `Map.ofEntries` 后clean重跑成功。最终Qdrant协议9项、配置10项，共19/19通过，包含IO失败后成功、503后成功、持续503恰好3次、401恰好1次和联合边界。
+- 扩大到33个精确RAG测试类后163/163通过，0 failure/error/skipped，BUILD SUCCESS 3.857秒；本轮文件 `git diff --check` 无问题。随后旧PID 24955已通过TERM优雅退出，Java 17六模块打包BUILD SUCCESS 7.142秒，新JAR由隔离启动脚本在8092启动，PID=41109，Hikari连接成功。
+- 使用既有SciFact索引对失败点queryId=880做新版本真实门禁：Dense 10/10、Sparse 10/10均为业务码0000、`degraded=false`、10条引用。Dense首请求冷启动pipeline=11777ms，后续为2044～3065ms；Sparse为1695～2924ms。20次均未再出现Qdrant错误，满足重新启动完整复评分的前置条件。
+- 门禁只对隔离benchmark tenant的唯一active password记录执行一次条件密码更新，影响恰好1行；随机密码和JWT仅存在进程变量，未写入文件、日志、manifest或Git。探测输出只记录variant、序号、业务码、降级状态、引用数和耗时，不记录查询正文或凭据。

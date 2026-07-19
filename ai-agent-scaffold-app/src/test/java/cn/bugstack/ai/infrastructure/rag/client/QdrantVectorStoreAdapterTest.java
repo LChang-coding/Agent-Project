@@ -10,9 +10,13 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -142,6 +146,71 @@ public class QdrantVectorStoreAdapterTest {
         }
     }
 
+    @Test
+    public void shouldRetryTransient503AndThenSucceed() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        try (Fixture fixture = fixture(exchange -> {
+            if (attempts.getAndIncrement() == 0) respond(exchange, 503, "{}");
+            else respond(exchange, 200, schema(true));
+        })) {
+            fixture.adapter.ensureCollection();
+
+            Assert.assertEquals(2, attempts.get());
+            Assert.assertEquals(2, fixture.requests.size());
+        }
+    }
+
+    @Test
+    public void shouldBoundRetriesWhenTransient503Persists() throws Exception {
+        try (Fixture fixture = fixture(exchange -> respond(exchange, 503, "{}"))) {
+            try {
+                fixture.adapter.ensureCollection();
+                Assert.fail("预期瞬态错误重试耗尽");
+            } catch (AppException e) {
+                Assert.assertEquals("RAG_QDRANT_HTTP_ERROR", e.getCode());
+            }
+            Assert.assertEquals(3, fixture.requests.size());
+        }
+    }
+
+    @Test
+    public void shouldNotRetryUnauthorizedResponse() throws Exception {
+        try (Fixture fixture = fixture(exchange -> respond(exchange, 401, "{}"))) {
+            try {
+                fixture.adapter.ensureCollection();
+                Assert.fail("预期认证错误");
+            } catch (AppException e) {
+                Assert.assertEquals("RAG_QDRANT_HTTP_ERROR", e.getCode());
+            }
+            Assert.assertEquals(1, fixture.requests.size());
+        }
+    }
+
+    @Test
+    public void shouldRetryConnectionIoFailureAndThenSucceed() throws Exception {
+        RagProperties properties = new RagProperties();
+        properties.getQdrant().setEndpoint(java.net.URI.create("http://127.0.0.1:6333"));
+        properties.getQdrant().setTimeout(Duration.ofSeconds(1));
+        properties.getQdrant().setTotalTimeout(Duration.ofSeconds(3));
+        properties.getQdrant().setRetryInitialBackoff(Duration.ofMillis(10));
+        properties.getQdrant().setRetryMaxBackoff(Duration.ofMillis(20));
+        HttpClient httpClient = Mockito.mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<java.io.InputStream> response = Mockito.mock(HttpResponse.class);
+        Mockito.when(response.statusCode()).thenReturn(200);
+        Mockito.when(response.body()).thenReturn(new ByteArrayInputStream(schema(true).getBytes(
+                java.nio.charset.StandardCharsets.UTF_8)));
+        Mockito.when(httpClient.send(Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenThrow(new IOException("connection reset"))
+                .thenReturn(response);
+        QdrantVectorStoreAdapter adapter = new QdrantVectorStoreAdapter(properties, objectMapper, httpClient);
+
+        adapter.ensureCollection();
+
+        Mockito.verify(httpClient, Mockito.times(2)).send(
+                Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any());
+    }
+
     private Fixture fixture(Responder responder) throws Exception {
         List<Request> requests = Collections.synchronizedList(new ArrayList<>());
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -156,6 +225,9 @@ public class QdrantVectorStoreAdapterTest {
         RagProperties properties = new RagProperties();
         properties.getQdrant().setEndpoint(java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort()));
         properties.getQdrant().setTimeout(Duration.ofSeconds(2));
+        properties.getQdrant().setTotalTimeout(Duration.ofSeconds(5));
+        properties.getQdrant().setRetryInitialBackoff(Duration.ofMillis(10));
+        properties.getQdrant().setRetryMaxBackoff(Duration.ofMillis(20));
         properties.getQdrant().setSparseOnDisk(true);
         QdrantVectorStoreAdapter adapter = new QdrantVectorStoreAdapter(
                 properties, objectMapper, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());
