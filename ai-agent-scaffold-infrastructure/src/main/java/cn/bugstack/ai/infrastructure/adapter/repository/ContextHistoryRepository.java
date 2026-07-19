@@ -55,6 +55,7 @@ public class ContextHistoryRepository implements IContextHistoryRepository {
                 .sequenceNo(po.getSequenceNo())
                 .parentMessageId(po.getParentMessageId())
                 .traceId(po.getTraceId())
+                .metadata(po.getMetadata())
                 .build();
     }
 

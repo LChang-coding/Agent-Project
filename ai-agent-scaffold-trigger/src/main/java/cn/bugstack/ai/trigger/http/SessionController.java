@@ -6,6 +6,10 @@ import cn.bugstack.ai.api.dto.session.SessionMessagePageResponseDTO;
 import cn.bugstack.ai.api.dto.session.SessionMessageResponseDTO;
 import cn.bugstack.ai.api.dto.session.SessionSummaryResponseDTO;
 import cn.bugstack.ai.api.response.Response;
+import cn.bugstack.ai.api.dto.RagCitationValidationDTO;
+import cn.bugstack.ai.api.dto.RagCitationSourceDTO;
+import cn.bugstack.ai.domain.rag.model.entity.RagAnswerCitationValidation;
+import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
@@ -41,13 +45,16 @@ public class SessionController {
     private static final int MAX_LIMIT = 100;
     private final SessionDomain sessionDomain;
     private final SessionLifecycleService lifecycleService;
+    private final RagAnswerCitationMetadataService citationMetadataService;
 
     /**
      * 创建会话接口；参数是会话领域服务；返回接口实例。
      */
-    public SessionController(SessionDomain sessionDomain, SessionLifecycleService lifecycleService) {
+    public SessionController(SessionDomain sessionDomain, SessionLifecycleService lifecycleService,
+                             RagAnswerCitationMetadataService citationMetadataService) {
         this.sessionDomain = sessionDomain;
         this.lifecycleService = lifecycleService;
+        this.citationMetadataService = citationMetadataService;
     }
 
     /**
@@ -117,6 +124,26 @@ public class SessionController {
         }
     }
 
+    /** 查询一条回答引用的当前可见正文。 */
+    @GetMapping("/{sessionId}/messages/{messageId}/citations/{citationId}")
+    public Response<RagCitationSourceDTO> citation(@PathVariable String sessionId,
+                                                   @PathVariable String messageId,
+                                                   @PathVariable String citationId) {
+        try {
+            RagAnswerCitationMetadataService.CitationSource source = citationMetadataService.resolveSource(
+                    TenantContextHolder.getTenantId(), requireUserId(), sessionId, messageId, citationId);
+            return success(RagCitationSourceDTO.builder().citationId(source.citationId())
+                    .documentId(source.documentId()).documentName(source.documentName())
+                    .documentVersion(source.documentVersion()).pageNumber(source.pageNumber())
+                    .headingPath(source.headingPath()).excerpt(source.excerpt()).build());
+        } catch (AppException exception) {
+            return fail(exception);
+        } catch (Exception exception) {
+            log.error("查询RAG引用失败 sessionId:{} messageId:{}", sessionId, messageId, exception);
+            return systemFail();
+        }
+    }
+
     private SessionSummaryResponseDTO toSummary(ChatSessionEntity session) {
         return SessionSummaryResponseDTO.builder().sessionId(session.getSessionId()).agentId(session.getAgentId())
                 .agentName(session.getAgentName()).appName(session.getAppName()).title(session.getTitle())
@@ -129,7 +156,21 @@ public class SessionController {
         return SessionMessageResponseDTO.builder().messageId(message.getMessageId()).runId(message.getRunId())
                 .role(message.getRole()).contentType(message.getContentType()).content(message.getContent())
                 .estimatedTokenCount(message.getEstimatedTokenCount()).sequenceNo(message.getSequenceNo())
-                .createTime(message.getCreateTime()).build();
+                .createTime(message.getCreateTime()).citationValidation(toCitationDTO(citationMetadataService.parse(message))).build();
+    }
+
+    private RagCitationValidationDTO toCitationDTO(RagAnswerCitationValidation value) {
+        if (value == null) return null;
+        return RagCitationValidationDTO.builder().status(value.status().name())
+                .retrievalIds(value.retrievalIds()).allowedCitationIds(value.allowedCitationIds())
+                .usedCitationIds(value.usedCitationIds()).invalidCitationIds(value.invalidCitationIds())
+                .citations(value.usedCitations().stream().map(citation -> RagCitationValidationDTO.CitationDTO.builder()
+                        .citationId(citation.citationId()).knowledgeBaseId(citation.knowledgeBaseId())
+                        .documentId(citation.documentId()).documentName(citation.documentName())
+                        .versionId(citation.versionId()).documentVersion(citation.documentVersion())
+                        .generation(citation.generation()).chunkId(citation.chunkId())
+                        .pageNumber(citation.pageNumber()).headingPath(citation.headingPath()).build()).toList())
+                .build();
     }
 
     private int normalizeLimit(int limit) {

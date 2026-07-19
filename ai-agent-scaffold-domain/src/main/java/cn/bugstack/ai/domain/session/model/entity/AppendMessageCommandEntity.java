@@ -22,4 +22,6 @@ public class AppendMessageCommandEntity {
     private String parentMessageId;
 
     private String traceId;
+
+    private String metadata;
 }

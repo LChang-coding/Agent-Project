@@ -86,6 +86,23 @@ public class RagRetrievalServiceTest {
     }
 
     @Test
+    public void shouldNotRetrieveAnotherUsersPrivateKnowledgeBase() {
+        when(repository.listBindings("tenant-a", RagBindingTargetType.AGENT, "agent-a"))
+                .thenReturn(List.of(binding(false)));
+        RagKnowledgeBaseEntity privateKnowledgeBase = new RagKnowledgeBaseEntity("tenant-a", "another-user",
+                "kb-a", "私有知识库", null, RagVisibility.PRIVATE, RagKnowledgeBaseStatus.ACTIVE,
+                "profile-a", 768, "alias-a", 3, 1);
+        when(repository.findKnowledgeBase("tenant-a", "kb-a")).thenReturn(Optional.of(privateKnowledgeBase));
+        when(repository.findRetrievalProfile("tenant-a", "profile-a")).thenReturn(Optional.of(profile(false, 0, 1000)));
+
+        RagRetrievalResult result = service.retrieve(request(1000));
+
+        Assert.assertTrue(result.citations().isEmpty());
+        verify(embedding, never()).embed(any());
+        verify(vectorStore, never()).search(anyString(), any());
+    }
+
+    @Test
     public void shouldRunHybridRrfRerankAndPreserveActiveScope() {
         fixtures(profile(true, 0, 1000), false);
         when(embedding.embed(any())).thenReturn(new EmbeddingPort.EmbeddingResult(

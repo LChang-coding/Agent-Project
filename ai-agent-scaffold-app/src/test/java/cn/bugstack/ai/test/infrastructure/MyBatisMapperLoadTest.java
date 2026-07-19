@@ -88,6 +88,7 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.insertIgnore"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.queryLatest"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryValidMessage"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.updateByTenantAndRevision"));
@@ -239,6 +240,7 @@ public class MyBatisMapperLoadTest {
         parameters.put("visibleThroughSequence", 5);
         parameters.put("candidateLimit", 32);
         parameters.put("maxContentChars", 131072);
+        parameters.put("messageId", "msg_1");
 
         String messageSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo",
                 parameters);
@@ -249,6 +251,15 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(messageSql.contains("deleted = 0"));
         Assert.assertTrue(messageSql.contains("tenant_id = ?"));
         Assert.assertFalse(messageSql.contains("content"));
+
+        String citationMessageSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryValidMessage", parameters);
+        Assert.assertTrue(citationMessageSql.contains("user_id = ?"));
+        Assert.assertTrue(citationMessageSql.contains("session_id = ?"));
+        Assert.assertTrue(citationMessageSql.contains("message_id = ?"));
+        Assert.assertTrue(citationMessageSql.contains("validity_status = 'active'"));
+        Assert.assertTrue(citationMessageSql.contains("tenant_id = ?"));
+        Assert.assertTrue(citationMessageSql.contains("LIMIT 1"));
 
         String toolSql = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId",
                 parameters);

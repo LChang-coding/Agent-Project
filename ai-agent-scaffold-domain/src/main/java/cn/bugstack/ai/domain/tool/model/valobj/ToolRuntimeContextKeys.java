@@ -18,6 +18,7 @@ public final class ToolRuntimeContextKeys {
     public static final String RAG_TARGET_TYPE = "ragTargetType";
     public static final String RAG_TARGET_ID = "ragTargetId";
     public static final String RAG_QUERY = "ragQuery";
+    public static final String RAG_EVIDENCE_INVOCATION_ID = "ragEvidenceInvocationId";
 
     /**
      * 禁止创建常量类；无参数；无返回值。

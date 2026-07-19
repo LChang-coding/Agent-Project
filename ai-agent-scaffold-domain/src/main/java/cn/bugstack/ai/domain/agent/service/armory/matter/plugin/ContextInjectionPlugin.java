@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.context.model.ContextAssembleRequest;
 import cn.bugstack.ai.domain.context.model.ContextAssemblyResult;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
+import cn.bugstack.ai.domain.rag.service.RagInvocationEvidenceStore;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolRuntimeContextKeys;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.TraceContext;
@@ -27,13 +28,16 @@ import java.util.Map;
 public class ContextInjectionPlugin extends BasePlugin {
 
     private final ConversationMemoryService conversationMemoryService;
+    private final RagInvocationEvidenceStore evidenceStore;
 
     /**
      * 创建上下文注入插件；参数是会话记忆服务；返回插件实例。
      */
-    public ContextInjectionPlugin(ConversationMemoryService conversationMemoryService) {
+    public ContextInjectionPlugin(ConversationMemoryService conversationMemoryService,
+                                  RagInvocationEvidenceStore evidenceStore) {
         super("contextInjectionPlugin");
         this.conversationMemoryService = conversationMemoryService;
+        this.evidenceStore = evidenceStore;
     }
 
     /**
@@ -59,6 +63,15 @@ public class ContextInjectionPlugin extends BasePlugin {
                     .build());
             if (result.getInstruction() != null && !result.getInstruction().isBlank()) {
                 llmRequest.appendInstructions(List.of(result.getInstruction()));
+            }
+            if (result.getRagEvidence() != null && !result.getRagEvidence().isEmpty()) {
+                evidenceStore.record(stringValue(state.get(ToolRuntimeContextKeys.TENANT_ID)),
+                        defaultString(stringValue(state.get(ToolRuntimeContextKeys.USER_ID)), callbackContext.userId()),
+                        stringValue(state.get(ToolRuntimeContextKeys.SESSION_ID)),
+                        stringValue(state.get(ToolRuntimeContextKeys.RUN_ID)),
+                        defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)),
+                                callbackContext.invocationId()),
+                        result.getRagEvidence());
             }
             return Maybe.empty();
         } catch (Exception e) {

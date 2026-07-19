@@ -15,4 +15,5 @@ public class ContextContribution {
     private String content;
     private Integer estimatedTokenCount;
     private String source;
+    private RagContextEvidence ragEvidence;
 }

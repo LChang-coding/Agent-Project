@@ -19,6 +19,7 @@ import cn.bugstack.ai.domain.context.model.ContextFragment;
 import cn.bugstack.ai.domain.context.model.ContextFragmentType;
 import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
 import cn.bugstack.ai.domain.context.model.ContextTaskCreateCommand;
+import cn.bugstack.ai.domain.context.model.RagContextEvidence;
 import cn.bugstack.ai.domain.context.model.ConversationMemorySnapshotEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
@@ -176,7 +177,8 @@ public class ConversationMemoryService {
                 if (contribution == null || isBlank(contribution.getContent()) || contribution.getType() == null) {
                     continue;
                 }
-                fragments.add(ContextFragment.of(contribution.getType(), contribution.getContent(), maxTokensFor(contribution.getType())));
+                fragments.add(ContextFragment.of(contribution.getType(), contribution.getContent(),
+                        maxTokensFor(contribution.getType()), contribution.getRagEvidence()));
             }
         }
 
@@ -209,6 +211,7 @@ public class ConversationMemoryService {
                 .effectiveFromSequence(!historySelected ? null : recentMessages.get(0).getSequenceNo())
                 .effectiveToSequence(!historySelected ? coveredToSequence
                         : recentMessages.get(recentMessages.size() - 1).getSequenceNo())
+                .ragEvidence(selected.stream().map(ContextFragment::getRagEvidence).filter(Objects::nonNull).toList())
                 .build();
     }
 

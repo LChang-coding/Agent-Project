@@ -1,5 +1,6 @@
 package cn.bugstack.ai.api.dto.session;
 
+import cn.bugstack.ai.api.dto.RagCitationValidationDTO;
 import lombok.Builder;
 import lombok.Data;
 
@@ -19,4 +20,5 @@ public class SessionMessageResponseDTO {
     private Integer estimatedTokenCount;
     private Integer sequenceNo;
     private LocalDateTime createTime;
+    private RagCitationValidationDTO citationValidation;
 }

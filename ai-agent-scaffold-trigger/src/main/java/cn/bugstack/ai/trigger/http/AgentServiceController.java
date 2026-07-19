@@ -7,6 +7,8 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
 import cn.bugstack.ai.domain.run.service.ActiveRunRegistry;
+import cn.bugstack.ai.domain.rag.model.entity.RagAnswerCitationValidation;
+import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
 import com.google.adk.events.Event;
 import io.reactivex.rxjava3.core.Flowable;
 import cn.bugstack.ai.types.context.TenantContextHolder;
@@ -39,6 +41,9 @@ public class AgentServiceController implements IAgentService {
 
     @Resource
     private ActiveRunRegistry activeRunRegistry;
+
+    @Resource
+    private RagAnswerCitationMetadataService citationMetadataService;
 
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
     @Override
@@ -153,6 +158,8 @@ public class AgentServiceController implements IAgentService {
             responseDTO.setRunId(runStream.getRun().getRunId());
             responseDTO.setRunStatus("completed");
             responseDTO.setContextRevision(runStream.getRun().getCurrentContextRevision());
+            applyCitationSnapshot(responseDTO, citationMetadataService.queryRunAnswer(
+                    TenantContextHolder.getTenantId(), userId, sessionId, runStream.getRun().getRunId()));
 
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -203,7 +210,8 @@ public class AgentServiceController implements IAgentService {
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
                         "contextRevision", runStream.getRun().getCurrentContextRevision())));
-                disposable = subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef);
+                disposable = subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef,
+                        TenantContextHolder.getTenantId(), userId, sessionId, runId);
             } else {
                 RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
                         sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(), requestDTO.getAttachmentIds());
@@ -212,7 +220,8 @@ public class AgentServiceController implements IAgentService {
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
                         "contextRevision", runStream.getRun().getCurrentContextRevision())));
-                disposable = subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef);
+                disposable = subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef,
+                        TenantContextHolder.getTenantId(), userId, sessionId, runId);
             }
             disposableRef.set(disposable);
             String activeRunId = runId;
@@ -252,11 +261,12 @@ public class AgentServiceController implements IAgentService {
      */
     private Disposable subscribeWorkflowTextStream(Flowable<String> stream,
                                                     SseEmitter emitter,
-                                                    AtomicReference<Disposable> disposableRef) {
+                                                    AtomicReference<Disposable> disposableRef,
+                                                    String tenantId, String userId, String sessionId, String runId) {
         return stream.subscribe(
                 content -> sendMessage(emitter, disposableRef, content),
                 error -> completeSseWithError(emitter, error),
-                emitter::complete
+                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId)
         );
     }
 
@@ -282,13 +292,51 @@ public class AgentServiceController implements IAgentService {
      */
     private Disposable subscribeAgentEventStream(Flowable<Event> stream,
                                                   SseEmitter emitter,
-                                                  AtomicReference<Disposable> disposableRef) {
+                                                  AtomicReference<Disposable> disposableRef,
+                                                  String tenantId, String userId, String sessionId, String runId) {
         AtomicReference<String> lastContentRef = new AtomicReference<>("");
         return stream.subscribe(
                 event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
                 error -> completeSseWithError(emitter, error),
-                emitter::complete
+                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId)
         );
+    }
+
+    /** 在业务事务已提交后发送唯一引用终态事件。 */
+    private void completeSseWithCitation(SseEmitter emitter, String tenantId, String userId,
+                                         String sessionId, String runId) {
+        try {
+            RagAnswerCitationMetadataService.AnswerSnapshot snapshot = citationMetadataService.queryRunAnswer(
+                    tenantId, userId, sessionId, runId);
+            if (snapshot != null) {
+                emitter.send(SseEmitter.event().name("citation_validation").data(java.util.Map.of(
+                        "messageId", snapshot.messageId(), "runId", runId,
+                        "validation", toCitationDTO(snapshot.validation()))));
+            }
+            emitter.complete();
+        } catch (Exception exception) {
+            completeSseWithError(emitter, exception);
+        }
+    }
+
+    private void applyCitationSnapshot(ChatResponseDTO response,
+                                       RagAnswerCitationMetadataService.AnswerSnapshot snapshot) {
+        if (snapshot == null) return;
+        response.setMessageId(snapshot.messageId());
+        response.setCitationValidation(toCitationDTO(snapshot.validation()));
+    }
+
+    private RagCitationValidationDTO toCitationDTO(RagAnswerCitationValidation value) {
+        return RagCitationValidationDTO.builder().status(value.status().name())
+                .retrievalIds(value.retrievalIds()).allowedCitationIds(value.allowedCitationIds())
+                .usedCitationIds(value.usedCitationIds()).invalidCitationIds(value.invalidCitationIds())
+                .citations(value.usedCitations().stream().map(citation -> RagCitationValidationDTO.CitationDTO.builder()
+                        .citationId(citation.citationId()).knowledgeBaseId(citation.knowledgeBaseId())
+                        .documentId(citation.documentId()).documentName(citation.documentName())
+                        .versionId(citation.versionId()).documentVersion(citation.documentVersion())
+                        .generation(citation.generation()).chunkId(citation.chunkId())
+                        .pageNumber(citation.pageNumber()).headingPath(citation.headingPath()).build()).toList())
+                .build();
     }
 
     /**

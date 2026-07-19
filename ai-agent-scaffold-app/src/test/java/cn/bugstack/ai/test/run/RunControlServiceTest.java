@@ -197,4 +197,29 @@ public class RunControlServiceTest {
         assertNull(service.completeWithAssistantMessage("tenant-1", "user-1", "run-1", "晚到回复", "trace-1"));
         verify(sessionDomain, never()).appendAssistantMessage(any(), any(), any(), any(), any(), any());
     }
+
+    @Test
+    public void shouldPersistCitationMetadataBeforeCompletingRunInSameOperation() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+        ChatRunEntity running = ChatRunEntity.builder().runId("run-1").tenantId("tenant-1").userId("user-1")
+                .sessionId("session-1").status(RunStatus.RUNNING).version(0).build();
+        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(running);
+        when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(running);
+        when(sessionDomain.appendAssistantMessage("tenant-1", "user-1", "session-1", "run-1",
+                "回答", "trace-1", "{\"schema\":\"rag-citations/v1\"}"))
+                .thenReturn(ChatMessageEntity.builder().messageId("msg-1").build());
+        when(runRepository.transition(eq("tenant-1"), eq("user-1"), eq("run-1"), eq(RunStatus.RUNNING),
+                eq(RunStatus.COMPLETED), eq(0), eq(null), eq(null), any())).thenReturn(1);
+
+        ChatMessageEntity result = service.completeWithAssistantMessage("tenant-1", "user-1", "run-1",
+                "回答", "trace-1", "{\"schema\":\"rag-citations/v1\"}");
+
+        assertEquals("msg-1", result.getMessageId());
+        verify(sessionDomain).appendAssistantMessage("tenant-1", "user-1", "session-1", "run-1",
+                "回答", "trace-1", "{\"schema\":\"rag-citations/v1\"}");
+    }
 }

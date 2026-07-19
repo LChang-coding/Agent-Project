@@ -136,6 +136,13 @@ public class SessionDomain {
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String runId,
                                                     String content, String traceId) {
+        return appendAssistantMessage(tenantId, userId, sessionId, runId, content, traceId, null);
+    }
+
+    /** 保存带安全元数据的运行助手消息。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String runId,
+                                                     String content, String traceId, String metadata) {
         AppendMessageCommandEntity command = new AppendMessageCommandEntity();
         command.setTenantId(tenantId);
         command.setUserId(userId);
@@ -145,6 +152,7 @@ public class SessionDomain {
         command.setContentType(CONTENT_TYPE_TEXT);
         command.setContent(content);
         command.setTraceId(traceId);
+        command.setMetadata(metadata);
         return appendMessage(command);
     }
 
@@ -176,6 +184,7 @@ public class SessionDomain {
                 .sequenceNo(maxSequenceNo == null ? 1 : maxSequenceNo + 1)
                 .parentMessageId(command.getParentMessageId())
                 .traceId(command.getTraceId())
+                .metadata(command.getMetadata())
                 .build();
         sessionRepository.insertMessage(message);
         sessionRepository.updateLastMessageTime(session.getTenantId(), session.getUserId(), session.getSessionId(), now);
@@ -210,6 +219,12 @@ public class SessionDomain {
      */
     public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId) {
         return sessionRepository.queryRunMessages(blankToNull(tenantId), userId, sessionId, runId);
+    }
+
+    /** 按可信复合范围查询单条有效消息。 */
+    public ChatMessageEntity queryValidMessage(String tenantId, String userId, String sessionId, String messageId) {
+        assertSessionAccess(tenantId, userId, sessionId, null);
+        return sessionRepository.queryValidMessage(blankToNull(tenantId), userId, sessionId, messageId);
     }
 
     /**

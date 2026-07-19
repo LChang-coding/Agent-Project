@@ -139,6 +139,12 @@ public interface IChatMessageDao {
                                          @Param("sessionId") String sessionId,
                                          @Param("runId") String runId);
 
+    /** 按可信复合范围查询单条有效消息。 */
+    ChatMessagePO queryValidMessage(@Param("tenantId") String tenantId,
+                                    @Param("userId") String userId,
+                                    @Param("sessionId") String sessionId,
+                                    @Param("messageId") String messageId);
+
     /**
      * 查询会话有效消息。
      */

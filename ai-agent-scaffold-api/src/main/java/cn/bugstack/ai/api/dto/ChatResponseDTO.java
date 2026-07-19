@@ -15,4 +15,8 @@ public class ChatResponseDTO {
 
     private Long contextRevision;
 
+    private String messageId;
+
+    private RagCitationValidationDTO citationValidation;
+
 }

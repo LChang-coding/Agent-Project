@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.context.model.ContextAssembleRequest;
 import cn.bugstack.ai.domain.context.model.ContextContribution;
 import cn.bugstack.ai.domain.context.model.ContextFragmentType;
 import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
+import cn.bugstack.ai.domain.context.model.RagContextEvidence;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalRequest;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalResult;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,17 @@ public class RagContextContributor implements ContextContributor {
         if (result.citations().isEmpty()) return List.of();
         String content = render(result);
         return List.of(ContextContribution.builder().type(ContextFragmentType.RAG).content(content)
-                .estimatedTokenCount(result.estimatedTokenCount()).source(result.retrievalId()).build());
+                .estimatedTokenCount(result.estimatedTokenCount()).source(result.retrievalId())
+                .ragEvidence(toEvidence(result)).build());
+    }
+
+    private RagContextEvidence toEvidence(RagRetrievalResult result) {
+        return new RagContextEvidence(result.retrievalId(), result.citations().stream()
+                .map(citation -> new RagContextEvidence.CitationReference(citation.citationId(),
+                        citation.knowledgeBaseId(), citation.documentId(), citation.documentName(),
+                        citation.versionId(), citation.documentVersion(), citation.generation(), citation.chunkId(),
+                        citation.contentHash(), citation.pageNumber(), citation.headingPath()))
+                .toList());
     }
 
     private String render(RagRetrievalResult result) {

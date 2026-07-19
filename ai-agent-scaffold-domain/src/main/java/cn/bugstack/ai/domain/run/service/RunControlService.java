@@ -249,12 +249,19 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
                                                           String content, String traceId) {
+        return completeWithAssistantMessage(tenantId, userId, runId, content, traceId, null);
+    }
+
+    /** 在运行锁内原子保存带安全元数据的助手消息并完成运行。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
+                                                           String content, String traceId, String metadata) {
         ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
             return null;
         }
         ChatMessageEntity message = blank(content) ? null : sessionDomain.appendAssistantMessage(run.getTenantId(),
-                run.getUserId(), run.getSessionId(), runId, content, traceId);
+                run.getUserId(), run.getSessionId(), runId, content, traceId, metadata);
         if (runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(), RunStatus.COMPLETED,
                 run.getVersion(), null, null, LocalDateTime.now()) != 1) {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "完成运行时状态已变化");

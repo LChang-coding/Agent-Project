@@ -184,8 +184,18 @@ public class SessionDomainTest {
 
         @Override
         public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId,
-                                                        String runId) {
+                                                         String runId) {
             return messages.stream().filter(message -> runId.equals(message.getRunId())).toList();
+        }
+
+        @Override
+        public ChatMessageEntity queryValidMessage(String tenantId, String userId, String sessionId,
+                                                   String messageId) {
+            return messages.stream().filter(message -> key(tenantId, userId, sessionId)
+                            .equals(key(message.getTenantId(), message.getUserId(), message.getSessionId()))
+                            && messageId.equals(message.getMessageId())
+                            && "active".equals(message.getValidityStatus()))
+                    .findFirst().orElse(null);
         }
 
         @Override

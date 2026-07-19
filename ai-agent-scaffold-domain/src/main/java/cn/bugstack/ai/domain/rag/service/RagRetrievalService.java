@@ -21,6 +21,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagFusionStrategy;
 import cn.bugstack.ai.domain.rag.model.valobj.RagRetrievalMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -242,7 +243,9 @@ public class RagRetrievalService {
             Optional<RagRetrievalProfileEntity> profile = repository.findRetrievalProfile(request.tenantId(),
                     binding.retrievalProfileId());
             boolean usable = knowledgeBase.isPresent() && knowledgeBase.get().status().searchable()
-                    && knowledgeBase.get().currentGeneration() > 0 && profile.isPresent();
+                    && knowledgeBase.get().currentGeneration() > 0 && profile.isPresent()
+                    && (knowledgeBase.get().visibility() != RagVisibility.PRIVATE
+                    || knowledgeBase.get().ownerUserId().equals(request.userId()));
             if (!usable) {
                 if (binding.required()) {
                     throw new AppException("RAG_REQUIRED_BINDING_UNAVAILABLE", "必需知识库或检索配置当前不可用");

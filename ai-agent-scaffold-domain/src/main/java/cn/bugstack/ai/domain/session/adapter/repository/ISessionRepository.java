@@ -65,6 +65,9 @@ public interface ISessionRepository {
      */
     List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId);
 
+    /** 按可信复合范围查询单条有效消息。 */
+    ChatMessageEntity queryValidMessage(String tenantId, String userId, String sessionId, String messageId);
+
     /**
      * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
      */

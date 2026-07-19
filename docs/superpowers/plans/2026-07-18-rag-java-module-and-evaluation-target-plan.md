@@ -1714,6 +1714,16 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 5. 测试覆盖无RAG、有效引用、伪造引用、跨retrieval引用、重复引用、流式分片、并发run隔离、会话落库和授权回源；先跑Java 17定向测试，再跑全部RAG/Agent相关回归及可行的真实流式/非流式黑盒。
 6. 完成后在本计划追加实际代码、首次失败、最终通过数、真实未测边界和证据路径；只暂存本切片文件，使用中文本地提交。`agent-eval`技能的可复现原则用于固定commit、确定性judge与重复试验，`benchmark`技能用于延迟/构建口径，不将其误称为RAG质量评测器。
 
+#### Agent/Workflow RAG最终回答引用闭环详细执行计划（执行前）
+
+1. Context层新增不可变的RAG证据契约，包含retrievalId以及citationId到knowledgeBase/document/version/generation/chunk/title/page/heading的映射；`ContextContribution -> ContextFragment -> ContextAssemblyResult`只传播最终被预算选中的证据，未注入模型的RAG片段不得进入allowlist。
+2. `ContextInjectionPlugin`以可信state中的tenant/user/session/run记录已注入证据；使用按完整scope键控、并发安全、有数量与TTL上限的运行证据仓，不使用“当前请求”全局变量。工作流并行节点允许在同一run下合并，但任何同citationId内容冲突、跨scope写入或超限必须失败，运行完成/失败/取消后清理。
+3. 新增纯Java引用校验器，只识别固定`cite_[0-9a-f]{24}`；从完整最终文本一次性提取并去重，输出`NO_RAG/RAG_AVAILABLE_UNUSED/VALID/INVALID_CITATIONS`、retrievalIds、allowed/used/invalid IDs。流式分片阶段不提前判断，模型伪造或其他retrieval的ID只进入invalid，不能获得可点击引用元数据。
+4. `RunControlService`完成运行时，在同一数据库事务把助手正文、引用验证metadata和COMPLETED状态一起提交；扩展现有`chat_message.metadata`领域映射，不增加重复表。失败/取消不得把部分答案标成有效引用；持久化成功后再清理内存证据。
+5. 非流式chat响应、流式终态`citation_validation`事件以及数据库会话历史统一返回同一验证摘要。新增强租户/用户/session/message/citation作用域的回源接口；只允许回源该消息`usedCitationIds`中的引用，并再次核对当前知识库/文档可见性、READY活动版本、generation和chunk归属，正文片段做长度上限。
+6. 同时补上检索绑定的用户私有知识库门禁：`PRIVATE`知识库只允许owner检索；租户可见库允许租户成员。测试覆盖预算未选中、无RAG、有效/伪造/跨retrieval/重复/分片引用、并发run与工作流节点合并、证据清理、metadata序列化/持久化、历史响应、SSE终态、跨租户/跨用户/非used/已删除或版本变化回源拒绝。
+7. 先跑引用领域与Context/Chat/Controller定向测试，再跑Java 17全部RAG、Agent、Context、Session、Run相关回归和全reactor打包；可行时在隔离本机应用与真实MySQL执行流式/非流式黑盒。所有首次失败、命令、数量、JAR hash与未测试边界追加到本计划后再中文提交。
+
 #### RAG召回失败案例可复算报告切片计划（执行前）
 
 1. 在benchmark模块增加纯离线命令，输入固定为SciFact `queries.jsonl + qrels.tsv + 本地Markdown语料 + document-map.jsonl + r11 run.jsonl`；校验四变体每个query恰一条且无error/degraded/empty，禁止从不完整run产出“最终失败案例”。
@@ -1775,3 +1785,19 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增终审测试覆盖阶段缺失、manifest哈希、qrels Gold不一致、重复映射、多binding、跨变体真实漂移、多Gold mixed和heading上限。Java 17定向测试：报告器8/8、检索服务19/19；最终全部RAG测试163/163，0 failure/error/skipped，八模块BUILD SUCCESS、Maven 13.611秒；benchmark独立`clean test package`为50/50，0 failure/error/skipped，5.739秒。
 - 正式报告使用同一CLI向两个全新位置生成，JSON与Markdown均通过字节级`cmp`。最终JSON SHA-256=`de5e829a559a39c9542d9518ed2ece1678ff5cda8d888143bbd74fc8150e5016`，Markdown=`0435f2038f133663ce26e279b9d223210f4ef1eef44854471847dd8bcf7c6c46`；原始10,608,078字节JSONL与manifest未改，SHA仍为`f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40`和`55af55561896d6da69b2c6bd485bc8bc1bb969828719e3e1848548d14e7f0171`。
 - 为避免并行clean/package对最终制品产生竞争，测试完成后又单独执行全reactor `mvn -DskipTests package`，BUILD SUCCESS、7.279秒；最终App JAR SHA-256=`3f30a826b4ba5df8c7c68336a0c29797111f9bc537b39e9cb3366044d91aa3df`，CLI JAR=`ed43c06e845d1fe49f277e32e549e8ddacdd5e0893367158eab9b5f26746ef14`。本轮没有重新发起远端检索，质量/延迟数值继续来自未修改的原始80条记录。
+
+#### Agent/Workflow RAG最终回答引用闭环执行结果
+
+- Context组装链新增不可变`RagContextEvidence`，只把经Token预算后真正选中并注入模型的retrieval/citation映射传递到插件；没被选中的候选不会进入最终引用白名单。
+- 新增按`tenantId + userId + sessionId + runId + invocationId`隔离的并发证据仓，具有30分钟TTL、2000运行scope、每scope 128次调用、每调用128条引用的硬上限；同retrieval/citation映射冲突fail closed，完成、失败、取消和流中断终态清理。
+- 工作流不再全局并集同一run的所有证据：每个DAG节点使用独立逻辑invocation，证据随祖先链传播，最终只合并terminal节点可达的祖先；无关兄弟分支的引用不会成为最终答案allowlist，自循环节点则累积各次实际注入证据。
+- 新增终答引用校验器，只识别边界完整的小写`cite_[0-9a-f]{24}`，稳定去重后输出`NO_RAG / RAG_AVAILABLE_UNUSED / VALID / INVALID_CITATIONS`。伪造、其他retrieval或映射冲突引用不会获得有效回源信息。
+- `RunControlService`在原有锁和Spring事务内同时保存assistant正文、`rag-citations/v1`版本化metadata并将run推进到COMPLETED；会话领域、Repository、MyBatis和Context历史的metadata双向映射已补齐，引用证据不再只依赖可丢失的内存审计表。
+- 非流式chat响应、流式完成后的唯一`citation_validation` SSE终态事件和数据库会话历史统一读取同一落库快照；响应包含messageId、retrievalIds、allowed/used/invalid IDs和已验证引用的文档/版本/分块/页码/标题路径。
+- 新增`GET /api/v1/sessions/{sessionId}/messages/{messageId}/citations/{citationId}`回源端点。SQL按tenant/user/session/message/active/deleted复合范围查询；回源时再次校验该citation必须是此assistant消息实际used引用，以及当前私有owner权限、知识库可检索状态、活动generation、READY文档/不可变版本、文档与知识库归属、chunk可见性/owner以及contentHash；仅返回最多1200字符正文，不返回对象键、凭据或向量。
+- 检索绑定同步补齐私有知识库owner门禁，非owner在Embedding/Qdrant调用前就以required binding unavailable拒绝，不产生外部模型或向量检索消耗。
+- 真实开发失败轨迹：首次定向测试使用系统Java 25，6个纯Java新测试通过，2个Mockito测试因Byte Buddy只支持到Java 24而error，切换Temurin 17后8/8通过；`SessionController`构造器扩展后首次测试编译2处失败，修正fixture后通过；私有库门禁测试一度因漏导入`RagVisibility`及Eclipse增量产物出现18个error，补导入并`clean`后33/33、扩展39/39通过。
+- 全reactor `mvn test`确实执行过：355项中0 failure、14 error，均为既有需要外部模型/配置的样例与集成测试，不声称全套绿色。一次使用旧Surefire的`*Rag*`模式还误执行6个内部`Fixture`类，188项中出现6个initialization error；改用从实际`*Rag*Test.java/*RAG*Test.java`文件生成精确类名清单，不把测试发现器伪错误当业务回归。
+- 最终Java 17精确门禁覆盖全部RAG测试文件以及Mapper、Session Controller/Domain、Run Control和SSE Controller，共41个报告、190/190通过，0 failure/error/skipped。最后一次干净测试后的包装脚本曾因zsh把`status`作为只读变量而返回1，但该次Maven本身190项全通过；改为`rc`后同一精确清单再跑一次，命令退出0且仍为190/190。
+- 最终全reactor Java 17 `mvn -DskipTests package`退出0；App JAR SHA-256=`d8e5efd0c9c768bd8267c701ef67164aef050f77c921e6053bf8730111ead1aa`，benchmark CLI JAR=`0c57f796a1b8b0f0e5bc81bbb76dd6dc66e83b8142149117ceead1b4fbbb4c34`。`git diff --check`对本切片通过；既有运行日志和用户未跟踪目录未修改、未暂存。
+- 本切片还没有在隔离的真实LLM + MySQL应用上执行Agent/Workflow流式与非流式黑盒，因此不把Controller/Domain测试写成端到端已证明；该项与PDF/DOCX/Markdown真实摄取、前端引用交互一起进入下一验收切片。

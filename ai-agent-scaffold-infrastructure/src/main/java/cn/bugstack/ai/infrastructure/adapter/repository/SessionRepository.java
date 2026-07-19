@@ -111,6 +111,11 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
+    public ChatMessageEntity queryValidMessage(String tenantId, String userId, String sessionId, String messageId) {
+        return toMessageEntity(chatMessageDao.queryValidMessage(tenantId, userId, sessionId, messageId));
+    }
+
+    @Override
     public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
         return chatMessageDao.queryValidMessages(tenantId, userId, sessionId).stream()
                 .map(this::toMessageEntity).collect(Collectors.toList());
@@ -193,6 +198,7 @@ public class SessionRepository implements ISessionRepository {
                 .sequenceNo(message.getSequenceNo())
                 .parentMessageId(message.getParentMessageId())
                 .traceId(message.getTraceId())
+                .metadata(message.getMetadata())
                 .build();
     }
 
@@ -204,6 +210,7 @@ public class SessionRepository implements ISessionRepository {
                 .role(message.getRole()).contentType(message.getContentType()).content(message.getContent())
                 .estimatedTokenCount(message.getEstimatedTokenCount()).sequenceNo(message.getSequenceNo())
                 .parentMessageId(message.getParentMessageId()).traceId(message.getTraceId())
+                .metadata(message.getMetadata())
                 .createTime(message.getCreateTime()).build();
     }
 }

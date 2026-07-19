@@ -3,6 +3,8 @@ package cn.bugstack.ai.domain.context.model;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 上下文组装结果。
  * <p>包含可注入模型请求的文本和观测字段。</p>
@@ -24,4 +26,5 @@ public class ContextAssemblyResult {
     private Integer ragTokens;
     private Integer effectiveFromSequence;
     private Integer effectiveToSequence;
+    private List<RagContextEvidence> ragEvidence;
 }

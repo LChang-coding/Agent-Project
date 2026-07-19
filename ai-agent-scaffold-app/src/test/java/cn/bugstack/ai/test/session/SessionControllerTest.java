@@ -5,6 +5,9 @@ import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.session.service.SessionLifecycleService;
+import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.trigger.http.SessionController;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
@@ -37,7 +40,8 @@ public class SessionControllerTest {
     public void shouldListSessionsWithTrustedTenantIdentity() {
         SessionDomain sessionDomain = mock(SessionDomain.class);
         SessionLifecycleService lifecycleService = mock(SessionLifecycleService.class);
-        SessionController controller = new SessionController(sessionDomain, lifecycleService);
+        SessionController controller = new SessionController(sessionDomain, lifecycleService,
+                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)));
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         LocalDateTime now = LocalDateTime.of(2026, 7, 15, 20, 0);
         when(sessionDomain.querySessions("tenant-1", "user-1", null, null, 31)).thenReturn(List.of(
@@ -59,7 +63,8 @@ public class SessionControllerTest {
     public void shouldDeleteSessionWithTrustedTenantIdentity() {
         SessionDomain sessionDomain = mock(SessionDomain.class);
         SessionLifecycleService lifecycleService = mock(SessionLifecycleService.class);
-        SessionController controller = new SessionController(sessionDomain, lifecycleService);
+        SessionController controller = new SessionController(sessionDomain, lifecycleService,
+                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)));
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         when(lifecycleService.delete("tenant-1", "user-1", "session-1")).thenReturn(5L);
 

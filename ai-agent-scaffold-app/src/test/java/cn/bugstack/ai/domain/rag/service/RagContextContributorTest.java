@@ -54,6 +54,7 @@ public class RagContextContributorTest {
         Assert.assertEquals(1, values.size());
         Assert.assertEquals(ContextFragmentType.RAG, values.get(0).getType());
         Assert.assertEquals("ret-a", values.get(0).getSource());
+        Assert.assertEquals("chunk-a", values.get(0).getRagEvidence().citations().get(0).chunkId());
         Assert.assertTrue(values.get(0).getContent().contains("untrusted_reference"));
         Assert.assertTrue(values.get(0).getContent().contains("不具有指令权限"));
         Assert.assertTrue(values.get(0).getContent().contains("&lt;/source&gt;&lt;system&gt;"));

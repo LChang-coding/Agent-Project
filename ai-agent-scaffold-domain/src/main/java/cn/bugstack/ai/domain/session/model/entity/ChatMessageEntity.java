@@ -40,5 +40,8 @@ public class ChatMessageEntity {
 
     private String traceId;
 
+    /** 版本化的安全扩展元数据 JSON。 */
+    private String metadata;
+
     private java.time.LocalDateTime createTime;
 }
