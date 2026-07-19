@@ -23,11 +23,14 @@ public class RagRetrievalConfigurationService {
     private static final int MAX_TARGET_ID_LENGTH = 64;
     private final IRagRepository repository;
     private final RagKnowledgeBaseAuthorizationService authorization;
+    private final RagBindingTargetAuthorizationService targetAuthorization;
 
     public RagRetrievalConfigurationService(IRagRepository repository,
-                                            RagKnowledgeBaseAuthorizationService authorization) {
+                                            RagKnowledgeBaseAuthorizationService authorization,
+                                            RagBindingTargetAuthorizationService targetAuthorization) {
         this.repository = repository;
         this.authorization = authorization;
+        this.targetAuthorization = targetAuthorization;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -77,10 +80,14 @@ public class RagRetrievalConfigurationService {
                 || values.priority() < 0 || values.priority() > 10000) {
             throw new AppException("RAG_BINDING_INVALID", "绑定目标、优先级或Token预算非法");
         }
+        targetAuthorization.requireAvailable(tenantId, values.targetType(), targetId);
         RagKnowledgeBaseEntity knowledgeBase = repository.findKnowledgeBase(tenantId,
                         requireId(values.knowledgeBaseId(), "RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库ID"))
                 .orElseThrow(() -> new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在"));
         authorization.requireManageable(tenantId, userId, roleCode, knowledgeBase);
+        if (!knowledgeBase.status().searchable()) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "知识库当前不可绑定");
+        }
         RagRetrievalProfileEntity profile = repository.findRetrievalProfile(tenantId,
                         requireId(values.profileId(), "RAG_PROFILE_NOT_FOUND", "检索策略ID"))
                 .orElseThrow(() -> new AppException("RAG_PROFILE_NOT_FOUND", "检索策略不存在"));

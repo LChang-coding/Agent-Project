@@ -6,6 +6,7 @@ import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
 import cn.bugstack.ai.domain.rag.service.RagKnowledgeBaseAuthorizationService;
+import cn.bugstack.ai.domain.rag.service.RagBindingTargetAuthorizationService;
 import cn.bugstack.ai.domain.rag.service.RagRetrievalConfigurationService;
 import cn.bugstack.ai.trigger.http.RagRetrievalConfigurationController;
 import cn.bugstack.ai.types.context.TenantContext;
@@ -87,7 +88,7 @@ public class RagRetrievalConfigurationControllerTest {
 
     private RagRetrievalConfigurationController controller(IRagRepository repository) {
         return new RagRetrievalConfigurationController(new RagRetrievalConfigurationService(repository,
-                new RagKnowledgeBaseAuthorizationService()));
+                new RagKnowledgeBaseAuthorizationService(), mock(RagBindingTargetAuthorizationService.class)));
     }
 
     private RagRetrievalProfileRequestDTO request() {

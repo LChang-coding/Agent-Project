@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagRetrievalMode;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.domain.rag.service.RagKnowledgeBaseAuthorizationService;
+import cn.bugstack.ai.domain.rag.service.RagBindingTargetAuthorizationService;
 import cn.bugstack.ai.domain.rag.service.RagRetrievalConfigurationService;
 import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
@@ -31,12 +32,15 @@ import static org.mockito.Mockito.when;
 public class RagRetrievalConfigurationServiceTest {
 
     private IRagRepository repository;
+    private RagBindingTargetAuthorizationService targetAuthorization;
     private RagRetrievalConfigurationService service;
 
     @Before
     public void setUp() {
         repository = Mockito.mock(IRagRepository.class);
-        service = new RagRetrievalConfigurationService(repository, new RagKnowledgeBaseAuthorizationService());
+        targetAuthorization = Mockito.mock(RagBindingTargetAuthorizationService.class);
+        service = new RagRetrievalConfigurationService(repository, new RagKnowledgeBaseAuthorizationService(),
+                targetAuthorization);
     }
 
     @Test
@@ -84,6 +88,7 @@ public class RagRetrievalConfigurationServiceTest {
         Assert.assertEquals("tenant-a", binding.tenantId());
         Assert.assertTrue(binding.bindingId().startsWith("binding_"));
         Assert.assertEquals(512, binding.maxTokens());
+        verify(targetAuthorization).requireAvailable("tenant-a", RagBindingTargetType.AGENT, "agent-a");
     }
 
     @Test
@@ -95,6 +100,19 @@ public class RagRetrievalConfigurationServiceTest {
                         RagBindingTargetType.AGENT, "agent-a", "kb-a", "profile-a", false, 512, 0)));
 
         Assert.assertEquals("RAG_KNOWLEDGE_BASE_NOT_FOUND", error.getCode());
+        verify(repository, never()).insertBinding(any(), any());
+    }
+
+    @Test
+    public void shouldRejectUnavailableKnowledgeBaseBeforeBindingInsert() {
+        when(repository.findKnowledgeBase("tenant-a", "kb-a"))
+                .thenReturn(Optional.of(knowledgeBase("tenant-a", RagKnowledgeBaseStatus.DELETING)));
+
+        AppException error = Assert.assertThrows(AppException.class, () -> service.createBinding(
+                "tenant-a", "owner-a", "owner", new RagRetrievalConfigurationService.BindingValues(
+                        RagBindingTargetType.AGENT, "agent-a", "kb-a", "profile-a", false, 512, 0)));
+
+        Assert.assertEquals("RAG_KNOWLEDGE_BASE_UNAVAILABLE", error.getCode());
         verify(repository, never()).insertBinding(any(), any());
     }
 
@@ -126,7 +144,11 @@ public class RagRetrievalConfigurationServiceTest {
     }
 
     private RagKnowledgeBaseEntity knowledgeBase(String tenantId) {
+        return knowledgeBase(tenantId, RagKnowledgeBaseStatus.ACTIVE);
+    }
+
+    private RagKnowledgeBaseEntity knowledgeBase(String tenantId, RagKnowledgeBaseStatus status) {
         return new RagKnowledgeBaseEntity(tenantId, "owner-a", "kb-a", "企业知识库", null,
-                RagVisibility.TENANT, RagKnowledgeBaseStatus.ACTIVE, null, 768, "alias-a", 3, 1);
+                RagVisibility.TENANT, status, null, 768, "alias-a", 3, 1);
     }
 }

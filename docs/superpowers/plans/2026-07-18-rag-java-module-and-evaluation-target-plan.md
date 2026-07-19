@@ -1941,3 +1941,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 资源采样为38个远端、82个Java样本；峰值CPU Docling 426.08%、Reranker 414.53%、Embedding 407.94%、Qdrant 66.34%，Java 67.2%；Java RSS峰值758592KiB、线程87。该小样本仍只用于本轮观测，不替代r6正式性能口径；PDF Docling 52.368s占其62.539s摄取约83.7%，解析仍是直接可见主阶段。
 - 证据采集器首次因系统Python缺少`minio`包失败，随后仅在`/tmp`创建隔离venv并固定`minio=7.2.16/requests=2.32.4`重跑成功，没有修改系统Python。故意把Emergency金标从2篡改为3时采集器退出4，并同时把数据库章节、citation和问题证据三项判为false，证明门禁不是固定返回成功。
 - 最终报告生成器已把r4作为独立页码证据纳入总账，同时保留r6原始性能口径；r1启动字段错误、r2 DOCX空页协议、r3标题栈不匹配、r4恢复的因果链及三份对应源文档均显式展示。两个全新目录独立生成后JSON/Markdown字节级`cmp`一致；最终总账SHA-256=`30cf5622c69b4bab52985891044cbe6ad23ffd31984d33e67c4599a9287b75ff`，报告=`13bf4807fece731dc42db0c99760edab581f04573aab52f0e5aa8d315dab9046`。
+
+#### RAG生命周期、手工恢复与绑定目标权限闭环计划（执行前）
+
+1. 先以当前commit `a393d5a`审计知识库Controller/Service/Repository/MyBatis、文档任务状态机、绑定配置与Agent/Workflow租户资源查询；列出目前已经实现的API、状态迁移、revision/fencing和前端调用，禁止根据早期审计直接假设代码未变。
+2. 知识库编辑只允许租户管理员在owner/tenant scope内修改可变字段，名称冲突和并发revision冲突返回稳定业务码；删除采用显式生命周期而非直接物理删除，必须阻止新上传/检索绑定，并协调活动文档、摄取/删除任务、Qdrant/MinIO清理与失败重试。若一次切片无法安全完成级联删除，则API保持不可开放并明确剩余边界，不能只把列表隐藏当删除成功。
+3. 为失败/死信摄取任务提供受权限控制的手工重试：区分INGEST/REBUILD/DELETE允许状态，创建新attempt或CAS推进同一任务必须与现有幂等键、maxAttempts、nextAttemptAt、cancel/revision/fencing一致；READY活动版本不能因旧任务重试被回滚，取消任务不能被重试复活。
+4. 绑定创建/更新在写库前验证targetType对应的Agent/Workflow真实存在、属于同一租户且当前可用，并验证知识库owner/tenant可检索状态；授权在外部Embedding/Qdrant调用前完成。数据库唯一约束继续作为竞态兜底，不能只依赖前端下拉框。
+5. 补Controller、领域、Repository/Mapper和前端测试，覆盖跨租户、非管理员、不存在/停用target、删除中知识库、revision冲突、重复重试、取消/终态、清理失败和旧任务围栏；Java 17跑定向与全部RAG测试，前端跑生产构建。
+6. 能在隔离中间件执行的生命周期路径用全新租户做真实HTTP/MySQL/Qdrant/MinIO黑盒；不能安全证明的级联路径保留为未测。所有首次失败、修复、命令、测试数、真实证据与SHA追加到本节，重大闭环中文本地提交后再更新最终报告。
+
+#### 绑定目标真实性与可用性阶段结果
+
+- 当前代码审计确认绑定创建原先只校验targetId格式、知识库和Profile，任意不存在的Agent/Workflow字符串也能入库；知识库处于DELETING/DISABLED时同样可创建新绑定。该问题发生在配置写入阶段，虽然后续检索会检查知识库可用性，仍会留下不可执行配置和错误的管理员预期。
+- 新增独立`RagBindingTargetAuthorizationService`：Agent必须存在于静态Agent事实源且未被当前租户禁用；Workflow必须通过`tenantId + workflowId`查询命中、实体租户再次一致、状态为published且publishedVersion大于0。不存在/跨租户统一返回`RAG_BINDING_TARGET_NOT_FOUND`，禁用/草稿统一返回`RAG_BINDING_TARGET_UNAVAILABLE`，避免泄露其他租户资源。
+- 绑定服务在写库前调用目标校验，并要求知识库状态`searchable()`；DELETING/DISABLED/INDEXING/DELETED返回`RAG_KNOWLEDGE_BASE_UNAVAILABLE`。权限门禁仍先要求可信owner/admin，数据库唯一约束继续作为并发冲突兜底。
+- 新增Agent存在/禁用、Workflow同租户已发布、跨租户、草稿和知识库删除中测试；定向3类测试15/15通过。Java 17按真实文件名执行全部RAG测试181/181通过，0 failure/error/skipped，六模块BUILD SUCCESS、总耗时3.134秒。
+- 本阶段只闭环“创建绑定”的目标真实性；知识库编辑/删除、摄取任务手工重试和已存在绑定在目标随后停用时的管理提示仍属于本计划后续项，不能把本阶段写成完整生命周期完成。
