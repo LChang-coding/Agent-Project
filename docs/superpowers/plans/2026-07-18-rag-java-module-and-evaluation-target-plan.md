@@ -1686,3 +1686,21 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 最终权威干净门禁执行`*Rag*Test,MinioObjectStorageServiceTest`：172/172通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗时10.567秒。其中全部RAG测试160项，对象存储测试12项；未用172冒充纯RAG测试数。
 - 前端最终生产构建再次通过：1916 modules transformed，1.37秒；RAG页面JS 35.50kB（gzip 11.53kB），CSS 21.30kB（gzip 4.43kB）。最终App JAR SHA-256为`8d8424b41e019128721977243c6cf1e32a6f3c99ab50d4a71727cd1aebdaf2e3`。
 - 本轮没有完成真实MySQL上的并发DELETE、事务中途失败回滚和旧/新fence竞态集成测试；现有Repository测试证明领域输入、调用顺序和CAS失败分支，但不能证明Spring事务代理与InnoDB锁的真实行为。这一项继续作为上线前证据缺口，不写成“已通过”。真实浏览器删除E2E同样尚未完成。
+
+#### RAG删除真实MySQL与黑盒验证计划（执行前）
+
+1. 先按`codex.md`和现有dev配置确认本机数据库、迁移方式和正在运行的应用；使用随机命名的隔离schema/租户/知识库，不触碰现有SciFact评测租户和运行中任务，也不向服务器上传Java项目。
+2. 在真实MySQL/InnoDB上验证：删除登记中途版本CAS或Outbox失败时整体回滚；两个并发首次DELETE只产生一个任务/Outbox；最终收口task fence CAS失败时版本、文档和chunk purge全部回滚；旧fence不能覆盖新Worker；`FAILED/DEAD -> PENDING`确实清空`finished_at`。
+3. 优先复用现有Spring/MyBatis基础设施写可重复集成测试；若环境无法隔离或缺少依赖，只执行无破坏的SQL探测并明确证据不足，不用Mockito结果替代真实事务结论。
+4. 在不停止现有评测应用、不并发启动第二个消费Worker的前提下，用新JAR和独立端口/禁用Worker配置完成健康、鉴权、删除API参数与页面加载黑盒；真正的异步删除E2E必须在单Worker隔离实例和专用文档上执行。
+5. 记录环境、schema、命令、行数、并发线程、故障注入点、通过/失败和清理结果；测试产生的数据与临时进程全部回收，完成后追加执行结果并以中文提交。
+
+#### RAG删除真实MySQL与黑盒验证阶段结果
+
+- 环境为最终JAR `8d8424b4…daf2e3`、Java 17、本机8093隔离进程、SSH TLS隧道`127.0.0.1:13306`、MySQL 8.0.46、InnoDB `REPEATABLE-READ`。应用账号只有既有`ai_agent_scaffold`库权限，不能创建隔离schema，因此改用随机tenant/user/kb/document/version并定向清理；未向服务器上传Java项目。
+- 第一次以`AI_RAG_ENABLED=true`启动被`RagProperties`认证门禁拒绝，原因是没有为Embedding/Reranker/Docling提供认证Key；没有填假Key绕过。第二次以RAG总开关false且Worker、Outbox发布、Kafka Listener、XXL执行器和Nacos全部禁用启动8093成功；该实例只验证本地控制面，不会扫描或消费现有任务。
+- 通过真实注册/登录和知识库API创建隔离owner租户；随后只为测试准备直接插入一份READY文档、一个READY版本和一条带可识别正文的chunk。两个并发HTTP DELETE均返回业务码`0000`和`pending`，MySQL最终只有1条`operation=delete`任务和1条Outbox，二者taskId相同；文档、版本都从revision 1原子变为`deleting/revision 2`。这是真实Spring事务/MyBatis/InnoDB对“并发首次受理只登记一次”的黑盒证据。
+- 删除登记后chunk仍为1行且测试正文仍存在，这是正确的阶段边界：HTTP事务只建立墓碑和任务，不能在请求线程提前删正文；物理清理由Worker后续执行。本轮因禁用Worker避免影响其他待处理任务，没有把该状态误判成完整删除成功。
+- 将该隔离DELETE任务真实改为DEAD、`attempt_count=3`并写入旧`finished_at`后，用过期`expectedRevision=0`重复DELETE；API返回`0000/pending`，数据库变为`pending / attempt_count=0 / finished_at=NULL / row_version=1`，证明幂等恢复忽略旧文档revision且Mapper确实清理旧终态时间。
+- 测试结束定向删除Outbox、task、chunk、version、binding、profile、KB、user_secret、tenant_user、user_account和tenant；第一次聚合残留核对为1，发现清理SQL漏掉`rag_document`，补删后该表残留为0，而其余九类表第一次已为0。8093随后优雅关闭；8091/8092未停止，临时Token和随机密码已从交互shell变量清除。
+- 本阶段仍未证明三项：登记事务在中途version CAS/Outbox失败时真实回滚；最终收口task stale-fence时version/document/chunk purge真实回滚；单Worker执行Qdrant、chunk、MinIO全链后完成删除。也未执行浏览器UI删除E2E。原因是当前共享库存在其他评测任务，启用新Worker会越过本次隔离范围；这些项目继续标为“未测试/证据不足”，不能用并发受理结果代替。
