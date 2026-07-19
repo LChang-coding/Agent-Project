@@ -246,6 +246,23 @@ public class RagProperties {
         @Max(16)
         private int requestBatchSize = 3;
 
+        /** 单次HTTP尝试时限；整次重排仍受通用timeout总deadline约束。 */
+        @NotNull
+        private Duration requestTimeout = Duration.ofSeconds(10);
+
+        /** 瞬态网络、超时或网关错误后的最大重试次数，不含首次请求。 */
+        @Min(0)
+        @Max(5)
+        private int maxRetries = 2;
+
+        /** 首次重试退避时长。 */
+        @NotNull
+        private Duration retryInitialBackoff = Duration.ofMillis(100);
+
+        /** 指数退避时长上限。 */
+        @NotNull
+        private Duration retryMaxBackoff = Duration.ofSeconds(1);
+
         /** 创建 Reranker 默认配置。 */
         public Reranker() {
             setEndpoint(URI.create("http://127.0.0.1:8082"));
@@ -259,11 +276,23 @@ public class RagProperties {
             return requestBatchSize <= batchSize;
         }
 
+        /** 校验单次请求、总deadline和重试退避边界。 */
+        @AssertTrue(message = "Reranker单次时限和退避必须为正、单次时限不得超过总时限且退避上限不小于初始值")
+        public boolean isRetryBoundaryValid() {
+            return requestTimeout != null && !requestTimeout.isZero() && !requestTimeout.isNegative()
+                    && getTimeout() != null && requestTimeout.compareTo(getTimeout()) <= 0
+                    && retryInitialBackoff != null && !retryInitialBackoff.isZero()
+                    && !retryInitialBackoff.isNegative() && retryMaxBackoff != null
+                    && !retryMaxBackoff.isZero() && !retryMaxBackoff.isNegative()
+                    && retryMaxBackoff.compareTo(retryInitialBackoff) >= 0;
+        }
+
         /** 输出脱敏摘要；无参数；返回不含密钥原文的 Reranker 配置。 */
         @Override
         public String toString() {
             return summary("Reranker") + ", modelRevision='" + modelRevision
-                    + "', batchSize=" + batchSize + ", requestBatchSize=" + requestBatchSize + '}';
+                    + "', batchSize=" + batchSize + ", requestBatchSize=" + requestBatchSize
+                    + ", requestTimeout=" + requestTimeout + ", maxRetries=" + maxRetries + '}';
         }
     }
 

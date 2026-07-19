@@ -86,6 +86,10 @@ public class RagPropertiesTest {
                 Map.entry("ai.rag.qdrant.retry-initial-backoff", "75ms"),
                 Map.entry("ai.rag.qdrant.retry-max-backoff", "800ms"),
                 Map.entry("ai.rag.qdrant.total-timeout", "12s"),
+                Map.entry("ai.rag.reranker.request-timeout", "3s"),
+                Map.entry("ai.rag.reranker.max-retries", "4"),
+                Map.entry("ai.rag.reranker.retry-initial-backoff", "50ms"),
+                Map.entry("ai.rag.reranker.retry-max-backoff", "500ms"),
                 Map.entry("ai.rag.kafka.listener-enabled", "true")
         ));
 
@@ -105,6 +109,10 @@ public class RagPropertiesTest {
         Assert.assertEquals(Duration.ofMillis(75), properties.getQdrant().getRetryInitialBackoff());
         Assert.assertEquals(Duration.ofMillis(800), properties.getQdrant().getRetryMaxBackoff());
         Assert.assertEquals(Duration.ofSeconds(12), properties.getQdrant().getTotalTimeout());
+        Assert.assertEquals(Duration.ofSeconds(3), properties.getReranker().getRequestTimeout());
+        Assert.assertEquals(4, properties.getReranker().getMaxRetries());
+        Assert.assertEquals(Duration.ofMillis(50), properties.getReranker().getRetryInitialBackoff());
+        Assert.assertEquals(Duration.ofMillis(500), properties.getReranker().getRetryMaxBackoff());
         Assert.assertTrue(properties.getKafka().isListenerEnabled());
     }
 
@@ -150,6 +158,24 @@ public class RagPropertiesTest {
 
         Assert.assertTrue(violations.stream().anyMatch(violation ->
                 "reranker.requestBatchWithinCandidateLimit".equals(violation.getPropertyPath().toString())));
+    }
+
+    /** 校验重排单次时限、总deadline和退避边界。 */
+    @Test
+    public void shouldRejectInvalidRerankerRetryBoundaries() {
+        RagProperties properties = enabledProperties();
+        properties.getReranker().setTimeout(Duration.ofSeconds(2));
+        properties.getReranker().setRequestTimeout(Duration.ofSeconds(3));
+        properties.getReranker().setMaxRetries(6);
+        properties.getReranker().setRetryInitialBackoff(Duration.ofSeconds(2));
+        properties.getReranker().setRetryMaxBackoff(Duration.ofSeconds(1));
+
+        Set<ConstraintViolation<RagProperties>> violations = validator.validate(properties);
+
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "reranker.maxRetries".equals(violation.getPropertyPath().toString())));
+        Assert.assertTrue(violations.stream().anyMatch(violation ->
+                "reranker.retryBoundaryValid".equals(violation.getPropertyPath().toString())));
     }
 
     /** 校验Qdrant有限重试与总时限的联合边界。 */

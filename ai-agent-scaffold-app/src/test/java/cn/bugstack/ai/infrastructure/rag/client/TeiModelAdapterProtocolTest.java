@@ -16,10 +16,15 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -63,6 +68,10 @@ public class TeiModelAdapterProtocolTest {
         properties.getEmbedding().setModelRevision("embedding-revision");
         properties.getReranker().setBatchSize(3);
         properties.getReranker().setRequestBatchSize(3);
+        properties.getReranker().setRequestTimeout(Duration.ofSeconds(1));
+        properties.getReranker().setMaxRetries(0);
+        properties.getReranker().setRetryInitialBackoff(Duration.ofMillis(1));
+        properties.getReranker().setRetryMaxBackoff(Duration.ofMillis(2));
         properties.getReranker().setModelRevision("reranker-revision");
         embeddingAdapter = new TeiEmbeddingAdapter(properties, objectMapper);
         rerankerAdapter = new TeiRerankerAdapter(properties, objectMapper);
@@ -240,9 +249,51 @@ public class TeiModelAdapterProtocolTest {
         AppException exception = expectAppException(() -> rerankerAdapter.rerank(
                 new RerankCommand("tenant", "trace", "query", candidates, 2)));
 
-        Assert.assertEquals("RAG_RERANK_HTTP_ERROR", exception.getCode());
+        Assert.assertEquals("RAG_RERANK_TRANSIENT_HTTP_ERROR", exception.getCode());
         Assert.assertEquals(2, requests.size());
         assertSensitiveValuesHidden(exception);
+    }
+
+    @Test
+    public void rerankerShouldRetryTransientStatusAndBoundExhaustion() {
+        properties.getReranker().setMaxRetries(2);
+        responseStatuses.addAll(List.of(503, 200));
+        queueJson("{}");
+        queueJson("[{\"index\":0,\"score\":0.9},{\"index\":1,\"score\":0.8},{\"index\":2,\"score\":0.7}]");
+
+        RerankResult result = rerankerAdapter.rerank(rerankCommand(1));
+
+        Assert.assertEquals("chunk-1", result.candidates().get(0).chunkId());
+        Assert.assertEquals(2, requests.size());
+
+        requests.clear();
+        status.set(503);
+        respondJson("{}");
+        AppException exhausted = expectRerankFailure();
+        Assert.assertEquals("RAG_RERANK_TRANSIENT_HTTP_ERROR", exhausted.getCode());
+        Assert.assertEquals(3, requests.size());
+    }
+
+    @Test
+    public void rerankerShouldRetryHttpTimeoutAndThenSucceed() throws Exception {
+        properties.getReranker().setMaxRetries(1);
+        HttpClient httpClient = Mockito.mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<java.io.InputStream> response = Mockito.mock(HttpResponse.class);
+        Mockito.when(response.statusCode()).thenReturn(200);
+        Mockito.when(response.body()).thenReturn(new ByteArrayInputStream(
+                "[{\"index\":0,\"score\":0.9},{\"index\":1,\"score\":0.8},{\"index\":2,\"score\":0.7}]"
+                        .getBytes(StandardCharsets.UTF_8)));
+        Mockito.when(httpClient.send(Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenThrow(new HttpTimeoutException("timeout"))
+                .thenReturn(response);
+        TeiRerankerAdapter adapter = new TeiRerankerAdapter(properties, objectMapper, httpClient);
+
+        RerankResult result = adapter.rerank(rerankCommand(1));
+
+        Assert.assertEquals("chunk-1", result.candidates().get(0).chunkId());
+        Mockito.verify(httpClient, Mockito.times(2)).send(
+                Mockito.any(), Mockito.<HttpResponse.BodyHandler<java.io.InputStream>>any());
     }
 
     @Test

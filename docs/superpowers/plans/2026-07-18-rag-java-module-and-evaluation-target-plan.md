@@ -996,3 +996,34 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 扩大到33个精确RAG测试类后163/163通过，0 failure/error/skipped，BUILD SUCCESS 3.857秒；本轮文件 `git diff --check` 无问题。随后旧PID 24955已通过TERM优雅退出，Java 17六模块打包BUILD SUCCESS 7.142秒，新JAR由隔离启动脚本在8092启动，PID=41109，Hikari连接成功。
 - 使用既有SciFact索引对失败点queryId=880做新版本真实门禁：Dense 10/10、Sparse 10/10均为业务码0000、`degraded=false`、10条引用。Dense首请求冷启动pipeline=11777ms，后续为2044～3065ms；Sparse为1695～2924ms。20次均未再出现Qdrant错误，满足重新启动完整复评分的前置条件。
 - 门禁只对隔离benchmark tenant的唯一active password记录执行一次条件密码更新，影响恰好1行；随机密码和JWT仅存在进程变量，未写入文件、日志、manifest或Git。探测输出只记录variant、序号、业务码、降级状态、引用数和耗时，不记录查询正文或凭据。
+
+###### SciFact 完整复评分恢复计划（执行前）
+
+1. 以提交 `3ab790f` 和新空目录 `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-3ab790f` 启动只读复评分，复用已完成且验证过7548向量块的四个既有target，不重新上传、摄取或修改profile。
+2. 只对隔离benchmark tenant的唯一active password记录再次做影响1行的随机密码条件更新，登录后把JWT、用户名和密码仅放入评测进程环境，以现有401单次刷新机制覆盖长时运行；凭据不写入run产物或计划。
+3. warmup固定10个查询×4变体。监控 `warmup.jsonl`，任一 `error`、`degraded=true`、空引用或重复variant/query立即停止；通过后才允许300×4 measured继续。
+4. 完成后校验 `run.jsonl` 恰有1200行、300个query×4唯一组合、0错误、0降级、0空引用；再核验manifest中的prepared/targets hash与当前提交，并生成Recall@1/5/10、Precision@10、MRR@10、nDCG@10、MAP@10、Success@1/5/10和各阶段P50/P95/P99。
+5. 评测期间保留本机JVM与远端中间件采样；若因基础设施失败中断，保留原目录并记录真实失败，不跨run拼接或外推指标。MySQL迁移不与本轮评分并行实施，避免改变实验环境。
+
+###### Reranker 间歇降级追加诊断计划（执行前）
+
+- 新run在第7条warmup首次观察到 `hybrid_rrf_rerank` 降级，停止信号发出时已落9条；0请求错误、0空引用、1次 `rerank_fallback`，没有measured文件。该run永久保留为失败证据。
+- 先用正确API Key直连3候选合成请求并连续探测，区分远端再次过载/超时与Java响应校验问题；同时从应用日志按traceId定位，但不输出Key或查询正文。
+- 若远端3候选也失败，在SSH仍不可用时不盲目重启容器；评估进一步降低 `requestBatchSize` 至1是否能以延迟换稳定性，并先做单query连续真实门禁。若远端成功而Java降级，则为安全日志增加稳定错误码并复现具体客户端分支。
+- 任何修复仍需先追加计划、补单元测试、跑精确RAG回归、打包、真实连续门禁和中文提交；完整复评分重新使用新目录，不复用本次9条warmup。
+
+###### Reranker 单批有限重试实现计划（执行前）
+
+- 正确Key直连合成探测结果：3候选前3次200/0.235～0.522秒，第4、5次均45秒0字节超时；1候选前3次200/0.204～0.300秒，第4次同样45秒0字节超时，第5次200/0.322秒。由此排除“仅候选数超过容量”，确认服务存在与批次大小无关的间歇请求挂住；探测超时后的body标签来自上次临时文件，不作为响应内容证据，只采信curl状态000和0字节超时。
+- `RagProperties.Reranker` 增加单次请求时限、最多重试次数和退避配置；现有 `timeout` 继续作为整次业务重排总deadline。默认单次请求10秒、最多2次重试、退避100ms～1s，总deadline仍30秒，并校验单次时限不大于总时限。
+- 每个3候选子批独立在剩余总deadline内重试；仅连接/读写IO、HTTP 429/502/503/504可重试，401、其他HTTP状态、数量/index/score/JSON错误立即失败。Semaphore仍覆盖整个业务重排，避免重试放大并发；退避在同一deadline内完成。
+- 协议测试新增单批超时/IO后成功、503后成功、401不重试、持续503有界耗尽及多批共享deadline的边界；配置测试覆盖绑定与非法组合。完成精确RAG回归、Java 17打包、连续真实Rerank门禁后再提交和启动新run。
+
+###### Reranker 单批有限重试实现与验收结果
+
+- `RagProperties.Reranker` 已增加 `requestTimeout=10s`、`maxRetries=2`、100ms～1s退避；原 `timeout` 保持整个业务重排总deadline，当前评测环境为30秒。配置强制单次时限不大于总时限、重试不超过5次、退避均为正且上限不小于初始值；四个新环境变量已进入 `application.yml`，摘要仍不泄漏Key。
+- `TeiRerankerAdapter` 对每个3候选子批复用一次序列化body，在剩余总deadline内重试HTTP超时、连接/读写IO和429/502/503/504；401/其他HTTP、响应过大、非法JSON、数量/index/score异常不重试。整个业务重排继续只占一个Semaphore permit，重试不会扩大并发，全部子批与退避共享总deadline。
+- 首次clean编译发现 `ObjectMapper.readValue(byte[])` 声明通用IOException；修正为在解析边界捕获IOException并转换成不可重试的 `RAG_RERANK_RESPONSE_INVALID`，避免错误地把坏JSON当网络抖动。随后协议14项、配置11项共25/25通过；完整33类RAG回归166/166通过，0 failure/error/skipped，BUILD SUCCESS 3.990秒。
+- Java 17六模块打包BUILD SUCCESS 7.194秒，旧PID 41109已TERM退出，新JAR在8092以PID 53930启动，显式使用3候选、10秒单次、2次重试、30秒总时限，Hikari连接成功。
+- 对queryId=880的 `hybrid_rrf_rerank` 连续真实请求10/10均业务码0000、`degraded=false`、10条引用；Rerank阶段耗时6744～16323ms，pipeline总耗时9309～22286ms。第6次Rerank为16323ms，明显跨过一个10秒单次挂起后由后续尝试恢复，且仍处于30秒总deadline内，直接证明真实瞬态故障恢复生效。
+- 失败run `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-3ab790f` 最终保留9条warmup、0 measured，其中1条Rerank降级；不与后续run合并。下一步提交本闭环后，以新提交号和全新目录再次启动完整复评分。

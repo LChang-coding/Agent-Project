@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -63,8 +64,8 @@ public class TeiRerankerAdapter implements RerankerPort {
             List<IndexedScore> scores = new ArrayList<>(command.candidates().size());
             for (int start = 0; start < command.candidates().size(); start += config.getRequestBatchSize()) {
                 int end = Math.min(start + config.getRequestBatchSize(), command.candidates().size());
-                scores.addAll(requestBatch(command.query(), command.candidates().subList(start, end), start,
-                        remaining(deadlineNanos), config));
+                scores.addAll(requestBatchWithRetry(command.query(), command.candidates().subList(start, end), start,
+                        deadlineNanos, config));
             }
             return new RerankResult(toCandidates(command, scores), config.getModelRevision());
         } catch (AppException e) {
@@ -81,32 +82,72 @@ public class TeiRerankerAdapter implements RerankerPort {
         }
     }
 
-    private List<IndexedScore> requestBatch(String query, List<Candidate> candidates, int offset,
-                                            Duration timeout, RagProperties.Reranker config)
+    private List<IndexedScore> requestBatchWithRetry(String query, List<Candidate> candidates, int offset,
+                                                     long deadlineNanos, RagProperties.Reranker config)
             throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("query", query);
         payload.put("texts", candidates.stream().map(Candidate::text).toList());
         payload.put("return_text", false);
         payload.put("raw_scores", false);
-        HttpRequest request = HttpRequest.newBuilder(TeiEmbeddingAdapter.endpoint(config.getEndpoint(), "rerank"))
-                .timeout(timeout).header("Authorization", "Bearer " + config.getApiKey())
-                .header("Content-Type", "application/json").header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofByteArray(objectMapper.writeValueAsBytes(payload))).build();
-        HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        byte[] body = TeiEmbeddingAdapter.readBounded(response.body(), MAX_RESPONSE_BYTES);
-        if (response.statusCode() != 200) {
-            throw new AppException("RAG_RERANK_HTTP_ERROR", "Reranker 服务返回状态 " + response.statusCode());
+        byte[] requestBody = objectMapper.writeValueAsBytes(payload);
+        int attempt = 0;
+        while (true) {
+            try {
+                RawResponse response = sendBatch(requestBody, deadlineNanos, config);
+                if (response.statusCode() == 200) {
+                    return parseScores(response.body(), candidates.size(), offset);
+                }
+                if (!isTransient(response.statusCode()) || attempt >= config.getMaxRetries()) {
+                    String code = isTransient(response.statusCode())
+                            ? "RAG_RERANK_TRANSIENT_HTTP_ERROR" : "RAG_RERANK_HTTP_ERROR";
+                    throw new AppException(code, "Reranker 服务返回状态 " + response.statusCode()
+                            + "，尝试次数 " + (attempt + 1));
+                }
+            } catch (HttpTimeoutException e) {
+                if (attempt >= config.getMaxRetries()) {
+                    throw new AppException("RAG_RERANK_TIMEOUT",
+                            "Reranker 单批请求超时，尝试次数 " + (attempt + 1), e);
+                }
+            } catch (IOException e) {
+                if (attempt >= config.getMaxRetries()) {
+                    throw new AppException("RAG_RERANK_UNAVAILABLE",
+                            "Reranker 单批调用失败，尝试次数 " + (attempt + 1), e);
+                }
+            }
+            backoff(attempt++, deadlineNanos, config);
         }
-        List<TeiScore> values = objectMapper.readValue(body, new TypeReference<>() { });
-        if (values == null || values.size() != candidates.size()) {
+    }
+
+    private RawResponse sendBatch(byte[] requestBody, long deadlineNanos, RagProperties.Reranker config)
+            throws Exception {
+        Duration remaining = remaining(deadlineNanos);
+        Duration requestTimeout = remaining.compareTo(config.getRequestTimeout()) < 0
+                ? remaining : config.getRequestTimeout();
+        HttpRequest request = HttpRequest.newBuilder(TeiEmbeddingAdapter.endpoint(config.getEndpoint(), "rerank"))
+                .timeout(requestTimeout).header("Authorization", "Bearer " + config.getApiKey())
+                .header("Content-Type", "application/json").header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody)).build();
+        HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        return new RawResponse(response.statusCode(),
+                TeiEmbeddingAdapter.readBounded(response.body(), MAX_RESPONSE_BYTES));
+    }
+
+    private List<IndexedScore> parseScores(byte[] body, int candidateCount, int offset) {
+        List<TeiScore> values;
+        try {
+            values = objectMapper.readValue(body, new TypeReference<>() { });
+        } catch (IOException e) {
+            throw new AppException("RAG_RERANK_RESPONSE_INVALID", "Reranker 返回内容不是合法JSON", e);
+        }
+        if (values == null || values.size() != candidateCount) {
             throw new AppException("RAG_RERANK_RESPONSE_INVALID", "Reranker 返回候选数量不一致");
         }
         List<IndexedScore> result = new ArrayList<>(values.size());
-        boolean[] seen = new boolean[candidates.size()];
+        boolean[] seen = new boolean[candidateCount];
         for (TeiScore score : values) {
             if (score == null || score.index() == null || score.score() == null
-                    || score.index() < 0 || score.index() >= candidates.size()
+                    || score.index() < 0 || score.index() >= candidateCount
                     || seen[score.index()] || !Double.isFinite(score.score())) {
                 throw new AppException("RAG_RERANK_RESPONSE_INVALID", "Reranker 返回索引或分数非法");
             }
@@ -114,6 +155,27 @@ public class TeiRerankerAdapter implements RerankerPort {
             result.add(new IndexedScore(offset + score.index(), score.score()));
         }
         return result;
+    }
+
+    private boolean isTransient(int statusCode) {
+        return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+    }
+
+    private void backoff(int retryIndex, long deadlineNanos, RagProperties.Reranker config)
+            throws InterruptedException {
+        long multiplier = 1L << Math.min(retryIndex, 30);
+        long desiredNanos;
+        try {
+            desiredNanos = Math.multiplyExact(config.getRetryInitialBackoff().toNanos(), multiplier);
+        } catch (ArithmeticException ignored) {
+            desiredNanos = Long.MAX_VALUE;
+        }
+        desiredNanos = Math.min(desiredNanos, config.getRetryMaxBackoff().toNanos());
+        long remainingNanos = remaining(deadlineNanos).toNanos();
+        if (desiredNanos >= remainingNanos) {
+            throw new AppException("RAG_RERANK_TIMEOUT", "Reranker 请求超过总时限");
+        }
+        Thread.sleep(desiredNanos / 1_000_000L, (int) (desiredNanos % 1_000_000L));
     }
 
     private List<ScoredCandidate> toCandidates(RerankCommand command, List<IndexedScore> scores) {
@@ -140,6 +202,9 @@ public class TeiRerankerAdapter implements RerankerPort {
     }
 
     private record TeiScore(Integer index, Double score) {
+    }
+
+    private record RawResponse(int statusCode, byte[] body) {
     }
 
     private record IndexedScore(int candidateIndex, double score) {

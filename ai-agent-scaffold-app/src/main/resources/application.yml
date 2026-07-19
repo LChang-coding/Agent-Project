@@ -74,6 +74,10 @@ ai:
       max-concurrency: ${AI_RAG_RERANKER_MAX_CONCURRENCY:2}
       batch-size: ${AI_RAG_RERANKER_BATCH_SIZE:16}
       request-batch-size: ${AI_RAG_RERANKER_REQUEST_BATCH_SIZE:3}
+      request-timeout: ${AI_RAG_RERANKER_REQUEST_TIMEOUT:10s}
+      max-retries: ${AI_RAG_RERANKER_MAX_RETRIES:2}
+      retry-initial-backoff: ${AI_RAG_RERANKER_RETRY_INITIAL_BACKOFF:100ms}
+      retry-max-backoff: ${AI_RAG_RERANKER_RETRY_MAX_BACKOFF:1s}
       model-revision: ${AI_RAG_RERANKER_MODEL_REVISION:2cfc18c9415c912f9d8155881c133215df768a70}
     docling:
       endpoint: ${AI_RAG_DOCLING_ENDPOINT:http://127.0.0.1:5001/v1}
