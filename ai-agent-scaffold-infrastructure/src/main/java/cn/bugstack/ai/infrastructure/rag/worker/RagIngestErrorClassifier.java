@@ -14,7 +14,9 @@ public final class RagIngestErrorClassifier {
             "RAG_EMBEDDING_TRANSIENT_HTTP_ERROR",
             "RAG_QDRANT_UNAVAILABLE", "RAG_QDRANT_INTERRUPTED",
             "RAG_REMOTE_BUSY", "RAG_REMOTE_INTERRUPTED",
-            "OBJECT_STORAGE_DOWNLOAD_FAILED", "RAG_OBJECT_DOWNLOAD_FAILED", "RAG_OBJECT_STORAGE_UNAVAILABLE",
+            "OBJECT_STORAGE_DOWNLOAD_FAILED", "OBJECT_STORAGE_DELETE_FAILED", "OBJECT_STORAGE_STAT_FAILED",
+            "RAG_OBJECT_DOWNLOAD_FAILED", "RAG_OBJECT_STORAGE_UNAVAILABLE", "RAG_DELETE_VECTOR_REMAINS",
+            "RAG_DELETE_CHUNK_REMAINS", "RAG_DELETE_OBJECT_REMAINS",
             "RAG_WORKSPACE_CREATE_FAILED", "RAG_WORKSPACE_CLEANUP_FAILED");
 
     /** 分类且脱敏；绝不保存原始 exception message。 */
@@ -46,7 +48,7 @@ public final class RagIngestErrorClassifier {
         if (code.contains("EMBEDDING")) return "向量化阶段失败";
         if (code.contains("QDRANT") || code.contains("INDEX")) return "向量索引阶段失败";
         if (code.contains("DOWNLOAD") || code.contains("STORAGE") || code.contains("OBJECT")) {
-            return "文档对象读取阶段失败";
+            return "文档对象存储访问阶段失败";
         }
         return "摄取任务执行失败";
     }

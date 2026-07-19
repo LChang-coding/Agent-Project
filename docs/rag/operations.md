@@ -85,6 +85,21 @@ received -> validating -> parsing -> chunking -> embedding -> indexing -> verify
 - Kafka 只传任务标识，消费者仍须向 MySQL claim；重复消息不能直接重复副作用。
 - 新版本 build-then-publish；失败或取消不破坏旧 active generation。
 
+删除主链：
+
+```text
+received -> deleting_vectors -> deleting_chunks -> deleting_source -> completed
+```
+
+删除恢复原则：
+
+- 删除受理以文档聚合根行锁、`expectedRevision` CAS、唯一 task key 和 Outbox 同事务建立真相；任何活动摄取/重建任务都使请求冲突。
+- 清理范围是文档的全部版本，包括 Qdrant point、MySQL chunk、MinIO 原对象和解析产物；不得只删 active version。
+- Qdrant、chunk 和对象删除都必须可重复执行；checkpoint 只能在该阶段副作用完成且经过 fencing 屏障后推进。
+- 失败或重试耗尽保持文档/版本 `DELETING`，不能调用摄取补偿将其恢复为 `READY`/`FAILED`；运维重试从已证明的 checkpoint 继续。
+- 仅当向量计数为0、chunk查询为空、原对象/解析对象均不存在时，才能用一个带 fence/revision 的事务同时收口全部版本、文档和任务。
+- RAG MinIO bucket 必须关闭对象版本控制或配置受审计的版本清理策略；当前 Worker 验证的是当前对象键不存在，不会枚举并删除历史 object version。启用版本控制却没有生命周期清理时，不得宣称原文件已物理销毁。
+
 排障顺序：
 
 1. 先查任务 `status/stage/errorCode/attempt/revision/lease`，不要只看 Kafka 消息。

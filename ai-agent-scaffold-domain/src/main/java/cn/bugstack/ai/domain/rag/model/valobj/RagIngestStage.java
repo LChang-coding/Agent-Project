@@ -10,7 +10,10 @@ public enum RagIngestStage {
     EMBEDDING,
     INDEXING,
     VERIFYING,
-    COMPLETED;
+    COMPLETED,
+    DELETING_VECTORS,
+    DELETING_CHUNKS,
+    DELETING_SOURCE;
 
     /** 判断目标阶段是否是当前阶段或紧邻的下一阶段。 */
     public boolean canAdvanceTo(RagIngestStage target) {

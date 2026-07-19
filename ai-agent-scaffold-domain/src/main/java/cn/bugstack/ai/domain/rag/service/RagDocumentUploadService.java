@@ -12,6 +12,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagUploadRegistration;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.model.valobj.RagValidatedUploadFile;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity;
@@ -60,7 +61,7 @@ public class RagDocumentUploadService {
         String taskId = id("ragtask");
         String eventId = id("ragevt");
         long generation = Math.max(1L, knowledgeBase.currentGeneration());
-        String objectKey = objectKey(command.tenantId(), command.knowledgeBaseId(), documentId,
+        String objectKey = RagObjectStorageScope.sourceObjectKey(command.tenantId(), command.knowledgeBaseId(), documentId,
                 versionId, file.safeFileName());
         ObjectStorageResultEntity stored = objectStorageService.putFile(ObjectStorageFileCommandEntity.builder()
                 .bucket(objectStorageService.ragBucket()).objectKey(objectKey).sourcePath(file.path())
@@ -78,7 +79,7 @@ public class RagDocumentUploadService {
                     null, 0L, generation, RagDocumentStatus.PROCESSING, 0L);
             RagDocumentVersionEntity version = new RagDocumentVersionEntity(command.tenantId(),
                     command.knowledgeBaseId(), documentId, versionId, 1, generation, stored.getBucket(),
-                    stored.getObjectKey(), file.safeFileName(), stored.getSha256(), file.mimeType(),
+                    stored.getObjectKey(), null, null, file.safeFileName(), stored.getSha256(), file.mimeType(),
                     stored.getSizeBytes(), RagDocumentVersionStatus.QUEUED, null, null, null, 0L);
             RagIngestJobEntity job = RagIngestJobEntity.pending(command.tenantId(), command.knowledgeBaseId(),
                     documentId, versionId, taskId, idempotencyKey, RagIngestOperation.INGEST,
@@ -114,16 +115,6 @@ public class RagDocumentUploadService {
             throw new AppException("RAG_UPLOAD_COMPENSATION_FAILED",
                     "上传登记失败且对象清理失败，需要后台清理", cleanupError);
         }
-    }
-
-    private String objectKey(String tenantId, String knowledgeBaseId, String documentId,
-                             String versionId, String fileName) {
-        return "tenants/" + shortHash(tenantId) + "/rag/" + shortHash(knowledgeBaseId) + "/"
-                + documentId + "/" + versionId + "/" + fileName;
-    }
-
-    private String shortHash(String value) {
-        return sha256(value).substring(0, 24);
     }
 
     private String sha256(String value) {

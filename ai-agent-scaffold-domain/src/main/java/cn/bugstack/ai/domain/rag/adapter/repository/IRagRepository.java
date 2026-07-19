@@ -54,9 +54,6 @@ public interface IRagRepository {
     /** 查询租户文档的版本列表。 */
     List<RagDocumentVersionEntity> listDocumentVersions(String tenantId, String documentId);
 
-    /** 新增租户文档版本。 */
-    int insertDocumentVersion(String tenantId, RagDocumentVersionEntity version);
-
     /** 按乐观版本更新文档版本状态。 */
     int updateDocumentVersion(String tenantId, RagDocumentVersionEntity version, long expectedRevision);
 
@@ -104,6 +101,12 @@ public interface IRagRepository {
                                   long expectedTaskRevision, String leaseOwner,
                                   long expectedFencingToken, RagIndexActivation activation, Instant now);
 
+    /** 在同一事务中关闭全部版本、文档墓碑并完成删除任务。 */
+    void completeClaimedDeleteJob(String tenantId, RagIngestJobEntity completedJob,
+                                  long expectedTaskRevision, String leaseOwner,
+                                  long expectedFencingToken, RagDocumentEntity deletedDocument,
+                                  List<RagDocumentVersionEntity> deletedVersions, Instant now);
+
     /** 在同一事务中关闭版本、清理文档目标 generation 并取消任务。 */
     void cancelClaimedIngestJob(String tenantId, RagIngestJobEntity cancelledJob,
                                 long expectedTaskRevision, long expectedVersionRevision,
@@ -130,8 +133,14 @@ public interface IRagRepository {
     /** 幂等批量保存租户分块。 */
     int upsertChunks(String tenantId, String versionId, List<RagChunkEntity> chunks);
 
-    /** 删除指定版本的业务分块记录。 */
+    /** 软删除指定版本的业务分块记录，用于可恢复摄取补偿。 */
     int deleteChunks(String tenantId, String versionId);
+
+    /** 物理删除指定版本的业务分块正文，用于不可逆文档删除。 */
+    int purgeChunks(String tenantId, String versionId);
+
+    /** 统计指定版本全部业务分块，包含已软删记录。 */
+    long countAllChunks(String tenantId, String versionId);
 
     /** 按租户查询检索配置。 */
     Optional<RagRetrievalProfileEntity> findRetrievalProfile(String tenantId, String profileId);

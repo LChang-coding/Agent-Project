@@ -1604,6 +1604,15 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 4. API使用可管理权限、document归属和`expectedRevision`门禁；重复删除已DELETING/DELETED文档幂等返回现有删除任务/终态，存在摄取任务时先要求管理员取消并等待闭合，禁止两个Worker竞争同一version。
 5. 前端文档行增加独立删除pending/确认/成功/失败反馈，DELETING期间禁止重复操作并依赖任务列表恢复进度。测试覆盖跨租户、revision冲突、活动摄取冲突、每个外部副作用前的fencing、失败重试和三表原子收口；运行Java 17 RAG回归与前端生产构建。
 
+#### RAG文档删除终审缺口修复计划（执行前）
+
+1. DELETE任务在失败结果写库本身失败时，不得进入摄取通用`CANCEL_REQUESTED`/补偿清理；保持RUNNING和DELETING，由租约过期后的新fence重新进入DELETE checkpoint。添加“外部删除失败+失败记账DB异常”故障注入回归。
+2. 删除完成Repository事务必须自身锁定文档聚合根，事务内重查全部版本并与Worker已清理的`versionId+revision`集合精确比对；集合增减、状态或revision不一致立即回滚重试，不允许文档/任务先完成而遗留版本。
+3. 检索覆盖“先得到向量hit，再被Worker软删chunk”窗口：缺失chunk只能在同租户/知识库/文档的DELETING/DELETED墓碑可证明时丢弃，其他缺失仍`RAG_CHUNK_SCOPE_VIOLATION` fail closed。
+4. 收紧对象删除范围：source/parsed locator必须成对，bucket必须是RAG bucket，key必须符合当前tenant/kb/document/version的服务端路径契约；半套locator或跨范围键必须fail closed，不得静默漏删或删错对象。
+5. `RagDocumentDeletionRegistration`聚合自证job.operation、tenant/kb/document/version范围；前端对FAILED/DEAD删除任务提供明确“继续删除”入口，并把墓碑审计可见语义与“删除原文件”文案对齐。
+6. 新增定向故障/并发/范围契约测试，再跑全部RAG Java回归、前端构建和可行的真实浏览器黑盒；首次失败与修复后结果都追加留痕。
+
 #### RAG最终测试数据、瓶颈与失败样例交付要求（2026-07-20补充）
 
 1. 全部功能切片和最终测试完成后，输出一份统一最终报告：逐项列出功能测试、Java单元/契约/集成、前端构建/浏览器E2E、三格式摄取、质量消融、查询/摄取性能和资源证据；每项必须有样本量、命令/端点、环境、配置、通过/失败数、原始产物路径和hash。
@@ -1612,6 +1621,21 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 4. 新增“组件屏蔽导致的召回失败案例”附录：从最终SciFact四变体原始JSONL与qrels/document-map中程序化提取有代表性的漏召回、错排和Rerank救回/伤害样本。每个样例必须列出queryId与问题、gold documentId/标题/可核验摘要、各变体TopK文档与名次、对应指标差、被关闭或新增的技术点及失败机制分析。
 5. 失败原因必须区分“原始证据可直接证明”与“根据排名/词项/语义差异做的推断”；推断要标注为推断并给出反证或进一步验证方法。公开语料可附可审计文档内容，不复制租户私有原文。
 6. 最终报告的指标、差值、样例和瓶颈均由脚本/程序从原始产物生成或独立复算；人工只写受证据支持的解释，禁止补写没有运行的数字。
+
+#### RAG最终严肃评测报告固定交付格式（2026-07-20再次确认，执行前）
+
+最终报告必须按以下顺序交付，任一无证据项目写“未测试/证据不足”而不是留空或估算：
+
+1. **执行摘要与结论边界**：版本、commit、JAR/CLI hash、测试日期、Java/服务器/模型/数据库/Qdrant配置、已证明容量边界、未证明范围和上线阻断项。
+2. **测试总账**：每项功能、单元、契约、集成、浏览器E2E、PDF/DOCX/Markdown摄取、质量、性能和故障注入分别列命令/端点、样本量、线程/并发、超时、通过/失败/跳过、耗时、原始目录及manifest/hash。
+3. **RAG技术点消融总表**：Dense、Sparse、RRF混合、Rerank、去重、父块、邻块、Token预算、chunk参数、TopK/候选数、批处理/连接/数据库优化逐项列关闭值、开启值、Recall@K、MRR@K、nDCG@K、Latency p50/p95/max、吞吐、error/degraded/empty、绝对变化、相对变化和统计口径；不同快照或环境禁止放进同一收益列。
+4. **逐阶段瓶颈链**：解析、切块、Embedding、Qdrant写入/检索、Sparse、融合、MySQL hydration、Rerank、上下文扩展和总请求逐阶段列时间分位数、CPU/内存/队列/网络/连接池证据；每个瓶颈写直接原因、影响范围、容量边界、优化方案、代价、预期方向和确认收益所需复测，不写未经实测的提升百分比。
+5. **召回失败案例正文**：每个case必须展示queryId、完整问题、gold documentId、文档标题、项目`docs/rag/evaluation-data/scifact/`中可核验正文片段、各消融变体TopK文档ID/标题/名次与分数，以及`Dense候选→Sparse候选→RRF→Rerank→去重/扩展→Token预算`中首次发生漏召回或错排的步骤。
+6. **失败因果分析**：对每个case分别列“原始数据直接证明的事实”“因排名/词项/语义/截断做出的推断”“其他可能解释”“反证或复现实验”。必须覆盖漏召回、错排、RRF救回、Rerank救回、Rerank伤害、关闭某组件后失败等代表类型；不能把相关性当因果性。
+7. **问题与改进优先级**：按质量收益、延迟成本、资源成本、实现风险排序，区分快速配置修复、代码优化、模型/硬件扩容与数据治理；每项绑定失败case或瓶颈证据。
+8. **证据索引与复算说明**：列出所有报告生成脚本、输入文件、输出报告、SHA-256和一键复算命令；人工解释不得修改脚本产出的原始排名、指标和样例字段。
+
+失败文档必须直接随报告展示标题与必要正文片段，并提供项目内对应语料/映射的可点击路径；不能只给documentId，也不能复制任何租户私有文档。现有1200条质量数据、两轮稳定性能数据和并发4失败只能按其实际口径纳入；后续未完成的细粒度消融必须真实执行后才能填值。
 
 #### SciFact评测文档本地固化切片计划（执行前）
 
@@ -1626,3 +1650,39 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 原始压缩包为2,816,079字节，SHA-256=`536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`；实际摄取Markdown为7,957,673字节，SHA-256=`0287493f09e9cb8d13d44bd46c01540229a7bad18d8c9da344f60429a89d6680`。其余四个准备产物逐文件字节数与SHA-256均和`manifest.json`一致，压缩包内部corpus/queries/test qrels三个源文件摘要也逐项通过。
 - 程序核对Markdown标题标记、`document-map`行数和唯一documentId均为5,183；查询行数和唯一queryId均为300；`qrels.tsv`共340行，其中首行为表头，实际相关性标注为339条，与清单一致。
 - 首次校验脚本失败过一次，原因是zsh中循环变量误命名为保留的`path`数组，覆盖了命令搜索路径并导致后续`jq`显示`command not found`；改名为`rel`后完整重跑。随后一次把qrels物理行数340直接与数据行339比较而退出，确认表头后按`NR-1`复核为339；两次都属于校验脚本口径问题，不是数据摘要或数量损坏。
+
+#### RAG文档删除生命周期切片执行结果
+
+- 领域层新增文档/版本`DELETING -> DELETED`状态和`DELETE`任务专用checkpoint；删除登记以`tenantId + knowledgeBaseId + documentId + expectedRevision`锁定聚合根并做revision CAS。活动摄取任务会冲突失败，重复删除返回或重排同一个删除任务，不创建第二条并发清理链。
+- Worker按“逐版本Qdrant向量删除并计数归零 -> MySQL chunk软删并确认空集 -> MinIO原件/解析产物删除 -> MySQL最终事务收口”执行。每个外部副作用前后检查租约/fencing；对象bucket和key必须属于当前tenant/kb/document/version服务端范围，source/parsed locator必须成对，跨范围或半套locator均fail closed。
+- 最终Repository事务重新锁定文档和完整版本集合，精确比对Worker已经清理的`versionId + revision + generation + status`后，原子关闭全部版本、文档、任务；并发版本集合变化会回滚。删除失败记账自身异常时任务保持RUNNING/DELETING，等待租约接管，禁止误入摄取通用取消补偿。
+- 检索对合法DELETING/DELETED墓碑的过期向量命中和“向量命中后chunk被并发软删”窗口做丢弃；只有同tenant/kb/document墓碑可证明时允许跳过，其他缺失chunk、错版本或跨范围命中仍按scope violation失败关闭。
+- HTTP新增带`expectedRevision`的删除端点，沿用租户上下文和owner/admin门禁；前端增加确认、逐行pending、删除阶段、失败/DEAD继续删除入口，DELETE任务不可取消，并明确“删除物理数据但保留审计墓碑”的产品语义。API、运维文档和MySQL索引脚本同步更新。
+- 真实开发测试轨迹未被省略：最初32项定向测试有1项把可重试存储错误判为FAILED，补齐错误分类器后通过；扩展到51项时先后暴露Mockito测试覆写方式、对象键范围fixture和Repository完整版本集mock缺失，均修复并重跑；扩展到57项时出现一次测试import缺失，以及一次Maven增量编译生成不完整测试字节码，补齐import并用`clean`构建消除增量产物后通过。这些失败都发生在本地测试阶段，没有被当作最终通过数据。
+- 权威定向门禁：Java 17下从干净状态执行删除/Worker/Repository/检索/Controller/Mapper等9个测试类，共57/57通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗时9.544秒。
+- 权威全量RAG门禁：`mvn clean test -pl ai-agent-scaffold-app -am -DskipTests=false -Dtest='*Rag*Test' -Dsurefire.failIfNoSpecifiedTests=false`共157/157通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗时10.476秒。较上一切片134项新增23项覆盖删除生命周期及其回归边界。
+- 前端最终生产构建通过`vue-tsc --noEmit`和Vite：1916 modules transformed，962ms；RAG页面JS为35.50kB（gzip 11.53kB），CSS为21.30kB（gzip 4.43kB）。`git diff --check`通过。
+- Java全reactor跳过重复测试的package成功；App JAR SHA-256为`b0293528b11fe4aad88772c9f2bdda957c1be50a3b6d04355584ddc63fe612a0`。
+- 浏览器曾尝试用新端口启动新JAR，但既有启动脚本硬编码`ai.rag.worker.enabled=true`且附加`false`后被Spring绑定为`true,false`，启动失败；当前浏览器连接的8091/8092仍是旧应用，不能证明新删除端点。因此本切片明确记录“真实浏览器删除E2E未完成”，不拿Controller测试或前端构建冒充黑盒E2E；后续与PDF/DOCX/Markdown三格式真实链路在隔离测试实例完成。
+- 构建仍报告既有Maven模型警告：`ai-agent-scaffold-api/pom.xml`的`parent.relativePath`指向坐标不一致，以及旧版resources插件的未知参数；本切片未改构建体系。它们未导致本次失败，但属于后续工程稳定性债务。
+
+#### RAG文档删除二次终审修复计划（提交前）
+
+1. 将DELETE生命周期的chunk清理从“仅软删、正文仍保留”改为物理删除，并用不带`deleted=0`过滤的计数查询验证版本分块确实归零；摄取取消/失败的通用补偿仍保留原有软删语义，避免无意扩大数据销毁范围。
+2. 对对象键逐段拒绝空段、`.`、`..`和反斜杠；对象存储端口新增存在性检查，Worker删除后必须确认对象不存在才推进checkpoint，补充穿越键和“delete返回但对象仍在”的故障测试。
+3. DELETED墓碑的过期向量命中必须由版本墓碑证明`versionId + generation`确实属于该文档；仅同documentId不足以静默丢弃。增加伪造版本/generation fail-closed测试。
+4. DELETE从FAILED/DEAD重新入队时清除`finished_at`，最终完成时间必须反映最后一次真实完成；API文档明确首次删除严格CAS、已有删除任务的幂等恢复忽略旧revision。
+5. 重跑删除定向、全部RAG Java 17测试、前端构建和package/hash；记录真实MySQL事务/并发测试是否完成，Mockito测试不得被表述为已证明InnoDB回滚与锁语义。
+
+#### RAG文档删除二次终审修复执行结果
+
+- 独立终审发现原实现把chunk设为`deleted=1`后就以有效查询空集判定完成，敏感正文和metadata仍在MySQL。已拆分补偿软删和DELETE物理清理：删除Worker调用`DELETE FROM rag_chunk WHERE tenant_id + version_id`，再用不含`deleted=0`条件的`COUNT(*)`确认包括历史软删行在内确实归零；Mapper契约测试验证DELETE和COUNT都带强租户/版本范围。
+- `ObjectStorageService`新增`objectExists`，MinIO使用`statObject`、本地存储使用`Files.exists(NOFOLLOW_LINKS)`；Worker每个delete后经fence屏障再确认对象不存在，否则以`RAG_DELETE_OBJECT_REMAINS`可重试失败，不能完成任务。真实本地文件测试证明删除前存在、删除后文件和exists均消失。
+- 对象键校验改为逐段拒绝空段、`.`、`..`和反斜杠，增加合法前缀后拼`../../other/private.md`的越界故障测试；Worker在调用对象存储前以`RAG_DELETE_OBJECT_SCOPE_INVALID`失败关闭。
+- DELETING/DELETED残留向量命中除tenant/kb/document/generation外，还必须查询版本墓碑并证明`versionId + generation + documentId + kbId`一致且版本状态为DELETING/DELETED；增加DELETED文档伪造版本的missing-chunk测试，结果保持`RAG_CHUNK_SCOPE_VIOLATION`。
+- 任务Mapper在状态回到PENDING时把`finished_at`置空，使FAILED/DEAD继续删除后的最终完成时间不再保留首次失败时刻；API文档明确首次受理严格revision CAS、已有同一删除任务的幂等查询/继续执行忽略旧revision但不放松scope校验。
+- MinIO当前对象存在性只证明当前key不可见，不能清除已启用bucket versioning的历史版本；运维文档新增强约束：RAG bucket必须关闭版本控制或配置受审计的历史版本生命周期清理，否则不得宣称原文件已物理销毁。
+- 二次定向首轮在测试编译期失败，原因是新增verify使用Mockito `eq`但漏静态导入；补齐后5个测试类56/56通过，0 failure/error/skipped。该失败是测试代码编译问题，不是生产链运行结果，但按要求保留。
+- 最终权威干净门禁执行`*Rag*Test,MinioObjectStorageServiceTest`：172/172通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗时10.567秒。其中全部RAG测试160项，对象存储测试12项；未用172冒充纯RAG测试数。
+- 前端最终生产构建再次通过：1916 modules transformed，1.37秒；RAG页面JS 35.50kB（gzip 11.53kB），CSS 21.30kB（gzip 4.43kB）。最终App JAR SHA-256为`8d8424b41e019128721977243c6cf1e32a6f3c99ab50d4a71727cd1aebdaf2e3`。
+- 本轮没有完成真实MySQL上的并发DELETE、事务中途失败回滚和旧/新fence竞态集成测试；现有Repository测试证明领域输入、调用顺序和CAS失败分支，但不能证明Spring事务代理与InnoDB锁的真实行为。这一项继续作为上线前证据缺口，不写成“已通过”。真实浏览器删除E2E同样尚未完成。

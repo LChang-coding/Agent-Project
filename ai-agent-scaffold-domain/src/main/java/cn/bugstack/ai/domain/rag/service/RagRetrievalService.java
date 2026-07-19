@@ -11,11 +11,14 @@ import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.entity.RagAgentBindingEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagChunkEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalAuditCommand;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalRequest;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalResult;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagFusionStrategy;
 import cn.bugstack.ai.domain.rag.model.valobj.RagRetrievalMode;
 import cn.bugstack.ai.types.exception.AppException;
@@ -278,10 +281,15 @@ public class RagRetrievalService {
         Map<String, RagChunkEntity> chunks = loadChunks(request.tenantId(),
                         fused.stream().map(value -> value.hit().chunkId()).toList(), aggregate).stream()
                 .collect(Collectors.toMap(RagChunkEntity::chunkId, value -> value));
+        Map<String, Optional<RagDocumentEntity>> missingChunkDocuments = new LinkedHashMap<>();
         List<RankedChunk> candidates = new ArrayList<>();
         Set<String> contentHashes = new LinkedHashSet<>();
         for (ScoredHit value : fused) {
             RagChunkEntity chunk = chunks.get(value.hit().chunkId());
+            if (chunk == null && isLegitimateDeletingHit(request.tenantId(), resolved, value.hit(),
+                    missingChunkDocuments)) {
+                continue;
+            }
             validateChunkScope(resolved, value.hit(), chunk);
             if (profile.deduplicateEnabled() && !contentHashes.add(chunk.contentHash())) continue;
             candidates.add(new RankedChunk(resolved, chunk, value.denseScore(), value.sparseScore(),
@@ -358,6 +366,14 @@ public class RagRetrievalService {
         int used = 0;
         for (RankedChunk value : ranked) {
             if (citations.size() >= value.resolved().profile().finalTopK()) continue;
+            RagDocumentEntity document = Optional.ofNullable(documents.get(value.chunk().documentId()))
+                    .orElseThrow(() -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
+            if (document.status() == RagDocumentStatus.DELETING
+                    || document.status() == RagDocumentStatus.DELETED) {
+                validateDeletingDocumentScope(value, document);
+                continue;
+            }
+            validateDocumentScope(value, document);
             List<RagChunkEntity> contextChunks = expandContext(request.tenantId(), value, aggregate);
             contextChunks = contextChunks.stream().filter(chunk -> !emittedChunks.contains(chunk.chunkId())).toList();
             String context = contextChunks.stream().map(RagChunkEntity::content).collect(Collectors.joining("\n\n"));
@@ -366,9 +382,6 @@ public class RagRetrievalService {
             int localUsed = bindingUsed.getOrDefault(bindingId, 0);
             if (tokens < 1 || used + tokens > globalBudget
                     || localUsed + tokens > bindingBudget.get(bindingId)) continue;
-            RagDocumentEntity document = Optional.ofNullable(documents.get(value.chunk().documentId()))
-                    .orElseThrow(() -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
-            validateDocumentScope(value, document);
             used += tokens;
             bindingUsed.put(bindingId, localUsed + tokens);
             contextChunks.forEach(chunk -> emittedChunks.add(chunk.chunkId()));
@@ -453,6 +466,30 @@ public class RagRetrievalService {
         }
     }
 
+    private boolean isLegitimateDeletingHit(String tenantId, ResolvedBinding resolved,
+                                             VectorStorePort.VectorSearchHit hit,
+                                             Map<String, Optional<RagDocumentEntity>> documents) {
+        Optional<RagDocumentEntity> candidate = documents.computeIfAbsent(hit.documentId(),
+                documentId -> repository.findDocument(tenantId, documentId));
+        if (candidate.isEmpty()) return false;
+        RagDocumentEntity document = candidate.get();
+        if (document.status() != RagDocumentStatus.DELETING && document.status() != RagDocumentStatus.DELETED) {
+            return false;
+        }
+        if (!resolved.knowledgeBase().knowledgeBaseId().equals(hit.knowledgeBaseId())
+                || !document.knowledgeBaseId().equals(hit.knowledgeBaseId())
+                || !document.documentId().equals(hit.documentId())
+                || resolved.knowledgeBase().currentGeneration() != hit.generation()) {
+            return false;
+        }
+        if (document.status() == RagDocumentStatus.DELETING
+                && (document.activeVersionId() != null && !document.activeVersionId().equals(hit.versionId())
+                || document.activeGeneration() > 0 && document.activeGeneration() != hit.generation())) {
+            return false;
+        }
+        return isTombstonedVersion(tenantId, document, hit.versionId(), hit.generation());
+    }
+
     private void validateRelatedScope(RagChunkEntity main, RagChunkEntity related) {
         if (!main.tenantId().equals(related.tenantId()) || !main.knowledgeBaseId().equals(related.knowledgeBaseId())
                 || !main.documentId().equals(related.documentId()) || !main.versionId().equals(related.versionId())
@@ -468,6 +505,28 @@ public class RagRetrievalService {
                 || chunk.generation() != document.activeGeneration()) {
             throw new AppException("RAG_DOCUMENT_SCOPE_VIOLATION", "引用文档已不属于当前活动索引快照");
         }
+    }
+
+    private void validateDeletingDocumentScope(RankedChunk value, RagDocumentEntity document) {
+        RagChunkEntity chunk = value.chunk();
+        if (!chunk.knowledgeBaseId().equals(document.knowledgeBaseId())
+                || document.activeVersionId() != null && !chunk.versionId().equals(document.activeVersionId())
+                || document.activeGeneration() > 0 && chunk.generation() != document.activeGeneration()
+                || !isTombstonedVersion(chunk.tenantId(), document, chunk.versionId(), chunk.generation())) {
+            throw new AppException("RAG_DOCUMENT_SCOPE_VIOLATION", "删除态文档命中超出原活动索引范围");
+        }
+    }
+
+    private boolean isTombstonedVersion(String tenantId, RagDocumentEntity document,
+                                         String versionId, long generation) {
+        Optional<RagDocumentVersionEntity> version = repository.findDocumentVersion(tenantId, versionId);
+        return version.isPresent()
+                && version.get().versionId().equals(versionId)
+                && version.get().documentId().equals(document.documentId())
+                && version.get().knowledgeBaseId().equals(document.knowledgeBaseId())
+                && version.get().generation() == generation
+                && (version.get().status() == RagDocumentVersionStatus.DELETING
+                || version.get().status() == RagDocumentVersionStatus.DELETED);
     }
 
     private void validateSameHitScope(VectorStorePort.VectorSearchHit left,

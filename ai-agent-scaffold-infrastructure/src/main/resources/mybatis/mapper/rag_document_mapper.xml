@@ -68,6 +68,13 @@
         WHERE tenant_id = #{tenantId} AND document_id = #{documentId} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryByTenantKnowledgeBaseAndDocumentIdForUpdate" resultMap="RagDocumentMap">
+        SELECT <include refid="Columns"/> FROM rag_document
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND document_id = #{documentId} AND deleted = 0
+        LIMIT 1 FOR UPDATE
+    </select>
+
     <select id="queryListByTenantAndDocumentIds" resultMap="RagDocumentMap">
         SELECT <include refid="Columns"/> FROM rag_document
         WHERE tenant_id = #{tenantId} AND document_id IN
@@ -121,5 +128,14 @@
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
           AND document_id = #{documentId} AND target_generation = #{generation}
           AND revision = #{expectedRevision} AND status = 'processing' AND deleted = 0
+    </update>
+
+    <update id="markDeletedByTenantAndRevision">
+        UPDATE rag_document
+        SET active_version_id = NULL, active_generation = 0, target_generation = NULL,
+            chunk_count = 0, status = 'deleted', revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND document_id = #{documentId} AND revision = #{expectedRevision}
+          AND status = 'deleting' AND deleted = 0
     </update>
 </mapper>

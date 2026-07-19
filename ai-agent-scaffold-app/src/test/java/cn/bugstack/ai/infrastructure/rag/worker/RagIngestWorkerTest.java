@@ -14,6 +14,8 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
+import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagLease;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
@@ -38,6 +40,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -125,6 +130,113 @@ public class RagIngestWorkerTest {
                 anyString(), any(), anyLong(), anyString(), anyLong(), any(), any());
         Assert.assertEquals("new-worker", fixture.job.get().lease().owner());
         Assert.assertEquals(2L, fixture.job.get().fencingToken());
+    }
+
+    @Test
+    public void shouldDeleteAllVersionsSourceParsedObjectsAndCompleteAtomically() {
+        DeleteFixture fixture = new DeleteFixture(false);
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.COMPLETED, fixture.job.get().status());
+        Assert.assertEquals(RagDocumentStatus.DELETED, fixture.document.get().status());
+        Assert.assertTrue(fixture.versions.get().stream()
+                .allMatch(version -> version.status() == RagDocumentVersionStatus.DELETED));
+        Assert.assertEquals(Set.of("version-1", "version-2"), fixture.deletedVectors);
+        Assert.assertEquals(Set.of(
+                DeleteFixture.key("version-1", "source-v1.md"),
+                DeleteFixture.key("version-1", "parsed-v1.json"),
+                DeleteFixture.key("version-2", "source-v2.md")), fixture.deletedObjects);
+        verify(fixture.repository, times(2)).purgeChunks(eq(DeleteFixture.TENANT), anyString());
+        verify(fixture.repository, times(2)).countAllChunks(eq(DeleteFixture.TENANT), anyString());
+        verify(fixture.repository).completeClaimedDeleteJob(anyString(), any(), anyLong(), anyString(),
+                anyLong(), any(), any(), any());
+        verify(fixture.repository, never()).completeClaimedIngestJob(
+                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any());
+        verify(fixture.repository, never()).failClaimedIngestJob(
+                anyString(), any(), anyLong(), anyLong(), anyLong(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    public void shouldKeepDeleteTombstoneAndRetryWhenSourceDeletionFails() {
+        DeleteFixture fixture = new DeleteFixture(true);
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.RETRYING, fixture.job.get().status());
+        Assert.assertEquals(RagDocumentStatus.DELETING, fixture.document.get().status());
+        Assert.assertTrue(fixture.versions.get().stream()
+                .allMatch(version -> version.status() == RagDocumentVersionStatus.DELETING));
+        verify(fixture.repository, never()).completeClaimedDeleteJob(
+                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any(), any());
+        verify(fixture.repository, never()).failClaimedIngestJob(
+                anyString(), any(), anyLong(), anyLong(), anyLong(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    public void shouldLeaveDeleteRunningForLeaseRecoveryWhenFailureAccountingAlsoFails() {
+        DeleteFixture fixture = new DeleteFixture(true, true);
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.RUNNING, fixture.job.get().status());
+        Assert.assertEquals(RagIngestStage.DELETING_SOURCE, fixture.job.get().checkpoint().stage());
+        Assert.assertNull(fixture.job.get().cancelReason());
+        verify(fixture.repository, never()).failClaimedIngestJob(
+                anyString(), any(), anyLong(), anyLong(), anyLong(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    public void shouldFailClosedBeforeDeletingObjectOutsideDocumentScope() {
+        DeleteFixture fixture = new DeleteFixture(false);
+        List<RagDocumentVersionEntity> current = fixture.versions.get();
+        RagDocumentVersionEntity source = current.get(0);
+        fixture.versions.set(List.of(new RagDocumentVersionEntity(source.tenantId(), source.knowledgeBaseId(),
+                        source.documentId(), source.versionId(), source.versionNumber(), source.generation(),
+                        source.objectBucket(), "tenants/other/rag/other/doc/version/private.md",
+                        source.parsedObjectBucket(), source.parsedObjectKey(), source.fileName(), source.sha256(),
+                        source.mimeType(), source.sizeBytes(), source.status(), source.parserVersion(),
+                        source.chunkerVersion(), source.embeddingModelRevision(), source.revision()), current.get(1)));
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.FAILED, fixture.job.get().status());
+        Assert.assertEquals("RAG_DELETE_OBJECT_SCOPE_INVALID", fixture.job.get().errorCode());
+        verify(fixture.storage, never()).deleteObject(anyString(), anyString());
+    }
+
+    @Test
+    public void shouldFailClosedBeforeDeletingTraversalObjectKey() {
+        DeleteFixture fixture = new DeleteFixture(false);
+        List<RagDocumentVersionEntity> current = fixture.versions.get();
+        RagDocumentVersionEntity source = current.get(0);
+        String traversal = RagObjectStorageScope.versionPrefix(DeleteFixture.TENANT, DeleteFixture.KB_ID,
+                DeleteFixture.DOCUMENT_ID, source.versionId()) + "../../other/private.md";
+        fixture.versions.set(List.of(new RagDocumentVersionEntity(source.tenantId(), source.knowledgeBaseId(),
+                        source.documentId(), source.versionId(), source.versionNumber(), source.generation(),
+                        source.objectBucket(), traversal, source.parsedObjectBucket(), source.parsedObjectKey(),
+                        source.fileName(), source.sha256(), source.mimeType(), source.sizeBytes(), source.status(),
+                        source.parserVersion(), source.chunkerVersion(), source.embeddingModelRevision(),
+                        source.revision()), current.get(1)));
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.FAILED, fixture.job.get().status());
+        Assert.assertEquals("RAG_DELETE_OBJECT_SCOPE_INVALID", fixture.job.get().errorCode());
+        verify(fixture.storage, never()).deleteObject(anyString(), anyString());
+    }
+
+    @Test
+    public void shouldRetryWhenDeleteReturnsButObjectStillExists() {
+        DeleteFixture fixture = new DeleteFixture(false);
+        when(fixture.storage.objectExists(anyString(), anyString())).thenReturn(true);
+
+        Assert.assertTrue(fixture.worker.execute(DeleteFixture.TENANT, DeleteFixture.JOB_ID, DeleteFixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.RETRYING, fixture.job.get().status());
+        Assert.assertEquals("RAG_DELETE_OBJECT_REMAINS", fixture.job.get().errorCode());
+        verify(fixture.repository, never()).completeClaimedDeleteJob(
+                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any(), any());
     }
 
     @Test
@@ -366,7 +478,7 @@ public class RagIngestWorkerTest {
 
         private static RagDocumentVersionEntity queuedVersion() {
             return new RagDocumentVersionEntity(TENANT, KB_ID, DOCUMENT_ID, VERSION_ID, 1, 1,
-                    "rag-bucket", "source", "document.md", sha256(MARKDOWN), "text/markdown",
+                    "rag-bucket", "source", null, null, "document.md", sha256(MARKDOWN), "text/markdown",
                     MARKDOWN.length, RagDocumentVersionStatus.QUEUED, null, null, null, 0);
         }
 
@@ -402,6 +514,110 @@ public class RagIngestWorkerTest {
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }
+        }
+    }
+
+    private static final class DeleteFixture {
+        private static final String TENANT = "tenant-a";
+        private static final String KB_ID = "kb-a";
+        private static final String DOCUMENT_ID = "doc-a";
+        private static final String JOB_ID = "delete-a";
+        private static final String OWNER = "worker-a";
+        private static final Instant NOW = Instant.parse("2026-07-20T02:00:00Z");
+
+        private final IRagRepository repository = mock(IRagRepository.class);
+        private final ObjectStorageService storage = mock(ObjectStorageService.class);
+        private final VectorStorePort vectorStore = mock(VectorStorePort.class);
+        private final ScheduledExecutorService executor = mock(ScheduledExecutorService.class);
+        private final AtomicReference<RagIngestJobEntity> job = new AtomicReference<>(RagIngestJobEntity.pending(
+                TENANT, KB_ID, DOCUMENT_ID, "version-2", JOB_ID, "delete-key",
+                RagIngestOperation.DELETE, 3L, 3));
+        private final AtomicReference<RagDocumentEntity> document = new AtomicReference<>(
+                new RagDocumentEntity(TENANT, "owner-a", RagVisibility.TENANT, KB_ID, DOCUMENT_ID,
+                        "document.md", "version-2", 3L, null, RagDocumentStatus.DELETING, 8L));
+        private final AtomicReference<List<RagDocumentVersionEntity>> versions = new AtomicReference<>(List.of(
+                version("version-1", 1, key("version-1", "source-v1.md"),
+                        key("version-1", "parsed-v1.json"), 5L),
+                version("version-2", 2, key("version-2", "source-v2.md"), null, 6L)));
+        private final Set<String> deletedVectors = new LinkedHashSet<>();
+        private final Set<String> deletedObjects = new LinkedHashSet<>();
+        private final RagIngestWorker worker;
+
+        private DeleteFixture(boolean failSourceDeletion) {
+            this(failSourceDeletion, false);
+        }
+
+        private DeleteFixture(boolean failSourceDeletion, boolean failFailureAccounting) {
+            RagProperties properties = new RagProperties();
+            properties.getWorker().setLeaseDurationMs(Duration.ofMinutes(3).toMillis());
+            properties.getWorker().setHeartbeatIntervalMs(Duration.ofSeconds(30).toMillis());
+            when(executor.scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any()))
+                    .thenReturn(mock(ScheduledFuture.class));
+            when(repository.findIngestJob(TENANT, JOB_ID)).thenAnswer(invocation -> Optional.of(job.get()));
+            when(repository.findDocument(TENANT, DOCUMENT_ID))
+                    .thenAnswer(invocation -> Optional.of(document.get()));
+            when(repository.listDocumentVersions(TENANT, DOCUMENT_ID))
+                    .thenAnswer(invocation -> versions.get());
+            when(repository.claimDueIngestJob(anyString(), anyString(), anyString(), any(), any()))
+                    .thenAnswer(invocation -> {
+                        Instant now = invocation.getArgument(3);
+                        Instant until = invocation.getArgument(4);
+                        RagIngestJobEntity claimed = job.get().claim(invocation.getArgument(2), 1L, now,
+                                Duration.between(now, until));
+                        job.set(claimed);
+                        return Optional.of(claimed);
+                    });
+            when(repository.heartbeatClaimedIngestJob(anyString(), anyString(), anyString(), anyLong(), any(), any()))
+                    .thenReturn(1);
+            when(repository.updateClaimedIngestJob(anyString(), any(), anyLong(), anyString(), anyLong(), any()))
+                    .thenAnswer(invocation -> {
+                        RagIngestJobEntity target = invocation.getArgument(1);
+                        if (failFailureAccounting && (target.status() == RagIngestJobStatus.RETRYING
+                                || target.status() == RagIngestJobStatus.FAILED
+                                || target.status() == RagIngestJobStatus.DEAD)) {
+                            throw new AppException("RAG_DATABASE_UNAVAILABLE", "模拟失败记账异常");
+                        }
+                        if (job.get().revision() != (long) invocation.getArgument(2)) return 0;
+                        job.set(target);
+                        return 1;
+                    });
+            when(repository.listChunks(anyString(), anyString())).thenReturn(List.of());
+            when(vectorStore.countVersion(anyString(), anyString())).thenReturn(0L);
+            when(storage.ragBucket()).thenReturn("rag");
+            doAnswer(invocation -> {
+                deletedVectors.add(invocation.getArgument(1));
+                return null;
+            }).when(vectorStore).deleteVersion(anyString(), anyString());
+            doAnswer(invocation -> {
+                String objectKey = invocation.getArgument(1);
+                if (failSourceDeletion && key("version-1", "source-v1.md").equals(objectKey)) {
+                    throw new AppException("OBJECT_STORAGE_DELETE_FAILED", "模拟对象存储暂时失败");
+                }
+                deletedObjects.add(objectKey);
+                return null;
+            }).when(storage).deleteObject(anyString(), anyString());
+            doAnswer(invocation -> {
+                job.set(invocation.getArgument(1));
+                document.set(invocation.getArgument(5));
+                versions.set(invocation.getArgument(6));
+                return null;
+            }).when(repository).completeClaimedDeleteJob(anyString(), any(), anyLong(), anyString(),
+                    anyLong(), any(), any(), any());
+            worker = new RagIngestWorker(repository, storage, mock(RagDocumentParserPort.class),
+                    mock(EmbeddingPort.class), mock(SparseEncoderPort.class), vectorStore,
+                    properties, Clock.fixed(NOW, ZoneOffset.UTC), executor);
+        }
+
+        private static RagDocumentVersionEntity version(String id, int number, String sourceKey,
+                                                        String parsedKey, long revision) {
+            return new RagDocumentVersionEntity(TENANT, KB_ID, DOCUMENT_ID, id, number, 3L,
+                    "rag", sourceKey, parsedKey == null ? null : "rag", parsedKey,
+                    id + ".md", "a".repeat(64), "text/markdown", 10L,
+                    RagDocumentVersionStatus.DELETING, null, null, null, revision);
+        }
+
+        private static String key(String versionId, String fileName) {
+            return RagObjectStorageScope.sourceObjectKey(TENANT, KB_ID, DOCUMENT_ID, versionId, fileName);
         }
     }
 }

@@ -82,7 +82,8 @@ public class RagPersistenceMapper {
         return new RagDocumentVersionEntity(po.getTenantId(), po.getKnowledgeBaseId(), po.getDocumentId(),
                 po.getVersionId(), requiredInt(po.getVersionNumber(), "文档版本号"),
                 requiredLong(po.getGeneration(), "文档版本generation"), po.getSourceBucket(),
-                po.getSourceObjectKey(), po.getFileName(), po.getContentHash(), po.getMimeType(),
+                po.getSourceObjectKey(), po.getParsedBucket(), po.getParsedObjectKey(),
+                po.getFileName(), po.getContentHash(), po.getMimeType(),
                 requiredLong(po.getSizeBytes(), "文档字节数"),
                 codec.enumValue(RagDocumentVersionStatus.class, po.getStatus(), "文档版本状态"),
                 po.getParserVersion(), po.getChunkerVersion(), po.getEmbeddingModelRevision(),
@@ -94,7 +95,8 @@ public class RagPersistenceMapper {
                 .knowledgeBaseId(entity.knowledgeBaseId()).documentId(entity.documentId())
                 .versionId(entity.versionId()).versionNumber(entity.versionNumber())
                 .generation(entity.generation()).sourceBucket(entity.objectBucket())
-                .sourceObjectKey(entity.objectKey()).fileName(entity.fileName()).mimeType(entity.mimeType())
+                .sourceObjectKey(entity.objectKey()).parsedBucket(entity.parsedObjectBucket())
+                .parsedObjectKey(entity.parsedObjectKey()).fileName(entity.fileName()).mimeType(entity.mimeType())
                 .sizeBytes(entity.sizeBytes()).contentHash(entity.sha256()).parserVersion(entity.parserVersion())
                 .chunkerVersion(entity.chunkerVersion()).embeddingModelRevision(entity.embeddingModelRevision())
                 .chunkCount(0).status(codec.databaseValue(entity.status())).rowVersion(entity.revision()).build();

@@ -43,7 +43,7 @@ public class RagIndexActivationTest {
 
     private RagDocumentVersionEntity version() {
         return new RagDocumentVersionEntity("tenant-a", "kb-a", "doc-a", "ver-a", 1, 1,
-                "bucket", "key", "文档.md", "a".repeat(64), "text/markdown", 10,
+                "bucket", "key", null, null, "文档.md", "a".repeat(64), "text/markdown", 10,
                 RagDocumentVersionStatus.QUEUED, null, null, null, 0);
     }
 

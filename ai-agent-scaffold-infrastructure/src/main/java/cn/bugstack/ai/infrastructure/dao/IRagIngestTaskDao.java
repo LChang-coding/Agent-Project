@@ -29,6 +29,10 @@ public interface IRagIngestTaskDao {
     RagIngestTaskPO queryByTenantAndTaskKey(@Param("tenantId") String tenantId,
                                            @Param("taskKey") String taskKey);
 
+    /** 查询文档当前未闭合的任务，用于删除登记互斥。 */
+    RagIngestTaskPO queryActiveByTenantAndDocumentId(@Param("tenantId") String tenantId,
+                                                     @Param("documentId") String documentId);
+
     /** 全局扫描到期任务，只投影 tenantId + jobId。 */
     List<RagIngestCandidatePO> queryDueCandidates(@Param("now") LocalDateTime now,
                                                   @Param("limit") int limit);

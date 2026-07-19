@@ -141,7 +141,7 @@ public class RagDocumentManagementServiceTest {
     private void stubDocumentLifecycle(IRagRepository repository) {
         when(repository.findDocumentVersion("tenant-a", "ver-a")).thenReturn(Optional.of(
                 new RagDocumentVersionEntity("tenant-a", "kb-a", "doc-a", "ver-a", 1, 1,
-                        "rag", "object", "document.md", "sha256", "text/markdown", 10,
+                        "rag", "object", null, null, "document.md", "sha256", "text/markdown", 10,
                         RagDocumentVersionStatus.QUEUED, null, null, null, 0)));
         when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(
                 new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",

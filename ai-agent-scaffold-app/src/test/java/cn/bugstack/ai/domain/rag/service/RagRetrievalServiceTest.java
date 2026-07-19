@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.entity.RagAgentBindingEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagChunkEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalAuditCommand;
@@ -17,6 +18,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalRequest;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalResult;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagFusionStrategy;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagRetrievalMode;
@@ -154,6 +156,81 @@ public class RagRetrievalServiceTest {
         modelFixturesOneHit();
         RagChunkEntity wrongTenantScope = chunk("chunk-a", "doc-a", "ver-a", "kb-other", "正文");
         Mockito.doReturn(List.of(wrongTenantScope)).when(repository).listChunksByIds(anyString(), any());
+
+        AppException error = Assert.assertThrows(AppException.class, () -> service.retrieve(request(1000)));
+
+        Assert.assertEquals("RAG_CHUNK_SCOPE_VIOLATION", error.getCode());
+    }
+
+    @Test
+    public void shouldSkipLegitimateVectorHitForDeletingDocument() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+        RagDocumentEntity deleting = new RagDocumentEntity(
+                "tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                "Alpha.md", "ver-a", 3L, null, RagDocumentStatus.DELETING, 2L);
+        Mockito.doReturn(List.of(deleting)).when(repository).listDocumentsByIds(anyString(), any());
+        when(repository.findDocumentVersion("tenant-a", "ver-a"))
+                .thenReturn(Optional.of(tombstoneVersion("ver-a", 3L, RagDocumentVersionStatus.DELETING)));
+
+        RagRetrievalResult result = service.retrieve(request(1000));
+
+        Assert.assertTrue(result.citations().isEmpty());
+    }
+
+    @Test
+    public void shouldStillFailClosedWhenDeletingDocumentHitHasWrongVersion() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+        RagDocumentEntity deleting = new RagDocumentEntity(
+                "tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                "Alpha.md", "ver-other", 3L, null, RagDocumentStatus.DELETING, 2L);
+        Mockito.doReturn(List.of(deleting)).when(repository).listDocumentsByIds(anyString(), any());
+
+        AppException error = Assert.assertThrows(AppException.class, () -> service.retrieve(request(1000)));
+
+        Assert.assertEquals("RAG_DOCUMENT_SCOPE_VIOLATION", error.getCode());
+    }
+
+    @Test
+    public void shouldSkipMissingChunkWhenDeletionTombstoneProvesStaleVectorRace() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+        Mockito.doReturn(List.of()).when(repository).listChunksByIds(anyString(), any());
+        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(
+                new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                        "Alpha.md", "ver-a", 3L, null, RagDocumentStatus.DELETING, 2L)));
+        when(repository.findDocumentVersion("tenant-a", "ver-a"))
+                .thenReturn(Optional.of(tombstoneVersion("ver-a", 3L, RagDocumentVersionStatus.DELETING)));
+
+        RagRetrievalResult result = service.retrieve(request(1000));
+
+        Assert.assertTrue(result.citations().isEmpty());
+    }
+
+    @Test
+    public void shouldFailClosedForMissingChunkWithoutDeletionTombstone() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+        Mockito.doReturn(List.of()).when(repository).listChunksByIds(anyString(), any());
+        when(repository.findDocument("tenant-a", "doc-a"))
+                .thenReturn(Optional.of(document("doc-a", "ver-a", "Alpha.md")));
+
+        AppException error = Assert.assertThrows(AppException.class, () -> service.retrieve(request(1000)));
+
+        Assert.assertEquals("RAG_CHUNK_SCOPE_VIOLATION", error.getCode());
+    }
+
+    @Test
+    public void shouldFailClosedForDeletedDocumentHitWithForgedVersion() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+        Mockito.doReturn(List.of()).when(repository).listChunksByIds(anyString(), any());
+        when(repository.findDocument("tenant-a", "doc-a")).thenReturn(Optional.of(
+                new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", "doc-a",
+                        "Alpha.md", null, 0L, null, RagDocumentStatus.DELETED, 3L)));
+        when(repository.findDocumentVersion("tenant-a", "ver-a")).thenReturn(Optional.of(
+                tombstoneVersion("ver-other", 3L, RagDocumentVersionStatus.DELETED)));
 
         AppException error = Assert.assertThrows(AppException.class, () -> service.retrieve(request(1000)));
 
@@ -315,6 +392,13 @@ public class RagRetrievalServiceTest {
     private RagDocumentEntity document(String documentId, String versionId, String name) {
         return new RagDocumentEntity("tenant-a", "owner-a", RagVisibility.TENANT, "kb-a", documentId,
                 name, versionId, 3, null, RagDocumentStatus.READY, 1);
+    }
+
+    private RagDocumentVersionEntity tombstoneVersion(String versionId, long generation,
+                                                       RagDocumentVersionStatus status) {
+        return new RagDocumentVersionEntity("tenant-a", "kb-a", "doc-a", versionId, 1, generation,
+                "rag", "source", null, null, "Alpha.md", "a".repeat(64), "text/markdown", 10L,
+                status, null, null, null, 2L);
     }
 
     private String sha(String value) {

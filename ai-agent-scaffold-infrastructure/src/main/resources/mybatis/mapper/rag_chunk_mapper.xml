@@ -134,4 +134,14 @@
         UPDATE rag_chunk SET status = 'deleted', deleted = 1, revision = revision + 1
         WHERE tenant_id = #{tenantId} AND version_id = #{versionId} AND deleted = 0
     </update>
+
+    <delete id="deleteByTenantAndVersionId">
+        DELETE FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND version_id = #{versionId}
+    </delete>
+
+    <select id="countAllByTenantAndVersionId" resultType="long">
+        SELECT COUNT(*) FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND version_id = #{versionId}
+    </select>
 </mapper>

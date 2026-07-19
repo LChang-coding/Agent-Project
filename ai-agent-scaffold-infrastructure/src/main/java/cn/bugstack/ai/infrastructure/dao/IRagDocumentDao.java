@@ -20,6 +20,11 @@ public interface IRagDocumentDao {
     RagDocumentPO queryByTenantAndDocumentId(@Param("tenantId") String tenantId,
                                              @Param("documentId") String documentId);
 
+    /** 在删除登记事务中锁定指定知识库的文档聚合根。 */
+    RagDocumentPO queryByTenantKnowledgeBaseAndDocumentIdForUpdate(@Param("tenantId") String tenantId,
+                                                                   @Param("knowledgeBaseId") String knowledgeBaseId,
+                                                                   @Param("documentId") String documentId);
+
     /** 按租户批量查询业务文档。 */
     List<RagDocumentPO> queryListByTenantAndDocumentIds(@Param("tenantId") String tenantId,
                                                         @Param("documentIds") List<String> documentIds);
@@ -55,5 +60,11 @@ public interface IRagDocumentDao {
                                                   @Param("documentId") String documentId,
                                                   @Param("generation") long generation,
                                                   @Param("expectedRevision") long expectedRevision);
+
+    /** 删除完成事务中以状态和revision关闭文档墓碑。 */
+    int markDeletedByTenantAndRevision(@Param("tenantId") String tenantId,
+                                       @Param("knowledgeBaseId") String knowledgeBaseId,
+                                       @Param("documentId") String documentId,
+                                       @Param("expectedRevision") long expectedRevision);
 
 }

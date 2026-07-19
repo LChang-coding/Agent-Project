@@ -11,6 +11,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentUploadResult;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagUploadFileCandidate;
 import cn.bugstack.ai.domain.rag.service.RagDocumentManagementService;
+import cn.bugstack.ai.domain.rag.service.RagDocumentDeletionService;
 import cn.bugstack.ai.domain.rag.service.RagDocumentUploadService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
@@ -18,6 +19,7 @@ import cn.bugstack.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,11 +41,14 @@ public class RagDocumentController {
 
     private final RagDocumentUploadService uploadService;
     private final RagDocumentManagementService managementService;
+    private final RagDocumentDeletionService deletionService;
 
     public RagDocumentController(RagDocumentUploadService uploadService,
-                                 RagDocumentManagementService managementService) {
+                                 RagDocumentManagementService managementService,
+                                 RagDocumentDeletionService deletionService) {
         this.uploadService = uploadService;
         this.managementService = managementService;
+        this.deletionService = deletionService;
     }
 
     /** 将 Multipart 流转存到受控临时文件后提交上传用例。 */
@@ -88,6 +93,20 @@ public class RagDocumentController {
             return success(managementService.listDocuments(TenantContextHolder.getTenantId(),
                             TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(), knowledgeBaseId)
                     .stream().map(this::documentResponse).toList());
+        } catch (AppException e) {
+            return failure(e);
+        }
+    }
+
+    /** 以revision乐观锁受理覆盖全部版本的异步文档删除。 */
+    @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents/{documentId}")
+    public Response<RagIngestTaskResponseDTO> delete(@PathVariable String knowledgeBaseId,
+                                                      @PathVariable String documentId,
+                                                      @RequestParam long expectedRevision) {
+        try {
+            return success(taskResponse(deletionService.deleteDocument(TenantContextHolder.getTenantId(),
+                    TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(), knowledgeBaseId,
+                    documentId, expectedRevision)));
         } catch (AppException e) {
             return failure(e);
         }

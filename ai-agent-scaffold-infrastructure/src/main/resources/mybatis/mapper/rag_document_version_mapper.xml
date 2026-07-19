@@ -71,6 +71,13 @@
         ORDER BY version_no DESC, id DESC
     </select>
 
+    <select id="queryListByTenantAndDocumentIdForUpdate" resultMap="RagDocumentVersionMap">
+        SELECT <include refid="Columns"/> FROM rag_document_version
+        WHERE tenant_id = #{tenantId} AND document_id = #{documentId} AND deleted = 0
+        ORDER BY version_no DESC, id DESC
+        FOR UPDATE
+    </select>
+
     <update id="updateByTenantAndRevision">
         UPDATE rag_document_version
         SET parser_version = #{version.parserVersion}, chunker_version = #{version.chunkerVersion},
@@ -96,5 +103,13 @@
           AND document_id = #{documentId} AND version_id = #{versionId}
           AND generation = #{generation} AND row_version = #{expectedRevision}
           AND status IN ('created', 'queued', 'processing') AND deleted = 0
+    </update>
+
+    <update id="markDeletedByTenantAndRevision">
+        UPDATE rag_document_version
+        SET status = 'deleted', row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND document_id = #{documentId} AND version_id = #{versionId}
+          AND row_version = #{expectedRevision} AND status = 'deleting' AND deleted = 0
     </update>
 </mapper>

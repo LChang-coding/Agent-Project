@@ -14,6 +14,8 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.errors.ErrorResponseException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -204,6 +206,26 @@ public class MinioObjectStorageService implements ObjectStorageService {
             }
         } catch (Exception e) {
             throw new AppException("OBJECT_STORAGE_DELETE_FAILED", "对象删除失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean objectExists(String bucket, String objectKey) {
+        checkLocation(bucket, objectKey);
+        try {
+            if (useMinio()) {
+                minioClient().statObject(StatObjectArgs.builder().bucket(bucket).object(objectKey).build());
+                return true;
+            }
+            return Files.exists(localPath(bucket, objectKey), LinkOption.NOFOLLOW_LINKS);
+        } catch (ErrorResponseException e) {
+            String code = e.errorResponse() == null ? null : e.errorResponse().code();
+            if ("NoSuchKey".equals(code) || "NoSuchObject".equals(code) || "NoSuchBucket".equals(code)) {
+                return false;
+            }
+            throw new AppException("OBJECT_STORAGE_STAT_FAILED", "对象存在性检查失败：" + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new AppException("OBJECT_STORAGE_STAT_FAILED", "对象存在性检查失败：" + e.getMessage(), e);
         }
     }
 

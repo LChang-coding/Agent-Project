@@ -29,6 +29,14 @@ public interface IRagChunkDao {
     int softDeleteByTenantAndVersionId(@Param("tenantId") String tenantId,
                                        @Param("versionId") String versionId);
 
+    /** 物理删除租户文档版本的全部分块。 */
+    int deleteByTenantAndVersionId(@Param("tenantId") String tenantId,
+                                   @Param("versionId") String versionId);
+
+    /** 统计租户文档版本的全部分块，包含已软删记录。 */
+    long countAllByTenantAndVersionId(@Param("tenantId") String tenantId,
+                                      @Param("versionId") String versionId);
+
     /** 按租户和切片业务 ID 查询。 */
     RagChunkPO queryByTenantAndChunkId(@Param("tenantId") String tenantId,
                                       @Param("chunkId") String chunkId);

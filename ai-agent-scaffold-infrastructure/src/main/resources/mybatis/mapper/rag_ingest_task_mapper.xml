@@ -79,6 +79,13 @@
         WHERE tenant_id = #{tenantId} AND task_key = #{taskKey} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryActiveByTenantAndDocumentId" resultMap="RagIngestTaskMap">
+        SELECT <include refid="Columns"/> FROM rag_ingest_task
+        WHERE tenant_id = #{tenantId} AND document_id = #{documentId}
+          AND status IN ('pending', 'running', 'retrying', 'cancel_requested') AND deleted = 0
+        ORDER BY id DESC LIMIT 1
+    </select>
+
     <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO">
         SELECT tenant_id AS tenantId, task_id AS jobId
         FROM rag_ingest_task
@@ -142,6 +149,7 @@
             trace_id = COALESCE(#{task.traceId}, trace_id),
             started_at = COALESCE(started_at, #{task.startedAt}),
             finished_at = CASE
+                WHEN #{task.status} = 'pending' THEN NULL
                 WHEN #{task.status} IN ('cancelled', 'completed', 'failed', 'dead')
                     THEN COALESCE(finished_at, CURRENT_TIMESTAMP(3))
                 ELSE finished_at
@@ -167,6 +175,7 @@
         error_code = #{task.errorCode}, error_message = #{task.errorMessage},
         trace_id = COALESCE(#{task.traceId}, trace_id),
         finished_at = CASE
+            WHEN #{task.status} = 'pending' THEN NULL
             WHEN #{task.status} IN ('cancelled', 'completed', 'failed', 'dead')
                 THEN COALESCE(finished_at, CURRENT_TIMESTAMP(3))
             ELSE finished_at

@@ -9,9 +9,12 @@ import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagRetrievalProfileEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobCandidate;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao;
 import cn.bugstack.ai.infrastructure.dao.IRagChunkDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
@@ -20,6 +23,7 @@ import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagChunkPO;
+import cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO;
 import cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceCodec;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
@@ -33,6 +37,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -134,12 +140,6 @@ public class RagRepository implements IRagRepository {
         return documentVersionDao.queryListByTenantAndDocumentId(requireText(tenantId, "tenantId"),
                         requireText(documentId, "documentId")).stream()
                 .map(mapper::toDocumentVersion).toList();
-    }
-
-    @Override
-    public int insertDocumentVersion(String tenantId, RagDocumentVersionEntity version) {
-        requireTenant(tenantId, version == null ? null : version.tenantId());
-        return documentVersionDao.insert(mapper.toDocumentVersionPo(version));
     }
 
     @Override
@@ -270,6 +270,63 @@ public class RagRepository implements IRagRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void completeClaimedDeleteJob(String tenantId, RagIngestJobEntity completedJob,
+                                         long expectedTaskRevision, String leaseOwner,
+                                         long expectedFencingToken, RagDocumentEntity deletedDocument,
+                                         List<RagDocumentVersionEntity> deletedVersions, Instant now) {
+        validateLifecycle(tenantId, completedJob, expectedTaskRevision, leaseOwner,
+                expectedFencingToken, now, RagIngestJobStatus.COMPLETED);
+        if (completedJob.operation() != RagIngestOperation.DELETE
+                || deletedDocument == null || deletedVersions == null || deletedVersions.isEmpty()
+                || !tenantId.equals(deletedDocument.tenantId())
+                || !completedJob.documentId().equals(deletedDocument.documentId())
+                || !completedJob.knowledgeBaseId().equals(deletedDocument.knowledgeBaseId())) {
+            throw new IllegalArgumentException("删除完成事务范围非法");
+        }
+        RagDocumentPO lockedDocumentPo = documentDao.queryByTenantKnowledgeBaseAndDocumentIdForUpdate(
+                tenantId, deletedDocument.knowledgeBaseId(), deletedDocument.documentId());
+        RagDocumentEntity lockedDocument = mapper.toDocument(lockedDocumentPo);
+        if (lockedDocument == null || lockedDocument.status() != RagDocumentStatus.DELETING
+                || lockedDocument.revision() != deletedDocument.revision() - 1) {
+            throw new AppException("RAG_DELETE_DOCUMENT_SET_CHANGED", "删除收口时文档墓碑已变化");
+        }
+        List<RagDocumentVersionEntity> lockedVersions = documentVersionDao
+                .queryListByTenantAndDocumentIdForUpdate(tenantId, deletedDocument.documentId())
+                .stream().map(mapper::toDocumentVersion).toList();
+        Map<String, RagDocumentVersionEntity> targetsById = new LinkedHashMap<>();
+        for (RagDocumentVersionEntity target : deletedVersions) {
+            if (targetsById.putIfAbsent(target.versionId(), target) != null) {
+                throw new IllegalArgumentException("删除完成事务版本重复");
+            }
+        }
+        if (lockedVersions.size() != targetsById.size()) {
+            throw new AppException("RAG_DELETE_VERSION_SET_CHANGED", "删除收口时文档版本集合已变化");
+        }
+        for (RagDocumentVersionEntity lockedVersion : lockedVersions) {
+            RagDocumentVersionEntity version = targetsById.get(lockedVersion.versionId());
+            if (version == null || !tenantId.equals(version.tenantId())
+                    || !deletedDocument.documentId().equals(version.documentId())
+                    || !deletedDocument.knowledgeBaseId().equals(version.knowledgeBaseId())
+                    || version.status() != RagDocumentVersionStatus.DELETED
+                    || lockedVersion.status() != RagDocumentVersionStatus.DELETING
+                    || lockedVersion.revision() != version.revision() - 1
+                    || lockedVersion.versionNumber() != version.versionNumber()
+                    || lockedVersion.generation() != version.generation()) {
+                throw new IllegalArgumentException("删除完成事务版本范围非法");
+            }
+            requireChanged(documentVersionDao.markDeletedByTenantAndRevision(tenantId,
+                    version.knowledgeBaseId(), version.documentId(), version.versionId(), version.revision() - 1));
+        }
+        requireChanged(documentDao.markDeletedByTenantAndRevision(tenantId,
+                deletedDocument.knowledgeBaseId(), deletedDocument.documentId(),
+                deletedDocument.revision() - 1));
+        requireChanged(ingestTaskDao.updateClaimedByTenantFenceAndRevision(tenantId,
+                mapper.toIngestTaskPo(completedJob), expectedTaskRevision, leaseOwner,
+                expectedFencingToken, LocalDateTime.ofInstant(now, ZoneOffset.UTC)));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void cancelClaimedIngestJob(String tenantId, RagIngestJobEntity cancelledJob,
                                        long expectedTaskRevision, long expectedVersionRevision,
                                        long expectedDocumentRevision, String leaseOwner,
@@ -354,6 +411,18 @@ public class RagRepository implements IRagRepository {
     @Override
     public int deleteChunks(String tenantId, String versionId) {
         return chunkDao.softDeleteByTenantAndVersionId(requireText(tenantId, "tenantId"),
+                requireText(versionId, "versionId"));
+    }
+
+    @Override
+    public int purgeChunks(String tenantId, String versionId) {
+        return chunkDao.deleteByTenantAndVersionId(requireText(tenantId, "tenantId"),
+                requireText(versionId, "versionId"));
+    }
+
+    @Override
+    public long countAllChunks(String tenantId, String versionId) {
+        return chunkDao.countAllByTenantAndVersionId(requireText(tenantId, "tenantId"),
                 requireText(versionId, "versionId"));
     }
 

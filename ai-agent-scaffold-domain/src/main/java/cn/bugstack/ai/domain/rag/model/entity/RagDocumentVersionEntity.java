@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.rag.model.entity;
 
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
+import cn.bugstack.ai.types.exception.AppException;
 
 /**
  * 不可变文档版本实体。
@@ -13,6 +14,8 @@ public record RagDocumentVersionEntity(String tenantId,
                                        long generation,
                                        String objectBucket,
                                        String objectKey,
+                                       String parsedObjectBucket,
+                                       String parsedObjectKey,
                                        String fileName,
                                        String sha256,
                                        String mimeType,
@@ -30,6 +33,15 @@ public record RagDocumentVersionEntity(String tenantId,
         requireText(versionId, "文档版本ID");
         requireText(objectBucket, "对象存储桶");
         requireText(objectKey, "对象存储键");
+        boolean hasParsedBucket = parsedObjectBucket != null && !parsedObjectBucket.isBlank();
+        boolean hasParsedKey = parsedObjectKey != null && !parsedObjectKey.isBlank();
+        if (hasParsedBucket != hasParsedKey) {
+            throw new IllegalArgumentException("解析产物存储桶与对象键必须成对");
+        }
+        if (hasParsedBucket) {
+            requireText(parsedObjectBucket, "解析产物存储桶");
+            requireText(parsedObjectKey, "解析产物对象键");
+        }
         requireText(fileName, "文件名");
         requireText(sha256, "文件摘要");
         requireText(mimeType, "文件类型");
@@ -76,10 +88,29 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.FAILED, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
+    /** 将任意已停止写入的版本转为删除中；重复调用保持幂等。 */
+    public RagDocumentVersionEntity requestDeletion() {
+        if (status == RagDocumentVersionStatus.DELETING || status == RagDocumentVersionStatus.DELETED) return this;
+        if (status == RagDocumentVersionStatus.PROCESSING) {
+            throw new AppException("RAG_DOCUMENT_VERSION_BUSY", "文档版本仍在处理中，不能开始删除");
+        }
+        return copy(RagDocumentVersionStatus.DELETING, parserVersion, chunkerVersion, embeddingModelRevision);
+    }
+
+    /** 外部对象和索引均清理后关闭版本墓碑。 */
+    public RagDocumentVersionEntity deleted() {
+        if (status == RagDocumentVersionStatus.DELETED) return this;
+        if (status != RagDocumentVersionStatus.DELETING) {
+            throw new AppException("RAG_DOCUMENT_VERSION_DELETE_STATE_INVALID", "只有删除中的版本可以关闭");
+        }
+        return copy(RagDocumentVersionStatus.DELETED, parserVersion, chunkerVersion, embeddingModelRevision);
+    }
+
     private RagDocumentVersionEntity copy(RagDocumentVersionStatus targetStatus, String parserRevision,
                                           String chunkerRevision, String embeddingRevision) {
         return new RagDocumentVersionEntity(tenantId, knowledgeBaseId, documentId, versionId, versionNumber,
-                generation, objectBucket, objectKey, fileName, sha256, mimeType, sizeBytes, targetStatus,
+                generation, objectBucket, objectKey, parsedObjectBucket, parsedObjectKey,
+                fileName, sha256, mimeType, sizeBytes, targetStatus,
                 parserRevision, chunkerRevision, embeddingRevision, revision + 1);
     }
 }

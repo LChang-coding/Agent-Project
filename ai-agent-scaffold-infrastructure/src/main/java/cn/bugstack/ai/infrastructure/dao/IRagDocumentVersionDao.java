@@ -23,6 +23,10 @@ public interface IRagDocumentVersionDao {
     List<RagDocumentVersionPO> queryListByTenantAndDocumentId(@Param("tenantId") String tenantId,
                                                               @Param("documentId") String documentId);
 
+    /** 删除收口事务内锁定文档的完整版本集合。 */
+    List<RagDocumentVersionPO> queryListByTenantAndDocumentIdForUpdate(@Param("tenantId") String tenantId,
+                                                                       @Param("documentId") String documentId);
+
     /** 按租户、版本业务 ID 和 row version 乐观更新状态。 */
     int updateByTenantAndRevision(@Param("tenantId") String tenantId,
                                   @Param("version") RagDocumentVersionPO version,
@@ -45,4 +49,11 @@ public interface IRagDocumentVersionDao {
                                  @Param("generation") long generation,
                                  @Param("status") String status,
                                  @Param("expectedRevision") long expectedRevision);
+
+    /** 删除完成事务中以完整聚合范围和revision关闭版本墓碑。 */
+    int markDeletedByTenantAndRevision(@Param("tenantId") String tenantId,
+                                       @Param("knowledgeBaseId") String knowledgeBaseId,
+                                       @Param("documentId") String documentId,
+                                       @Param("versionId") String versionId,
+                                       @Param("expectedRevision") long expectedRevision);
 }

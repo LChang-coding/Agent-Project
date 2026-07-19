@@ -6,7 +6,7 @@
 - 所有请求必须携带现有登录 Bearer。租户、用户和角色由 `TenantContextHolder` 注入，不接受请求体覆盖。
 - 管理操作由领域层校验 owner/admin；普通成员不能靠隐藏前端按钮绕过后端鉴权。
 - 业务成功码沿用项目统一 `0000`；HTTP 200 不等于业务成功，调用方必须同时检查响应 `code`。
-- 更新 Profile 和删除 Binding 使用 revision 乐观锁，缺少或过期 revision 必须刷新后重试。
+- 更新 Profile、删除 Binding 和首次受理文档删除使用 revision 乐观锁，缺少或过期 revision 必须刷新后重试。文档已有同一幂等删除任务时，重复 DELETE 仅查询当前任务或从失败 checkpoint 继续，此时忽略旧 revision，但仍严格校验租户、知识库、文档和任务范围。
 
 ## 端点清单
 
@@ -16,6 +16,7 @@
 | GET | `/api/v1/rag/knowledge-bases` | 查询当前租户知识库 | 不接受 tenantId |
 | POST | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents` | 上传文档 | `multipart/form-data` 的 `file`；业务策略支持 PDF、DOCX、MD/Markdown且上限50 MiB；Servlet限制、Nacos下发覆盖和反向代理请求体限制必须分别对齐 |
 | GET | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents` | 查询知识库文档 | 返回 active/target generation 和状态 |
+| DELETE | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/documents/{documentId}?expectedRevision=N` | 异步删除文档 | 仅owner/admin；必须携带当前 revision；返回可跟踪的 `DELETE` 任务 |
 | GET | `/api/v1/rag/knowledge-bases/{knowledgeBaseId}/ingest-tasks?limit=100` | 查询最新摄取任务 | 仅owner/admin；`limit` 1–200，按最新在前返回，不暴露lease、fencing、checkpoint或内部错误消息 |
 | GET | `/api/v1/rag/ingest-tasks/{taskId}` | 查询摄取任务 | 返回 operation、stage、状态、chunk 进度、attempt 和稳定错误码 |
 | POST | `/api/v1/rag/ingest-tasks/{taskId}/cancel` | 请求取消 | 可选 `reason`；未领取任务同步关闭，持有租约的任务进入取消屏障 |
@@ -37,6 +38,15 @@
 - Markdown 严格 UTF-8、空文件及 NUL 字符校验。
 - MinIO 服务端对象路径和流式 SHA-256；失败清理半成品。
 - 同租户、同知识库、相同内容哈希幂等复用，不泄漏其他租户是否存在同一文件。
+
+## 文档删除语义
+
+- 受理删除时，文档聚合根行加锁，并在同一 MySQL 事务内将文档及其全部版本置为 `DELETING`、创建唯一删除任务和 Outbox 事件。
+- 存在摄取、重建或其他活动任务时拒绝删除；并发请求不能越过 `expectedRevision` CAS。
+- Worker 按“Qdrant全版本向量 -> MySQL chunks -> MinIO原文件与解析产物”执行幂等清理，每个外部副作用前后都校验 lease/fencing。
+- 删除任务不支持取消；删除失败或重试耗尽时保持 `DELETING`，不会恢复为可检索状态。重复删除返回原任务，失败任务则从原 checkpoint 重入队。
+- 合法删除窗口中遇到的残留向量命中会被丢弃；租户、知识库、版本或 generation 不一致仍会 fail closed。
+- 文档列表保留 `DELETED` 审计墓碑，但墓碑不可检索、不包含活动版本或 generation；“删除”指向量、分块、原文件和解析产物的物理清理，不是抹除任务审计事实。
 
 ## 调试响应语义
 

@@ -166,6 +166,14 @@ export function uploadRagDocument(knowledgeBaseId: string, file: File, onProgres
   });
 }
 
+export function deleteRagDocument(knowledgeBaseId: string, documentId: string, expectedRevision: number) {
+  return request<RagIngestTask>({
+    url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/${encodeURIComponent(documentId)}`,
+    method: 'DELETE',
+    params: { expectedRevision },
+  });
+}
+
 export function queryRagIngestTask(taskId: string) {
   return request<RagIngestTask>({
     url: `/v1/rag/ingest-tasks/${encodeURIComponent(taskId)}`,

@@ -111,6 +111,9 @@ public record RagIngestJobEntity(String tenantId,
     public RagIngestJobEntity advance(String leaseOwner, long expectedFencingToken, Instant now,
                                       RagIngestCheckpoint target) {
         assertExternalCallAllowed(leaseOwner, expectedFencingToken, now);
+        if (operation == RagIngestOperation.DELETE) {
+            throw domainError("RAG_DELETE_CHECKPOINT_INVALID", "删除任务不能使用摄取阶段推进方法");
+        }
         if (target == null || target.stage() == RagIngestStage.COMPLETED || !checkpoint.canAdvanceTo(target)) {
             throw domainError("RAG_INGEST_CHECKPOINT_REGRESSION", "摄取检查点不能倒退、跳级或直接完成");
         }
@@ -120,6 +123,9 @@ public record RagIngestJobEntity(String tenantId,
 
     /** 幂等请求取消；终态任务不会被重新打开。 */
     public RagIngestJobEntity requestCancel(String reason) {
+        if (operation == RagIngestOperation.DELETE) {
+            throw domainError("RAG_DELETE_NOT_CANCELLABLE", "删除已经开始后不能取消");
+        }
         if (status == RagIngestJobStatus.CANCEL_REQUESTED || status == RagIngestJobStatus.CANCELLED) {
             return this;
         }
@@ -171,6 +177,9 @@ public record RagIngestJobEntity(String tenantId,
     /** 完成已验证的任务，完成前不允许跳过 VERIFYING。 */
     public RagIngestJobEntity complete(String leaseOwner, long expectedFencingToken, Instant now) {
         assertExternalCallAllowed(leaseOwner, expectedFencingToken, now);
+        if (operation == RagIngestOperation.DELETE) {
+            throw domainError("RAG_DELETE_COMPLETE_METHOD_INVALID", "删除任务必须使用删除完成方法");
+        }
         if (checkpoint.stage() != RagIngestStage.VERIFYING) {
             throw domainError("RAG_INGEST_NOT_VERIFIED", "摄取任务完成前必须验证索引");
         }
@@ -183,6 +192,43 @@ public record RagIngestJobEntity(String tenantId,
                 checkpoint.processedChunks(), checkpoint.totalChunks(), checkpoint.embeddingBatchIndex(),
                 checkpoint.vectorUpsertIndex());
         return copy(RagIngestJobStatus.COMPLETED, completed, attemptCount, null, null,
+                fencingToken, null, null, null);
+    }
+
+    /** 推进独立删除阶段，禁止跨阶段、倒退或混入摄取检查点。 */
+    public RagIngestJobEntity advanceDeletion(String leaseOwner, long expectedFencingToken, Instant now,
+                                               RagIngestStage targetStage) {
+        assertExternalCallAllowed(leaseOwner, expectedFencingToken, now);
+        if (operation != RagIngestOperation.DELETE || !validDeleteTransition(checkpoint.stage(), targetStage)) {
+            throw domainError("RAG_DELETE_CHECKPOINT_REGRESSION", "删除检查点不能倒退或跳级");
+        }
+        RagIngestCheckpoint target = new RagIngestCheckpoint(targetStage, 0, 0, 0, 0);
+        return copy(status, target, attemptCount, nextRetryAt, lease, fencingToken,
+                cancelReason, errorCode, errorMessage);
+    }
+
+    /** 在全部删除副作用已验证后以零分块检查点完成任务。 */
+    public RagIngestJobEntity completeDeletion(String leaseOwner, long expectedFencingToken, Instant now) {
+        assertExternalCallAllowed(leaseOwner, expectedFencingToken, now);
+        if (operation != RagIngestOperation.DELETE || checkpoint.stage() != RagIngestStage.DELETING_SOURCE) {
+            throw domainError("RAG_DELETE_NOT_VERIFIED", "删除任务尚未完成全部清理阶段");
+        }
+        return copy(RagIngestJobStatus.COMPLETED,
+                new RagIngestCheckpoint(RagIngestStage.COMPLETED, 0, 0, 0, 0),
+                attemptCount, null, null, fencingToken, null, null, null);
+    }
+
+    /** 将失败或耗尽的删除任务重新排队，保留幂等检查点并清除旧错误。 */
+    public RagIngestJobEntity requeueDeletion() {
+        if (operation != RagIngestOperation.DELETE) {
+            throw domainError("RAG_DELETE_REQUEUE_OPERATION_INVALID", "只有删除任务可以重新排队");
+        }
+        if (status == RagIngestJobStatus.COMPLETED || status == RagIngestJobStatus.PENDING
+                || status == RagIngestJobStatus.RUNNING || status == RagIngestJobStatus.RETRYING) return this;
+        if (status != RagIngestJobStatus.FAILED && status != RagIngestJobStatus.DEAD) {
+            throw domainError("RAG_DELETE_REQUEUE_STATE_INVALID", "删除任务当前不能重新排队");
+        }
+        return copy(RagIngestJobStatus.PENDING, checkpoint, 0, null, null,
                 fencingToken, null, null, null);
     }
 
@@ -234,6 +280,13 @@ public record RagIngestJobEntity(String tenantId,
                 operation, generation, targetStatus, targetCheckpoint, targetAttempts, maxAttempts,
                 targetRetryAt, targetLease,
                 targetFencingToken, revision + 1, targetCancelReason, targetErrorCode, targetErrorMessage);
+    }
+
+    private boolean validDeleteTransition(RagIngestStage current, RagIngestStage target) {
+        return current == target
+                || current == RagIngestStage.RECEIVED && target == RagIngestStage.DELETING_VECTORS
+                || current == RagIngestStage.DELETING_VECTORS && target == RagIngestStage.DELETING_CHUNKS
+                || current == RagIngestStage.DELETING_CHUNKS && target == RagIngestStage.DELETING_SOURCE;
     }
 
     private static void requireTime(Instant now, Duration duration) {

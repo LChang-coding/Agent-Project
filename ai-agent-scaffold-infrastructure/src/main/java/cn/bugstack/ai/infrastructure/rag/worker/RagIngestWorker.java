@@ -16,6 +16,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagIngestCheckpoint;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
+import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.service.StructuredRagChunker;
 import cn.bugstack.ai.domain.rag.service.DeterministicSparseEncoder;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadCommandEntity;
@@ -112,6 +113,8 @@ public class RagIngestWorker {
         try (LeaseHeartbeat heartbeat = startHeartbeat(job, leaseOwner)) {
             if (job.status() == RagIngestJobStatus.CANCEL_REQUESTED) {
                 cleanupCancelled(job, leaseOwner, heartbeat);
+            } else if (job.operation() == RagIngestOperation.DELETE) {
+                deleteDocument(job, leaseOwner, heartbeat);
             } else {
                 ingest(job, leaseOwner, heartbeat);
             }
@@ -155,6 +158,103 @@ public class RagIngestWorker {
         job = advance(job, leaseOwner, new RagIngestCheckpoint(RagIngestStage.VERIFYING,
                 children.size(), children.size(), job.checkpoint().embeddingBatchIndex(), children.size()));
         activate(job, leaseOwner, heartbeat);
+    }
+
+    private void deleteDocument(RagIngestJobEntity claimed, String leaseOwner, LeaseHeartbeat heartbeat) {
+        DeleteScope scope = loadDeleteScope(claimed);
+        RagIngestJobEntity job = barrier(claimed.tenantId(), claimed.jobId(), leaseOwner,
+                claimed.fencingToken(), heartbeat, true);
+        if (job.checkpoint().stage() == RagIngestStage.RECEIVED) {
+            job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_VECTORS);
+        }
+        if (job.checkpoint().stage() == RagIngestStage.DELETING_VECTORS) {
+            for (RagDocumentVersionEntity version : scope.versions()) {
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+                vectorStore.deleteVersion(job.tenantId(), version.versionId());
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+                if (vectorStore.countVersion(job.tenantId(), version.versionId()) != 0L) {
+                    throw new AppException("RAG_DELETE_VECTOR_REMAINS", "文档版本仍存在向量索引");
+                }
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+            }
+            job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_CHUNKS);
+        }
+        if (job.checkpoint().stage() == RagIngestStage.DELETING_CHUNKS) {
+            for (RagDocumentVersionEntity version : scope.versions()) {
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+                repository.purgeChunks(job.tenantId(), version.versionId());
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+                if (repository.countAllChunks(job.tenantId(), version.versionId()) != 0L) {
+                    throw new AppException("RAG_DELETE_CHUNK_REMAINS", "文档版本仍存在业务分块");
+                }
+            }
+            job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_SOURCE);
+        }
+        if (job.checkpoint().stage() != RagIngestStage.DELETING_SOURCE) {
+            throw new AppException("RAG_DELETE_STAGE_INVALID", "删除任务不在可恢复的原件清理阶段");
+        }
+        for (RagDocumentVersionEntity version : scope.versions()) {
+            validateDeleteObjectLocation(job, version, version.objectBucket(), version.objectKey(), "source");
+            job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
+                    version.objectBucket(), version.objectKey());
+            if (hasText(version.parsedObjectBucket()) && hasText(version.parsedObjectKey())) {
+                validateDeleteObjectLocation(job, version, version.parsedObjectBucket(),
+                        version.parsedObjectKey(), "parsed");
+                job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
+                        version.parsedObjectBucket(), version.parsedObjectKey());
+            }
+        }
+        job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        completeDeletion(job, leaseOwner);
+    }
+
+    private RagIngestJobEntity deleteObjectWithBarrier(RagIngestJobEntity job, String leaseOwner,
+                                                        LeaseHeartbeat heartbeat, String bucket,
+                                                        String objectKey) {
+        RagIngestJobEntity current = barrier(job.tenantId(), job.jobId(), leaseOwner,
+                job.fencingToken(), heartbeat, true);
+        objectStorageService.deleteObject(bucket, objectKey);
+        current = barrier(current.tenantId(), current.jobId(), leaseOwner,
+                current.fencingToken(), heartbeat, true);
+        if (objectStorageService.objectExists(bucket, objectKey)) {
+            throw new AppException("RAG_DELETE_OBJECT_REMAINS", "对象删除后仍然存在");
+        }
+        return barrier(current.tenantId(), current.jobId(), leaseOwner,
+                current.fencingToken(), heartbeat, true);
+    }
+
+    private void validateDeleteObjectLocation(RagIngestJobEntity job, RagDocumentVersionEntity version,
+                                              String bucket, String objectKey, String kind) {
+        if (!objectStorageService.ragBucket().equals(bucket)
+                || !RagObjectStorageScope.containsVersionObject(objectKey, job.tenantId(),
+                job.knowledgeBaseId(), job.documentId(), version.versionId())) {
+            throw new AppException("RAG_DELETE_OBJECT_SCOPE_INVALID",
+                    "待删除" + kind + "对象超出文档存储范围");
+        }
+    }
+
+    private DeleteScope loadDeleteScope(RagIngestJobEntity job) {
+        RagDocumentEntity document = repository.findDocument(job.tenantId(), job.documentId())
+                .orElseThrow(() -> new AppException("RAG_DELETE_DOCUMENT_NOT_FOUND", "待删除文档不存在"));
+        List<RagDocumentVersionEntity> versions = repository.listDocumentVersions(job.tenantId(), job.documentId());
+        if (job.operation() != RagIngestOperation.DELETE || document.status()
+                != cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus.DELETING
+                || !document.knowledgeBaseId().equals(job.knowledgeBaseId()) || versions.isEmpty()
+                || versions.stream().anyMatch(version -> !version.knowledgeBaseId().equals(job.knowledgeBaseId())
+                || !version.documentId().equals(job.documentId())
+                || version.status() != RagDocumentVersionStatus.DELETING)) {
+            throw new AppException("RAG_DELETE_SCOPE_MISMATCH", "删除任务与文档或版本墓碑范围不一致");
+        }
+        return new DeleteScope(document, versions);
+    }
+
+    private void completeDeletion(RagIngestJobEntity job, String leaseOwner) {
+        DeleteScope current = loadDeleteScope(job);
+        long expectedTaskRevision = job.revision();
+        RagIngestJobEntity completed = job.completeDeletion(leaseOwner, job.fencingToken(), clock.instant());
+        repository.completeClaimedDeleteJob(job.tenantId(), completed, expectedTaskRevision,
+                leaseOwner, job.fencingToken(), current.document().deleted(),
+                current.versions().stream().map(RagDocumentVersionEntity::deleted).toList(), clock.instant());
     }
 
     private Scope loadScope(RagIngestJobEntity job) {
@@ -349,6 +449,16 @@ public class RagIngestWorker {
                 repository.updateClaimedIngestJob(tenantId, retry, latest.revision(), leaseOwner, fence, now);
                 return;
             }
+            if (latest.operation() == RagIngestOperation.DELETE) {
+                Instant now = clock.instant();
+                RagIngestJobEntity failed = failure.retryable()
+                        ? latest.failRetryable(leaseOwner, fence, now, now,
+                        failure.code(), failure.safeMessage())
+                        : latest.failTerminal(leaseOwner, fence, now,
+                        failure.code(), failure.safeMessage());
+                repository.updateClaimedIngestJob(tenantId, failed, latest.revision(), leaseOwner, fence, now);
+                return;
+            }
             cleanupForTerminalFailure(latest, leaseOwner, fence);
             Scope scope = loadScopeForClosing(latest);
             Instant now = clock.instant();
@@ -358,8 +468,10 @@ public class RagIngestWorker {
             repository.failClaimedIngestJob(tenantId, failed, latest.revision(), scope.version().revision(),
                     scope.document().revision(), leaseOwner, fence, now);
         } catch (Exception commitError) {
-            requestFailureCleanupIfOwned(tenantId, jobId, leaseOwner, fence,
-                    failure.retryable() && latest.attemptCount() >= latest.maxAttempts(), failure);
+            if (latest.operation() != RagIngestOperation.DELETE) {
+                requestFailureCleanupIfOwned(tenantId, jobId, leaseOwner, fence,
+                        failure.retryable() && latest.attemptCount() >= latest.maxAttempts(), failure);
+            }
             log.warn("RAG失败结果或清理未提交，等待租约恢复 tenantId:{} jobId:{} code:{}",
                     tenantId, jobId, errorClassifier.classify(commitError).code());
         }
@@ -427,6 +539,17 @@ public class RagIngestWorker {
         if (repository.updateClaimedIngestJob(job.tenantId(), target, job.revision(), leaseOwner,
                 job.fencingToken(), now) != 1) {
             throw new AppException("RAG_INGEST_CHECKPOINT_CONFLICT", "摄取检查点已被其他 Worker 修改");
+        }
+        return repository.findIngestJob(job.tenantId(), job.jobId()).orElseThrow();
+    }
+
+    private RagIngestJobEntity advanceDeletion(RagIngestJobEntity job, String leaseOwner,
+                                                RagIngestStage stage) {
+        Instant now = clock.instant();
+        RagIngestJobEntity target = job.advanceDeletion(leaseOwner, job.fencingToken(), now, stage);
+        if (repository.updateClaimedIngestJob(job.tenantId(), target, job.revision(), leaseOwner,
+                job.fencingToken(), now) != 1) {
+            throw new AppException("RAG_DELETE_CHECKPOINT_CONFLICT", "删除检查点已被其他Worker修改");
         }
         return repository.findIngestJob(job.tenantId(), job.jobId()).orElseThrow();
     }
@@ -507,6 +630,10 @@ public class RagIngestWorker {
         return value == null ? "" : value;
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     @PreDestroy
     public void shutdown() {
         heartbeatExecutor.shutdownNow();
@@ -514,6 +641,12 @@ public class RagIngestWorker {
 
     private record Scope(RagDocumentVersionEntity version, RagDocumentEntity document,
                          RagKnowledgeBaseEntity knowledgeBase) {
+    }
+
+    private record DeleteScope(RagDocumentEntity document, List<RagDocumentVersionEntity> versions) {
+        private DeleteScope {
+            versions = List.copyOf(versions);
+        }
     }
 
     static final class LeaseHeartbeat implements AutoCloseable {

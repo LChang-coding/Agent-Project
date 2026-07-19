@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentUploadResult;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.service.RagDocumentManagementService;
+import cn.bugstack.ai.domain.rag.service.RagDocumentDeletionService;
 import cn.bugstack.ai.domain.rag.service.RagDocumentUploadService;
 import cn.bugstack.ai.trigger.http.RagDocumentController;
 import cn.bugstack.ai.types.context.TenantContext;
@@ -36,9 +37,11 @@ public class RagDocumentControllerTest {
     public void shouldStageMultipartInvokeTrustedCommandAndDeleteTemporaryFile() {
         RagDocumentUploadService uploadService = mock(RagDocumentUploadService.class);
         RagDocumentManagementService managementService = mock(RagDocumentManagementService.class);
+        RagDocumentDeletionService deletionService = mock(RagDocumentDeletionService.class);
         when(uploadService.upload(any())).thenReturn(new RagDocumentUploadResult(
                 "doc-a", "ver-a", "task-a", "知识.md", 8, "queued", false));
-        RagDocumentController controller = new RagDocumentController(uploadService, managementService);
+        RagDocumentController controller = new RagDocumentController(uploadService, managementService,
+                deletionService);
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-a").userId("user-a")
                 .roleCode("admin").build());
         MockMultipartFile file = new MockMultipartFile("file", "知识.md", "text/markdown",
@@ -62,11 +65,13 @@ public class RagDocumentControllerTest {
     public void shouldListTasksUsingTrustedContextAndPublicProjection() {
         RagDocumentUploadService uploadService = mock(RagDocumentUploadService.class);
         RagDocumentManagementService managementService = mock(RagDocumentManagementService.class);
+        RagDocumentDeletionService deletionService = mock(RagDocumentDeletionService.class);
         var task = RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a", "task-a",
                 "task-key", RagIngestOperation.INGEST, 1, 3);
         when(managementService.listTasks("tenant-a", "admin-a", "admin", "kb-a", 25))
                 .thenReturn(List.of(task));
-        RagDocumentController controller = new RagDocumentController(uploadService, managementService);
+        RagDocumentController controller = new RagDocumentController(uploadService, managementService,
+                deletionService);
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-a").userId("admin-a")
                 .roleCode("admin").build());
 
@@ -81,5 +86,27 @@ public class RagDocumentControllerTest {
         Assert.assertFalse(publicFields.contains("fencingToken"));
         Assert.assertFalse(publicFields.contains("errorMessage"));
         verify(managementService).listTasks("tenant-a", "admin-a", "admin", "kb-a", 25);
+    }
+
+    @Test
+    public void shouldDeleteDocumentUsingTrustedContextAndExpectedRevision() {
+        RagDocumentUploadService uploadService = mock(RagDocumentUploadService.class);
+        RagDocumentManagementService managementService = mock(RagDocumentManagementService.class);
+        RagDocumentDeletionService deletionService = mock(RagDocumentDeletionService.class);
+        var task = RagIngestJobEntity.pending("tenant-a", "kb-a", "doc-a", "ver-a", "task-delete",
+                "delete-key", RagIngestOperation.DELETE, 3, 3);
+        when(deletionService.deleteDocument("tenant-a", "owner-a", "owner", "kb-a", "doc-a", 7L))
+                .thenReturn(task);
+        RagDocumentController controller = new RagDocumentController(uploadService, managementService,
+                deletionService);
+        TenantContextHolder.set(TenantContext.builder().tenantId("tenant-a").userId("owner-a")
+                .roleCode("owner").build());
+
+        var response = controller.delete("kb-a", "doc-a", 7L);
+
+        Assert.assertEquals("0000", response.getCode());
+        Assert.assertEquals("task-delete", response.getData().getTaskId());
+        Assert.assertEquals("delete", response.getData().getOperation());
+        verify(deletionService).deleteDocument("tenant-a", "owner-a", "owner", "kb-a", "doc-a", 7L);
     }
 }

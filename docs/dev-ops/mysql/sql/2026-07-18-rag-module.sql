@@ -427,7 +427,7 @@ CREATE TABLE IF NOT EXISTS `rag_ingest_task` (
   `document_version` INT NULL COMMENT '文档版本号',
   `generation` BIGINT NOT NULL COMMENT '本任务操作的索代引代',
   `operation` VARCHAR(32) NOT NULL COMMENT 'ingest/rebuild/delete',
-  `stage` VARCHAR(32) NOT NULL DEFAULT 'received' COMMENT 'received/parsing/chunking/embedding/indexing/verifying/completed',
+  `stage` VARCHAR(32) NOT NULL DEFAULT 'received' COMMENT '摄取阶段或deleting_vectors/deleting_chunks/deleting_source/completed',
   `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/retrying/cancel_requested/cancelled/completed/failed/dead',
   `attempt_count` INT NOT NULL DEFAULT 0 COMMENT '已领取次数',
   `max_attempts` INT NOT NULL DEFAULT 3 COMMENT '最大领取次数',
@@ -454,8 +454,12 @@ CREATE TABLE IF NOT EXISTS `rag_ingest_task` (
   UNIQUE KEY `uk_rag_ingest_task_key` (`tenant_id`, `task_key`),
   KEY `idx_rag_ingest_due` (`status`, `next_retry_at`, `lease_until`, `id`),
   KEY `idx_rag_ingest_document` (`tenant_id`, `document_id`, `generation`, `id`),
+  KEY `idx_rag_ingest_document_status` (`tenant_id`, `document_id`, `status`, `id`),
   KEY `idx_rag_ingest_kb` (`tenant_id`, `kb_id`, `status`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='RAG摄取与清理任务账本';
+
+CALL `sp_rag_add_index_20260718`('rag_ingest_task', 'idx_rag_ingest_document_status',
+    'KEY `idx_rag_ingest_document_status` (`tenant_id`, `document_id`, `status`, `id`)');
 
 CREATE TABLE IF NOT EXISTS `rag_outbox` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',

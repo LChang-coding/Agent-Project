@@ -120,7 +120,7 @@
               <small v-if="task.cancelReason" class="task-error">取消原因·{{ task.cancelReason }}</small>
             </div>
             <button
-              v-if="isAdministrator && isTaskRunning(task.status)"
+              v-if="isAdministrator && task.operation !== 'delete' && isTaskRunning(task.status)"
               class="rag-button rag-button--danger"
               type="button"
               :disabled="cancelBusyTaskId === task.taskId"
@@ -128,6 +128,16 @@
             >
               <LoaderCircle v-if="cancelBusyTaskId === task.taskId" class="spin" :size="15" />
               {{ cancelBusyTaskId === task.taskId ? '正在取消' : '取消任务' }}
+            </button>
+            <button
+              v-else-if="isAdministrator && task.operation === 'delete' && ['failed', 'dead'].includes(task.status)"
+              class="rag-button rag-button--danger"
+              type="button"
+              :disabled="retryBusyTaskId === task.taskId"
+              @click="retryDeleteTask(task)"
+            >
+              <LoaderCircle v-if="retryBusyTaskId === task.taskId" class="spin" :size="15" />
+              {{ retryBusyTaskId === task.taskId ? '重新入队中' : '继续删除' }}
             </button>
           </article>
         </section>
@@ -149,6 +159,18 @@
             <span class="status-pill" :class="`status-pill--${statusTone(document.status)}`">
               {{ statusText(document.status) }}
             </span>
+            <button
+              v-if="isAdministrator && ['ready', 'failed'].includes(document.status)"
+              class="document-delete"
+              type="button"
+              :disabled="deletingDocumentId === document.documentId"
+              :aria-label="`删除文档 ${document.displayName}`"
+              @click="removeDocument(document)"
+            >
+              <LoaderCircle v-if="deletingDocumentId === document.documentId" class="spin" :size="16" />
+              <Trash2 v-else :size="16" />
+              <span>{{ deletingDocumentId === document.documentId ? '受理中' : '删除' }}</span>
+            </button>
           </article>
         </div>
         <div v-else class="document-empty">
@@ -310,7 +332,7 @@ import {
 import { queryAgentConfigManagement } from '@/api/agent';
 import {
   cancelRagIngestTask, createKnowledgeBase, createRagBinding, createRagRetrievalProfile,
-  debugRagRetrieval, deleteRagBinding, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
+  debugRagRetrieval, deleteRagBinding, deleteRagDocument, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
   queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, updateRagRetrievalProfile, uploadRagDocument,
   type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase,
   type RagRetrievalDebugResult, type RagRetrievalProfile, type RagRetrievalProfilePayload,
@@ -338,6 +360,8 @@ const uploadBusy = ref(false);
 const uploadProgress = ref(0);
 const pendingFileName = ref('');
 const cancelBusyTaskId = ref('');
+const retryBusyTaskId = ref('');
+const deletingDocumentId = ref('');
 const createKnowledgeBaseBusy = ref(false);
 const showCreateKnowledgeBase = ref(false);
 const knowledgeBaseForm = reactive({ name: '', description: '' });
@@ -489,6 +513,39 @@ async function cancelTask(target: RagIngestTask) {
   finally { cancelBusyTaskId.value = ''; }
 }
 
+async function removeDocument(document: RagDocument) {
+  const confirmed = window.confirm(`删除“${document.displayName}”的全部内容与版本？\n\n系统会保留不可检索的审计墓碑，并异步清理向量、分块和原文件。清理开始后不能取消。`);
+  if (!confirmed || !selectedKnowledgeBaseId.value) return;
+  deletingDocumentId.value = document.documentId;
+  try {
+    const task = await deleteRagDocument(selectedKnowledgeBaseId.value, document.documentId, document.revision);
+    taskById.value = { ...taskById.value, [task.taskId]: task };
+    await loadDocuments();
+    startTaskPolling();
+    notice.value = { kind: 'success', message: task.status === 'completed'
+      ? `“${document.displayName}”已删除。`
+      : `“${document.displayName}”已退出检索，正在清理向量、分块和原文件。` };
+  } catch (error) { showError(error, '文档删除受理失败'); }
+  finally { deletingDocumentId.value = ''; }
+}
+
+async function retryDeleteTask(task: RagIngestTask) {
+  const document = documents.value.find((item) => item.documentId === task.documentId);
+  if (!document || document.status !== 'deleting' || !selectedKnowledgeBaseId.value) {
+    notice.value = { kind: 'error', message: '删除墓碑已变化，请刷新数据后再试。' };
+    return;
+  }
+  retryBusyTaskId.value = task.taskId;
+  try {
+    const requeued = await deleteRagDocument(selectedKnowledgeBaseId.value,
+      document.documentId, document.revision);
+    taskById.value = { ...taskById.value, [requeued.taskId]: requeued };
+    startTaskPolling();
+    notice.value = { kind: 'success', message: `“${document.displayName}”已从上次检查点继续清理。` };
+  } catch (error) { showError(error, '删除任务重试失败'); }
+  finally { retryBusyTaskId.value = ''; }
+}
+
 async function saveKnowledgeBase() {
   createKnowledgeBaseBusy.value = true;
   try {
@@ -565,7 +622,7 @@ function defaultProfile(): RagRetrievalProfilePayload {
 
 function showError(error: unknown, fallback: string) { const candidate = error as { info?: string; message?: string }; notice.value = { kind: 'error', message: candidate?.info || candidate?.message || fallback }; }
 function isTaskRunning(status: string) { return ['pending', 'running', 'retrying', 'cancel_requested'].includes(status); }
-function taskPercent(task: RagIngestTask) { if (!task.totalChunks) return task.status === 'completed' ? 100 : isTaskRunning(task.status) ? 12 : 0; return Math.min(100, Math.round((task.processedChunks / task.totalChunks) * 100)); }
+function taskPercent(task: RagIngestTask) { if (task.operation === 'delete') return ({ received: 8, deleting_vectors: 30, deleting_chunks: 60, deleting_source: 85, completed: 100 } as Record<string, number>)[task.stage] ?? 0; if (!task.totalChunks) return task.status === 'completed' ? 100 : isTaskRunning(task.status) ? 12 : 0; return Math.min(100, Math.round((task.processedChunks / task.totalChunks) * 100)); }
 function shortId(value?: string) { if (!value) return '—'; return value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-4)}` : value; }
 function formatBytes(value: number) { if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`; return `${(value / 1024 / 1024).toFixed(1)} MiB`; }
 function fileType(name: string) { return name.split('.').pop()?.toUpperCase() || 'DOC'; }
@@ -574,9 +631,9 @@ function knowledgeBaseName(id: string) { return knowledgeBases.value.find((item)
 function profileName(id: string) { return profiles.value.find((item) => item.profileId === id)?.name || shortId(id); }
 function targetLabel(type: RagTargetType, id: string) { const target = (type === 'agent' ? agentTargets.value : workflowTargets.value).find((item) => item.id === id); return target?.name || id; }
 function scoreText(value?: number) { return Number.isFinite(value) ? Number(value).toFixed(3) : '—'; }
-function statusTone(status: string) { if (['active', 'ready', 'completed'].includes(status)) return 'success'; if (['failed', 'dead', 'cancelled'].includes(status)) return 'danger'; if (['pending', 'running', 'retrying', 'cancel_requested', 'processing'].includes(status)) return 'working'; return 'neutral'; }
-function statusText(status: string) { return ({ active: '可用', ready: '已就绪', completed: '已完成', failed: '失败', dead: '已终止', cancelled: '已取消', pending: '等待中', running: '处理中', retrying: '等待重试', cancel_requested: '取消中', processing: '处理中' } as Record<string, string>)[status] || status; }
-function taskStageText(stage: string) { return ({ received: '已受理', queued: '排队', downloading: '下载原文档', parsing: '解析结构', chunking: '切分语义块', embedding: '生成向量', indexing: '写入索引', verifying: '验证完整性', completed: '已完成' } as Record<string, string>)[stage] || stage; }
+function statusTone(status: string) { if (['active', 'ready', 'completed'].includes(status)) return 'success'; if (['failed', 'dead', 'cancelled'].includes(status)) return 'danger'; if (['pending', 'running', 'retrying', 'cancel_requested', 'processing', 'deleting'].includes(status)) return 'working'; return 'neutral'; }
+function statusText(status: string) { return ({ active: '可用', ready: '已就绪', completed: '已完成', failed: '失败', dead: '已终止', cancelled: '已取消', pending: '等待中', running: '处理中', retrying: '等待重试', cancel_requested: '取消中', processing: '处理中', deleting: '删除中', deleted: '已删除' } as Record<string, string>)[status] || status; }
+function taskStageText(stage: string) { return ({ received: '已受理', queued: '排队', downloading: '下载原文档', parsing: '解析结构', chunking: '切分语义块', embedding: '生成向量', indexing: '写入索引', verifying: '验证完整性', deleting_vectors: '清理向量', deleting_chunks: '清理分块', deleting_source: '清理原文件', completed: '已完成' } as Record<string, string>)[stage] || stage; }
 function operationText(operation: string) { return ({ ingest: '摄取', rebuild: '重建', delete: '删除' } as Record<string, string>)[operation] || operation; }
 </script>
 
@@ -618,7 +675,7 @@ function operationText(operation: string) { return ({ ingest: '摄取', rebuild:
 .document-stage { background: rgba(255,255,252,.78); }.sr-file { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .upload-progress { position: relative; margin: -6px 0 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }.upload-progress > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent-soft), rgba(169,121,57,.22)); transition: width .2s; }.upload-progress div { position: relative; display: flex; justify-content: space-between; padding: 9px 11px; font-size: 11px; }.upload-progress em { font-style: normal; font-weight: 700; }
 .task-list { display: grid; max-height: 330px; margin-bottom: 14px; gap: 8px; overflow-y: auto; }.task-card { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; padding: 14px; gap: 12px; border: 1px solid rgba(169,121,57,.24); border-radius: 14px; background: linear-gradient(105deg, var(--gold-soft), #fffaf0); }.task-card--danger { border-color: rgba(155,62,62,.2); background: var(--danger-soft); }.task-orbit { display: grid; width: 42px; height: 42px; color: var(--gold); border-radius: 50%; background: rgba(255,255,255,.7); place-items: center; }.task-card--danger .task-orbit,.task-error { color: var(--danger) !important; }.task-main span,.task-main small { display: block; color: var(--muted); font-size: 10px; }.task-main strong { display: block; margin: 3px 0 7px; font-size: 12px; }.task-progress { height: 3px; margin-bottom: 6px; overflow: hidden; border-radius: 3px; background: rgba(23,33,43,.1); }.task-progress span { display: block; height: 100%; background: var(--gold); transition: width .35s; }.task-error { margin-top: 4px; overflow-wrap: anywhere; }
-.document-list { display: grid; gap: 9px; }.document-row { display: grid; grid-template-columns: 48px minmax(0,1fr) 76px auto; align-items: center; min-height: 76px; padding: 11px 13px; gap: 12px; border: 1px solid var(--line); border-radius: 13px; background: #fff; transition: transform var(--motion-fast), box-shadow var(--motion-fast); }.document-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }.file-mark { display: grid; width: 42px; height: 48px; color: var(--accent-deep); border-radius: 7px 13px 7px 7px; background: var(--accent-soft); font: 800 9px monospace; place-items: center; }.file-mark[data-type="PDF"] { color: var(--danger); background: var(--danger-soft); }.file-mark[data-type="DOCX"] { color: #315d91; background: #e3ebf5; }.document-copy { min-width: 0; }.document-copy strong,.document-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.document-copy strong { font-size: 13px; }.document-copy span { margin-top: 5px; color: var(--muted); font: 10px monospace; }.document-generation small,.document-generation strong { display: block; text-align: center; }.document-generation small { color: var(--muted); font: 8px monospace; letter-spacing: .08em; }.document-generation strong { margin-top: 4px; font: 700 14px monospace; }.status-pill { padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }.status-pill--success { color: var(--success); background: var(--success-soft); }.status-pill--working { color: var(--warning); background: var(--warning-soft); }.status-pill--danger { color: var(--danger); background: var(--danger-soft); }.status-pill--neutral { color: var(--muted); background: var(--surface-muted); }
+.document-list { display: grid; gap: 9px; }.document-row { display: grid; grid-template-columns: 48px minmax(0,1fr) 76px auto auto; align-items: center; min-height: 76px; padding: 11px 13px; gap: 12px; border: 1px solid var(--line); border-radius: 13px; background: #fff; transition: transform var(--motion-fast), box-shadow var(--motion-fast); }.document-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }.file-mark { display: grid; width: 42px; height: 48px; color: var(--accent-deep); border-radius: 7px 13px 7px 7px; background: var(--accent-soft); font: 800 9px monospace; place-items: center; }.file-mark[data-type="PDF"] { color: var(--danger); background: var(--danger-soft); }.file-mark[data-type="DOCX"] { color: #315d91; background: #e3ebf5; }.document-copy { min-width: 0; }.document-copy strong,.document-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.document-copy strong { font-size: 13px; }.document-copy span { margin-top: 5px; color: var(--muted); font: 10px monospace; }.document-generation small,.document-generation strong { display: block; text-align: center; }.document-generation small { color: var(--muted); font: 8px monospace; letter-spacing: .08em; }.document-generation strong { margin-top: 4px; font: 700 14px monospace; }.status-pill { padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }.status-pill--success { color: var(--success); background: var(--success-soft); }.status-pill--working { color: var(--warning); background: var(--warning-soft); }.status-pill--danger { color: var(--danger); background: var(--danger-soft); }.status-pill--neutral { color: var(--muted); background: var(--surface-muted); }.document-delete { display: inline-flex; align-items: center; min-height: 34px; padding: 0 9px; gap: 6px; color: var(--danger); border: 1px solid rgba(155,62,62,.16); border-radius: 9px; cursor: pointer; background: var(--danger-soft); font-size: 11px; font-weight: 700; }.document-delete:disabled { cursor: wait; opacity: .55; }
 .document-empty { min-height: 430px; }.document-empty p { max-width: 360px; margin: 8px auto; font-size: 12px; line-height: 1.65; }.empty-illustration { position: relative; display: grid; width: 88px; height: 88px; margin-bottom: 17px; color: var(--accent); border: 1px solid var(--line); border-radius: 25px; background: var(--surface-muted); place-items: center; transform: rotate(-3deg); }.empty-illustration span { position: absolute; right: -8px; bottom: -8px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold-soft); }
 .lab-heading svg { color: var(--gold); }.lab-tabs { display: grid; grid-template-columns: repeat(3,1fr); margin-bottom: 18px; padding: 3px; border-radius: 10px; background: var(--bg-strong); }.lab-tabs button { padding: 8px; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 700; background: transparent; }.lab-tabs button.active { color: var(--ink); background: #fff; box-shadow: 0 4px 12px rgba(23,33,43,.07); }
 .lab-locked { min-height: 420px; padding: 30px; }.lab-locked p { line-height: 1.7; }.lab-form { display: grid; gap: 9px; }.lab-form > label,.rag-modal > label,.profile-grid > label { color: var(--ink-soft); font-size: 11px; font-weight: 700; }.label-row { display: flex; justify-content: space-between; margin-top: 5px; color: var(--ink-soft); font-size: 11px; font-weight: 700; }.label-row span { color: var(--muted); font-family: monospace; }.lab-input { width: 100%; min-height: 39px; padding: 0 10px; color: var(--ink); border: 1px solid var(--line-strong); border-radius: 9px; outline: none; background: #fff; transition: border var(--motion-fast), box-shadow var(--motion-fast); }.lab-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(30,90,103,.1); }.lab-textarea { min-height: 92px; padding: 10px; resize: vertical; line-height: 1.55; }.compact-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.compact-fields label { color: var(--ink-soft); font-size: 10px; font-weight: 700; }.compact-fields input { margin-top: 5px; }.check-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }.check-row input { margin-top: 2px; accent-color: var(--accent); }.check-row span,.check-row strong,.check-row small { display: block; }.check-row small { margin-top: 3px; color: var(--muted); font-weight: 400; line-height: 1.45; }
@@ -628,6 +685,6 @@ function operationText(operation: string) { return ({ ingest: '摄取', rebuild:
 .skeleton-list,.document-skeleton { display: grid; gap: 9px; }.skeleton-list span,.document-skeleton span { border-radius: 12px; background: linear-gradient(90deg, var(--surface-muted) 25%, #fff 40%, var(--surface-muted) 60%); background-size: 300% 100%; animation: shimmer 1.4s infinite; }.skeleton-list span { height: 68px; }.document-skeleton span { height: 76px; }
 .spin { animation: spin .9s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }@keyframes shimmer { to { background-position: -150% 0; } }
 @media (max-width: 1260px) { .rag-workbench { grid-template-columns: 230px minmax(420px,1fr); }.retrieval-lab { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; }.lab-form,.debug-result,.profile-list,.binding-list { max-width: 760px; }.retrieval-lab .lab-tabs { max-width: 460px; } }
-@media (max-width: 800px) { .rag-page { overflow-x: clip; padding: 18px 14px; }.rag-hero { align-items: stretch; flex-direction: column; }.rag-hero > div { min-width: 0; max-width: 100%; }.rag-kicker { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.rag-hero h1 { font-size: clamp(32px, 11vw, 44px); }.hero-actions { flex-wrap: wrap; }.rag-workbench { display: block; width: 100%; border-radius: 16px; }.library-rail { border-right: 0; border-bottom: 1px solid var(--line); }.rail-footer { display: none; }.document-stage,.library-rail,.retrieval-lab { padding: 18px 14px; }.document-row { grid-template-columns: 42px minmax(0,1fr) auto; }.document-generation { display: none; }.stage-heading { align-items: flex-start; }.stage-heading .rag-button { flex: none; font-size: 0; }.stage-heading .rag-button svg { margin: 0; }.task-card { grid-template-columns: 38px minmax(0,1fr); }.task-card .rag-button { grid-column: 1 / -1; justify-content: center; }.profile-grid { grid-template-columns: 1fr; }.span-two { grid-column: auto; }.modal-backdrop { align-items: start; padding: 12px; }.rag-modal { margin: 20px 0; } }
+@media (max-width: 800px) { .rag-page { overflow-x: clip; padding: 18px 14px; }.rag-hero { align-items: stretch; flex-direction: column; }.rag-hero > div { min-width: 0; max-width: 100%; }.rag-kicker { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.rag-hero h1 { font-size: clamp(32px, 11vw, 44px); }.hero-actions { flex-wrap: wrap; }.rag-workbench { display: block; width: 100%; border-radius: 16px; }.library-rail { border-right: 0; border-bottom: 1px solid var(--line); }.rail-footer { display: none; }.document-stage,.library-rail,.retrieval-lab { padding: 18px 14px; }.document-row { grid-template-columns: 42px minmax(0,1fr) auto; }.document-generation { display: none; }.document-delete { grid-column: 2 / -1; justify-content: center; }.stage-heading { align-items: flex-start; }.stage-heading .rag-button { flex: none; font-size: 0; }.stage-heading .rag-button svg { margin: 0; }.task-card { grid-template-columns: 38px minmax(0,1fr); }.task-card .rag-button { grid-column: 1 / -1; justify-content: center; }.profile-grid { grid-template-columns: 1fr; }.span-two { grid-column: auto; }.modal-backdrop { align-items: start; padding: 12px; }.rag-modal { margin: 20px 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 </style>

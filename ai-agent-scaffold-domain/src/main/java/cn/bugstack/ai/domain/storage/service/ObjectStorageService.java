@@ -41,6 +41,9 @@ public interface ObjectStorageService {
      */
     void deleteObject(String bucket, String objectKey);
 
+    /** 判断对象是否仍存在；删除生命周期以此验证清理结果。 */
+    boolean objectExists(String bucket, String objectKey);
+
     /**
      * 获取 Skill 包默认桶；无参数；返回桶名称。
      */

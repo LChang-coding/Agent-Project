@@ -104,6 +104,24 @@ public class MinioObjectStorageServiceTest {
     }
 
     @Test
+    public void shouldVerifyLocalObjectDeletion() throws Exception {
+        Path root = Files.createTempDirectory("object-storage-root-");
+        Path object = root.resolve("rag-documents/tenant/document.md");
+        Files.createDirectories(object.getParent());
+        Files.writeString(object, "sensitive-content", StandardCharsets.UTF_8);
+        ObjectStorageProperties properties = new ObjectStorageProperties();
+        properties.setType("local");
+        properties.setLocalRoot(root.toString());
+        MinioObjectStorageService service = new MinioObjectStorageService(properties);
+
+        Assert.assertTrue(service.objectExists("rag-documents", "tenant/document.md"));
+        service.deleteObject("rag-documents", "tenant/document.md");
+
+        Assert.assertFalse(service.objectExists("rag-documents", "tenant/document.md"));
+        Assert.assertFalse(Files.exists(object));
+    }
+
+    @Test
     public void shouldStreamLocalObjectToControlledTargetAndReturnDigest() throws Exception {
         Path storageRoot = Files.createTempDirectory("object-storage-root-");
         Path targetRoot = Files.createTempDirectory("object-download-root-");

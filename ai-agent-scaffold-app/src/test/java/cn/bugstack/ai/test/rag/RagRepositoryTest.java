@@ -2,6 +2,10 @@ package cn.bugstack.ai.test.rag;
 
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestCheckpoint;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
@@ -42,6 +46,7 @@ public class RagRepositoryTest {
     private IRagIngestTaskDao ingestTaskDao;
     private IRagDocumentDao documentDao;
     private IRagDocumentVersionDao documentVersionDao;
+    private RagPersistenceMapper mapper;
     private RagRepository repository;
 
     @Before
@@ -51,10 +56,11 @@ public class RagRepositoryTest {
         documentDao = Mockito.mock(IRagDocumentDao.class);
         documentVersionDao = Mockito.mock(IRagDocumentVersionDao.class);
         RagPersistenceCodec codec = new RagPersistenceCodec(new ObjectMapper());
+        mapper = new RagPersistenceMapper(codec);
         repository = new RagRepository(knowledgeBaseDao, documentDao,
                 documentVersionDao, ingestTaskDao, Mockito.mock(IRagChunkDao.class),
                 Mockito.mock(IRagRetrievalProfileDao.class), Mockito.mock(IRagAgentBindingDao.class),
-                new RagPersistenceMapper(codec), codec);
+                mapper, codec);
     }
 
     @Test
@@ -231,6 +237,88 @@ public class RagRepositoryTest {
     }
 
     @Test
+    public void shouldCloseEveryVersionDocumentAndFencedDeleteTaskInOneLifecycle() {
+        Instant now = Instant.parse("2026-07-20T01:00:00Z");
+        RagIngestJobEntity completed = new RagIngestJobEntity("tenant-a", "kb-1", "doc-1",
+                "version-2", "delete-1", "delete-key", RagIngestOperation.DELETE, 2L,
+                RagIngestJobStatus.COMPLETED,
+                new RagIngestCheckpoint(RagIngestStage.COMPLETED, 0, 0, 0, 0),
+                1, 3, null, null, 11L, 8L, null, null, null);
+        RagDocumentEntity deletedDocument = new RagDocumentEntity("tenant-a", "owner-a",
+                RagVisibility.TENANT, "kb-1", "doc-1", "document.md", null, 0L,
+                null, RagDocumentStatus.DELETED, 5L);
+        List<RagDocumentVersionEntity> versions = List.of(
+                deletedVersion("version-1", 1, 4L), deletedVersion("version-2", 2, 6L));
+        RagDocumentEntity deletingDocument = new RagDocumentEntity("tenant-a", "owner-a",
+                RagVisibility.TENANT, "kb-1", "doc-1", "document.md", "version-2", 2L,
+                null, RagDocumentStatus.DELETING, 4L);
+        Mockito.when(documentDao.queryByTenantKnowledgeBaseAndDocumentIdForUpdate(
+                "tenant-a", "kb-1", "doc-1")).thenReturn(mapper.toDocumentPo(deletingDocument));
+        Mockito.when(documentVersionDao.queryListByTenantAndDocumentIdForUpdate("tenant-a", "doc-1"))
+                .thenReturn(versions.stream().map(version -> mapper.toDocumentVersionPo(
+                        new RagDocumentVersionEntity(version.tenantId(), version.knowledgeBaseId(),
+                                version.documentId(), version.versionId(), version.versionNumber(),
+                                version.generation(), version.objectBucket(), version.objectKey(),
+                                version.parsedObjectBucket(), version.parsedObjectKey(), version.fileName(),
+                                version.sha256(), version.mimeType(), version.sizeBytes(),
+                                RagDocumentVersionStatus.DELETING, version.parserVersion(),
+                                version.chunkerVersion(), version.embeddingModelRevision(),
+                                version.revision() - 1))).toList());
+        Mockito.when(documentVersionDao.markDeletedByTenantAndRevision(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyLong())).thenReturn(1);
+        Mockito.when(documentDao.markDeletedByTenantAndRevision(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyLong())).thenReturn(1);
+        Mockito.when(ingestTaskDao.updateClaimedByTenantFenceAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.any())).thenReturn(1);
+
+        repository.completeClaimedDeleteJob("tenant-a", completed, 7L, "worker-a", 11L,
+                deletedDocument, versions, now);
+
+        Mockito.verify(documentVersionDao).markDeletedByTenantAndRevision(
+                "tenant-a", "kb-1", "doc-1", "version-1", 3L);
+        Mockito.verify(documentVersionDao).markDeletedByTenantAndRevision(
+                "tenant-a", "kb-1", "doc-1", "version-2", 5L);
+        Mockito.verify(documentDao).markDeletedByTenantAndRevision("tenant-a", "kb-1", "doc-1", 4L);
+        Mockito.verify(ingestTaskDao).updateClaimedByTenantFenceAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(7L), Mockito.eq("worker-a"),
+                Mockito.eq(11L), Mockito.eq(LocalDateTime.ofInstant(now, ZoneOffset.UTC)));
+        Mockito.verifyNoInteractions(knowledgeBaseDao);
+    }
+
+    @Test
+    public void shouldAbortDeleteCompletionWhenLockedVersionSetChanged() {
+        Instant now = Instant.parse("2026-07-20T01:00:00Z");
+        RagIngestJobEntity completed = new RagIngestJobEntity("tenant-a", "kb-1", "doc-1",
+                "version-1", "delete-1", "delete-key", RagIngestOperation.DELETE, 2L,
+                RagIngestJobStatus.COMPLETED,
+                new RagIngestCheckpoint(RagIngestStage.COMPLETED, 0, 0, 0, 0),
+                1, 3, null, null, 11L, 8L, null, null, null);
+        RagDocumentEntity deletingDocument = new RagDocumentEntity("tenant-a", "owner-a",
+                RagVisibility.TENANT, "kb-1", "doc-1", "document.md", "version-1", 2L,
+                null, RagDocumentStatus.DELETING, 4L);
+        RagDocumentEntity deletedDocument = deletingDocument.deleted();
+        Mockito.when(documentDao.queryByTenantKnowledgeBaseAndDocumentIdForUpdate(
+                "tenant-a", "kb-1", "doc-1")).thenReturn(mapper.toDocumentPo(deletingDocument));
+        Mockito.when(documentVersionDao.queryListByTenantAndDocumentIdForUpdate("tenant-a", "doc-1"))
+                .thenReturn(List.of());
+
+        cn.bugstack.ai.types.exception.AppException error = Assert.assertThrows(
+                cn.bugstack.ai.types.exception.AppException.class,
+                () -> repository.completeClaimedDeleteJob("tenant-a", completed, 7L, "worker-a", 11L,
+                        deletedDocument, List.of(deletedVersion("version-1", 1, 4L)), now));
+
+        Assert.assertEquals("RAG_DELETE_VERSION_SET_CHANGED", error.getCode());
+        Mockito.verify(documentVersionDao, Mockito.never()).markDeletedByTenantAndRevision(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyLong());
+        Mockito.verify(ingestTaskDao, Mockito.never()).updateClaimedByTenantFenceAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.any());
+    }
+
+    @Test
     public void shouldStopLifecycleWhenOldVersionRevisionLosesCas() {
         RagIngestJobEntity completed = terminalJob(RagIngestJobStatus.COMPLETED);
         RagIndexActivation activation = new RagIndexActivation(
@@ -318,5 +406,12 @@ public class RagRepositoryTest {
                 null, null, 11L, 8L, null,
                 status == RagIngestJobStatus.FAILED ? "RAG_FAILED" : null,
                 status == RagIngestJobStatus.FAILED ? "failed" : null);
+    }
+
+    private RagDocumentVersionEntity deletedVersion(String versionId, int number, long revision) {
+        return new RagDocumentVersionEntity("tenant-a", "kb-1", "doc-1", versionId, number, 2L,
+                "rag", "source/" + versionId, null, null, versionId + ".md", "a".repeat(64),
+                "text/markdown", 10L, RagDocumentVersionStatus.DELETED,
+                null, null, null, revision);
     }
 }

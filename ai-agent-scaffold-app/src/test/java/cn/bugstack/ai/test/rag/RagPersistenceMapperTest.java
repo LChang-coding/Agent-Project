@@ -29,7 +29,8 @@ public class RagPersistenceMapperTest {
     public void shouldRoundTripDocumentVersionChunkAndTask() {
         RagDocumentVersionEntity version = new RagDocumentVersionEntity(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2, 3L,
-                "rag-source", "tenant-a/doc-1/v2.pdf", "manual.pdf", "a".repeat(64),
+                "rag-source", "tenant-a/doc-1/v2.pdf", "rag-parsed", "tenant-a/doc-1/v2.json",
+                "manual.pdf", "a".repeat(64),
                 "application/pdf", 4096L, RagDocumentVersionStatus.PROCESSING,
                 "docling-2", "chunker-1", "e5-v1", 4L);
         RagChunkEntity chunk = new RagChunkEntity("tenant-a", "owner-1", RagVisibility.TENANT,
