@@ -98,7 +98,8 @@ public final class RagBenchmarkCli {
                 path(options, "prepared"), path(options, "out"), number(options, "seed", 20260719L),
                 nonNegativeInteger(options, "warmup-queries", 10),
                 Duration.ofMillis(integer(options, "poll-ms", 1000)),
-                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 3600)));
+                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 3600)),
+                remote.requestTimeoutSeconds());
         RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, remote.client()).run(configuration);
         System.out.printf("completed runId=%s knowledgeBaseId=%s taskId=%s out=%s%n",
                 result.runId(), result.knowledgeBaseId(), result.taskId(), configuration.runDirectory());
@@ -128,7 +129,8 @@ public final class RagBenchmarkCli {
                 new RagBenchmarkRunner.EvaluationConfiguration(required(options, "run-id"), remote.baseUrl(),
                         remote.credentialSource(), required(options, "code-revision"), path(options, "prepared"),
                         path(options, "targets"), path(options, "out"), number(options, "seed", 20260719L),
-                        nonNegativeInteger(options, "warmup-queries", 10));
+                        nonNegativeInteger(options, "warmup-queries", 10), optionalPath(options, "resume-from"),
+                        remote.requestTimeoutSeconds());
         RagBenchmarkRunner.Result result = new RagBenchmarkRunner(objectMapper, remote.client())
                 .evaluate(configuration);
         System.out.printf("completed evaluate runId=%s out=%s%n", result.runId(), configuration.runDirectory());
@@ -163,7 +165,8 @@ public final class RagBenchmarkCli {
                 : new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
                 requestTimeout, maxResponseBytes);
         return new Remote(baseUrl, "environment:" + tokenEnvironment
-                + (refreshEnabled ? ";refresh=enabled" : ";refresh=disabled"), client);
+                + (refreshEnabled ? ";refresh=enabled" : ";refresh=disabled"), client,
+                Math.toIntExact(requestTimeout.toSeconds()));
     }
 
     private static Map<String, String> options(String[] args) {
@@ -182,6 +185,10 @@ public final class RagBenchmarkCli {
 
     private static Path path(Map<String, String> values, String name) {
         return Path.of(required(values, name)).toAbsolutePath().normalize();
+    }
+    private static Path optionalPath(Map<String, String> values, String name) {
+        String value = values.get(name);
+        return value == null || value.isBlank() ? null : Path.of(value).toAbsolutePath().normalize();
     }
     private static String required(Map<String, String> values, String name) {
         String value = values.get(name);
@@ -250,8 +257,10 @@ public final class RagBenchmarkCli {
         lines.add("        [--phase-timeout-seconds 1800 --request-timeout-seconds 120]");
         lines.add("evaluate --base-url http://HOST:PORT/api --prepared DIR --targets targets.json --out EMPTY_DIR");
         lines.add("        --run-id ID --code-revision GIT_COMMIT [--warmup-queries 10 --seed 20260719]");
+        lines.add("        [--resume-from FAILED_RUN_DIR --request-timeout-seconds 120]");
         lines.forEach(System.out::println);
     }
 
-    private record Remote(URI baseUrl, String credentialSource, RagBenchmarkHttpClient client) {}
+    private record Remote(URI baseUrl, String credentialSource, RagBenchmarkHttpClient client,
+                          int requestTimeoutSeconds) {}
 }

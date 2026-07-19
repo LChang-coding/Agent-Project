@@ -17,6 +17,7 @@ WARMUP_QUERIES="${RAG_BENCHMARK_WARMUP_QUERIES:-0}"
 INGEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_INGEST_TIMEOUT_SECONDS:-900}"
 REQUEST_TIMEOUT_SECONDS="${RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS:-120}"
 EXISTING_TARGETS="${RAG_BENCHMARK_EXISTING_TARGETS:-}"
+RESUME_FROM="${RAG_BENCHMARK_RESUME_FROM:-}"
 EXISTING_USERNAME="${RAG_BENCHMARK_USERNAME:-}"
 EXISTING_PASSWORD="${RAG_BENCHMARK_PASSWORD:-}"
 CLI_JAR="$PROJECT_ROOT/ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar"
@@ -42,6 +43,10 @@ if [[ ! -r "$CLI_JAR" || ! -d "$PREPARED_DIR" || -e "$OUTPUT_DIR"
 fi
 if [[ -n "$EXISTING_TARGETS" && (-z "$EXISTING_USERNAME" || -z "$EXISTING_PASSWORD") ]]; then
   printf 'existing targets require RAG_BENCHMARK_USERNAME and RAG_BENCHMARK_PASSWORD for the original tenant\n' >&2
+  exit 2
+fi
+if [[ -n "$RESUME_FROM" && (-z "$EXISTING_TARGETS" || ! -d "$RESUME_FROM") ]]; then
+  printf 'RAG_BENCHMARK_RESUME_FROM requires existing targets and a readable source directory\n' >&2
   exit 2
 fi
 
@@ -102,6 +107,9 @@ if [[ -n "$EXISTING_TARGETS" ]]; then
   fi
   command_name=evaluate
   extra_arguments=(--targets "$EXISTING_TARGETS")
+  if [[ -n "$RESUME_FROM" ]]; then
+    extra_arguments+=(--resume-from "$RESUME_FROM")
+  fi
 fi
 java -jar "$CLI_JAR" "$command_name" \
   --base-url "$BASE_URL" \

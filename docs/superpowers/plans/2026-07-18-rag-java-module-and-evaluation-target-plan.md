@@ -1310,3 +1310,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `run-local-rag-mini.sh`新增`RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS`，默认值仍为120，run/evaluate与可选load阶段统一使用；仅接受1～3600的十进制正整数，非法值在登录和创建输出前以退出码2失败。第八次将显式使用240，不改变应用侧组件deadline。
 - 新增本地慢HTTP集成回归：服务端接收请求后由Latch阻塞而不发送响应，100ms客户端超时后断言原始`HttpTimeoutException`、manifest=`failed`、errorType=`HttpTimeoutException`、稳定errorCode，且正式`run.jsonl`不存在；测试结束显式释放Latch并关闭服务端，不依赖固定长sleep。
 - benchmark全量测试两次均为21/21通过、0 failure/error/skipped；`mvn package`成功生成fat CLI。脚本`bash -n`通过，非法超时0的真实脚本检查得到退出码2和预期错误摘要；拟提交文件`git diff --check`通过。新CLI JAR SHA-256为`b2b0d499843c3fce1da68f2577a5a1bb3d2af68e21c7c477ab20cb2db158d0ea`。
+
+###### SciFact 第八次独立复评分计划（执行前）
+
+1. 使用提交`f740c68`和CLI JAR SHA-256 `b2b0d499843c3fce1da68f2577a5a1bb3d2af68e21c7c477ab20cb2db158d0ea`，保持App JAR SHA-256 `c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`及其本地MySQL/Rerank运行参数不变；输出使用全新空目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-f740c68-r8`，不续写第七次553条。
+2. 启动前核验8092应用、本地13307 MySQL、prepared四文件、targets hash与远端Embedding/Qdrant/Rerank健康；要求没有其他benchmark evaluator。只对原隔离benchmark用户做username/userId/tenantId/active/password同时匹配的唯一密码更新，随机明文仍只存在受限临时文件和评测进程环境。
+3. 保持seed=20260719、同一300个SciFact query、同一四个targets、load关闭和warmup=10；唯一变化是显式`RAG_BENCHMARK_REQUEST_TIMEOUT_SECONDS=240`。该值只给客户端等待后端完整响应留余量，不改变检索结果、组件预算、候选数、并发、模型或索引。
+4. 内建40条预热门禁仍要求40唯一组合、四变体各10、0错误、0降级、0空排名，Rerank候选数与耗时均为正；门禁通过前正式文件必须不存在。通过后完整执行1200条正式记录，任一稳定错误码、降级、空排名、重复或进程异常都停止并保留失败证据。
+5. 运行采用前台托管会话并配只读监测，不在监测脚本中修改或拼接输出。只有manifest=completed、正式1200条、1200唯一组合、四组各300且所有完整性门禁通过，才允许执行独立`score`复算与质量指标比较。
+
+###### SciFact 第八次首次启动安全失败与重试计划（执行前）
+
+- 首次启动在隔离账号密码条件更新阶段由MySQL以`Unknown column 's.secret_value'`拒绝，shell退出码1；真实列名为`secret_value_hash`。此前唯一性查询为1，但失败UPDATE没有修改任何行，评测脚本尚未执行，全新输出目录仍不存在，因此没有半成品run可清理或续写。
+- 重试继续使用同一提交、JAR、输入hash、runId和全新目录；重新生成随机密码及BCrypt摘要，条件保持username/userId/tenantId/三方active/未删除/secret_type=password同时匹配，唯一行数必须为1，改用真实`secret_value_hash`后实际影响行数也必须为1。
+- 更新成功后立刻在同一个受限前台shell中把随机明文传给登录脚本并启动评测，不打印密码或摘要、不写入Git；其余40+1200门禁及240秒唯一变量保持第八次原计划不变。
+
+###### SciFact 第八次启动结果与严格断点续跑计划（执行前）
+
+- 修正真实字段为`secret_value_hash`后，username/userId/tenantId/secret type/状态联合条件匹配1且实际更新1；评测成功登录并启动。用户指出1200条不应因客户端边界从头重跑后，立即向前台会话发送SIGINT：第八次只留下7条warmup、正式`run.jsonl`不存在，manifest仍为running。该目录保留为人工中断证据，不续写、不参与评分。
+- 第七次553条的失败点是外层`HttpTimeoutException`，已有553条均唯一、0 error、0 degraded、0 empty，且输入、seed、targets、应用/模型/索引配置均未变化；因此实现CLI原生`--resume-from DIR`，由程序严格验证后复用有效前缀，比重新产生647次无必要模型调用更合理，也不能用shell手工拼接替代。
+- 断点门禁必须验证：源manifest为同dataset/sourceRevision/文档数/query数/Markdown hash/seed/warmup/targets hash，mode为existing-targets且状态不是completed；源warmup完整通过现有门禁并逐条符合确定性shuffle顺序；源正式记录数在1～1199，每条按轮转算法严格匹配预期variant/query/query hash，组合唯一、无业务错误、无降级、非空排名，Rerank记录还有正候选数和正耗时。任一字段不符，以稳定`RAG_BENCHMARK_RESUME_GATE_FAILED`失败且不发出检索请求。
+- 通过后在全新输出目录中逐字节复制源warmup与正式前缀，manifest记录源目录名、源runId、源codeRevision、源manifest/run/warmup SHA-256及resumedRecordCount；随后只从第554条继续。复制前缀保留原runId和原始行hash，新请求使用新runId，最终报告明确是同配置下的可审计分段执行，不冒充单次无中断运行。
+- 增加单测覆盖健康前缀只调用剩余请求并完成、顺序或hash篡改在零HTTP调用前失败、源降级/错误/空排名拒绝、源输入或targets不一致拒绝；CLI与shell透传`--resume-from`，默认无该参数时保持原行为。测试、重建、中文提交后，以第七次目录为源和全新第九次目录续跑647条。
+
+###### 严格断点续跑实现、独立审计与验收结果
+
+- 用户指出“不应从头重跑”后，第八次前台会话在7条warmup、0条正式记录时被SIGINT停止；旧目录保留且不参与后续。新增`RagBenchmarkResumeGate`与CLI/脚本`--resume-from`/`RAG_BENCHMARK_RESUME_FROM`，默认无断点参数时原有行为不变。
+- Resume Gate只接受failed且原因为请求超时或稳定I/O错误的源目录，拒绝running/completed、符号链接、缺文件、存在metrics、超限文件、空白/截断JSONL。绑定schema、base URL、dataset/source revision、文档/query数、Markdown名称/字节/hash、seed、warmup、线程数、四变体定义、原始targets SHA及四个唯一target映射；新manifest开始额外记录prepared manifest/queries/qrels/document-map SHA、request timeout和resume protocol version。第七次旧manifest缺四个prepared hash，续跑manifest会显式标记`legacyPreparedFingerprintCompatibility=true`，不把既有计划与现场hash证据冒充为旧产物自证。
+- warmup与measured均按排序query+Java Random(seed)+固定变体轮转逐条zip验证runId/variant/queryId/query SHA；同时要求retrievalId跨两阶段全局唯一、0 error/degraded/reason、排名1～10且行内唯一并全部存在document-map、非负耗时/候选、totalMs正，Rerank候选与rerankMs正。measured必须是1～1200的严格前缀；1200条已写完但评分前失败时允许零HTTP只评分。
+- 续跑先验证源snapshot并计算manifest/targets-copy/warmup/run四个hash，再逐字节复制warmup与正式前缀；复制后复算目标hash，源在校验与复制间变化即以`RAG_BENCHMARK_RESUME_GATE_FAILED`停止。manifest/metrics记录源目录、源runId/code revision、四hash、resumed count、next index、warmup runId、source segments与当前segment runId；支持混合runId的链式再次续跑，不要求未来从头开始。
+- Runner正向集成测试构造3/8健康前缀，断言只产生5次HTTP、前3行逐字节语义保持、最终8条和metrics完成；门禁失败集成测试断言0次HTTP、failed manifest/稳定错误码且无正式文件。Gate测试覆盖健康、query hash篡改、错误样本、prepared不一致、8/8零请求恢复与混合runId链式lineage。首轮新增测试因测试夹具为所有记录复用同一retrievalId，被新唯一性门禁正确拒绝；夹具改为递增唯一ID后通过，没有放宽生产门禁。
+- benchmark全量最终29/29测试通过、0 failure/error/skipped，`mvn package`成功；脚本`bash -n`通过，缺失resume目录的真实脚本门禁在任何认证/请求前以退出码2失败。新CLI JAR SHA-256为`5d8fe7a3cef96e205f58e43a029b03e8d6856699f87bd83bc531ae0e1e488e4f`，拟提交作用域`git diff --check`通过。
+- 只读独立审计再次从prepared重建1200顺序：第七次40条warmup和553条正式记录逐条0 mismatch；553条为Dense 138、Sparse 138、Hybrid-RRF 139、Rerank 138，0错误/降级/空/重复文档，所有文档ID存在document-map，593个retrievalId跨warmup/run唯一。第553条是queryId=783的Hybrid-RRF，第554条必须是同query的Rerank，不能重发第553条。源文件hash为manifest `c37f0fd548427944df06eb85337817a3c8b3a43bf849f2801053e71935185157`、targets-copy `bfd079e4b05cd739f5b7bea8600693cea57b72feea016f209f4db63206759f69`、warmup `f93a196d9c574af5b2503b3b4909fa66ea4ad6d2c31140c7467b9603eeb4f414`、run `e012c0a78d39ad0b8a027e454f86817dfe4e5cf95d038a4908e2e07f1e4b74fe`。
+- 外部语义门禁补充：四target当前binding/profile规范化指纹为`3361f9162eb059c40f05a2696dac4f02ec0db65552f4ffd73701322bb32998bb`且恰4行；KB/document/active version规范化指纹为`a6e65d48e7fe5431747712f9a7a61938222cdbae8103972c858ad8f99933fce3`且恰1行；benchmark Qdrant物理collection为green、总7563点，目标tenant/kb/generation精确7548点；App JAR仍为`c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，四个远端容器镜像/健康组合指纹为`68a6d2d0fd5b173e8f14b9437ab70e3cd4de71b30703926820692e8c13a1bbb5`。首次生成数据库指纹时误把带参数mysql命令存为zsh标量，shell把整串当文件名并产生空文件；该结果明确作废，改用命令数组后得到上述有效行数和hash。
+- 质量前缀可以复用，但第七次使用120秒外层策略、续段使用240秒，且第554次曾有一次未落run的删失超时。最终分段run只用于Recall/MRR/nDCG/MAP质量指标；其合并延迟、P95/P99和“0错误率”不得冒充统一策略性能结论，后续性能/SLA必须另跑同一超时与并发配置。
