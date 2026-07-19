@@ -1398,3 +1398,12 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `QdrantVectorStoreAdapter`仅把已有现场证据HTTP 408加入原有429/502/503/504瞬态集合，继续复用总deadline、最大重试和指数退避；400、401等客户端错误仍只调用一次。新增测试验证408后200成功、持续408严格3次后稳定`RAG_QDRANT_HTTP_ERROR`、400不重试。
 - Temurin Java 17下Qdrant协议测试12/12通过。扩大到RAG/Docling/TEI相关模式时，所有165个真实外层测试均通过，另有7个被旧Surefire 2.6错误发现为测试的私有嵌套fixture类报`No runnable methods`；项目全量308条中294条通过，14个既有错误来自上述旧测试发现问题及旧Agent示例缺租户上下文/Bean，与本次改动无关，按约定记录但不阻断。
 - Java 17 reactor跳过重复测试后的App打包成功，新JAR SHA-256为`484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`；两个shell通过`bash -n`、plist通过`plutil -lint`。全仓`git diff --check`只被运行时日志中的既有尾随空格阻断，限定本次7个文件的diff check通过，日志不纳入提交。
+
+###### 新JAR四变体真实冒烟结果与第十一次续跑计划（执行前）
+
+- 可靠性修复已以中文提交`3d9510c`闭环；旧8092应用收到SIGINT退出，虽然Spring关闭钩子出现既有Logback类卸载告警，但端口释放成功。新JAR SHA-256 `484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`以Temurin 17、PID 45587启动，MySQL为127.0.0.1:13307，Qdrant为127.0.0.1:16333隧道。Loki隧道仍未就绪但启动脚本按既有策略继续，不影响检索链。
+- 同一隔离账号条件更新严格匹配1/影响1，queryId=783真实四变体全部code=0000、0降级、10引用：Dense total=5106ms/100候选，Sparse total=3223ms/100候选，Hybrid-RRF total=4274ms/双路各100，Hybrid-RRF+Rerank total=13985ms/Rerank候选10、rerankMs=7499。四个retrievalId均不同且数据库审计由生产链生成，证明新JAR与隧道可完成全链路；该4次只作为冒烟，不进入质量指标。
+- 第十一次使用提交`3d9510c`、App上述新hash、CLI仍为`970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`；全新输出目录固定为`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-3d9510c-r11`，恢复源仍是第七次40条warmup+553条严格健康正式前缀，不使用第九次污染文件或第十次未启动目录。
+- 启动前再次核验App健康、实际进程环境中的Qdrant隧道/20秒单次/90秒总时限/5次重试、MySQL、prepared四hash、targets hash和源四hash；隔离账号密码仍执行唯一条件更新。保持seed、query顺序、四targets、模型、索引、profile、240秒benchmark外层超时与load关闭不变。
+- Resume Gate应零重发复制553条，并从全局第554条queryId=783/Rerank开始；Measured Gate在任何错误/降级/空或非法结果写入前立即终止。运行中只读监测manifest、记录总数/唯一性、分组数和8092/Qdrant/MySQL健康，不修改产物。
+- 完成条件仍为1200条、1200唯一variant/query、各变体300、0错误/降级/空、全部Rerank字段有效、manifest=completed和metrics存在；随后必须用独立`score`基于prepared qrels复算并校验hash，才可报告Recall/MRR/nDCG/MAP。分段质量run的延迟不作为统一性能结论。
