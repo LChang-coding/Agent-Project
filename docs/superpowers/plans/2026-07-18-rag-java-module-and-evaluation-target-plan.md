@@ -1958,3 +1958,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 绑定服务在写库前调用目标校验，并要求知识库状态`searchable()`；DELETING/DISABLED/INDEXING/DELETED返回`RAG_KNOWLEDGE_BASE_UNAVAILABLE`。权限门禁仍先要求可信owner/admin，数据库唯一约束继续作为并发冲突兜底。
 - 新增Agent存在/禁用、Workflow同租户已发布、跨租户、草稿和知识库删除中测试；定向3类测试15/15通过。Java 17按真实文件名执行全部RAG测试181/181通过，0 failure/error/skipped，六模块BUILD SUCCESS、总耗时3.134秒。
 - 本阶段只闭环“创建绑定”的目标真实性；知识库编辑/删除、摄取任务手工重试和已存在绑定在目标随后停用时的管理提示仍属于本计划后续项，不能把本阶段写成完整生命周期完成。
+
+#### 最终测试报告证据与失败因果交付约束（2026-07-20，执行前）
+
+1. 最终报告必须完整列出已经真实获得的功能、质量、性能、资源、稳定性、格式兼容、生命周期和故障注入数据；每个数字都能回指项目内原始JSON/JSONL/日志摘要、运行manifest、commit/JAR、输入数据hash、样本量、并发、线程、接口地址或脱敏后的环境标识。没有原始证据的项目只能标记“未测试/证据不足”，禁止估算、补齐或把单元测试冒充真实E2E。
+2. 所有RAG技术点必须使用同数据快照、同问题集合和同统计口径做前后消融对照；至少展示Dense、Sparse、Hybrid、Hybrid+Rerank已有四组结果，并分别解释绝对变化、相对变化、收益样本、受损样本、延迟代价和是否达到预期。无法隔离的chunk、父邻块、Token预算或TopK参数不得声称带来增益。
+3. 瓶颈章节按“证据 -> 直接原因 -> 根因推断 -> 可证伪替代解释 -> 优化方案 -> 复测门槛”书写，区分解析、Embedding、Qdrant检索、融合、Rerank、Java编排、MySQL/MinIO和资源容量，不把相关性写成确定因果；优化建议必须说明预期影响面、风险和验收指标。
+4. 召回失败案例必须显式给出queryId、完整问题、可用的gold answer、全部Gold文档ID/标题/项目内正文证据链接、各变体Gold名次、实际Top10文档ID，并至少展开Top3错误文档的正文片段；同时给出首个失效阶段、该阶段输入/输出、后续步骤为何无法挽回，以及针对该因果判断的反证实验。SciFact没有gold answer时必须明确写“数据集未提供”，不得生成答案。
+5. 失败案例需要覆盖persistent miss、Sparse词项失配、融合丢失、Rerank伤害、无答案仍召回、格式/页码异常和真实运行故障；对每例区分“原始候选根本没有Gold”“候选中有Gold但融合淘汰”“融合后有Gold但重排降名”“检索正确但生成/引用未验证”，不得只按终态标签倒推原因。
+6. 报告发布前由确定性生成器重新计算并做数量、variant、状态、hash和字节一致性门禁；另在全新目录重复生成并`cmp`，运行Java 17全部RAG测试、benchmark测试、前端生产构建和全reactor打包。最终交付同时提供人读报告、机器总账、完整失败case附件、测试文档/问题入口和原始证据索引。
+
+#### 知识库乐观锁编辑与前端可用目标阶段结果
+
+- 新增`PUT /api/v1/rag/knowledge-bases/{knowledgeBaseId}`及请求DTO；仅可信租户owner/admin可编辑名称与说明，tenant scope和manageable校验在持久化前完成。删除中/已删除状态拒绝编辑，名称冲突、缺少revision、旧revision及CAS并发失败分别返回稳定业务码。
+- 更新实体保留owner、visibility、状态、检索策略、Embedding维度、collection alias和generation，只把revision推进1；没有把“编辑信息”误实现为重建索引。服务测试覆盖字段保持、跨revision、同名、删除中、并发CAS和普通成员无仓储调用，Controller测试覆盖revision必填及成功响应下一revision。
+- 前端知识库弹窗复用于创建和编辑，显式显示“正在保存/保存修改”，保存期间禁止关闭；编辑入口位于当前知识库摘要区，成功后只替换对应列表项并保留选中知识库及文档。Workflow绑定下拉同时收紧为`status=published && publishedVersion>0`，与后端目标可用性规则一致，避免先展示草稿再由后端拒绝。
+- Java 17定向门禁首次即通过：3类测试10/10，0 failure/error/skipped；随后按真实文件名生成36个RAG测试类清单，全部185/185通过，0 failure/error/skipped，六模块BUILD SUCCESS。前端`npm run build`通过，`vue-tsc --noEmit`无类型错误，Vite 1916 modules transformed并成功产出生产包。
+- 本阶段未开放知识库删除API，也未宣告任务通用手工重试完成；原因是级联删除必须把活动/失败任务、向量、分块、MinIO对象和绑定清理闭环，后续仍按本计划独立实现与故障注入，不能以列表隐藏代替删除成功。

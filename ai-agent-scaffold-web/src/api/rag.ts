@@ -145,6 +145,18 @@ export function createKnowledgeBase(payload: { name: string; description?: strin
   return request<RagKnowledgeBase>({ url: '/v1/rag/knowledge-bases', method: 'POST', data: payload });
 }
 
+export function updateKnowledgeBase(knowledgeBaseId: string, payload: {
+  name: string;
+  description?: string;
+  expectedRevision: number;
+}) {
+  return request<RagKnowledgeBase>({
+    url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}`,
+    method: 'PUT',
+    data: payload,
+  });
+}
+
 export function queryRagDocuments(knowledgeBaseId: string) {
   return request<RagDocument[]>({
     url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents`,

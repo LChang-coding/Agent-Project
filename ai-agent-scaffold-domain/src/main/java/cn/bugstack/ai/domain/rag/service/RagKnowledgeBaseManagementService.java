@@ -61,6 +61,39 @@ public class RagKnowledgeBaseManagementService {
         return repository.listKnowledgeBases(tenantId);
     }
 
+    /** 以revision CAS编辑知识库名称和描述，不改变索引与生命周期字段。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RagKnowledgeBaseEntity update(String tenantId, String userId, String roleCode,
+                                         String knowledgeBaseId, long expectedRevision,
+                                         String name, String description) {
+        authorizationService.requireTenantAdministrator(tenantId, userId, roleCode);
+        RagKnowledgeBaseEntity existing = repository.findKnowledgeBase(tenantId, requireId(knowledgeBaseId))
+                .orElseThrow(() -> new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在"));
+        authorizationService.requireManageable(tenantId, userId, roleCode, existing);
+        if (existing.status() == RagKnowledgeBaseStatus.DELETING
+                || existing.status() == RagKnowledgeBaseStatus.DELETED) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "删除中的知识库不能编辑");
+        }
+        if (expectedRevision != existing.revision()) {
+            throw revisionConflict();
+        }
+        String normalizedName = normalizeName(name);
+        String normalizedDescription = normalizeDescription(description);
+        boolean duplicate = repository.listKnowledgeBases(tenantId).stream()
+                .filter(item -> !existing.knowledgeBaseId().equals(item.knowledgeBaseId()))
+                .map(RagKnowledgeBaseEntity::name)
+                .anyMatch(value -> normalizedName.equalsIgnoreCase(value.trim()));
+        if (duplicate) throw conflict();
+        RagKnowledgeBaseEntity updated = new RagKnowledgeBaseEntity(existing.tenantId(), existing.ownerUserId(),
+                existing.knowledgeBaseId(), normalizedName, normalizedDescription, existing.visibility(),
+                existing.status(), existing.retrievalProfileId(), existing.embeddingDimension(),
+                existing.collectionAlias(), existing.currentGeneration(), existing.revision() + 1);
+        if (repository.updateKnowledgeBase(tenantId, updated, expectedRevision) != 1) {
+            throw revisionConflict();
+        }
+        return updated;
+    }
+
     private String normalizeName(String value) {
         if (value == null || value.isBlank()) {
             throw new AppException("RAG_KNOWLEDGE_BASE_NAME_INVALID", "知识库名称不能为空");
@@ -70,6 +103,13 @@ public class RagKnowledgeBaseManagementService {
             throw new AppException("RAG_KNOWLEDGE_BASE_NAME_INVALID", "知识库名称不能超过128个字符");
         }
         return normalized;
+    }
+
+    private String requireId(String value) {
+        if (value == null || value.isBlank() || value.length() > 64) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在");
+        }
+        return value.trim();
     }
 
     private String normalizeDescription(String value) {
@@ -93,5 +133,9 @@ public class RagKnowledgeBaseManagementService {
 
     private AppException conflict() {
         return new AppException("RAG_KNOWLEDGE_BASE_CONFLICT", "当前租户已存在同名知识库，请更换名称后重试");
+    }
+
+    private AppException revisionConflict() {
+        return new AppException("RAG_KNOWLEDGE_BASE_REVISION_CONFLICT", "知识库已被其他操作更新，请刷新后重试");
     }
 }

@@ -1,6 +1,7 @@
 package cn.bugstack.ai.test.rag;
 
 import cn.bugstack.ai.api.dto.rag.RagKnowledgeBaseResponseDTO;
+import cn.bugstack.ai.api.dto.rag.RagKnowledgeBaseUpdateRequestDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
@@ -16,7 +17,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,6 +62,47 @@ public class RagKnowledgeBaseControllerTest {
         Assert.assertEquals("RAG_AUTH_CONTEXT_MISSING", response.getCode());
         Assert.assertNull(response.getData());
         org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    public void shouldRequireRevisionForKnowledgeBaseUpdate() {
+        IRagRepository repository = mock(IRagRepository.class);
+        RagKnowledgeBaseController controller = new RagKnowledgeBaseController(new RagKnowledgeBaseManagementService(
+                repository, new RagKnowledgeBaseAuthorizationService()));
+        TenantContextHolder.set(TenantContext.builder()
+                .tenantId("tenant-a").userId("admin-1").roleCode("admin").build());
+        RagKnowledgeBaseUpdateRequestDTO request = new RagKnowledgeBaseUpdateRequestDTO();
+        request.setName("新名称");
+
+        Response<RagKnowledgeBaseResponseDTO> response = controller.update("kb-a", request);
+
+        Assert.assertEquals("RAG_KNOWLEDGE_BASE_REVISION_REQUIRED", response.getCode());
+        org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
+    public void shouldUpdateKnowledgeBaseInTrustedTenantAndReturnNextRevision() {
+        IRagRepository repository = mock(IRagRepository.class);
+        RagKnowledgeBaseController controller = new RagKnowledgeBaseController(new RagKnowledgeBaseManagementService(
+                repository, new RagKnowledgeBaseAuthorizationService()));
+        TenantContextHolder.set(TenantContext.builder()
+                .tenantId("tenant-a").userId("admin-1").roleCode("admin").build());
+        when(repository.findKnowledgeBase("tenant-a", "kb-a"))
+                .thenReturn(Optional.of(knowledgeBase("tenant-a")));
+        when(repository.listKnowledgeBases("tenant-a")).thenReturn(List.of(knowledgeBase("tenant-a")));
+        when(repository.updateKnowledgeBase(org.mockito.ArgumentMatchers.eq("tenant-a"), any(),
+                org.mockito.ArgumentMatchers.eq(0L))).thenReturn(1);
+        RagKnowledgeBaseUpdateRequestDTO request = new RagKnowledgeBaseUpdateRequestDTO();
+        request.setName("企业知识中心");
+        request.setDescription("已更新");
+        request.setExpectedRevision(0L);
+
+        Response<RagKnowledgeBaseResponseDTO> response = controller.update("kb-a", request);
+
+        Assert.assertEquals("0000", response.getCode());
+        Assert.assertEquals("企业知识中心", response.getData().getName());
+        Assert.assertEquals("已更新", response.getData().getDescription());
+        Assert.assertEquals(Long.valueOf(1L), response.getData().getRevision());
     }
 
     private RagKnowledgeBaseEntity knowledgeBase(String tenantId) {

@@ -12,7 +12,7 @@
           <RefreshCw v-else :size="16" />
           {{ loading ? '正在同步' : '刷新数据' }}
         </button>
-        <button v-if="isAdministrator" class="rag-button rag-button--primary" type="button" @click="showCreateKnowledgeBase = true">
+        <button v-if="isAdministrator" class="rag-button rag-button--primary" type="button" @click="openKnowledgeBaseEditor()">
           <Plus :size="17" /> 新建知识库
         </button>
       </div>
@@ -74,6 +74,9 @@
           <span>Embedding</span>
           <strong>{{ selectedKnowledgeBase.embeddingDimension }} dimensions</strong>
           <small>ID · {{ shortId(selectedKnowledgeBase.knowledgeBaseId) }}</small>
+          <button v-if="isAdministrator" class="rag-button rag-button--soft rag-button--wide" type="button" @click="openKnowledgeBaseEditor(selectedKnowledgeBase)">
+            编辑知识库信息
+          </button>
         </footer>
       </aside>
 
@@ -285,13 +288,13 @@
       </aside>
     </main>
 
-    <div v-if="showCreateKnowledgeBase" class="modal-backdrop" @click.self="showCreateKnowledgeBase = false">
+    <div v-if="showKnowledgeBaseEditor" class="modal-backdrop" @click.self="closeKnowledgeBaseEditor">
       <form class="rag-modal" @submit.prevent="saveKnowledgeBase">
-        <header><div><span>NEW LIBRARY</span><h2>建立知识库</h2></div><button type="button" aria-label="关闭" @click="showCreateKnowledgeBase = false"><X :size="19" /></button></header>
+        <header><div><span>{{ editingKnowledgeBaseId ? 'EDIT LIBRARY' : 'NEW LIBRARY' }}</span><h2>{{ editingKnowledgeBaseId ? '编辑知识库' : '建立知识库' }}</h2></div><button type="button" aria-label="关闭" @click="closeKnowledgeBaseEditor"><X :size="19" /></button></header>
         <label>知识库名称<input v-model.trim="knowledgeBaseForm.name" class="lab-input" maxlength="128" autofocus placeholder="例如：人力资源制度" /></label>
         <label>用途说明<textarea v-model.trim="knowledgeBaseForm.description" class="lab-input lab-textarea" maxlength="500" placeholder="说明这里收纳哪些文档，以及将由哪些 Agent 使用。" /></label>
-        <p><ShieldCheck :size="16" /> 归属当前租户，知识库 ID 和向量 collection 别名由服务端生成。</p>
-        <footer><button class="rag-button rag-button--quiet" type="button" @click="showCreateKnowledgeBase = false">取消</button><button class="rag-button rag-button--primary" type="submit" :disabled="createKnowledgeBaseBusy || !knowledgeBaseForm.name"><LoaderCircle v-if="createKnowledgeBaseBusy" class="spin" :size="16" />{{ createKnowledgeBaseBusy ? '创建中…' : '创建知识库' }}</button></footer>
+        <p><ShieldCheck :size="16" /> {{ editingKnowledgeBaseId ? '仅修改名称与说明；索引、绑定及 collection 保持不变，并通过 revision 防止覆盖他人更新。' : '归属当前租户，知识库 ID 和向量 collection 别名由服务端生成。' }}</p>
+        <footer><button class="rag-button rag-button--quiet" type="button" :disabled="knowledgeBaseBusy" @click="closeKnowledgeBaseEditor">取消</button><button class="rag-button rag-button--primary" type="submit" :disabled="knowledgeBaseBusy || !knowledgeBaseForm.name"><LoaderCircle v-if="knowledgeBaseBusy" class="spin" :size="16" />{{ knowledgeBaseBusy ? '正在保存…' : editingKnowledgeBaseId ? '保存修改' : '创建知识库' }}</button></footer>
       </form>
     </div>
 
@@ -333,7 +336,8 @@ import { queryAgentConfigManagement } from '@/api/agent';
 import {
   cancelRagIngestTask, createKnowledgeBase, createRagBinding, createRagRetrievalProfile,
   debugRagRetrieval, deleteRagBinding, deleteRagDocument, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
-  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, updateRagRetrievalProfile, uploadRagDocument,
+  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, updateKnowledgeBase,
+  updateRagRetrievalProfile, uploadRagDocument,
   type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase,
   type RagRetrievalDebugResult, type RagRetrievalProfile, type RagRetrievalProfilePayload,
   type RagTargetType,
@@ -362,8 +366,10 @@ const pendingFileName = ref('');
 const cancelBusyTaskId = ref('');
 const retryBusyTaskId = ref('');
 const deletingDocumentId = ref('');
-const createKnowledgeBaseBusy = ref(false);
-const showCreateKnowledgeBase = ref(false);
+const knowledgeBaseBusy = ref(false);
+const showKnowledgeBaseEditor = ref(false);
+const editingKnowledgeBaseId = ref('');
+const editingKnowledgeBaseRevision = ref<number | undefined>();
 const knowledgeBaseForm = reactive({ name: '', description: '' });
 const debugBusy = ref(false);
 const debugResult = ref<RagRetrievalDebugResult | null>(null);
@@ -424,7 +430,9 @@ async function reloadAll() {
 async function loadTargets() {
   const results = await Promise.allSettled([queryAgentConfigManagement(false), queryWorkflows()]);
   if (results[0].status === 'fulfilled') agentTargets.value = results[0].value.filter((item) => item.status === 'enabled').map((item) => ({ id: item.agentId, name: item.agentName }));
-  if (results[1].status === 'fulfilled') workflowTargets.value = results[1].value.filter((item) => item.status !== 'deleted').map((item) => ({ id: item.workflowId, name: item.workflowName }));
+  if (results[1].status === 'fulfilled') workflowTargets.value = results[1].value
+    .filter((item) => item.status === 'published' && item.publishedVersion > 0)
+    .map((item) => ({ id: item.workflowId, name: item.workflowName }));
 }
 
 async function selectKnowledgeBase(id: string) {
@@ -546,19 +554,45 @@ async function retryDeleteTask(task: RagIngestTask) {
   finally { retryBusyTaskId.value = ''; }
 }
 
+function openKnowledgeBaseEditor(knowledgeBase?: RagKnowledgeBase) {
+  editingKnowledgeBaseId.value = knowledgeBase?.knowledgeBaseId || '';
+  editingKnowledgeBaseRevision.value = knowledgeBase?.revision;
+  knowledgeBaseForm.name = knowledgeBase?.name || '';
+  knowledgeBaseForm.description = knowledgeBase?.description || '';
+  showKnowledgeBaseEditor.value = true;
+}
+
+function closeKnowledgeBaseEditor() {
+  if (knowledgeBaseBusy.value) return;
+  showKnowledgeBaseEditor.value = false;
+  editingKnowledgeBaseId.value = '';
+  editingKnowledgeBaseRevision.value = undefined;
+  knowledgeBaseForm.name = '';
+  knowledgeBaseForm.description = '';
+}
+
 async function saveKnowledgeBase() {
-  createKnowledgeBaseBusy.value = true;
+  knowledgeBaseBusy.value = true;
   try {
-    const created = await createKnowledgeBase({ ...knowledgeBaseForm });
-    knowledgeBases.value = [created, ...knowledgeBases.value];
-    selectedKnowledgeBaseId.value = created.knowledgeBaseId;
-    bindingForm.knowledgeBaseId = created.knowledgeBaseId;
-    documents.value = [];
-    showCreateKnowledgeBase.value = false;
-    knowledgeBaseForm.name = ''; knowledgeBaseForm.description = '';
-    notice.value = { kind: 'success', message: `知识库“${created.name}”已创建。` };
-  } catch (error) { showError(error, '知识库创建失败'); }
-  finally { createKnowledgeBaseBusy.value = false; }
+    const editing = Boolean(editingKnowledgeBaseId.value);
+    const saved = editing
+      ? await updateKnowledgeBase(editingKnowledgeBaseId.value, {
+        ...knowledgeBaseForm,
+        expectedRevision: editingKnowledgeBaseRevision.value!,
+      })
+      : await createKnowledgeBase({ ...knowledgeBaseForm });
+    const existing = knowledgeBases.value.some((item) => item.knowledgeBaseId === saved.knowledgeBaseId);
+    knowledgeBases.value = existing
+      ? knowledgeBases.value.map((item) => item.knowledgeBaseId === saved.knowledgeBaseId ? saved : item)
+      : [saved, ...knowledgeBases.value];
+    selectedKnowledgeBaseId.value = saved.knowledgeBaseId;
+    bindingForm.knowledgeBaseId = saved.knowledgeBaseId;
+    if (!editing) documents.value = [];
+    knowledgeBaseBusy.value = false;
+    closeKnowledgeBaseEditor();
+    notice.value = { kind: 'success', message: `知识库“${saved.name}”已${editing ? '更新' : '创建'}。` };
+  } catch (error) { showError(error, editingKnowledgeBaseId.value ? '知识库更新失败，请刷新后重试' : '知识库创建失败'); }
+  finally { knowledgeBaseBusy.value = false; }
 }
 
 async function runDebug() {
@@ -670,7 +704,7 @@ function operationText(operation: string) { return ({ ingest: '摄取', rebuild:
 .library-card:hover { border-color: rgba(30,90,103,.14); background: rgba(255,255,255,.58); }.library-card--active { border-color: rgba(30,90,103,.21); background: #fff; box-shadow: var(--shadow-sm); }
 .library-glyph { display: grid; width: 38px; height: 38px; color: var(--accent); border-radius: 11px; background: var(--accent-soft); place-items: center; }.library-copy { min-width: 0; }.library-copy strong, .library-copy small, .library-copy span { display: block; }.library-copy strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.library-copy small { overflow: hidden; margin: 3px 0 7px; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.library-copy span { color: var(--ink-soft); font-size: 10px; }
 .status-dot { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; }.status-dot--success { background: var(--success); }.status-dot--working { background: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }.status-dot--danger { background: var(--danger); }.status-dot--neutral { background: var(--muted); }
-.rail-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(23,33,43,.1); }.rail-footer span,.rail-footer strong,.rail-footer small { display: block; }.rail-footer span { color: var(--muted); font: 10px monospace; letter-spacing: .12em; }.rail-footer strong { margin: 6px 0; font-size: 13px; }.rail-footer small { color: var(--muted); font-family: monospace; }
+.rail-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(23,33,43,.1); }.rail-footer span,.rail-footer strong,.rail-footer small { display: block; }.rail-footer span { color: var(--muted); font: 10px monospace; letter-spacing: .12em; }.rail-footer strong { margin: 6px 0; font-size: 13px; }.rail-footer small { color: var(--muted); font-family: monospace; }.rail-footer .rag-button { margin-top: 12px; }
 .rail-empty, .document-empty, .lab-locked { display: grid; place-items: center; color: var(--muted); text-align: center; }.rail-empty { margin: 40px 8px; gap: 8px; }.rail-empty strong,.document-empty strong,.lab-locked strong { color: var(--ink-soft); }.rail-empty span { font-size: 12px; line-height: 1.5; }
 .document-stage { background: rgba(255,255,252,.78); }.sr-file { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .upload-progress { position: relative; margin: -6px 0 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }.upload-progress > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent-soft), rgba(169,121,57,.22)); transition: width .2s; }.upload-progress div { position: relative; display: flex; justify-content: space-between; padding: 9px 11px; font-size: 11px; }.upload-progress em { font-style: normal; font-weight: 700; }

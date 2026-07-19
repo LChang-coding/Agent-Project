@@ -12,6 +12,7 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -77,14 +78,76 @@ public class RagKnowledgeBaseManagementServiceTest {
                 () -> service(concurrentRepository).create("tenant-a", "admin-1", "admin", "企业手册", null));
     }
 
+    @Test
+    public void shouldUpdateOnlyMutableFieldsWithRevisionCas() {
+        IRagRepository repository = mock(IRagRepository.class);
+        RagKnowledgeBaseEntity current = knowledgeBase("tenant-a", "旧名称", RagKnowledgeBaseStatus.ACTIVE, 4);
+        when(repository.findKnowledgeBase("tenant-a", "kb-1")).thenReturn(Optional.of(current));
+        when(repository.listKnowledgeBases("tenant-a")).thenReturn(List.of(current));
+        when(repository.updateKnowledgeBase(org.mockito.ArgumentMatchers.eq("tenant-a"), any(),
+                org.mockito.ArgumentMatchers.eq(4L))).thenReturn(1);
+
+        RagKnowledgeBaseEntity updated = service(repository).update(
+                "tenant-a", "admin-1", "admin", "kb-1", 4, " 新名称 ", " 新描述 ");
+
+        Assert.assertEquals("新名称", updated.name());
+        Assert.assertEquals("新描述", updated.description());
+        Assert.assertEquals(5L, updated.revision());
+        Assert.assertEquals(current.collectionAlias(), updated.collectionAlias());
+        Assert.assertEquals(current.currentGeneration(), updated.currentGeneration());
+    }
+
+    @Test
+    public void shouldRejectStaleDuplicateAndDeletingKnowledgeBaseUpdate() {
+        IRagRepository staleRepository = mock(IRagRepository.class);
+        when(staleRepository.findKnowledgeBase("tenant-a", "kb-1"))
+                .thenReturn(Optional.of(knowledgeBase("tenant-a", "旧名称", RagKnowledgeBaseStatus.ACTIVE, 4)));
+        assertAppException("RAG_KNOWLEDGE_BASE_REVISION_CONFLICT", () -> service(staleRepository).update(
+                "tenant-a", "admin-1", "admin", "kb-1", 3, "新名称", null));
+
+        IRagRepository duplicateRepository = mock(IRagRepository.class);
+        RagKnowledgeBaseEntity current = knowledgeBase("tenant-a", "旧名称", RagKnowledgeBaseStatus.ACTIVE, 4);
+        when(duplicateRepository.findKnowledgeBase("tenant-a", "kb-1")).thenReturn(Optional.of(current));
+        when(duplicateRepository.listKnowledgeBases("tenant-a")).thenReturn(List.of(current,
+                new RagKnowledgeBaseEntity("tenant-a", "owner-1", "kb-2", "已存在", null,
+                        RagVisibility.TENANT, RagKnowledgeBaseStatus.ACTIVE, null, 768,
+                        "rag_hash_kb-2", 0, 0)));
+        assertAppException("RAG_KNOWLEDGE_BASE_CONFLICT", () -> service(duplicateRepository).update(
+                "tenant-a", "admin-1", "admin", "kb-1", 4, " 已存在 ", null));
+
+        IRagRepository deletingRepository = mock(IRagRepository.class);
+        when(deletingRepository.findKnowledgeBase("tenant-a", "kb-1"))
+                .thenReturn(Optional.of(knowledgeBase("tenant-a", "旧名称", RagKnowledgeBaseStatus.DELETING, 4)));
+        assertAppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", () -> service(deletingRepository).update(
+                "tenant-a", "admin-1", "admin", "kb-1", 4, "新名称", null));
+
+        IRagRepository concurrentRepository = mock(IRagRepository.class);
+        when(concurrentRepository.findKnowledgeBase("tenant-a", "kb-1")).thenReturn(Optional.of(current));
+        when(concurrentRepository.listKnowledgeBases("tenant-a")).thenReturn(List.of(current));
+        when(concurrentRepository.updateKnowledgeBase(org.mockito.ArgumentMatchers.eq("tenant-a"), any(),
+                org.mockito.ArgumentMatchers.eq(4L))).thenReturn(0);
+        assertAppException("RAG_KNOWLEDGE_BASE_REVISION_CONFLICT", () -> service(concurrentRepository).update(
+                "tenant-a", "admin-1", "admin", "kb-1", 4, "新名称", null));
+
+        IRagRepository memberRepository = mock(IRagRepository.class);
+        assertAppException("RAG_ADMIN_REQUIRED", () -> service(memberRepository).update(
+                "tenant-a", "member-1", "member", "kb-1", 4, "新名称", null));
+        verify(memberRepository, never()).findKnowledgeBase(any(), any());
+    }
+
     private RagKnowledgeBaseManagementService service(IRagRepository repository) {
         return new RagKnowledgeBaseManagementService(repository, new RagKnowledgeBaseAuthorizationService());
     }
 
     private RagKnowledgeBaseEntity knowledgeBase(String tenantId, String name) {
+        return knowledgeBase(tenantId, name, RagKnowledgeBaseStatus.ACTIVE, 0);
+    }
+
+    private RagKnowledgeBaseEntity knowledgeBase(String tenantId, String name,
+                                                  RagKnowledgeBaseStatus status, long revision) {
         return new RagKnowledgeBaseEntity(tenantId, "owner-1", "kb-1", name, null,
-                RagVisibility.TENANT, RagKnowledgeBaseStatus.ACTIVE, null, 768,
-                "rag_hash_kb-1", 0L, 0L);
+                RagVisibility.TENANT, status, null, 768,
+                "rag_hash_kb-1", 0L, revision);
     }
 
     private void assertAppException(String code, Runnable action) {
