@@ -35,6 +35,8 @@ public final class RagBenchmarkCli {
             case "evaluate" -> evaluate(options);
             case "load" -> load(options);
             case "failure-cases" -> failureCases(options);
+            case "diagnose-cases" -> diagnoseCases(options);
+            case "diagnostic-report" -> diagnosticReport(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
     }
@@ -49,6 +51,30 @@ public final class RagBenchmarkCli {
         reporter.write(report, json, markdown);
         System.out.printf("failure-cases completed queries=%d json=%s markdown=%s%n",
                 report.manifest().queryCount(), json, markdown);
+    }
+
+    private static void diagnoseCases(Map<String, String> options) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Remote remote = remote(options, objectMapper);
+        RagDiagnosticCaseRunner.Result result = new RagDiagnosticCaseRunner(objectMapper, remote.client()).run(
+                new RagDiagnosticCaseRunner.Configuration(required(options, "run-id"),
+                        required(options, "code-revision"), path(options, "case-report"),
+                        path(options, "targets"), path(options, "out"), integer(options, "max-queries", 100),
+                        remote.requestTimeoutSeconds()));
+        System.out.printf("diagnose-cases completed queries=%d records=%d sha256=%s out=%s%n",
+                result.queryCount(), result.recordCount(), result.recordsSha256(), result.records().getParent());
+    }
+
+    private static void diagnosticReport(Map<String, String> options) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        RagInternalDiagnosticReporter reporter = new RagInternalDiagnosticReporter(objectMapper);
+        RagInternalDiagnosticReporter.Report report = reporter.generate(new RagInternalDiagnosticReporter.Configuration(
+                path(options, "failure-report"), path(options, "diagnostics"),
+                path(options, "diagnostic-manifest"), path(options, "qrels"),
+                path(options, "documents"), path(options, "document-map")));
+        reporter.write(report, path(options, "out-json"), path(options, "out-markdown"));
+        System.out.printf("diagnostic-report completed queries=%d records=%d integrity=%s%n",
+                report.manifest().queryCount(), report.manifest().recordCount(), report.manifest().integrityHealthy());
     }
 
     private static void prepare(Map<String, String> options) throws IOException {
@@ -287,6 +313,12 @@ public final class RagBenchmarkCli {
         lines.add("failure-cases --queries queries.jsonl --qrels qrels.tsv --documents benchmark.md");
         lines.add("        --document-map document-map.jsonl --run run.jsonl --out-json report.json");
         lines.add("        --out-markdown report.md [--max-per-category 3]");
+        lines.add("diagnose-cases --base-url http://HOST:PORT/api --case-report report.json --targets targets.json");
+        lines.add("        --out EMPTY_DIR --run-id ID --code-revision GIT_COMMIT [--max-queries 100]");
+        lines.add("diagnostic-report --failure-report report.json --diagnostics diagnostic.jsonl");
+        lines.add("        --diagnostic-manifest diagnostic-manifest.json --qrels qrels.tsv");
+        lines.add("        --documents benchmark.md --document-map document-map.jsonl");
+        lines.add("        --out-json report.json --out-markdown report.md");
         lines.forEach(System.out::println);
     }
 

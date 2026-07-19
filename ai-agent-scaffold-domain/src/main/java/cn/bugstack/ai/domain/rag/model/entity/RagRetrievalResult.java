@@ -11,12 +11,20 @@ public record RagRetrievalResult(String retrievalId,
                                  int estimatedTokenCount,
                                  boolean degraded,
                                  List<String> degradationReasons,
-                                 Metrics metrics) {
+                                 Metrics metrics,
+                                 Diagnostics diagnostics) {
+
+    public RagRetrievalResult(String retrievalId, List<Citation> citations, int estimatedTokenCount,
+                              boolean degraded, List<String> degradationReasons, Metrics metrics) {
+        this(retrievalId, citations, estimatedTokenCount, degraded, degradationReasons, metrics,
+                Diagnostics.empty());
+    }
 
     public RagRetrievalResult {
         requireText(retrievalId, "检索ID");
         citations = citations == null ? List.of() : List.copyOf(citations);
         degradationReasons = degradationReasons == null ? List.of() : List.copyOf(degradationReasons);
+        diagnostics = diagnostics == null ? Diagnostics.empty() : diagnostics;
         if (estimatedTokenCount < 0 || metrics == null) {
             throw new IllegalArgumentException("RAG检索结果参数非法");
         }
@@ -40,7 +48,7 @@ public record RagRetrievalResult(String retrievalId,
                 new Metrics(value.denseCandidateCount(), value.sparseCandidateCount(), value.fusionCandidateCount(),
                         value.rerankCandidateCount(), value.embeddingMs(), value.denseMs(), value.sparseMs(),
                         value.fusionMs(), value.rerankMs(), value.totalMs(), value.configurationMs(),
-                        value.hydrationMs(), value.assemblyMs(), auditMs, serviceMs));
+                        value.hydrationMs(), value.assemblyMs(), auditMs, serviceMs), diagnostics);
     }
 
     /** 最终引用；context 可包含同版本父块和相邻块，chunkId 始终指向主命中。 */
@@ -110,6 +118,44 @@ public record RagRetrievalResult(String retrievalId,
                     || fusionMs < 0 || rerankMs < 0 || totalMs < 0 || configurationMs < 0
                     || hydrationMs < 0 || assemblyMs < 0 || auditMs < 0 || serviceMs < 0) {
                 throw new IllegalArgumentException("RAG检索指标非法");
+            }
+        }
+    }
+
+    /** 仅管理员debug显式开启的有界阶段诊断；不含向量、对象键和正文。 */
+    public record Diagnostics(boolean enabled, boolean truncated, int capturedCount,
+                              int maxCapturedCount, List<CandidateTrace> candidates) {
+        public Diagnostics {
+            candidates = candidates == null ? List.of() : List.copyOf(candidates);
+            if (capturedCount < 0 || maxCapturedCount < 0 || capturedCount != candidates.size()
+                    || capturedCount > maxCapturedCount || !enabled && (capturedCount > 0 || truncated)) {
+                throw new IllegalArgumentException("RAG诊断参数非法");
+            }
+        }
+        public static Diagnostics empty() { return new Diagnostics(false, false, 0, 0, List.of()); }
+    }
+
+    /** 单个候选在某一阶段的排名和分数；outcome用于说明保留或淘汰原因。 */
+    public record CandidateTrace(String bindingId, String profileId, String stage, int rank,
+                                 String knowledgeBaseId, String documentId, String versionId,
+                                 long generation, String chunkId, String headingPath,
+                                 Double denseScore, Double sparseScore,
+                                 Double fusionScore, Double rerankScore, String outcome) {
+        public CandidateTrace {
+            requireText(bindingId, "绑定ID");
+            requireText(profileId, "配置ID");
+            requireText(stage, "诊断阶段");
+            requireText(knowledgeBaseId, "知识库ID");
+            requireText(documentId, "文档ID");
+            requireText(versionId, "版本ID");
+            requireText(chunkId, "分块ID");
+            requireText(outcome, "候选结果");
+            if (rank < 1 || generation < 1
+                    || denseScore != null && !Double.isFinite(denseScore)
+                    || sparseScore != null && !Double.isFinite(sparseScore)
+                    || fusionScore != null && !Double.isFinite(fusionScore)
+                    || rerankScore != null && !Double.isFinite(rerankScore)) {
+                throw new IllegalArgumentException("RAG候选诊断参数非法");
             }
         }
     }

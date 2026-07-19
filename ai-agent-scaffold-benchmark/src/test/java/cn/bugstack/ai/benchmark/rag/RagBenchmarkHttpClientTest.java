@@ -33,9 +33,14 @@ class RagBenchmarkHttpClientTest {
                  "metrics":{"embeddingMs":2,"denseMs":3,"sparseMs":0,"fusionMs":1,"rerankMs":0,
                             "totalMs":7,"denseCandidateCount":12,"sparseCandidateCount":0,
                             "fusionCandidateCount":10,"rerankCandidateCount":0},
+                 "diagnostics":{"enabled":true,"truncated":false,"capturedCount":1,"maxCapturedCount":2048,
+                   "candidates":[{"bindingId":"b1","profileId":"p1","stage":"dense_raw","rank":1,
+                     "knowledgeBaseId":"kb1","documentId":"doc-1","versionId":"v1","generation":1,
+                     "chunkId":"c1","headingPath":"%s — title","denseScore":0.8,"sparseScore":null,"fusionScore":null,
+                     "rerankScore":null,"outcome":"returned_by_vector_store"}]},
                  "citations":[{"headingPath":"%s — title"},{"headingPath":"%s — another chunk"}],
                  "padding":"%s"}
-                """.formatted(RagBenchmarkArtifactWriter.marker("doc-1"),
+                """.formatted(RagBenchmarkArtifactWriter.marker("doc-1"), RagBenchmarkArtifactWriter.marker("doc-1"),
                     RagBenchmarkArtifactWriter.marker("doc-1"), "x".repeat(2000)))));
         server.createContext("/api/v1/rag/knowledge-bases/kb-1/documents", exchange -> respond(exchange, 200,
                 success("[{\"documentId\":\"doc-1\",\"status\":\"ready\",\"activeVersionId\":\"ver-1\",\"activeGeneration\":1}]")));
@@ -54,6 +59,12 @@ class RagBenchmarkHttpClientTest {
         assertEquals(java.util.List.of("doc-1"), result.rankedDocumentIds());
         assertEquals(7, result.timingsMs().get("totalMs"));
         assertEquals(12, result.candidateCounts().get("denseCandidateCount"));
+        assertEquals(1, result.diagnosticCapturedCount());
+        assertEquals("dense_raw", result.diagnosticCandidates().get(0).stage());
+        assertEquals(RagBenchmarkArtifactWriter.marker("doc-1") + " — title",
+                result.diagnosticCandidates().get(0).headingPath());
+        assertEquals("doc-1", result.diagnosticCandidates().get(0).benchmarkDocumentId());
+        assertEquals(0.8, result.diagnosticCandidates().get(0).denseScore());
         assertEquals(200, result.httpStatus());
         assertTrue(result.responseBytes() > 2000);
         assertTrue(result.toString().indexOf("secret-token") < 0);

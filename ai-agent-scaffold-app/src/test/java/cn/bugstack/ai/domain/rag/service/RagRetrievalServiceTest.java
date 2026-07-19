@@ -116,6 +116,69 @@ public class RagRetrievalServiceTest {
         verify(reranker, times(1)).rerank(any());
         verify(repository, times(1)).listDocumentsByIds(anyString(), any());
         verify(repository, never()).findDocument(anyString(), anyString());
+        Assert.assertFalse(result.diagnostics().enabled());
+        Assert.assertTrue(result.diagnostics().candidates().isEmpty());
+    }
+
+    @Test
+    public void shouldCaptureBoundedStageDiagnosticsOnlyWhenExplicitlyEnabled() {
+        fixtures(profile(true, 0, 1000), false);
+        when(embedding.embed(any())).thenReturn(new EmbeddingPort.EmbeddingResult(
+                List.of(List.of(1F, 0F)), 2, "dense-r1"));
+        when(sparse.encode(any())).thenReturn(new SparseEncoderPort.SparseEncodingResult(
+                List.of(new SparseEncoderPort.SparseVector(Map.of(11, 1F))), "sparse-r1"));
+        when(vectorStore.search(anyString(), any())).thenAnswer(invocation -> {
+            VectorStorePort.VectorSearchCommand command = invocation.getArgument(1);
+            return command.denseVector().isEmpty()
+                    ? List.of(hit("chunk-b", "doc-b", "ver-b", 0.9), hit("chunk-a", "doc-a", "ver-a", 0.7))
+                    : List.of(hit("chunk-a", "doc-a", "ver-a", 0.8), hit("chunk-b", "doc-b", "ver-b", 0.6));
+        });
+        when(reranker.rerank(any())).thenReturn(new RerankerPort.RerankResult(List.of(
+                new RerankerPort.ScoredCandidate("chunk-b", 0.95, 1),
+                new RerankerPort.ScoredCandidate("chunk-a", 0.75, 2)), "rerank-r1"));
+
+        RagRetrievalResult result = service.retrieve(diagnosticRequest(1000));
+
+        Assert.assertTrue(result.diagnostics().enabled());
+        Assert.assertFalse(result.diagnostics().truncated());
+        Assert.assertEquals(result.diagnostics().capturedCount(), result.diagnostics().candidates().size());
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("dense_raw") && value.rank() == 1 && value.documentId().equals("doc-a")
+                        && value.headingPath().equals("章节") && value.denseScore().equals(0.8)));
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("sparse_raw") && value.rank() == 1 && value.documentId().equals("doc-b")
+                        && value.sparseScore().equals(0.9)));
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("fusion") && value.fusionScore() != null));
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("rerank_output") && value.rank() == 1 && value.documentId().equals("doc-b")
+                        && value.rerankScore().equals(0.95)));
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("context_budget") && value.outcome().equals("accepted_citation")));
+    }
+
+    @Test
+    public void shouldBoundDiagnosticHeadingPathBeforeReturningDebugPayload() {
+        fixtures(singleModeProfile(RagRetrievalMode.DENSE), false);
+        String longHeading = "BENCH_DOC_B64_Z29sZA — " + "章".repeat(2_000);
+        when(embedding.embed(any())).thenReturn(new EmbeddingPort.EmbeddingResult(
+                List.of(List.of(1F, 0F)), 2, "dense-r1"));
+        when(vectorStore.search(anyString(), any())).thenReturn(List.of(new VectorStorePort.VectorSearchHit(
+                "point-chunk-a", "kb-a", "doc-a", "ver-a", 3, "chunk-a", 0.8,
+                Map.of("heading_path", longHeading))));
+        Mockito.doReturn(List.of(new RagChunkEntity("tenant-a", "owner-a", RagVisibility.TENANT,
+                "kb-a", "doc-a", "ver-a", 1, 3, "chunk-a", 1, null, null, null,
+                "Alpha 正文", 10, 1, longHeading, sha("chunk-a"), "point-chunk-a", Map.of())))
+                .when(repository).listChunksByIds(anyString(), any());
+
+        RagRetrievalResult result = service.retrieve(diagnosticRequest(1000));
+
+        Assert.assertFalse(result.diagnostics().candidates().isEmpty());
+        Assert.assertTrue(result.diagnostics().candidates().stream()
+                .allMatch(value -> value.headingPath() == null || value.headingPath().length() <= 1_024));
+        Assert.assertTrue(result.diagnostics().candidates().stream()
+                .filter(value -> value.headingPath() != null)
+                .allMatch(value -> value.headingPath().startsWith("BENCH_DOC_B64_Z29sZA")));
     }
 
     @Test
@@ -249,6 +312,19 @@ public class RagRetrievalServiceTest {
     }
 
     @Test
+    public void shouldExplainTokenBudgetDiscardInDiagnostics() {
+        fixtures(profile(false, 0, 1000), false);
+        modelFixturesOneHit();
+
+        RagRetrievalResult result = service.retrieve(diagnosticRequest(1));
+
+        Assert.assertTrue(result.citations().isEmpty());
+        Assert.assertTrue(result.diagnostics().candidates().stream().anyMatch(value ->
+                value.stage().equals("context_budget")
+                        && value.outcome().equals("discarded_global_token_budget")));
+    }
+
+    @Test
     public void shouldDegradeOptionalDenseBindingWhenEmbeddingIsUnavailable() {
         fixtures(profile(false, 0, 1000), false);
         when(embedding.embed(any())).thenThrow(new AppException("RAG_EMBEDDING_HTTP_ERROR", "远程失败"));
@@ -353,6 +429,11 @@ public class RagRetrievalServiceTest {
                 RagBindingTargetType.AGENT, "agent-a", "  如何 使用 Alpha？  ", "trace-a", maxTokens);
     }
 
+    private RagRetrievalRequest diagnosticRequest(int maxTokens) {
+        return new RagRetrievalRequest("tenant-a", "user-a", "session-a", "run-a",
+                RagBindingTargetType.AGENT, "agent-a", "  如何 使用 Alpha？  ", "trace-a", maxTokens, true);
+    }
+
     private RagAgentBindingEntity binding(boolean required) {
         return new RagAgentBindingEntity("tenant-a", "binding-a", RagBindingTargetType.AGENT, "agent-a",
                 "kb-a", "profile-a", required, 1000, 0, 1);
@@ -380,7 +461,7 @@ public class RagRetrievalServiceTest {
 
     private VectorStorePort.VectorSearchHit hit(String chunkId, String documentId, String versionId, double score) {
         return new VectorStorePort.VectorSearchHit("point-" + chunkId, "kb-a", documentId, versionId,
-                3, chunkId, score, Map.of());
+                3, chunkId, score, Map.of("heading_path", "章节"));
     }
 
     private RagChunkEntity chunk(String chunkId, String documentId, String versionId, String kbId, String content) {

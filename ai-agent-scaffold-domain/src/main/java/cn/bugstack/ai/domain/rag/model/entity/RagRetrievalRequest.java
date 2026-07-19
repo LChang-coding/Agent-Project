@@ -13,7 +13,14 @@ public record RagRetrievalRequest(String tenantId,
                                   String targetId,
                                   String query,
                                   String traceId,
-                                  int maxContextTokens) {
+                                  int maxContextTokens,
+                                  boolean diagnosticsEnabled) {
+
+    public RagRetrievalRequest(String tenantId, String userId, String sessionId, String runId,
+                               RagBindingTargetType targetType, String targetId, String query,
+                               String traceId, int maxContextTokens) {
+        this(tenantId, userId, sessionId, runId, targetType, targetId, query, traceId, maxContextTokens, false);
+    }
 
     public RagRetrievalRequest {
         requireText(tenantId, "租户ID");

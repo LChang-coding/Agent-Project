@@ -41,6 +41,6 @@ public class RagRetrievalDebugService {
             throw new AppException("RAG_DEBUG_BUDGET_INVALID", "调试Token预算必须位于1到32768之间");
         }
         return retrievalService.retrieve(new RagRetrievalRequest(tenantId, userId, null, null, targetType,
-                normalizedTarget, query, traceId, maxContextTokens));
+                normalizedTarget, query, traceId, maxContextTokens, true));
     }
 }

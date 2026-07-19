@@ -48,6 +48,9 @@ public class RagRetrievalDebugControllerTest {
         Assert.assertEquals(Long.valueOf(6), response.getData().getMetrics().getAssemblyMs());
         Assert.assertEquals(Long.valueOf(9), response.getData().getMetrics().getAuditMs());
         Assert.assertEquals(Long.valueOf(24), response.getData().getMetrics().getServiceMs());
+        Assert.assertTrue(response.getData().getDiagnostics().getEnabled());
+        Assert.assertEquals(Integer.valueOf(1), response.getData().getDiagnostics().getCapturedCount());
+        Assert.assertEquals("dense_raw", response.getData().getDiagnostics().getCandidates().get(0).getStage());
     }
 
     @Test
@@ -73,6 +76,10 @@ public class RagRetrievalDebugControllerTest {
                 () -> RagRetrievalDebugResponseDTO.class.getDeclaredField("query"));
         Assert.assertThrows(NoSuchFieldException.class,
                 () -> RagRetrievalDebugResponseDTO.class.getDeclaredField("errorBody"));
+        Assert.assertThrows(NoSuchFieldException.class,
+                () -> RagRetrievalDebugResponseDTO.Candidate.class.getDeclaredField("vector"));
+        Assert.assertThrows(NoSuchFieldException.class,
+                () -> RagRetrievalDebugResponseDTO.Candidate.class.getDeclaredField("objectKey"));
     }
 
     private RagRetrievalDebugRequestDTO request(String type) {
@@ -88,8 +95,12 @@ public class RagRetrievalDebugControllerTest {
                 "kb-a", "document-a", "退货政策.md", "version-a", 1, 3,
                 "chunk-a", "7 天内可退货", 1, "退货", "hash-a",
                 0.8, 0.6, 0.7, 0.9, Map.of("kind", "child"));
+        RagRetrievalResult.CandidateTrace candidate = new RagRetrievalResult.CandidateTrace(
+                "binding-a", "profile-a", "dense_raw", 1, "kb-a", "document-a", "version-a", 3,
+                "chunk-a", "DOCID::doc-a — title", 0.8, null, null, null, "returned_by_vector_store");
         return new RagRetrievalResult("retrieval-a", List.of(citation), 8, false, List.of(),
                 new RagRetrievalResult.Metrics(10, 10, 8, 5, 2, 3, 4, 1, 5, 15,
-                        2, 3, 6, 9, 24));
+                        2, 3, 6, 9, 24),
+                new RagRetrievalResult.Diagnostics(true, false, 1, 2048, List.of(candidate)));
     }
 }

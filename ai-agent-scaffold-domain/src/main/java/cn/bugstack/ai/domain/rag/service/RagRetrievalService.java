@@ -110,13 +110,13 @@ public class RagRetrievalService {
 
     private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
                                                 long started, AuditState audit) {
-        Aggregate aggregate = new Aggregate();
+        Aggregate aggregate = new Aggregate(request.diagnosticsEnabled());
         long configurationStarted = System.nanoTime();
         List<RagAgentBindingEntity> bindings = repository.listBindings(request.tenantId(), request.targetType(),
                 request.targetId());
         if (bindings.isEmpty()) {
             aggregate.configurationMs = elapsedMs(configurationStarted);
-            return RagRetrievalResult.empty(retrievalId, elapsedMs(started), aggregate.configurationMs);
+            return emptyResult(retrievalId, started, aggregate);
         }
         if (bindings.size() > MAX_BINDINGS) {
             throw new AppException("RAG_BINDING_LIMIT_EXCEEDED", "单个运行目标的知识库绑定不能超过32个");
@@ -126,7 +126,7 @@ public class RagRetrievalService {
         aggregate.configurationMs = elapsedMs(configurationStarted);
         audit.capture(resolved);
         if (resolved.isEmpty()) {
-            return RagRetrievalResult.empty(retrievalId, elapsedMs(started), aggregate.configurationMs);
+            return emptyResult(retrievalId, started, aggregate);
         }
 
         resolved.stream().filter(value -> value.profile().queryRewriteEnabled())
@@ -160,7 +160,7 @@ public class RagRetrievalService {
             return new RagRetrievalResult(retrievalId, List.of(), 0, true, aggregate.degradationReasons,
                     new RagRetrievalResult.Metrics(0, 0, 0, 0, dense.elapsedMs(), 0, 0, 0, 0,
                             elapsedMs(started), aggregate.configurationMs, aggregate.hydrationMs,
-                            aggregate.assemblyMs, 0, 0));
+                            aggregate.assemblyMs, 0, 0), aggregate.diagnostics.result());
         }
 
         List<RankedChunk> ranked = new ArrayList<>();
@@ -199,7 +199,7 @@ public class RagRetrievalService {
                 request.tenantId(), request.targetType(), request.targetId(), retrievalId, citations.size(), tokens,
                 !aggregate.degradationReasons.isEmpty(), totalMs);
         return new RagRetrievalResult(retrievalId, citations, tokens, !aggregate.degradationReasons.isEmpty(),
-                aggregate.degradationReasons, metrics);
+                aggregate.degradationReasons, metrics, aggregate.diagnostics.result());
     }
 
     private void recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
@@ -217,6 +217,13 @@ public class RagRetrievalService {
                     request.tenantId(), request.targetId(), result.retrievalId(), request.traceId(),
                     auditException.getClass().getSimpleName());
         }
+    }
+
+    private RagRetrievalResult emptyResult(String retrievalId, long started, Aggregate aggregate) {
+        return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
+                new RagRetrievalResult.Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        elapsedMs(started), aggregate.configurationMs, aggregate.hydrationMs,
+                        aggregate.assemblyMs, 0, 0), aggregate.diagnostics.result());
     }
 
     private void failIfRequired(List<ResolvedBinding> bindings, RagRetrievalMode unaffectedMode,
@@ -264,6 +271,7 @@ public class RagRetrievalService {
             denseHits = call.value();
             aggregate.denseMs += call.elapsedMs();
             aggregate.denseCandidates += denseHits.size();
+            aggregate.diagnostics.captureRaw(resolved, "dense_raw", denseHits, true);
         }
         if (profile.mode() != RagRetrievalMode.DENSE) {
             Timed<List<VectorStorePort.VectorSearchHit>> call = timed(() -> vectorStorePort.search(request.tenantId(),
@@ -271,11 +279,13 @@ public class RagRetrievalService {
             sparseHits = call.value();
             aggregate.sparseMs += call.elapsedMs();
             aggregate.sparseCandidates += sparseHits.size();
+            aggregate.diagnostics.captureRaw(resolved, "sparse_raw", sparseHits, false);
         }
         long fusionStarted = System.nanoTime();
         List<ScoredHit> fused = fuse(profile, denseHits, sparseHits);
         aggregate.fusionMs += elapsedMs(fusionStarted);
         aggregate.fusionCandidates += fused.size();
+        aggregate.diagnostics.captureFused(resolved, "fusion", fused);
         if (fused.isEmpty()) return List.of();
 
         Map<String, RagChunkEntity> chunks = loadChunks(request.tenantId(),
@@ -284,22 +294,35 @@ public class RagRetrievalService {
         Map<String, Optional<RagDocumentEntity>> missingChunkDocuments = new LinkedHashMap<>();
         List<RankedChunk> candidates = new ArrayList<>();
         Set<String> contentHashes = new LinkedHashSet<>();
-        for (ScoredHit value : fused) {
+        int filteredRank = 0;
+        for (int fusedIndex = 0; fusedIndex < fused.size(); fusedIndex++) {
+            ScoredHit value = fused.get(fusedIndex);
             RagChunkEntity chunk = chunks.get(value.hit().chunkId());
             if (chunk == null && isLegitimateDeletingHit(request.tenantId(), resolved, value.hit(),
                     missingChunkDocuments)) {
+                aggregate.diagnostics.capture(resolved, "candidate_filter", fusedIndex + 1, value,
+                        null, "discarded_tombstone");
                 continue;
             }
             validateChunkScope(resolved, value.hit(), chunk);
-            if (profile.deduplicateEnabled() && !contentHashes.add(chunk.contentHash())) continue;
-            candidates.add(new RankedChunk(resolved, chunk, value.denseScore(), value.sparseScore(),
-                    value.fusionScore(), null));
+            if (profile.deduplicateEnabled() && !contentHashes.add(chunk.contentHash())) {
+                aggregate.diagnostics.capture(resolved, "candidate_filter", fusedIndex + 1, value,
+                        null, "discarded_duplicate_content_hash");
+                continue;
+            }
+            RankedChunk candidate = new RankedChunk(resolved, chunk, value.denseScore(), value.sparseScore(),
+                    value.fusionScore(), null);
+            candidates.add(candidate);
+            aggregate.diagnostics.capture(candidate, "candidate_filter", ++filteredRank, "kept");
         }
         if (!profile.rerankEnabled() || candidates.isEmpty()) {
-            return candidates.stream().limit(profile.finalTopK()).toList();
+            List<RankedChunk> output = candidates.stream().limit(profile.finalTopK()).toList();
+            aggregate.diagnostics.captureRanked("pre_assembly", output, "kept_without_rerank");
+            return output;
         }
         int rerankInputSize = Math.min(profile.rerankTopK(), candidates.size());
         List<RankedChunk> rerankInput = candidates.subList(0, rerankInputSize);
+        aggregate.diagnostics.captureRanked("rerank_input", rerankInput, "sent_to_reranker");
         try {
             Timed<RerankerPort.RerankResult> reranked = timed(() -> rerankerPort.rerank(
                     new RerankerPort.RerankCommand(request.tenantId(), request.traceId(), query,
@@ -318,13 +341,17 @@ public class RagRetrievalService {
                 }
                 output.add(original.withRerank(score.score()));
             }
-            return output.stream().sorted(RANKING).limit(profile.finalTopK()).toList();
+            List<RankedChunk> rerankOutput = output.stream().sorted(RANKING).limit(profile.finalTopK()).toList();
+            aggregate.diagnostics.captureRanked("rerank_output", rerankOutput, "kept_after_rerank");
+            return rerankOutput;
         } catch (RuntimeException exception) {
             aggregate.degradationReasons.add("rerank_fallback:" + profile.profileId());
             log.warn("RAG重排降级 tenantId:{} profileId:{} traceId:{} errorType:{}",
                     request.tenantId(), profile.profileId(), request.traceId(),
                     exception.getClass().getSimpleName());
-            return candidates.stream().limit(profile.finalTopK()).toList();
+            List<RankedChunk> fallback = candidates.stream().limit(profile.finalTopK()).toList();
+            aggregate.diagnostics.captureRanked("rerank_output", fallback, "fallback_without_rerank_score");
+            return fallback;
         }
     }
 
@@ -364,13 +391,18 @@ public class RagRetrievalService {
         Set<String> emittedChunks = new LinkedHashSet<>();
         List<RagRetrievalResult.Citation> citations = new ArrayList<>();
         int used = 0;
-        for (RankedChunk value : ranked) {
-            if (citations.size() >= value.resolved().profile().finalTopK()) continue;
+        for (int rankedIndex = 0; rankedIndex < ranked.size(); rankedIndex++) {
+            RankedChunk value = ranked.get(rankedIndex);
+            if (citations.size() >= value.resolved().profile().finalTopK()) {
+                aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_final_topk");
+                continue;
+            }
             RagDocumentEntity document = Optional.ofNullable(documents.get(value.chunk().documentId()))
                     .orElseThrow(() -> new AppException("RAG_DOCUMENT_MISSING", "引用文档不存在"));
             if (document.status() == RagDocumentStatus.DELETING
                     || document.status() == RagDocumentStatus.DELETED) {
                 validateDeletingDocumentScope(value, document);
+                aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_document_tombstone");
                 continue;
             }
             validateDocumentScope(value, document);
@@ -380,8 +412,18 @@ public class RagRetrievalService {
             int tokens = tokenCounter.estimate(context);
             String bindingId = value.resolved().binding().bindingId();
             int localUsed = bindingUsed.getOrDefault(bindingId, 0);
-            if (tokens < 1 || used + tokens > globalBudget
-                    || localUsed + tokens > bindingBudget.get(bindingId)) continue;
+            if (tokens < 1) {
+                aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_empty_context");
+                continue;
+            }
+            if (used + tokens > globalBudget) {
+                aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_global_token_budget");
+                continue;
+            }
+            if (localUsed + tokens > bindingBudget.get(bindingId)) {
+                aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_binding_token_budget");
+                continue;
+            }
             used += tokens;
             bindingUsed.put(bindingId, localUsed + tokens);
             contextChunks.forEach(chunk -> emittedChunks.add(chunk.chunkId()));
@@ -394,6 +436,7 @@ public class RagRetrievalService {
                     value.rerankScore(), Map.of("binding_id", bindingId,
                             "profile_id", value.resolved().profile().profileId(),
                             "profile_revision", Long.toString(value.resolved().profile().revision()))));
+            aggregate.diagnostics.capture(value, "context_budget", rank, "accepted_citation");
         }
         return List.copyOf(citations);
     }
@@ -623,6 +666,86 @@ public class RagRetrievalService {
         private long hydrationMs;
         private long assemblyMs;
         private final List<String> degradationReasons = new ArrayList<>();
+        private final DiagnosticsCollector diagnostics;
+
+        private Aggregate(boolean diagnosticsEnabled) {
+            this.diagnostics = new DiagnosticsCollector(diagnosticsEnabled);
+        }
+    }
+
+    private static final class DiagnosticsCollector {
+        private static final int MAX_CAPTURED = 2_048;
+        private static final int MAX_HEADING_PATH_CHARS = 1_024;
+        private final boolean enabled;
+        private final List<RagRetrievalResult.CandidateTrace> candidates = new ArrayList<>();
+        private boolean truncated;
+
+        private DiagnosticsCollector(boolean enabled) { this.enabled = enabled; }
+
+        private void captureRaw(ResolvedBinding resolved, String stage,
+                                List<VectorStorePort.VectorSearchHit> hits, boolean dense) {
+            if (!enabled) return;
+            for (int index = 0; index < hits.size(); index++) {
+                VectorStorePort.VectorSearchHit hit = hits.get(index);
+                add(new RagRetrievalResult.CandidateTrace(resolved.binding().bindingId(),
+                        resolved.profile().profileId(), stage, index + 1, hit.knowledgeBaseId(), hit.documentId(),
+                        hit.versionId(), hit.generation(), hit.chunkId(), safeHeadingPath(hit.payload().get("heading_path")),
+                        dense ? hit.score() : null,
+                        dense ? null : hit.score(), null, null, "returned_by_vector_store"));
+            }
+        }
+
+        private void captureFused(ResolvedBinding resolved, String stage, List<ScoredHit> values) {
+            if (!enabled) return;
+            for (int index = 0; index < values.size(); index++) {
+                capture(resolved, stage, index + 1, values.get(index), null, "kept_after_fusion_threshold_topk");
+            }
+        }
+
+        private void capture(ResolvedBinding resolved, String stage, int rank, ScoredHit value,
+                             Double rerankScore, String outcome) {
+            if (!enabled) return;
+            VectorStorePort.VectorSearchHit hit = value.hit();
+            add(new RagRetrievalResult.CandidateTrace(resolved.binding().bindingId(),
+                    resolved.profile().profileId(), stage, rank, hit.knowledgeBaseId(), hit.documentId(),
+                    hit.versionId(), hit.generation(), hit.chunkId(), safeHeadingPath(hit.payload().get("heading_path")),
+                    value.denseScore(), value.sparseScore(),
+                    value.fusionScore(), rerankScore, outcome));
+        }
+
+        private void captureRanked(String stage, List<RankedChunk> values, String outcome) {
+            if (!enabled) return;
+            for (int index = 0; index < values.size(); index++) capture(values.get(index), stage, index + 1, outcome);
+        }
+
+        private void capture(RankedChunk value, String stage, int rank, String outcome) {
+            if (!enabled) return;
+            RagChunkEntity chunk = value.chunk();
+            add(new RagRetrievalResult.CandidateTrace(value.resolved().binding().bindingId(),
+                    value.resolved().profile().profileId(), stage, rank, chunk.knowledgeBaseId(), chunk.documentId(),
+                    chunk.versionId(), chunk.generation(), chunk.chunkId(), safeHeadingPath(chunk.headingPath()),
+                    value.denseScore(), value.sparseScore(),
+                    value.fusionScore(), value.rerankScore(), outcome));
+        }
+
+        private void add(RagRetrievalResult.CandidateTrace value) {
+            if (candidates.size() >= MAX_CAPTURED) {
+                truncated = true;
+                return;
+            }
+            candidates.add(value);
+        }
+
+        private String safeHeadingPath(String value) {
+            if (value == null || value.length() <= MAX_HEADING_PATH_CHARS) return value;
+            return value.substring(0, MAX_HEADING_PATH_CHARS);
+        }
+
+        private RagRetrievalResult.Diagnostics result() {
+            if (!enabled) return RagRetrievalResult.Diagnostics.empty();
+            return new RagRetrievalResult.Diagnostics(true, truncated, candidates.size(), MAX_CAPTURED,
+                    List.copyOf(candidates));
+        }
     }
 
     private final class AuditState {

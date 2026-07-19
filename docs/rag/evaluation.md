@@ -212,6 +212,30 @@ java -jar ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar
 
 报告JSON SHA-256为`61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0`，Markdown为`6da9cb37537682b733476eba8942418fb05dd226a6be08c933e8f1afbe3a4657`，本次生成CLI JAR为`8b667a993403eac4fb7b4d48d3fac213ae4d40bc8fea4313b46c350265e5f91d`。原始run没有保存逐候选分数、Dense/Sparse Top100文档ID或RRF逐项贡献，所以报告明确把这些字段标为“未采集”；首个失效点是基于四个消融终态的首个可观测步骤，内部算子级因果仍需增加候选/分数留痕后复跑代表query，不能由当前结果编造。
 
+内部候选留痕和真实复测已经补齐。管理员debug请求显式开启诊断时，服务返回有界的chunk级Dense/Sparse原始候选、融合、过滤、Rerank输入/输出和上下文预算轨迹；普通Agent/Workflow请求默认关闭，不产生这些大响应。SciFact原始文档ID由Qdrant受信payload中的`heading_path`解码，不能用同一Markdown源文件的内部`documentId`冒充BEIR文档ID。
+
+[内部阶段证据Markdown](evaluation-results/scifact-r11-internal-failure-analysis.md)、[机器可读证据JSON](evaluation-results/scifact-r11-internal-failure-analysis.json)和[80条原始诊断轨迹目录](evaluation-results/scifact-r11-internal-diagnostics/)绑定上述失败案例、本地语料和映射的SHA-256。20个去重代表问题真实执行四变体共80次，80个retrievalId唯一、HTTP均为200、诊断未截断、文档标记全部可解码；与r11最终排名逐条精确一致80/80。终审报告还校验diagnostic manifest完成状态/计数/哈希、qrels全量Gold集合、阶段闭包、stage/outcome白名单、candidateCounts、连续rank和单binding/profile作用域；任一最终排名或共享候选身份/分数漂移会拒绝产出。因此这些代表case可按阶段轨迹做“首个可观测失效”分析，但仍不把它夸大为模型内部根因。四个消融target的binding/profile本来不同，跨target指纹仅归一化这两个局部配置ID，仍比较共享知识库、文档、版本、generation、chunk、outcome和分数。
+
+在这80条变体轨迹中，52条没有发生Gold完全丢失；17条首个完全失效点在融合的threshold/TopK联合步骤，2条在Dense原始Top100、5条在Sparse原始Top100、4条在Hybrid两路原始候选并集。没有代表case首次死在content-hash去重、Rerank输出或上下文预算。带Rerank的20条记录在同一次retrieval的输入→输出比较中，8条MRR改善、7条下降、5条不变；这解释了总体MRR上升但仍存在逐query伤害，不能只报平均增益。
+
+代表case诊断延迟不是正式全量性能样本，但再次复现瓶颈：Dense p50/p95为2304/2911ms，Sparse为1762/1996ms，Hybrid为2401/2963ms，Hybrid+Rerank为11473/26585ms；Rerank阶段自身p50/p95为9189/23756ms，最慢请求54507ms中Rerank占51920ms。debug响应为112439～201051 bytes，这是管理员诊断成本，不得外推到默认关闭诊断的在线请求。
+
+内部报告复算命令：
+
+```bash
+java -jar ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar diagnostic-report \
+  --failure-report docs/rag/evaluation-results/scifact-r11-failure-cases.json \
+  --diagnostics docs/rag/evaluation-results/scifact-r11-internal-diagnostics/diagnostic.jsonl \
+  --diagnostic-manifest docs/rag/evaluation-results/scifact-r11-internal-diagnostics/diagnostic-manifest.json \
+  --qrels docs/rag/evaluation-data/scifact/prepared/qrels.tsv \
+  --documents docs/rag/evaluation-data/scifact/prepared/documents/benchmark-0001.md \
+  --document-map docs/rag/evaluation-data/scifact/prepared/document-map.jsonl \
+  --out-json /path/to/new-internal-report.json \
+  --out-markdown /path/to/new-internal-report.md
+```
+
+原始诊断JSONL SHA-256=`f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40`，manifest=`55af55561896d6da69b2c6bd485bc8bc1bb969828719e3e1848548d14e7f0171`；真实请求使用App JAR=`eec2e99901c8513f99a474cf2559a5a3288e32357a347481fb77c85934cd6fc5`和当时的采集CLI JAR=`f33bdf5f18b764b475be3e85d93214c500b9d75a426304ca7339213257eaaa55`。终审证据JSON=`de5e829a559a39c9542d9518ed2ece1678ff5cda8d888143bbd74fc8150e5016`，Markdown=`0435f2038f133663ce26e279b9d223210f4ef1eef44854471847dd8bcf7c6c46`，两次独立离线生成字节级一致。Java 17最终门禁为全部RAG测试163/163、benchmark测试50/50；最终全reactor打包App JAR=`3f30a826b4ba5df8c7c68336a0c29797111f9bc537b39e9cb3366044d91aa3df`、CLI JAR=`ed43c06e845d1fe49f277e32e549e8ddacdd5e0893367158eab9b5f26746ef14`。尚未采集融合threshold与TopK的分离决策、完整模型/index冻结指纹，以及上下文扩展后的具体Token差额；报告对这些字段明确标为联合步骤或不可观测，不作编造。
+
 关键SHA-256：正式run `24331ecdbb58978e37a92bff9c1afad5c09d1abadba68b88fdbf4d0b0ee792a5`，metrics `e48c03a097ae8b02198b5af70cd6ff7703cf91daa4cf9fac0ba26ee046674c3e`，independent metrics `e3ac2eb39bb494df425de0140900bc47d0656f2b7c42989cbd80a06dc320b352`，CLI JAR `970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`，App JAR `484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。质量run由120/240秒客户策略的两个分段构成，其合并延迟不用作性能结论。
 
 ## 已验证的稳定容量结果

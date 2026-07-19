@@ -70,7 +70,8 @@ public class RagRetrievalDebugController {
                         .configurationMs(metrics.configurationMs()).hydrationMs(metrics.hydrationMs())
                         .assemblyMs(metrics.assemblyMs()).auditMs(metrics.auditMs())
                         .serviceMs(metrics.serviceMs()).build())
-                .citations(result.citations().stream().map(this::toCitation).toList()).build();
+                .citations(result.citations().stream().map(this::toCitation).toList())
+                .diagnostics(toDiagnostics(result.diagnostics())).build();
     }
 
     private RagRetrievalDebugResponseDTO.Citation toCitation(RagRetrievalResult.Citation value) {
@@ -82,6 +83,24 @@ public class RagRetrievalDebugController {
                 .denseScore(value.denseScore()).sparseScore(value.sparseScore())
                 .fusionScore(value.fusionScore()).rerankScore(value.rerankScore())
                 .metadata(value.metadata()).build();
+    }
+
+    private RagRetrievalDebugResponseDTO.Diagnostics toDiagnostics(RagRetrievalResult.Diagnostics value) {
+        return RagRetrievalDebugResponseDTO.Diagnostics.builder().enabled(value.enabled())
+                .truncated(value.truncated()).capturedCount(value.capturedCount())
+                .maxCapturedCount(value.maxCapturedCount())
+                .candidates(value.candidates().stream().map(this::toCandidate).toList()).build();
+    }
+
+    private RagRetrievalDebugResponseDTO.Candidate toCandidate(RagRetrievalResult.CandidateTrace value) {
+        return RagRetrievalDebugResponseDTO.Candidate.builder().bindingId(value.bindingId())
+                .profileId(value.profileId()).stage(value.stage()).rank(value.rank())
+                .knowledgeBaseId(value.knowledgeBaseId()).documentId(value.documentId())
+                .versionId(value.versionId()).generation(value.generation()).chunkId(value.chunkId())
+                .headingPath(value.headingPath())
+                .denseScore(value.denseScore()).sparseScore(value.sparseScore())
+                .fusionScore(value.fusionScore()).rerankScore(value.rerankScore())
+                .outcome(value.outcome()).build();
     }
 
     private <T> Response<T> success(T data) {

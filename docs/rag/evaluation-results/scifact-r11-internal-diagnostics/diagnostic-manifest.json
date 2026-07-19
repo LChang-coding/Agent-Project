@@ -1,0 +1,16 @@
+{
+  "schemaVersion" : 1,
+  "status" : "completed",
+  "runId" : "scifact-r11-internal-diagnostics-20260720",
+  "codeRevision" : "292d2124f6d2bf6f369bde7aadbcc9b44df50da3-dirty-diagnostics",
+  "caseReportSha256" : "61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0",
+  "targetsSha256" : "ca953fb2815fbce231b28ef681e01d808a48631ef0204df925a88fd9c88150f4",
+  "queryCount" : 20,
+  "expectedRecordCount" : 80,
+  "completedRecordCount" : 80,
+  "requestTimeoutSeconds" : 240,
+  "startedAt" : "2026-07-19T20:24:34.378488Z",
+  "finishedAt" : "2026-07-19T20:31:44.665976Z",
+  "diagnosticJsonlSha256" : "f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40",
+  "failureType" : null
+}

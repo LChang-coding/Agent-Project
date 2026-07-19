@@ -1731,3 +1731,47 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 真实生成后用第二个全新临时目录再次执行同一CLI，JSON和Markdown均字节级`cmp`相同；随后用独立`jq`断言复核300查询/1200记录、21 case、四变体集合、正文非空及各分类的success/MRR关系全部通过。
 - 失败轨迹如实保留：首次全局`git diff --check`被不属于本切片的现有运行日志尾随空格阻断，改为仅检查本切片文件后通过；第一次真实报告复算数值一致但字节`cmp`失败，根因是`Map.of/Map.copyOf`字段顺序不稳定，改为显式LinkedHashMap/按键排序后完整重跑并通过。未修改或暂存用户日志。
 - 最终报告JSON SHA-256=`61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0`，Markdown=`6da9cb37537682b733476eba8942418fb05dd226a6be08c933e8f1afbe3a4657`，CLI JAR=`8b667a993403eac4fb7b4d48d3fac213ae4d40bc8fea4313b46c350265e5f91d`。报告和复算命令已加入`docs/rag/evaluation.md`；这完成失败案例证据切片，但不代表PDF/DOCX E2E、内部候选分数留痕或Agent最终回答引用闭环已经完成。
+
+#### RAG内部阶段诊断与失败因果复测切片计划（执行前）
+
+1. 为管理员debug请求增加显式`diagnosticsEnabled`链路，普通Agent/Workflow检索默认关闭，避免每次在线请求保留Top100诊断数据；诊断数据随唯一retrieval结果返回，不写单例可变“当前请求”字段，防止并发串租户。
+2. 对每个binding/profile留存有界阶段快照：Dense原始候选、Sparse原始候选、融合排序、去重/阈值后候选、Rerank输入与输出、最终citation/Token预算结果。每条至少包含document/version/chunk、阶段rank、dense/sparse/fusion/rerank score和淘汰原因；任何快照都不含向量、对象键、密钥或跨租户内容。
+3. Debug API仅在现有owner/admin鉴权后返回诊断；设置明确最大候选数和响应大小边界。普通检索结果、RAG上下文注入和审计契约保持兼容，diagnostics关闭时为空且不增加Qdrant/模型调用。
+4. benchmark增加只针对已选失败query的阶段证据采集/离线合并能力，固定同一targets、profile、索引指纹和请求参数；将内部候选与分数写入独立原始JSONL，不改写r11，不能把后补诊断run的延迟并入原质量/性能统计。
+5. 测试覆盖关闭零留痕、各阶段rank/score、去重/TopK/Token预算淘汰、Rerank顺序、跨binding隔离、响应脱敏/上限和并发请求隔离；真实复跑代表漏召回、RRF救回、Rerank改善/伤害case后，更新失败报告的直接事实、首个内部失效点和仍需推断的边界。
+6. 完成后追加测试命令、样本数、原始目录/hash、每类因果结论与失败轨迹，中文本地提交；若远端服务或当前索引不可复现，明确写“证据不足”而不是使用旧终态排名反推内部阶段。
+7. SciFact把5,183篇语料摄取为同一个Markdown源文档，内部`documentId`无法对应BEIR语料ID；诊断候选必须额外返回不含正文的`headingPath`（Qdrant受信payload已有`heading_path`，水合后以chunk字段为准），benchmark据此还原原始语料ID。缺少合法标题标记的真实诊断记录必须拒绝进入因果报告，不能把源文档ID误当作gold文档ID。
+
+#### RAG内部阶段诊断与失败因果复测切片执行结果
+
+- 管理员debug链路新增显式`diagnosticsEnabled`，普通检索构造器默认false。结果按单次retrieval返回有界2048条`CandidateTrace`，覆盖`dense_raw/sparse_raw/fusion/candidate_filter/pre_assembly/rerank_input/rerank_output/context_budget`，记录binding/profile、业务scope、chunk、headingPath、四类分数和淘汰outcome；不返回向量、正文、对象键或密钥，也没有单例“当前请求”状态。
+- SciFact 5,183篇语料实际来自一个Markdown业务文档，初版只有内部documentId不能回映gold。已把Qdrant受信payload的`heading_path`贯穿raw/fusion轨迹，水合后改用chunk heading；benchmark严格解码`BENCH_DOC_B64_*`得到原始文档ID，任一候选无法解码即整轮失败。
+- benchmark新增`diagnose-cases`逐条flush原始诊断和`diagnostic-report`离线因果报告。后者按chunk→document去重，分别计算首个覆盖损失/完全损失，区分Dense/Sparse并行父节点，按同一retrieval的Rerank输入输出判断排序增益/伤害，并对最终排名、retrievalId和Dense/Sparse/Fusion跨变体指纹做漂移门禁；所有错误竞争文档从项目内固化Markdown回源标题和600字符片段。
+- 真实运行使用本机最终Java进程8092、SSH TLS MySQL隧道13306、Qdrant隧道16333、既有SciFact四target和20个去重代表问题；只重置原隔离benchmark owner的唯一active密码行，随机密码/JWT仅存在受限临时目录和子进程环境，退出后删除，Java项目没有上传服务器。80/80请求完成、四变体各20、HTTP 200、0降级、0空诊断、0截断、80个retrievalId唯一、所有候选可回源。
+- 完整性门禁：80/80最终文档排名与r11逐条精确一致，Dense/Sparse/Fusion跨变体候选指纹0漂移。80条变体轨迹中52条没有Gold完全损失；17条首个完全损失在fusion threshold/TopK联合步骤，2条在Dense原始Top100，5条在Sparse原始Top100，4条在Hybrid两路原始并集；本次代表case没有首个失效发生在去重、Rerank输出或上下文预算。
+- 同一次Hybrid+Rerank retrieval的输入→输出比较为8条MRR改善、7条下降、5条不变。诊断样本延迟：Dense p50/p95=2304/2911ms，Sparse=1762/1996ms，Hybrid=2401/2963ms，Rerank=11473/26585ms；Rerank阶段p50/p95=9189/23756ms，最慢54507ms请求中Rerank占51920ms，再次直接定位CPU模型推理/排队为主瓶颈。debug响应112439～201051 bytes，仅代表显式诊断成本。
+- 原始`diagnostic.jsonl`为10,608,078字节、SHA-256=`f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40`；manifest=`55af55561896d6da69b2c6bd485bc8bc1bb969828719e3e1848548d14e7f0171`。最终因果JSON=`e68c474ae34c2b08cebb29c9f33c78979050bc705dd006784624bbc6f3355e50`，Markdown=`ba548ab92ed9b98add2282e1c229e86c0fb6aa83fbb672b2d3b5eee25b7f676c`；两次全新输出字节级一致。
+- 失败轨迹如实保留：首次后台启动在Java前退出且日志为空，改为前台托管；第一次定向测试误用Homebrew Java 25，Mockito/Byte Buddy不支持而产生2 errors，Temurin 17重跑21/21通过；benchmark公共HTTP客户端最初强制旧fixture必须有diagnostics导致5 errors，改为仅`diagnose-cases`强制；一次完整性jq表达式作用域错误和一次文档路径漏`prepared/`均在产出门禁前失败；首次因果JSON复算因`Set.copyOf`字段顺序不稳定字节不等，改为LinkedHashSet后两次字节一致。这些失败不计入最终通过数据。
+- 最终Java 17干净门禁：App全部`*Rag*Test`共162/162通过、0 failure/error/skipped，六模块BUILD SUCCESS、Maven 9.982秒；benchmark全部43/43通过、0 failure/error/skipped，BUILD SUCCESS并生成fat CLI，Maven 4.233秒。首次显式diagnostics测试和Token预算淘汰测试均在RAG套件内；报告生成器另有fusion失效、竞争文档正文和稳定输出测试。
+- 真实80请求使用App JAR SHA-256=`eec2e99901c8513f99a474cf2559a5a3288e32357a347481fb77c85934cd6fc5`、采集CLI JAR=`f33bdf5f18b764b475be3e85d93214c500b9d75a426304ca7339213257eaaa55`；报告生成器和最终门禁完成后，全reactor跳过重复测试打包成功，最终App JAR=`bc1fb00f089f4bf32aa872a2bb374abfcbc5144ec566d7b98d91ab6d290bde9e`、CLI JAR=`4157f1ddc6055ec1d311611efcc27f67f3b24c373d3d46bab68fe5da79fe72ff`。运行JAR与最终JAR职责分开记录，不用最终hash反写真实请求环境。
+- 证据边界仍明确：fusion代码把threshold和TopK放在同一步，不能继续细分；原始诊断没有完整profile/模型/index冻结指纹，只能以观察到的候选指纹证明本轮可比；没有捕获上下文扩展后的具体Token差额。代表case本轮未发生context budget首失效，因此没有用不存在的数据推演具体Token因果。
+
+#### RAG内部诊断独立终审修复计划（执行前）
+
+1. 报告生成前强制校验诊断manifest为completed、query/record计数、JSONL SHA、失败报告SHA、run/target/code revision字段；重新读取qrels并与失败报告每个query的全部Gold集合核对，同时拒绝document-map重复marker或documentId。任一缺失/重放/篡改都不得生成报告。
+2. 为四变体定义完整阶段闭包和stage/outcome白名单，并把Dense/Sparse/Fusion/Rerank阶段条数与record candidateCounts对齐；缺阶段、未知outcome、阶段计数不符直接fail-fast，不能把采集缺口分类成召回损失。
+3. 当前benchmark每个target恰好一个binding；报告器先强制单binding/profile，遇多binding明确拒绝并标为尚不支持，不能把不同binding的局部rank混成全局rank。Hybrid raw union只用于coverage，禁止把Dense/Sparse分支局部rank解释为一个全局排序。
+4. Rerank同请求效果按每个Gold的rank方向和Recall共同分类，出现一升一降记为MIXED，不能只用最佳Gold的MRR代表多Gold总体。
+5. 漂移门禁扩展binding/profile/kb/document/version/generation/chunk/outcome，分数使用明确容差；任何baseline最终排名或候选指纹漂移都中止报告生成，而不是继续发布结论。
+6. headingPath在返回前做有界截断；报告标题改为“内部阶段失败证据”，总账记录数动态渲染，重点变体由实际首失效/重排类别确定。补阶段缺失、多Gold mixed、多binding、manifest/qrels/hash、重复映射和漂移拒绝测试，再重跑162项RAG、全部benchmark、两次字节复算及最终JAR/hash。
+
+#### RAG内部诊断独立终审修复执行结果
+
+- `diagnostic-report`现在强制输入diagnostic manifest与qrels；生成前校验manifest schema/status、query与record计数、诊断JSONL/失败报告SHA、runId/codeRevision/targets字段，并把失败报告记录的qrels、Markdown、document-map哈希与当前文件逐项核对。每个选中query的全部正相关qrels必须与报告Gold集合精确一致，document-map的空值、重复marker和重复documentId均直接拒绝。
+- 为四变体建立完整阶段闭包、stage/outcome白名单、连续rank和candidateCounts对账。每条记录必须恰好一个binding/profile；当前不支持多binding局部rank合并。Hybrid的Dense/Sparse原始并集明确标记为`parallel_branch_local_min_for_coverage_only`，只用于覆盖判断，`bestGoldRank=null`，不会伪造跨分支全局名次。
+- 跨变体门禁比较共享knowledgeBase/document/version/generation/chunk/outcome和四类分数（容差`1e-9`），最终排名或候选指纹漂移都会终止生成。首次用真实80条记录执行时被门禁拒绝，原因是实现把四个消融target本来不同的binding/profile ID也要求相等；核对query 598显示底层候选、分数和共享scope一致，只有target局部binding/profile不同。修正为每条记录内强制单作用域、跨target归一化这两个局部ID后，真实80/80通过；这一失败轨迹没有从报告中删除。
+- Rerank效果改为逐Gold方向与Recall/MRR联合留痕；一升一降分类为`RERANK_MIXED`，输入不存在而输出重新出现视为不变量破坏。真实20个代表query没有mixed，最终仍为8 gain、7 harm、5 neutral；没有为了展示新分类修改真实计数。
+- 诊断`headingPath`在领域服务返回前限制为1024字符，保留SciFact marker前缀；报告改名为“内部阶段失败证据”，总账使用动态recordCount，竞争文档记录来源阶段，重点变体由实际损失或Rerank类别选定。
+- 新增终审测试覆盖阶段缺失、manifest哈希、qrels Gold不一致、重复映射、多binding、跨变体真实漂移、多Gold mixed和heading上限。Java 17定向测试：报告器8/8、检索服务19/19；最终全部RAG测试163/163，0 failure/error/skipped，八模块BUILD SUCCESS、Maven 13.611秒；benchmark独立`clean test package`为50/50，0 failure/error/skipped，5.739秒。
+- 正式报告使用同一CLI向两个全新位置生成，JSON与Markdown均通过字节级`cmp`。最终JSON SHA-256=`de5e829a559a39c9542d9518ed2ece1678ff5cda8d888143bbd74fc8150e5016`，Markdown=`0435f2038f133663ce26e279b9d223210f4ef1eef44854471847dd8bcf7c6c46`；原始10,608,078字节JSONL与manifest未改，SHA仍为`f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40`和`55af55561896d6da69b2c6bd485bc8bc1bb969828719e3e1848548d14e7f0171`。
+- 为避免并行clean/package对最终制品产生竞争，测试完成后又单独执行全reactor `mvn -DskipTests package`，BUILD SUCCESS、7.279秒；最终App JAR SHA-256=`3f30a826b4ba5df8c7c68336a0c29797111f9bc537b39e9cb3366044d91aa3df`，CLI JAR=`ed43c06e845d1fe49f277e32e549e8ddacdd5e0893367158eab9b5f26746ef14`。本轮没有重新发起远端检索，质量/延迟数值继续来自未修改的原始80条记录。

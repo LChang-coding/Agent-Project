@@ -16,6 +16,7 @@ public class RagRetrievalDebugResponseDTO {
     private List<String> degradationReasons;
     private Metrics metrics;
     private List<Citation> citations;
+    private Diagnostics diagnostics;
 
     @Data
     @Builder
@@ -56,5 +57,35 @@ public class RagRetrievalDebugResponseDTO {
         private Double fusionScore;
         private Double rerankScore;
         private Map<String, String> metadata;
+    }
+
+    @Data
+    @Builder
+    public static class Diagnostics {
+        private Boolean enabled;
+        private Boolean truncated;
+        private Integer capturedCount;
+        private Integer maxCapturedCount;
+        private List<Candidate> candidates;
+    }
+
+    @Data
+    @Builder
+    public static class Candidate {
+        private String bindingId;
+        private String profileId;
+        private String stage;
+        private Integer rank;
+        private String knowledgeBaseId;
+        private String documentId;
+        private String versionId;
+        private Long generation;
+        private String chunkId;
+        private String headingPath;
+        private Double denseScore;
+        private Double sparseScore;
+        private Double fusionScore;
+        private Double rerankScore;
+        private String outcome;
     }
 }

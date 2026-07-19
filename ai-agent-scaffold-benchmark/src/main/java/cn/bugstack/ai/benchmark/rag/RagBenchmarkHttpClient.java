@@ -161,9 +161,25 @@ public final class RagBenchmarkHttpClient {
                 "rerankCandidateCount")) candidates.put(name, metrics.path(name).asInt());
         List<String> reasons = new ArrayList<>();
         data.path("degradationReasons").forEach(value -> reasons.add(value.asText()));
+        JsonNode diagnostics = data.path("diagnostics");
+        List<DiagnosticCandidate> diagnosticCandidates = new ArrayList<>();
+        for (JsonNode candidate : diagnostics.path("candidates")) {
+            String candidateHeading = optionalText(candidate, "headingPath");
+            diagnosticCandidates.add(new DiagnosticCandidate(requiredText(candidate, "bindingId"),
+                    requiredText(candidate, "profileId"), requiredText(candidate, "stage"),
+                    candidate.path("rank").asInt(), requiredText(candidate, "knowledgeBaseId"),
+                    requiredText(candidate, "documentId"), requiredText(candidate, "versionId"),
+                    candidate.path("generation").asLong(), requiredText(candidate, "chunkId"),
+                    candidateHeading, RagBenchmarkArtifactWriter.documentIdFromHeading(candidateHeading),
+                    optionalDouble(candidate, "denseScore"), optionalDouble(candidate, "sparseScore"),
+                    optionalDouble(candidate, "fusionScore"), optionalDouble(candidate, "rerankScore"),
+                    requiredText(candidate, "outcome")));
+        }
         return new DebugResult(requiredText(data, "retrievalId"), List.copyOf(uniqueDocuments),
                 List.copyOf(headings), data.path("degraded").asBoolean(false), List.copyOf(reasons),
-                Map.copyOf(timings), Map.copyOf(candidates), response.httpStatus(), response.responseBytes());
+                Map.copyOf(timings), Map.copyOf(candidates), diagnostics.path("truncated").asBoolean(false),
+                diagnostics.path("capturedCount").asInt(), diagnostics.path("maxCapturedCount").asInt(),
+                List.copyOf(diagnosticCandidates), response.httpStatus(), response.responseBytes());
     }
 
     private JsonNode postJson(String path, Object payload) throws IOException, InterruptedException {
@@ -256,6 +272,10 @@ public final class RagBenchmarkHttpClient {
         JsonNode value = node == null ? null : node.get(field);
         return value == null || value.isNull() ? "" : value.asText();
     }
+    private Double optionalDouble(JsonNode node, String field) {
+        JsonNode value = node == null ? null : node.get(field);
+        return value == null || value.isNull() ? null : value.asDouble();
+    }
 
     public record KnowledgeBase(String knowledgeBaseId, String status) {}
     public record Upload(String documentId, String taskId, String status, boolean deduplicated) {}
@@ -273,7 +293,14 @@ public final class RagBenchmarkHttpClient {
     public record Binding(String bindingId, String targetId, long revision) {}
     public record DebugResult(String retrievalId, List<String> rankedDocumentIds, List<String> citationHeadings,
                               boolean degraded, List<String> degradationReasons, Map<String, Long> timingsMs,
-                              Map<String, Integer> candidateCounts, int httpStatus, int responseBytes) {}
+                              Map<String, Integer> candidateCounts, boolean diagnosticsTruncated,
+                              int diagnosticCapturedCount, int diagnosticMaxCapturedCount,
+                              List<DiagnosticCandidate> diagnosticCandidates, int httpStatus, int responseBytes) {}
+    public record DiagnosticCandidate(String bindingId, String profileId, String stage, int rank,
+                                      String knowledgeBaseId, String documentId, String versionId,
+                                      long generation, String chunkId, String headingPath, String benchmarkDocumentId,
+                                      Double denseScore, Double sparseScore,
+                                      Double fusionScore, Double rerankScore, String outcome) {}
 
     private record ApiResponse(JsonNode data, int httpStatus, int responseBytes) {}
 
