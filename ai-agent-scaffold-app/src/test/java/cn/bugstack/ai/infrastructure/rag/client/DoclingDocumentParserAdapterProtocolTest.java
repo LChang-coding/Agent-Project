@@ -188,12 +188,14 @@ public class DoclingDocumentParserAdapterProtocolTest {
 
     @Test
     public void docxShouldSendItsMimeTypeAndExplicitOcrChoice() throws Exception {
-        respondSuccess("DOCX parsed", "source.docx");
+        respondPageSuccess("# DOCX\nparsed", Map.of(), List.of(headerWithoutProvenance("DOCX", 1)));
         Path path = write("source.docx", new byte[]{'P', 'K', 3, 4, 1, 2, 3});
 
-        adapter.parse(command(path, "source.docx",
+        ParsedDocument result = adapter.parse(command(path, "source.docx",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document", true));
 
+        Assert.assertEquals(0, result.pageCount());
+        Assert.assertNull(result.sections().get(0).pageNumber());
         String multipart = new String(requests.get(0).body(), StandardCharsets.ISO_8859_1);
         assertTextPart(multipart, "from_formats", "docx");
         assertTextPart(multipart, "do_ocr", "true");
@@ -328,6 +330,10 @@ public class DoclingDocumentParserAdapterProtocolTest {
     private Map<String, ?> header(String text, int level, int pageNumber) {
         return Map.of("label", "section_header", "text", text, "level", level,
                 "prov", List.of(Map.of("page_no", pageNumber)));
+    }
+
+    private Map<String, ?> headerWithoutProvenance(String text, int level) {
+        return Map.of("label", "section_header", "text", text, "level", level, "prov", List.of());
     }
 
     private void respond(Map<String, ?> response) throws Exception {

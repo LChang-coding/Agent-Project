@@ -403,8 +403,11 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         if (pages == null || pages.isNull()) {
             return PageMetadata.empty();
         }
-        if (!pages.isObject() || pages.isEmpty()) {
+        if (!pages.isObject()) {
             throw invalidPageMetadata();
+        }
+        if (pages.isEmpty()) {
+            return PageMetadata.empty();
         }
         Set<Integer> pageNumbers = new HashSet<>();
         pages.fields().forEachRemaining(entry -> {

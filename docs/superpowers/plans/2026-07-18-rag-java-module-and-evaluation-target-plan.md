@@ -1900,3 +1900,10 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 章节页码只从`section_header`的provenance建立完整heading path映射；与Markdown标题路径精确匹配后赋值，重复同路径按出现顺序消费。无法匹配、缺provenance或非标题正文保持`null`；本地Markdown仍没有虚构页码。
 - 协议测试新增三页、重复标题、未知匹配、非法页对象和双`to_formats`断言；定向`DoclingDocumentParserAdapterProtocolTest`为11/11通过。Java 17按真实文件名生成36个RAG测试类清单后干净执行，Maven权威结果176/176通过、0 failure/error/skipped，六模块BUILD SUCCESS、总耗时9.379秒。
 - 全reactor `mvn -DskipTests package`成功；当前待黑盒App JAR SHA-256=`5bf8b3abaa0644da4709fd43e37c3a6ed7ed2b2aed2332d718ed767230c00e6c`。尚未把单元结果冒充页码E2E；下一步先提交当前代码，再以该提交和同一JAR执行全新真实MinIO三格式run。
+
+#### Docling页级元数据首次真实复测失败与协议修正计划（执行前）
+
+- `format-e2e-page-r1-3f7c779-minio`在第一个Markdown上传前失败，原因是临时启动命令对`codex.md`的MinIO表格匹配过宽，把“中间件位置表”的服务器名称误当Access Key；任务没有完成摄取。失败run/evidence目录原样保留，修正为精确匹配`MinIO + ai_agent_admin`唯一行后重新启动同一JAR。
+- `format-e2e-page-r2-3f7c779-minio`完成Markdown摄取与6次查询后，在DOCX解析阶段以`RAG_DOCLING_PAGE_METADATA_INVALID`失败；资源manifest exitCode=1，未进入PDF。真实DOCX协议摘要证明`json_content`存在，但`pages={}`且所有标题`prov=[]`；这是Docling对流式版式DOCX没有页级provenance，不是非法页号。
+- 保持“非法非空页集合fail closed”，把空`pages`对象重新定义为“页级信息未知”，返回`pageCount=0`且章节页码`null`；禁止从DOCX显式分页符、字数或标题顺序估算页面。增加空页对象回归后重新执行Java门禁、提交修复、以新JAR和全新r3目录重跑。
+- PDF真实响应仍有1～3连续页和标题provenance，r3必须证明PDF页数及至少一个citation页码；DOCX若继续无页信息，最终结论必须写成“当前Docling 1.26.0对该DOCX不提供固定页语义”，不能宣告DOCX页码闭环。
