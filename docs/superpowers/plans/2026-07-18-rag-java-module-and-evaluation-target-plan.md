@@ -1553,3 +1553,35 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 已修正“320个唯一并发×变体×query组合”：正确口径是320条正式记录、160个唯一组合，每个组合在两个独立run中各观测一次；包含runId时才是320个唯一键。
 - `docs/rag/evaluation.md`已补齐两轮原始目录、CLI/App JAR hash及manifest/report/evidence manifest的SHA-256；所有数字都能回溯到本机受控临时目录。
 - `git diff --check`作为提交前最后门禁；本次只纳入评测报告和本计划文档，不纳入运行日志与其他未跟踪目录。
+
+#### RAG总目标完成度审计计划（2026-07-20，执行前）
+
+1. 从用户原始需求、`codex.md`和本目标计划中提取可验收项，覆盖租户管理员文档管理、Word/PDF/Markdown摄取、Java解析/切块/Embedding/Qdrant入库、混合检索/RRF/Rerank/引用、租户隔离、幂等/重试/取消/租约/checkpoint、前端状态与评测留痕。
+2. 以当前工作树为权威事实，逐项定位代码、SQL、配置、测试、运行产物和已有提交；区分“已证明”、“证据不足”和“未实现”，不用计划文字代替可执行证据。
+3. 优先修复会破坏主链路或安全边界的缺口，每个实施切片再单独追加执行前计划；运行与风险成比例的单元、集成、真实中间件或端到端验证。
+4. 每个重大闭环把实际操作、测试数据、限制和证据路径追加到本文档，只暂存本切片相关文件，使用中文本地提交。
+
+#### RAG总目标完成度审计结果（2026-07-20）
+
+| 验收域 | 权威证据摘要 | 当前判定 |
+|---|---|---|
+| 管理员前端 | `KnowledgeBaseView.vue`已有知识库创建、上传、当前任务取消、profile/binding/debug及明确loading反馈 | 核心页面已实现；任务历史、刷新恢复、多任务、失败详情、文档/知识库删除和重建未闭环 |
+| PDF/DOCX/Markdown | `RagUploadFilePolicy`、Docling/Markdown adapter和Worker主链支持三种明确格式；Markdown有生产HTTP链路证据 | 代码/协议已实现；PDF、DOCX尚无与Markdown同级的上传→Worker→Qdrant→检索E2E证据。旧`.doc`不在本计划明确的PDF/DOCX/Markdown首期范围 |
+| Java摄取 | `RagIngestWorker`已实现MinIO下载/摘要、解析、切块、Dense/Sparse、Qdrant upsert、计数核验与generation激活 | `INGEST`主链已证明；Worker显式拒绝`REBUILD/DELETE`，原件/解析产物的删除与重建生命周期未实现 |
+| 可恢复性 | SQL、实体、Repository和Worker覆盖幂等键、有界重试、租约、heartbeat、fencing、checkpoint和取消副作用屏障 | `INGEST`已实现；运行中取消/租约接管的真实故障注入E2E、终态后手工重试和删除原件仍缺失 |
+| 检索与引用 | `RagRetrievalService`已有Dense/Sparse/RRF/加权融合/Rerank/去重/父邻块/token预算与typed citation；`RagContextContributor`按不可信资料注入 | 检索与审计已证明；Agent流式/非流式真实回答、`used_citation_ids`、回答后Citation Validator和授权回源未闭环 |
+| 租户隔离 | Controller只从`TenantContextHolder`取身份，MyBatis/Qdrant及MySQL hydration都带tenant/kb/generation并后验 | 应用内IDOR未发现直接缺口；角色/成员状态仍信任最长7200秒的JWT静态claim，绑定targetId未校验真实Agent/Workflow归属 |
+| 安全边界 | Embedding/Reranker/Docling经独立Key网关，Java项目保持本机运行 | Qdrant 6333按用户明确联调要求保持公网匿名读写；这不等于生产安全，在含敏感/生产数据前是上线阻断项。自助注册+50MiB上传亦无租户配额/速率限制 |
+| 质量与性能 | SciFact 1200条四变体0坏样本、独立复分和两轮completed容量证据可复算 | 质量已闭环；当前只证明并发2健康，并发4已真实失败，首瓶颈是Reranker CPU/排队，不宣称更高容量或open-loop SLA |
+| 文档与上线 | `docs/rag/` 已有API/运维/评测文档 | `docs/rag/README.md`仍保留“质量运行中/容量待完成”过期口径；`codex.md`的MySQL默认地址与`application-dev.yml`实际默认值矛盾，且缺Java/Vue复现和RAG故障排查命令 |
+
+- 审计使用三个独立只读视角分别复核总需求/评测、鉴权/多租户、前端/运维；三方都判定“核心开发与评测已有实证，但总目标不能标记完成”。
+- 本轮只读审计没有改动应用、服务器或评测产物；下一实施切片优先修复任务列表与页面刷新恢复，它是当前已开放上传/取消能力的直接一致性缺陷。
+
+#### 摄取任务历史与刷新恢复切片计划（执行前）
+
+1. 在现有强租户Repository/DAO/MyBatis增加按`tenant_id + kb_id`查询最新摄取任务的有界列表，排序由服务端确定，不暴露租约、fencing、对象键或内部错误消息。
+2. 增加管理员任务列表API，仍以`TenantContextHolder`和知识库可管理权限为门禁；单任务查询/取消契约保持兼容。
+3. 前端首次进入、切换知识库和手动刷新时恢复服务端任务；显示多任务、真实终态图标、`errorCode/cancelReason`和轮询失败反馈，每行独立取消。
+4. 单元/契约测试覆盖tenant+kb过滤、limit边界、跨租户不可见、管理员门禁与响应脱敏；运行Java 17定向RAG回归和前端生产构建。
+5. 完成后追加实际文件、测试数和限制，仅暂存本切片文件并用中文本地提交。
