@@ -1226,3 +1226,41 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java17全模块跳过重复测试打包成功，旧PID 71769先TERM退出；新App JAR由隔离脚本在8092启动，PID 4101，Hikari经真实门禁后的13306成功建连。新App JAR SHA-256为`c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，重组后的CLI JAR SHA-256为`12036b795f3dcdf149c4da9468407a78741ad0ad0fd4f32ba60edd3f0582ead6`。
 - 真实故障注入先恢复隔离用户并成功登录，再STOP当前隧道、以有效JWT调用原Hybrid目标；请求在数据库通信失败后由新JAR明确返回HTTP 500、curl退出0，没有伪401或认证重登。第一次采集脚本误用zsh只读变量`status`，HTTP请求已产生服务端`ServletException/RecoverableDataAccessException`证据但shell打印阶段失败；改用`http_code`完整复测得到`forced_downstream_http_status=500`。两次trap均尝试恢复，最终ensure和TLS查询通过。
 - 本轮修复了错误分类和半失活发现，不声称消除了公网传输抖动；此前实测仍出现4.8～65.2秒及连接失败。第七次复评分前必须重新通过连续数据库/真实检索门禁，正式run任一5xx/降级/空结果仍立即停止。
+
+###### 质量评测专用本地 MySQL 副本计划（执行前）
+
+1. 目的不是把生产数据库“迁回本机”，而是把SciFact检索质量/组件消融与已证实的公网MySQL传输抖动解耦；远端新MySQL保持原状，继续作为部署、远程性能和可靠性评测对象。最终报告必须分别标注本地副本质量环境与远端链路性能环境，禁止混写延迟。
+2. 本机无Docker，但已有Homebrew MySQL 9.6.0_2、10 CPU、32 GiB内存、759 GiB空闲磁盘。使用独立`/tmp/ai-agent-rag-benchmark/mysql-data`数据目录、loopback `127.0.0.1:13307`、独立socket/pid/log和LaunchAgent；关闭binlog/performance_schema，限制连接与Buffer Pool，不占用系统默认3306，不启用公网监听。
+3. 只从已完成的迁移dump `/tmp/ai-agent-scaffold-mysql-20260719T2016.sql`初始化一次，执行前再次要求SHA-256为`ffc2bae94a16d4d68c7a468bb63f28e3ec8ba91e54b8c5c1a6f12b26d8e86aba`；创建最小权限`ai_agent_app@127.0.0.1/localhost`，应用密码仍从受控`codex.md`读取，不写入脚本、plist、日志或Git。
+4. 恢复后核验34张表、45374行及关键表计数与迁移基线一致，并验证目标tenant、四个targets、7548向量块元数据均存在。若MySQL 9.6导入与8.0 dump不兼容，则停止并保留错误证据，不修改dump迁就。
+5. `start-local-rag-benchmark-app.sh`新增显式`RAG_BENCHMARK_LOCAL_MYSQL=true`分支：true时确保本地副本并连13307/非TLS loopback，false默认仍确保SSH隧道并用13306/TLS。不得依据端口隐式猜测环境，manifest/计划记录实际数据源。
+6. 完成脚本语法、LaunchAgent lint、真实重启恢复、30次本地查询、Auth/RAG回归和新JAR启动；再对同一query四组真实冒烟。全部通过后中文提交，以新提交/JAR SHA和全新目录开启第七次40+1200质量复评。
+
+###### 公网 MySQL 客户端连接失败诊断计划（执行前）
+
+1. 本轮只做只读诊断，不修改业务数据、不切换8092应用数据源、不上传本地项目；分别验证本机到`103.205.240.84:3306`的TCP可达性与TLS握手，区分“10秒网络超时”和“已到达MySQL但认证方式不安全”两个阶段。
+2. 经SSH只读核对远端MySQL容器健康、3306发布/监听、`require_secure_transport`、TLS证书状态、应用账号认证插件与允许来源Host，并核对DOCKER-USER/主机防火墙当前是否仍只允许此前识别的开发公网网段。
+3. 给出数据库客户端可直接填写的主机、端口、SSL Mode及驱动兼容参数；若当前公网出口已经变化，只报告精确阻断点和最小修复方案，不擅自扩大到全网放行，也不降低`caching_sha2_password`或关闭TLS。
+
+###### 公网 MySQL 客户端连接失败诊断结果
+
+- 本机到`103.205.240.84:3306`的原始TCP握手在10秒内成功；远端`rag-mysql`容器为healthy，Docker确实发布`0.0.0.0:3306->3306/tcp`。`DOCKER-USER`当前只允许`223.104.79.0/24`访问3306后丢弃其他来源，本次服务端识别的客户端地址为`223.104.79.125`，因此本次不是防火墙网段不匹配。
+- MySQL服务端`have_ssl=YES`并支持TLS 1.2/1.3；`ai_agent_app@%`与`root@%`均使用`caching_sha2_password`。服务端全局`require_secure_transport=OFF`，但用户客户端没有建立安全连接且其驱动又不允许在明文链路获取RSA公钥，所以报`Authentication requires secure connection`；这不等于密码错误。
+- 用公网地址、`ai_agent_app`、已知数据库密码和`SSL Mode=REQUIRED`执行真实`SELECT 1`成功；同一密码用于`root`则明确返回1045 Access denied。因此客户端应使用应用账号，不能把应用密码当作公网root密码。
+- 公网链路仍有抖动：连续TLS认证中出现一次接近硬上限才成功、下一次12秒硬超时，复现了客户端“当前10秒超时”提示。最小可用配置为TLS REQUIRED并把连接超时提高至30秒（必要时60秒）；项目自身继续使用SSH隧道/本地评测副本，不把提高超时冒充链路瓶颈已消除。
+
+###### 本地质量副本门禁与 Rerank 降级诊断计划（执行前）
+
+1. 核验8092进程环境明确连接本机`127.0.0.1:13307`，对本地副本执行表数、关键表计数、应用账号查询和LaunchAgent强制重启恢复；所有远端性能数据与本地质量环境继续隔离标注。
+2. 对原SciFact隔离租户只条件更新唯一active密码凭据，随机明文仅存于受限临时目录/进程环境；依次调用Dense、Sparse、Hybrid-RRF和Hybrid-RRF+Rerank，要求HTTP 200、10引用、无降级，且Rerank有正候选数和正耗时。
+3. 若前三组成功而Rerank降级，读取响应/审计中的结构化降级原因，并只读核对`rag-reranker`、`rag-model-gateway`健康、资源、容器日志和服务器内网直连；先区分模型进程故障、网关超时和公网传输抖动，再决定最小恢复操作。
+4. 恢复后重新跑完整四组，不能用一次Rerank成功与前三组旧结果拼接门禁。通过后再执行脚本语法、plist lint、强制重启与30次本地查询，追加真实结果并中文提交本地质量评测环境。
+
+###### 本地质量副本门禁与 Rerank 降级诊断结果
+
+- 8092原PID 11511的实际进程环境确认`RAG_BENCHMARK_LOCAL_MYSQL=true`、`MYSQL_HOST=127.0.0.1`、`MYSQL_PORT=13307`，JDBC为loopback非TLS且显式允许本机`caching_sha2_password`公钥交换；本地MySQL LaunchAgent运行。恢复基线为34张表、导入dump SHA-256 `ffc2bae94a16d4d68c7a468bb63f28e3ec8ba91e54b8c5c1a6f12b26d8e86aba`，关键计数`rag_chunk=38295`、`rag_retrieval_citation=5661`、`chat_message=163`、`tenant=22`，四个SciFact target binding、一个知识库及四个profile均存在。后续真实冒烟会新增审计/引用/refresh token，因此总行数在45374导入基线之上增长是预期写入，不能再要求运行态总行数恒等45374。
+- 第一次Dense请求实际成功，HTTP 200、10引用、100候选、无降级、`totalMs=32299`；门禁shell误用jq `false // "missing"`，把合法布尔false当缺失后退出，未错误宣称服务失败。改为显式`has("degraded")`后完整重跑，Dense/Sparse/Hybrid分别成功且无降级，但Rerank返回10引用同时`degraded=true`、`rerankCandidateCount=0`、`rerankMs=0`，结构化原因是`rerank_fallback`，因此该轮正确判失败。
+- 远端容器证据：`rag-reranker`与`rag-model-gateway`均healthy、0次重启、无OOM；Reranker约占2.008 GiB/3 GiB，服务器仍有约9.5 GiB available、无Swap使用。网关在失败窗口记录同一Java客户端多次`/rerank`，部分200、部分499；模型端成功子批耗时约2.72～5.26秒并含0.83～1.47秒队列，证明模型在线，根因是Top-10按3/3/3/1串行时，公网响应抖动使10秒单批/30秒总deadline提前取消，而不是模型崩溃或数据库故障。
+- benchmark启动脚本把Rerank参数改为可由环境覆盖，默认仍保持3候选有界子批与最多2次重试，但单批时限由10秒调到20秒、四子批共享总deadline由30秒调到60秒。此改动只作用隔离评测启动脚本，不冒充线上生产默认；延长单次等待可避免已在服务端完成的推理因公网响应略超10秒被取消并重复计算。
+- 旧PID 11511优雅TERM退出，新PID 27659继续连接本地13307启动，实际Rerank环境为`requestBatchSize=3`、`requestTimeout=20s`、`timeout=60s`、`maxRetries=2`。同一query重新完整执行四组，依次为Dense `1981ms/100+0`、Sparse `1813ms/0+100`、Hybrid `4004ms/100+100`、Hybrid+Rerank `14988ms/100+100`；四组均HTTP 200、code 0000、10引用、0降级，Rerank真实`candidateCount=10`、`rerankMs=14061`，完整门禁通过。
+- 强制`launchctl kickstart -k`后本地MySQL PID由10442切换为28980，ensure真实查询恢复；应用账号30/30次loopback查询均返回22个租户，8092应用PID仍为27659并在数据库重启后完成login+`/auth/me`，证明Hikari连接池恢复。本地数据库准备/健康脚本语法、plist lint、可执行权限和dump hash均通过；全仓`git diff --check`只命中未纳入本次提交的运行日志既有尾随空格，后续提交门禁必须对拟提交文件做作用域检查。

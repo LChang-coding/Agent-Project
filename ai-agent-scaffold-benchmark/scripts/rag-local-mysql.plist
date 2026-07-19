@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>cn.bugstack.ai.rag-local-mysql</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/opt/mysql/bin/mysqld</string>
+        <string>--datadir=/tmp/ai-agent-rag-benchmark/mysql-data</string>
+        <string>--socket=/tmp/ai-agent-rag-benchmark/mysql.sock</string>
+        <string>--pid-file=/tmp/ai-agent-rag-benchmark/mysql.pid</string>
+        <string>--log-error=/tmp/ai-agent-rag-benchmark/mysql-error.log</string>
+        <string>--bind-address=127.0.0.1</string>
+        <string>--port=13307</string>
+        <string>--mysqlx=OFF</string>
+        <string>--skip-log-bin</string>
+        <string>--skip-performance-schema</string>
+        <string>--innodb-buffer-pool-size=268435456</string>
+        <string>--max-connections=32</string>
+        <string>--table-open-cache=400</string>
+        <string>--thread-cache-size=4</string>
+        <string>--skip-name-resolve</string>
+        <string>--default-time-zone=+00:00</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/ai-agent-rag-benchmark/mysql.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ai-agent-rag-benchmark/mysql.err.log</string>
+</dict>
+</plist>

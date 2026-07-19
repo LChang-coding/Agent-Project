@@ -37,22 +37,37 @@ embedding_key="$(read_table_cell '| Embedding API |' 5)"
 reranker_key="$(read_table_cell '| Reranker API |' 5)"
 docling_key="$(read_table_cell '| Docling API |' 5)"
 mysql_password="$(read_table_cell 'root` 或应用配置中的数据库用户' 4)"
+local_mysql="${RAG_BENCHMARK_LOCAL_MYSQL:-false}"
 require_value AI_RAG_EMBEDDING_API_KEY "$embedding_key"
 require_value AI_RAG_RERANKER_API_KEY "$reranker_key"
 require_value AI_RAG_DOCLING_API_KEY "$docling_key"
 require_value MYSQL_PASSWORD "$mysql_password"
 
-"$SCRIPT_DIR/ensure-rag-mysql-tunnel.sh"
+if [[ "$local_mysql" != "true" && "$local_mysql" != "false" ]]; then
+  printf 'RAG_BENCHMARK_LOCAL_MYSQL must be true or false\n' >&2
+  exit 2
+fi
+if [[ "$local_mysql" == "true" ]]; then
+  "$SCRIPT_DIR/prepare-local-rag-benchmark-mysql.sh"
+  default_mysql_port=13307
+  default_ssl_mode=DISABLED
+  default_public_key_retrieval=true
+else
+  MYSQL_PASSWORD="$mysql_password" "$SCRIPT_DIR/ensure-rag-mysql-tunnel.sh"
+  default_mysql_port=13306
+  default_ssl_mode=REQUIRED
+  default_public_key_retrieval=false
+fi
 
 export AI_RAG_EMBEDDING_API_KEY="$embedding_key"
 export AI_RAG_RERANKER_API_KEY="$reranker_key"
 export AI_RAG_DOCLING_API_KEY="$docling_key"
 export MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
-export MYSQL_PORT="${MYSQL_PORT:-13306}"
+export MYSQL_PORT="${MYSQL_PORT:-$default_mysql_port}"
 export MYSQL_DATABASE="${MYSQL_DATABASE:-ai_agent_scaffold}"
 export MYSQL_USERNAME="${MYSQL_USERNAME:-ai_agent_app}"
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:-$mysql_password}"
-export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-jdbc:mysql://$MYSQL_HOST:$MYSQL_PORT/$MYSQL_DATABASE?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&sslMode=REQUIRED&allowPublicKeyRetrieval=false&connectTimeout=5000&socketTimeout=15000&tcpKeepAlive=true}"
+export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-jdbc:mysql://$MYSQL_HOST:$MYSQL_PORT/$MYSQL_DATABASE?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&sslMode=$default_ssl_mode&allowPublicKeyRetrieval=$default_public_key_retrieval&connectTimeout=5000&socketTimeout=15000&tcpKeepAlive=true}"
 export MYSQL_POOL_MIN_IDLE="${MYSQL_POOL_MIN_IDLE:-1}"
 export MYSQL_POOL_MAX_SIZE="${MYSQL_POOL_MAX_SIZE:-6}"
 export MYSQL_POOL_IDLE_TIMEOUT_MS="${MYSQL_POOL_IDLE_TIMEOUT_MS:-120000}"
@@ -82,12 +97,15 @@ export AI_RAG_EMBEDDING_MAX_RETRIES=5
 export AI_RAG_EMBEDDING_RETRY_INITIAL_BACKOFF=500ms
 export AI_RAG_EMBEDDING_RETRY_MAX_BACKOFF=4s
 export AI_RAG_RERANKER_ENDPOINT="${AI_RAG_RERANKER_ENDPOINT:-http://103.205.240.84:8082}"
-export AI_RAG_RERANKER_REQUEST_BATCH_SIZE=3
-export AI_RAG_RERANKER_REQUEST_TIMEOUT=10s
-export AI_RAG_RERANKER_TIMEOUT=30s
-export AI_RAG_RERANKER_MAX_RETRIES=2
-export AI_RAG_RERANKER_RETRY_INITIAL_BACKOFF=100ms
-export AI_RAG_RERANKER_RETRY_MAX_BACKOFF=1s
+export AI_RAG_RERANKER_REQUEST_BATCH_SIZE="${AI_RAG_RERANKER_REQUEST_BATCH_SIZE:-3}"
+# Top-10 is sent as 3/3/3/1 sequential requests. The benchmark deadline must cover all
+# four remote batches, while the per-request deadline avoids retrying an inference
+# merely because the public response path occasionally exceeds ten seconds.
+export AI_RAG_RERANKER_REQUEST_TIMEOUT="${AI_RAG_RERANKER_REQUEST_TIMEOUT:-20s}"
+export AI_RAG_RERANKER_TIMEOUT="${AI_RAG_RERANKER_TIMEOUT:-60s}"
+export AI_RAG_RERANKER_MAX_RETRIES="${AI_RAG_RERANKER_MAX_RETRIES:-2}"
+export AI_RAG_RERANKER_RETRY_INITIAL_BACKOFF="${AI_RAG_RERANKER_RETRY_INITIAL_BACKOFF:-100ms}"
+export AI_RAG_RERANKER_RETRY_MAX_BACKOFF="${AI_RAG_RERANKER_RETRY_MAX_BACKOFF:-1s}"
 export AI_RAG_DOCLING_ENDPOINT="${AI_RAG_DOCLING_ENDPOINT:-http://103.205.240.84:5001/v1}"
 export AI_RAG_WORKER_LEASE_DURATION_MS=600000
 export AI_RAG_WORKER_HEARTBEAT_INTERVAL_MS=30000
