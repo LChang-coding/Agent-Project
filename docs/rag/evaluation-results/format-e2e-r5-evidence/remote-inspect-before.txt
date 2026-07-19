@@ -1,0 +1,9 @@
+2026-07-19T22:31:09Z
+/rag-mysql|0|false|running|healthy|mysql:8.0.46
+/rag-prometheus|0|false|running|healthy|prom/prometheus:v3.12.0-distroless
+/rag-model-gateway|0|false|running|healthy|nginx:1.28.0-alpine
+/rag-embedding|0|false|running|healthy|ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+/rag-docling|0|false|running|healthy|ghcr.io/docling-project/docling-serve-cpu:v1.26.0
+/rag-reranker|0|false|running|healthy|ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+/rag-qdrant|0|false|running|healthy|qdrant/qdrant:v1.18.2
+/rag-node-exporter|0|false|running|not_configured|quay.io/prometheus/node-exporter:v1.11.1

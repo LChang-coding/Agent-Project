@@ -1840,3 +1840,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 真实开发失败轨迹：第一次干净定向编译因DAO激活方法新增参数导致`RagRepositoryTest`7处testCompile错误，更新mock与精确指标断言后恢复；第一次复用旧进程命令启动新JAR因模型密钥原先仅在父进程环境而失败，重新从本机受限配置注入同一环境后启动成功。这两次失败均未计为通过数据。
 - Java 17门禁：数据修复定向38/38通过；加入Docling协议后41/41通过，其中真实本地HTTP超时测试测得101ms且仅1次请求、普通连接关闭测试2次请求后成功；文件名筛选的全部RAG测试176/176通过，均为0 failure/error/skipped。全reactor跳过重复测试打包成功，当前待测App JAR SHA-256=`e6335927080af2a6e9aebbe2b27c18eaa5e77f89cd6ab059a7872c698c154043`。
 - 尚未宣告真实修复闭环：必须由全新r3租户完成MinIO、MySQL、Qdrant三端一致性、三格式召回、Docling attempt日志和资源证据复测；r2继续作为修复前基线保留。
+
+#### 真实MinIO链路纠偏与三格式r5复测计划（执行前）
+
+1. 保留r1～r4全部原始目录，不覆盖、不删除。首先以进程命令、数据库对象键和本机文件三方核对实际对象存储实现；当前进程同时出现`--ai.storage.type=local`与`--ai.storage.type=minio`，在完成实物核验前，r1～r4不得标为真实MinIO链路。
+2. 若对象实际位于本机目录，则把r1/r2/r4降级为“真实HTTP、MySQL、Qdrant、Docling与模型服务，但对象存储为本地实现”的证据；r3继续作为真实失败轨迹。任何已有延迟只在对应环境内解释，不与后续MinIO轮次直接拼接。
+3. 停止当前隔离测试进程，以显式且唯一的`--ai.storage.type=minio`重新启动同一commit/JAR；保留现有数据库、Qdrant和模型端点，其余测试隔离参数不变。启动后同时检查Spring生效配置、MinIO bucket和上传对象，不依据命令尾部顺序推断配置优先级。
+4. 使用全新租户、知识库、文档和run目录执行`format-e2e-r5`：三种格式均走真实HTTP上传与Worker摄取，保存任务轮询、查询结果、MySQL版本/分块、Qdrant点数、MinIO原件与解析产物的对象大小/哈希一致性及资源采样；任何格式失败则保留失败run，修复后使用新编号，不覆盖r5。
+5. 独立复算r4本地对象证据与r5 MinIO证据的SHA-256、行数、对象数量和查询统计；核对容器重启/OOM、Docling尝试、Embedding/Rerank降级。最终报告必须显式区分配置错误、服务性能和RAG算法质量，不能把环境纠偏产生的差异解释成算法增益。
+6. 将首次MinIO证据采集失败、重复参数根因、验证命令、r5全量结果与未测边界追加到本节；通过脚本测试、Java门禁和证据一致性检查后再做中文本地提交。
+
+#### RAG最终证据总账与失败因果报告计划（执行前）
+
+1. 冻结正式输入集合：SciFact 300问题×4消融的1200条质量记录、20问题×4的80条内部阶段诊断、两轮稳定低并发性能、并发4边界失败、r6三格式真实MinIO E2E及资源/三端一致性；r1～r5只作为修复前、配置纠偏或失败轨迹，不混入正式聚合统计。
+2. 编写确定性汇总脚本，从原始JSON/JSONL/manifest计算Recall@10、MRR@10、nDCG@10、MAP@10、错误/降级/空结果、p50/p95/max、阶段耗时、资源峰值和格式摄取数据；禁止在文档里手填可由机器计算的数字，输入缺失或hash变化时fail-fast。
+3. 报告按固定结构输出：测试环境与口径、功能闭环、质量消融前后差、在线性能与容量边界、三格式解析/存储一致性、瓶颈排名、优化建议与复测门槛、失败case因果链、未测项和证据索引。不同JAR、debug/online、warmup/measured、成功/失败数据必须分栏。
+4. 每个失败代表case显式展示问题、全部Gold文档及项目内正文片段、实际Top10错误文档及片段、四变体名次、首个内部失效阶段、直接事实、推断、替代解释和反证实验；最终报告链接完整21-case附件，不用少数样本代替总量分布。
+5. 对页面数为0、无答案问题仍返回候选、远端采样曾失败、r3超时重试与Embedding配置回退等问题保留负面证据；“页面数未知”不得写成“0页”，“检索命中”不得写成“答案正确”。
+6. 生成机器可读总账与Markdown后，在全新目录独立复算并做字节/hash校验；再执行脚本语法、关键断言、Java 17 RAG回归和全reactor打包。所有实际执行、首次失败、修复、hash和剩余限制追加到计划文档，重大闭环使用中文本地提交。
+
+#### 真实MinIO纠偏、r6复测与最终报告执行结果
+
+- 配置纠偏已由实物证据确认：旧进程命令同时含`--ai.storage.type=local`与`--ai.storage.type=minio`，r4三个源文件及三个`parsed/normalized.md`实际存在于`/tmp/ai-agent-rag-benchmark/object-storage/ai-agent-rag`，而当时公网MinIO只有`ai-agent-assets/ai-agent-skills`且无`ai-agent-rag`。因此r1/r2/r4只保留为真实HTTP/MySQL/Qdrant/Docling/模型服务、但本地对象存储的证据；没有冒充MinIO性能轮。
+- 以同一commit `eef28f1`、App JAR=`e6335927080af2a6e9aebbe2b27c18eaa5e77f89cd6ab059a7872c698c154043`重启隔离进程，启动参数只保留一个`--ai.storage.type=minio`。r5业务链15/15通过、0降级，MinIO/MySQL/Qdrant一致性全通过；但资源采样每次新建SSH，首轮只有1个远端样本，结束快照又因SSH超时由人工重试补取，所以r5只用于功能与对象一致性，不用于远端资源峰值。
+- 资源采样器改为一个受控SSH ControlMaster复用连接，退出时用同一连接抓取最终容器状态并关闭socket；独立后台探针获得2个远端/5个本地样本、前后8容器一致且无残留control socket。第一次r6启动在SSH master首次连接超时，业务未开始，保留为`format-e2e-r6-attempt1-evidence`；新增三次重试后使用新目录正式执行。
+- 正式r6=`format-e2e-r6-eef28f1-minio-resources`：Markdown/DOCX/PDF固定问题各5条，共15/15通过，0 error/degraded，三项task均attempt=1。摄取耗时分别3056/6094/37597ms；Docling真实HTTP事件为DOCX 2166ms、PDF 34163ms，说明PDF解析占全摄取约90.9%。查询15条transport p50/p95/max=2333/4588/4588ms，Rerank阶段=1909/4142/4142ms。
+- r6三端一致性：MinIO原件和解析产物均存在且字节/hash与数据库一致；Markdown/DOCX/PDF child块=5/6/6、Qdrant精确点数=5/6/6、数据库逻辑块数相同，物理父子行=10/12/12。页数字段三个格式仍为0；报告明确解释为“页级元数据未知/未闭环”，没有解释成0页。
+- r6资源证据为21个远端样本、46个Java样本；峰值CPU：Docling 461.93%、Reranker 408.24%、Embedding 359.77%、MySQL 46.46%、Qdrant 19.06%；内存限额占比峰值分别47.88%/67.79%/64.38%/52.34%/3.61%。Java峰值14.9% CPU、566608KiB RSS、85线程；前后8容器均restart=0、OOM=false、状态不变。evidence manifest=`cde0c53ec2c9787bb8d6769fd02dde55e76e45e6bd7b727563440da8104b5e24`，存储一致性=`2672de1d2c47f591788c986821551a84b26d6747fbcfbf0f29f171745e2d48dc`。
+- 将原来仅在`/tmp`的正式质量r11、稳定性能r1/r2和并发4门禁失败原始JSON/JSONL/资源证据机械复制到项目`docs/rag/evaluation-results/`，文件字节和SHA未改变；最终报告不再依赖易失临时目录。并发4原始失败仍为queryId=1024、Hybrid+Rerank、HTTP 200、67190ms、`rerank_fallback`，远端Reranker CPU峰值566.50%，未把该失败run计算成稳定分位数。
+- 新增`build-rag-final-report.py`，对1200条质量run、独立复分、80条内部诊断、320条稳定measured、并发4失败、r6三格式与资源/存储manifest做数量、状态、variant和SHA门禁，再生成机器总账与中文报告。报告明确给出负面结论：Dense的Recall/MRR/nDCG/MAP四项均高于当前Hybrid+Rerank；Rerank只在Hybrid内部改善排序且有67 gain/29 harm；没有把“组件更多”写成必然更好。
+- 最终报告展示5类代表失败的完整问题、Gold截断摘要、实际前三条非Gold截断摘要、终态与内部首个失效、内部Gold分数轨迹、直接事实、可证伪推断、替代解释和复证实验；另链接21个代表case附件，其中包含全部Gold摘要、各case前三条非Gold摘要和各变体Top10文档ID。没有把前三条摘要误称为“错误Top10全文”。45个persistent miss与17个fusion threshold/TopK首个完全损失均按原始口径保留。
+- 独立target终审先发现并发边界把199条measured误写成259、Sparse“敏感/不敏感”语义反转、persistent miss已在raw Top100并集失效却仍推断Top10/Rerank、失败标签被误写成互斥分布、无答案三份响应未进hash总账等问题。已逐项修复：最终写明199=80+80+39 measured，259只属于含warmup的全部原始记录；标签表给出可重叠布尔语义；persistent case排除末端步骤作为首因；Rerank harm展示同请求Gold 1→5与score；三份`format-na1.json`加入证据SHA。
+- 修复后报告再次在两个全新临时目录独立生成，JSON与Markdown两两`cmp`相同，并与正式目录字节相同；最终Markdown SHA-256=`be08c7be1f32a6c8d9089687789d70ceeb2b6becabdde8cc52d1eb3d4d2acd46`，机器总账=`d7fa0d3a86bdd5efad01275acce9a688f4f134789642a4f33a15af71e27f6894`。生成器另通过`py_compile`、关键字段`jq -e`和所有输入hash门禁。
+- Java 17发布门禁：全部文件名匹配RAG测试176/176通过，0 failure/error/skipped；benchmark独立`clean test package`为50/50通过；全reactor`mvn -DskipTests package` BUILD SUCCESS。当前重新打包App JAR=`d7c6b83122a780a1c948540730fe02852179b21bca309c26e7f11cb3b92829bd`、benchmark CLI=`57238691e2ed9a6217775216d0f3fcd5377d9366d30ba7ff1a9164ec7e2de957`；r6真实请求仍严格归属其manifest记录的旧App JAR，未用新hash反写测试环境。
+- 未完成项继续明确：SciFact无gold answer，未测Faithfulness/Answer Correctness；三格式只是一份小文件、单Worker/线程；无答案探针仍返回5～6个候选，Agent是否正确拒答未做最终LLM黑盒；页码元数据未闭环；fusion threshold与TopK仍无法拆分。这些均列在报告限制与复测门槛中。

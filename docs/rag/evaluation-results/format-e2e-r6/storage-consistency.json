@@ -1,0 +1,138 @@
+{
+  "capturedAt": "2026-07-19T22:39:34.132717Z",
+  "collection": "ai_agent_rag_benchmark_v1",
+  "passed": true,
+  "results": [
+    {
+      "checks": {
+        "childAndDistinctVectorPointCountMatch": true,
+        "mysqlAndQdrantCountMatch": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_4d36a877156843a0ad616dd917d8a6dd",
+      "format": "docx",
+      "minio": {
+        "parsed": {
+          "bytes": 1428,
+          "exists": true,
+          "sha256": "c1af4a1e51bb1a8060cb126110596e63d287224845d90159661ff69a280f4b2b"
+        },
+        "source": {
+          "bytes": 10605,
+          "exists": true,
+          "sha256": "6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52"
+        }
+      },
+      "mysql": {
+        "characterCount": 1428,
+        "childChunkRows": 6,
+        "distinctVectorPointIds": 6,
+        "documentChunkCount": 6,
+        "documentPageCount": 0,
+        "pageCount": 0,
+        "physicalChunkRows": 12,
+        "versionChunkCount": 6
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 6
+      },
+      "status": "ready",
+      "tenantId": "tenant_873ed06b-f39e-43ae-95bc-d9a74786c595",
+      "versionId": "ragver_da171b3a7b2d4f45b67bafc72791430c"
+    },
+    {
+      "checks": {
+        "childAndDistinctVectorPointCountMatch": true,
+        "mysqlAndQdrantCountMatch": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_73f77c0fdfaa43428f585d01ea25cd9e",
+      "format": "markdown",
+      "minio": {
+        "parsed": {
+          "bytes": 1232,
+          "exists": true,
+          "sha256": "a7183cdf343754c54a569a8e64b135dd55528e767973256383cafc57a56d898d"
+        },
+        "source": {
+          "bytes": 1233,
+          "exists": true,
+          "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+        }
+      },
+      "mysql": {
+        "characterCount": 1232,
+        "childChunkRows": 5,
+        "distinctVectorPointIds": 5,
+        "documentChunkCount": 5,
+        "documentPageCount": 0,
+        "pageCount": 0,
+        "physicalChunkRows": 10,
+        "versionChunkCount": 5
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 5
+      },
+      "status": "ready",
+      "tenantId": "tenant_873ed06b-f39e-43ae-95bc-d9a74786c595",
+      "versionId": "ragver_6c973d9c267c4c83840f375830b79e0c"
+    },
+    {
+      "checks": {
+        "childAndDistinctVectorPointCountMatch": true,
+        "mysqlAndQdrantCountMatch": true,
+        "parsedHashMatches": true,
+        "parsedSizeMatches": true,
+        "ready": true,
+        "sourceHashMatches": true,
+        "sourceSizeMatches": true,
+        "versionAndDocumentChunkCountMatch": true
+      },
+      "documentId": "doc_6adf7edb013a41e688d1d0fb66bff9f3",
+      "format": "pdf",
+      "minio": {
+        "parsed": {
+          "bytes": 1375,
+          "exists": true,
+          "sha256": "8bc95d8da17ef9f1c8344735c46226b2d65488f80a7a13cb452ef480c96dc929"
+        },
+        "source": {
+          "bytes": 4180,
+          "exists": true,
+          "sha256": "5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448"
+        }
+      },
+      "mysql": {
+        "characterCount": 1375,
+        "childChunkRows": 6,
+        "distinctVectorPointIds": 6,
+        "documentChunkCount": 6,
+        "documentPageCount": 0,
+        "pageCount": 0,
+        "physicalChunkRows": 12,
+        "versionChunkCount": 6
+      },
+      "passed": true,
+      "qdrant": {
+        "exactPointCount": 6
+      },
+      "status": "ready",
+      "tenantId": "tenant_873ed06b-f39e-43ae-95bc-d9a74786c595",
+      "versionId": "ragver_21156caa3edd42f089aa8b3e5505d448"
+    }
+  ],
+  "runId": "format-e2e-r6-eef28f1-minio-resources",
+  "schemaVersion": 1
+}

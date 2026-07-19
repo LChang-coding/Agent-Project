@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicated": false,
+      "documentId": "doc_5e0a562264e5473487ecb446dd6e87e3",
+      "fileName": "format-fidelity.pdf",
+      "sizeBytes": 4180,
+      "status": "queued",
+      "taskId": "ragtask_7a1e466dee384552b60da8d646509e04",
+      "versionId": "ragver_78d5551ab47b4380842076b8ee08de5a"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 11,
+    "httpStatus": 200,
+    "requestBytes": 4180,
+    "responseBytes": 287
+  }
+}

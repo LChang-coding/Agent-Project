@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-19T22:39:18Z",
+  "runId": "format-e2e-r6-eef28f1-minio-resources",
+  "runExitCode": 0,
+  "files": [
+    {
+      "name": "local-process.jsonl",
+      "sha256": "1b01101f0ab910898698503f898b9e382e2636b0386b7868266a43ea14090624",
+      "bytes": 8098
+    },
+    {
+      "name": "remote-containers.jsonl",
+      "sha256": "dbb9b9da98f52a68d8e17e4165b4b97575581f27957303cda740bb132fef2875",
+      "bytes": 34845
+    },
+    {
+      "name": "remote-inspect-before.txt",
+      "sha256": "7442fc5777318c16e5204595a184f373e23079de8a421bd9185a5eff1b1ee41a",
+      "bytes": 632
+    },
+    {
+      "name": "remote-inspect-after.txt",
+      "sha256": "97defe5c448012a52c5886806c98aa0c9f94cadb4d330d7ac0f1b81566d4e6dd",
+      "bytes": 632
+    }
+  ]
+}

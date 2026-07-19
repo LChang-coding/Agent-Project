@@ -21,17 +21,44 @@ if [[ -e "$OUTPUT_DIR" ]]; then
 fi
 mkdir -p "$OUTPUT_DIR"
 
+SSH_CONTROL_PATH="/tmp/rag-resource-ssh-$$.sock"
+SSH_OPTIONS=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -S "$SSH_CONTROL_PATH")
+
+close_ssh_master() {
+  ssh -S "$SSH_CONTROL_PATH" -O exit RAG-Server >/dev/null 2>&1 || true
+  rm -f "$SSH_CONTROL_PATH"
+}
+trap close_ssh_master EXIT INT TERM
+master_ready=false
+for attempt in 1 2 3; do
+  if ssh -M -o ControlPersist=no "${SSH_OPTIONS[@]}" -fN RAG-Server; then
+    master_ready=true
+    break
+  fi
+  printf 'SSH control master attempt %d of 3 failed\n' "$attempt" >&2
+  sleep 2
+done
+if [[ "$master_ready" != "true" ]]; then
+  printf 'SSH control master did not become ready after 3 attempts\n' >&2
+  exit 1
+fi
+
+capture_remote_inspect() {
+  local target_path="$1"
+  local temporary_path="$target_path.tmp"
+  {
+    date -u +%Y-%m-%dT%H:%M:%SZ
+    ssh "${SSH_OPTIONS[@]}" RAG-Server \
+      "docker inspect --format '{{.Name}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}not_configured{{end}}|{{.Config.Image}}' \
+        rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter" </dev/null
+  } >"$temporary_path"
+  mv "$temporary_path" "$target_path"
+}
+
 inspect_path="$OUTPUT_DIR/remote-inspect-before.txt"
-inspect_temporary="$inspect_path.tmp"
 inspect_captured=false
 for attempt in 1 2 3; do
-  if {
-    date -u +%Y-%m-%dT%H:%M:%SZ
-    ssh -o BatchMode=yes -o ConnectTimeout=10 RAG-Server \
-      "docker inspect --format '{{.Name}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}not_configured{{end}}|{{.Config.Image}}' \
-        rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter"
-  } >"$inspect_temporary"; then
-    mv "$inspect_temporary" "$inspect_path"
+  if capture_remote_inspect "$inspect_path"; then
     inspect_captured=true
     break
   fi
@@ -60,11 +87,13 @@ local_sampler() {
 }
 
 remote_sampler() {
-  ssh -o BatchMode=yes -o ConnectTimeout=10 RAG-Server \
-    "while true; do docker stats --no-stream --format '{{json .}}' \
-      rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter \
-      | jq -sc --arg ts \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" '{capturedAt:\$ts,containers:.}'; \
-      sleep '$INTERVAL_SECONDS'; done"
+  while kill -0 "$APP_PID" 2>/dev/null; do
+    ssh "${SSH_OPTIONS[@]}" RAG-Server \
+      "docker stats --no-stream --format '{{json .}}' \
+        rag-mysql rag-prometheus rag-model-gateway rag-embedding rag-docling rag-reranker rag-qdrant rag-node-exporter \
+        | jq -sc --arg ts \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" '{capturedAt:\$ts,containers:.}'" </dev/null || true
+    sleep "$INTERVAL_SECONDS"
+  done
 }
 
 local_sampler >"$OUTPUT_DIR/local-process.jsonl" &
@@ -76,6 +105,8 @@ shutdown() {
   trap - EXIT INT TERM
   kill "$local_pid" "$remote_pid" 2>/dev/null || true
   wait "$local_pid" "$remote_pid" 2>/dev/null || true
+  capture_remote_inspect "$OUTPUT_DIR/remote-inspect-after.txt" || true
+  close_ssh_master
 }
 trap shutdown EXIT INT TERM
 wait "$local_pid" "$remote_pid"

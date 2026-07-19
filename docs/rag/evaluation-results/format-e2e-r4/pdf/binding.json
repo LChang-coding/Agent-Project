@@ -1,0 +1,22 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "bindingId": "binding_ace34b8aca364c8eb6f8635abd3d5cab",
+      "knowledgeBaseId": "kb_0e8faa9fe3b843a5be3a59e75d8ee4d8",
+      "maxTokens": 4096,
+      "priority": 100,
+      "profileId": "profile_5737cea8d2c14a55b33c59a87d5651f5",
+      "required": true,
+      "revision": 0,
+      "targetId": "format_format-e2e-r4-eef28f1_pdf",
+      "targetType": "workflow"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 7,
+    "httpStatus": 200,
+    "responseBytes": 337
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "answerMetrics": "retrieval_evidence_term_coverage_only; no LLM answer judge",
+  "appJarSha256": "e6335927080af2a6e9aebbe2b27c18eaa5e77f89cd6ab059a7872c698c154043",
+  "baseUrl": "http://127.0.0.1:8092/api",
+  "cleanup": "keep synthetic tenant for audit",
+  "codeRevision": "eef28f1674ce1543d999bdc4c71a8eac80c9804e",
+  "finishedAt": "2026-07-19T22:23:14.787497Z",
+  "fixtureFiles": {
+    "docx": {
+      "bytes": 10605,
+      "file": "format-fidelity.docx",
+      "sha256": "6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52"
+    },
+    "markdown": {
+      "bytes": 1233,
+      "file": "format-fidelity.md",
+      "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+    },
+    "pdf": {
+      "bytes": 4180,
+      "file": "format-fidelity.pdf",
+      "sha256": "5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448"
+    }
+  },
+  "fixtureSpecSha256": "2d55a3baa532bded0b9b67e95afe15219da5f8b227eb57cfa12e1d2620753ad8",
+  "formatResults": {
+    "docx": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_71b898ea35b44cd3b8d01563e89e4942",
+      "documentId": "doc_50f4c953ded64d7da238efaa708efbda",
+      "ingestElapsedMs": 7117,
+      "knowledgeBaseId": "kb_6404827a5c1c4e02a173869d95caea56",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_50f4c953ded64d7da238efaa708efbda",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_6404827a5c1c4e02a173869d95caea56",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 6,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_8c568e4fe3ef43c09a562e7a5eb7ea0b",
+        "totalChunks": 6,
+        "versionId": "ragver_71b898ea35b44cd3b8d01563e89e4942"
+      },
+      "taskId": "ragtask_8c568e4fe3ef43c09a562e7a5eb7ea0b",
+      "totalQueries": 5
+    },
+    "markdown": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_0d7c8392a34f4a75be8696f134e89e27",
+      "documentId": "doc_62c3ff446b83440caac30d610a87864e",
+      "ingestElapsedMs": 5106,
+      "knowledgeBaseId": "kb_c89e9a0b6c2b4fa9964e4c8ee4c04eec",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_62c3ff446b83440caac30d610a87864e",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_c89e9a0b6c2b4fa9964e4c8ee4c04eec",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 5,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_3d8049cc6092434d83262eac8488b018",
+        "totalChunks": 5,
+        "versionId": "ragver_0d7c8392a34f4a75be8696f134e89e27"
+      },
+      "taskId": "ragtask_3d8049cc6092434d83262eac8488b018",
+      "totalQueries": 5
+    },
+    "pdf": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_015082ebfde94918b307c750eef262dd",
+      "documentId": "doc_176557c6991d4a838bde660cb2788c61",
+      "ingestElapsedMs": 40662,
+      "knowledgeBaseId": "kb_0e8faa9fe3b843a5be3a59e75d8ee4d8",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_176557c6991d4a838bde660cb2788c61",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_0e8faa9fe3b843a5be3a59e75d8ee4d8",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 6,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_7baad6aeda134370a91334ce9546d2fa",
+        "totalChunks": 6,
+        "versionId": "ragver_015082ebfde94918b307c750eef262dd"
+      },
+      "taskId": "ragtask_7baad6aeda134370a91334ce9546d2fa",
+      "totalQueries": 5
+    }
+  },
+  "ingestTimeoutSeconds": 900,
+  "noAnswerQuestionCountPerFormat": 1,
+  "queryThreads": 1,
+  "questionCountPerFormat": 5,
+  "requestTimeoutSeconds": 180,
+  "retrievalEvidencePassed": 15,
+  "retrievalEvidenceTotal": 15,
+  "runId": "format-e2e-r4-eef28f1",
+  "schemaVersion": 1,
+  "startedAt": "2026-07-19T22:21:07.154684Z",
+  "status": "completed",
+  "syntheticUsername": "rag_format_1784499667-2dc69b",
+  "uploadThreads": 1,
+  "workerThreads": 1
+}

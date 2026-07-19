@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "currentGeneration": 0,
+      "description": "Synthetic pdf parser fidelity fixture",
+      "embeddingDimension": 768,
+      "knowledgeBaseId": "kb_c86a479a66b24792bca2b7ece4ac9251",
+      "name": "format_format-e2e-r2-c9adf64_pdf",
+      "revision": 0,
+      "status": "active",
+      "visibility": "tenant"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 5,
+    "httpStatus": 200,
+    "responseBytes": 292
+  }
+}

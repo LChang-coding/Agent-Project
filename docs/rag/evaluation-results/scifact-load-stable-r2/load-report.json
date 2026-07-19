@@ -1,0 +1,1130 @@
+{
+  "schemaVersion" : 1,
+  "runId" : "scifact-load-stable-r2-48f9099",
+  "percentileMethod" : "nearest-rank",
+  "loadModel" : "closed-loop-fixed-request-count",
+  "coordinatedOmissionWarning" : "closed-loop结果不代表open-loop到达率过载表现",
+  "serverResourceEvidence" : "/tmp/rag-load-stable-r2-48f9099-evidence/evidence-manifest.json",
+  "levels" : {
+    "2" : {
+      "concurrency" : 2,
+      "requestCount" : 80,
+      "attemptCount" : 80,
+      "successCount" : 80,
+      "elapsedMs" : 214722,
+      "throughputRequestsPerSecond" : 0.372574771099375,
+      "attemptThroughputRequestsPerSecond" : 0.372574771099375,
+      "successThroughputRequestsPerSecond" : 0.372574771099375,
+      "variants" : {
+        "hybrid_rrf_rerank" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 18949.1,
+            "p50" : 18210,
+            "p95" : 28004,
+            "p99" : 28663,
+            "max" : 28663
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 18949.1,
+            "p50" : 18210,
+            "p95" : 28004,
+            "p99" : 28663,
+            "max" : 28663
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 18949.1,
+            "p50" : 18210,
+            "p95" : 28004,
+            "p99" : 28663,
+            "max" : 28663
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.2,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 7,
+              "max" : 7
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.3,
+              "p50" : 5,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 344.45,
+              "p50" : 251,
+              "p95" : 763,
+              "p99" : 793,
+              "max" : 793
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 0.95,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 1,
+              "max" : 1
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 18936.35,
+              "p50" : 18195,
+              "p95" : 27990,
+              "p99" : 28656,
+              "max" : 28656
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 17864.35,
+              "p50" : 17312,
+              "p95" : 27300,
+              "p99" : 27519,
+              "max" : 27519
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 396.35,
+              "p50" : 280,
+              "p95" : 947,
+              "p99" : 1094,
+              "max" : 1094
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 315.8,
+              "p50" : 281,
+              "p95" : 555,
+              "p99" : 571,
+              "max" : 571
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 4.55,
+              "p50" : 5,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 18943.8,
+              "p50" : 18203,
+              "p95" : 27999,
+              "p99" : 28660,
+              "max" : 28660
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 6.8,
+              "p50" : 7,
+              "p95" : 9,
+              "p99" : 9,
+              "max" : 9
+            }
+          },
+          "observedDominantLatencyComponent" : "rerankMs"
+        },
+        "hybrid_rrf" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 894.9,
+            "p50" : 844,
+            "p95" : 1219,
+            "p99" : 1280,
+            "max" : 1280
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 894.9,
+            "p50" : 844,
+            "p95" : 1219,
+            "p99" : 1280,
+            "max" : 1280
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 894.9,
+            "p50" : 844,
+            "p95" : 1219,
+            "p99" : 1280,
+            "max" : 1280
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.3,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.6,
+              "p50" : 5,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 247.45,
+              "p50" : 226,
+              "p95" : 392,
+              "p99" : 420,
+              "max" : 420
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 1.05,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 2,
+              "max" : 2
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 881.7,
+              "p50" : 825,
+              "p95" : 1207,
+              "p99" : 1266,
+              "max" : 1266
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 310.6,
+              "p50" : 308,
+              "p95" : 544,
+              "p99" : 558,
+              "max" : 558
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 309.45,
+              "p50" : 276,
+              "p95" : 545,
+              "p99" : 563,
+              "max" : 563
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 3.85,
+              "p50" : 3,
+              "p95" : 7,
+              "p99" : 11,
+              "max" : 11
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 889.3,
+              "p50" : 836,
+              "p95" : 1213,
+              "p99" : 1274,
+              "max" : 1274
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 7.0,
+              "p50" : 7,
+              "p95" : 9,
+              "p99" : 10,
+              "max" : 10
+            }
+          },
+          "observedDominantLatencyComponent" : "embeddingMs"
+        },
+        "sparse" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 317.35,
+            "p50" : 257,
+            "p95" : 540,
+            "p99" : 570,
+            "max" : 570
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 317.35,
+            "p50" : 257,
+            "p95" : 540,
+            "p99" : 570,
+            "max" : 570
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 317.35,
+            "p50" : 257,
+            "p95" : 540,
+            "p99" : 570,
+            "max" : 570
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.05,
+              "p50" : 7,
+              "p95" : 9,
+              "p99" : 9,
+              "max" : 9
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.15,
+              "p50" : 5,
+              "p95" : 7,
+              "p99" : 9,
+              "max" : 9
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 294.45,
+              "p50" : 228,
+              "p95" : 516,
+              "p99" : 543,
+              "max" : 543
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 0.95,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 1,
+              "max" : 1
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 305.9,
+              "p50" : 243,
+              "p95" : 530,
+              "p99" : 557,
+              "max" : 557
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 2.65,
+              "p50" : 2,
+              "p95" : 5,
+              "p99" : 6,
+              "max" : 6
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 312.2,
+              "p50" : 250,
+              "p95" : 536,
+              "p99" : 565,
+              "max" : 565
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 5.65,
+              "p50" : 5,
+              "p95" : 10,
+              "p99" : 11,
+              "max" : 11
+            }
+          },
+          "observedDominantLatencyComponent" : "sparseMs"
+        },
+        "dense" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 643.2,
+            "p50" : 572,
+            "p95" : 1241,
+            "p99" : 1259,
+            "max" : 1259
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 643.2,
+            "p50" : 572,
+            "p95" : 1241,
+            "p99" : 1259,
+            "max" : 1259
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 643.2,
+            "p50" : 572,
+            "p95" : 1241,
+            "p99" : 1259,
+            "max" : 1259
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.45,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.6,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 1.05,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 3,
+              "max" : 3
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 630.25,
+              "p50" : 554,
+              "p95" : 1232,
+              "p99" : 1245,
+              "max" : 1245
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 319.6,
+              "p50" : 223,
+              "p95" : 743,
+              "p99" : 793,
+              "max" : 793
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 298.1,
+              "p50" : 251,
+              "p95" : 441,
+              "p99" : 667,
+              "max" : 667
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 2.85,
+              "p50" : 3,
+              "p95" : 5,
+              "p99" : 5,
+              "max" : 5
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 637.6,
+              "p50" : 564,
+              "p95" : 1236,
+              "p99" : 1253,
+              "max" : 1253
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 6.6,
+              "p50" : 6,
+              "p95" : 10,
+              "p99" : 12,
+              "max" : 12
+            }
+          },
+          "observedDominantLatencyComponent" : "embeddingMs"
+        }
+      }
+    },
+    "1" : {
+      "concurrency" : 1,
+      "requestCount" : 80,
+      "attemptCount" : 80,
+      "successCount" : 80,
+      "elapsedMs" : 266314,
+      "throughputRequestsPerSecond" : 0.3003972753967121,
+      "attemptThroughputRequestsPerSecond" : 0.3003972753967121,
+      "successThroughputRequestsPerSecond" : 0.3003972753967121,
+      "variants" : {
+        "hybrid_rrf_rerank" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 11345.05,
+            "p50" : 10966,
+            "p95" : 15169,
+            "p99" : 16263,
+            "max" : 16263
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 11345.05,
+            "p50" : 10966,
+            "p95" : 15169,
+            "p99" : 16263,
+            "max" : 16263
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 11345.05,
+            "p50" : 10966,
+            "p95" : 15169,
+            "p99" : 16263,
+            "max" : 16263
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.15,
+              "p50" : 6,
+              "p95" : 9,
+              "p99" : 9,
+              "max" : 9
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 6.35,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 15,
+              "max" : 15
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 261.0,
+              "p50" : 227,
+              "p95" : 377,
+              "p99" : 642,
+              "max" : 642
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 1.0,
+              "p50" : 1,
+              "p95" : 2,
+              "p99" : 2,
+              "max" : 2
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 11331.35,
+              "p50" : 10954,
+              "p95" : 15154,
+              "p99" : 16247,
+              "max" : 16247
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 10271.4,
+              "p50" : 10150,
+              "p95" : 14351,
+              "p99" : 14897,
+              "max" : 14897
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 434.9,
+              "p50" : 234,
+              "p95" : 979,
+              "p99" : 1208,
+              "max" : 1208
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 348.0,
+              "p50" : 317,
+              "p95" : 534,
+              "p99" : 534,
+              "max" : 534
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 4.9,
+              "p50" : 5,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 11338.7,
+              "p50" : 10960,
+              "p95" : 15163,
+              "p99" : 16257,
+              "max" : 16257
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 6.75,
+              "p50" : 7,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            }
+          },
+          "observedDominantLatencyComponent" : "rerankMs"
+        },
+        "hybrid_rrf" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 1116.7,
+            "p50" : 1030,
+            "p95" : 1808,
+            "p99" : 1858,
+            "max" : 1858
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 1116.7,
+            "p50" : 1030,
+            "p95" : 1808,
+            "p99" : 1858,
+            "max" : 1858
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 1116.7,
+            "p50" : 1030,
+            "p95" : 1808,
+            "p99" : 1858,
+            "max" : 1858
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 5.7,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.4,
+              "p50" : 5,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 308.75,
+              "p50" : 219,
+              "p95" : 639,
+              "p99" : 792,
+              "max" : 792
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 1.15,
+              "p50" : 1,
+              "p95" : 2,
+              "p99" : 4,
+              "max" : 4
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 1105.25,
+              "p50" : 1021,
+              "p95" : 1799,
+              "p99" : 1845,
+              "max" : 1845
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 385.85,
+              "p50" : 335,
+              "p95" : 869,
+              "p99" : 895,
+              "max" : 895
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 396.45,
+              "p50" : 339,
+              "p95" : 684,
+              "p99" : 813,
+              "max" : 813
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 4.05,
+              "p50" : 4,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 1111.3,
+              "p50" : 1026,
+              "p95" : 1802,
+              "p99" : 1852,
+              "max" : 1852
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 5.4,
+              "p50" : 5,
+              "p95" : 9,
+              "p99" : 9,
+              "max" : 9
+            }
+          },
+          "observedDominantLatencyComponent" : "denseMs"
+        },
+        "sparse" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 289.0,
+            "p50" : 242,
+            "p95" : 435,
+            "p99" : 707,
+            "max" : 707
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 289.0,
+            "p50" : 242,
+            "p95" : 435,
+            "p99" : 707,
+            "max" : 707
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 289.0,
+            "p50" : 242,
+            "p95" : 435,
+            "p99" : 707,
+            "max" : 707
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 5.3,
+              "p50" : 5,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.15,
+              "p50" : 4,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 266.15,
+              "p50" : 221,
+              "p95" : 413,
+              "p99" : 686,
+              "max" : 686
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 1.05,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 3,
+              "max" : 3
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 277.6,
+              "p50" : 231,
+              "p95" : 427,
+              "p99" : 696,
+              "max" : 696
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 3.15,
+              "p50" : 2,
+              "p95" : 7,
+              "p99" : 9,
+              "max" : 9
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 283.85,
+              "p50" : 238,
+              "p95" : 431,
+              "p99" : 703,
+              "max" : 703
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 5.65,
+              "p50" : 6,
+              "p95" : 9,
+              "p99" : 10,
+              "max" : 10
+            }
+          },
+          "observedDominantLatencyComponent" : "sparseMs"
+        },
+        "dense" : {
+          "requestCount" : 20,
+          "attemptCount" : 20,
+          "successCount" : 20,
+          "errorCount" : 0,
+          "errorCodeCounts" : { },
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "successfulEmptyCount" : 0,
+          "successfulEmptyRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 20,
+            "mean" : 562.85,
+            "p50" : 500,
+            "p95" : 828,
+            "p99" : 875,
+            "max" : 875
+          },
+          "allAttemptElapsedMs" : {
+            "count" : 20,
+            "mean" : 562.85,
+            "p50" : 500,
+            "p95" : 828,
+            "p99" : 875,
+            "max" : 875
+          },
+          "successOnlyElapsedMs" : {
+            "count" : 20,
+            "mean" : 562.85,
+            "p50" : 500,
+            "p95" : 828,
+            "p99" : 875,
+            "max" : 875
+          },
+          "stageTimingsMs" : {
+            "assemblyMs" : {
+              "count" : 20,
+              "mean" : 6.0,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "outsideReportedServiceMs" : {
+              "count" : 20,
+              "mean" : 5.25,
+              "p50" : 5,
+              "p95" : 6,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 20,
+              "mean" : 0.8,
+              "p50" : 1,
+              "p95" : 1,
+              "p99" : 1,
+              "max" : 1
+            },
+            "totalMs" : {
+              "count" : 20,
+              "mean" : 550.8,
+              "p50" : 485,
+              "p95" : 816,
+              "p99" : 867,
+              "max" : 867
+            },
+            "rerankMs" : {
+              "count" : 20,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 20,
+              "mean" : 245.2,
+              "p50" : 199,
+              "p95" : 395,
+              "p99" : 528,
+              "max" : 528
+            },
+            "denseMs" : {
+              "count" : 20,
+              "mean" : 292.55,
+              "p50" : 271,
+              "p95" : 471,
+              "p99" : 492,
+              "max" : 492
+            },
+            "hydrationMs" : {
+              "count" : 20,
+              "mean" : 3.95,
+              "p50" : 3,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "serviceMs" : {
+              "count" : 20,
+              "mean" : 557.6,
+              "p50" : 494,
+              "p95" : 823,
+              "p99" : 871,
+              "max" : 871
+            },
+            "auditMs" : {
+              "count" : 20,
+              "mean" : 5.85,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 10,
+              "max" : 10
+            }
+          },
+          "observedDominantLatencyComponent" : "denseMs"
+        }
+      }
+    }
+  }
+}

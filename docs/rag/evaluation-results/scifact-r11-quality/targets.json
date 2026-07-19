@@ -1,0 +1,10 @@
+{
+  "sourceSha256" : "70273080edaa9507a03c4cb9e14099505034349c4cdcc07e7cc12e1eccfe5ffd",
+  "schemaVersion" : 1,
+  "targets" : {
+    "dense" : "bench_scifact-quality-recover-dba0df8_dense",
+    "sparse" : "bench_scifact-quality-recover-dba0df8_sparse",
+    "hybrid_rrf" : "bench_scifact-quality-recover-dba0df8_hybrid_rrf",
+    "hybrid_rrf_rerank" : "bench_scifact-quality-recover-dba0df8_hybrid_rrf_rerank"
+  }
+}

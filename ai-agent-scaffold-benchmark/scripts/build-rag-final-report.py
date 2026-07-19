@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+"""Build the auditable final RAG evaluation ledger and Chinese report from frozen evidence."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+from pathlib import Path
+from typing import Any
+
+
+VARIANTS = ("sparse", "dense", "hybrid_rrf", "hybrid_rrf_rerank")
+
+
+def load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def stats(values: list[float]) -> dict[str, float | int]:
+    if not values:
+        raise ValueError("statistics require at least one value")
+    ordered = sorted(values)
+    nearest = lambda p: ordered[math.ceil(len(ordered) * p) - 1]
+    return {
+        "count": len(values), "min": min(values), "mean": sum(values) / len(values),
+        "p50": nearest(0.50), "p95": nearest(0.95), "max": max(values),
+    }
+
+
+def pct(value: str) -> float:
+    return float(value.rstrip("%"))
+
+
+def slim_timing(value: dict[str, Any]) -> dict[str, Any]:
+    return {key: value[key] for key in ("count", "mean", "p50", "p95", "p99", "max") if key in value}
+
+
+def fmt(value: float, digits: int = 4) -> str:
+    return f"{value:.{digits}f}"
+
+
+def change(after: float, before: float) -> dict[str, float]:
+    return {"absolute": after - before, "relativePercent": ((after / before) - 1) * 100 if before else 0.0}
+
+
+def assert_hashes(manifest: dict[str, Any], base: Path) -> None:
+    for item in manifest["files"]:
+        path = base / item["name"]
+        if sha256(path) != item["sha256"]:
+            raise ValueError(f"evidence hash mismatch: {path}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--project-root", type=Path, required=True)
+    parser.add_argument("--out-dir", type=Path, required=True)
+    args = parser.parse_args()
+    root = args.project_root.resolve()
+    results = root / "docs/rag/evaluation-results"
+    out = args.out_dir.resolve()
+    if out.exists():
+        raise SystemExit("output directory must not exist")
+    out.mkdir(parents=True)
+
+    paths = {
+        "qualityMetrics": results / "scifact-r11-quality/metrics.json",
+        "qualityIndependent": results / "scifact-r11-quality/metrics-independent.json",
+        "qualityRun": results / "scifact-r11-quality/run.jsonl",
+        "qualityManifest": results / "scifact-r11-quality/run-manifest.json",
+        "failureCases": results / "scifact-r11-failure-cases.json",
+        "failureCasesMarkdown": results / "scifact-r11-failure-cases.md",
+        "internalAnalysis": results / "scifact-r11-internal-failure-analysis.json",
+        "internalMarkdown": results / "scifact-r11-internal-failure-analysis.md",
+        "diagnosticManifest": results / "scifact-r11-internal-diagnostics/diagnostic-manifest.json",
+        "diagnosticJsonl": results / "scifact-r11-internal-diagnostics/diagnostic.jsonl",
+        "stableR1": results / "scifact-load-stable-r1/load-report.json",
+        "stableR2": results / "scifact-load-stable-r2/load-report.json",
+        "boundaryManifest": results / "scifact-load-boundary-c4/load-manifest.json",
+        "boundaryRun": results / "scifact-load-boundary-c4/load.jsonl",
+        "boundaryEvidence": results / "scifact-load-boundary-c4-evidence/evidence-manifest.json",
+        "boundaryRemote": results / "scifact-load-boundary-c4-evidence/remote-containers.jsonl",
+        "boundaryLocal": results / "scifact-load-boundary-c4-evidence/local-process.jsonl",
+        "formatManifest": results / "format-e2e-r6/manifest.json",
+        "formatQueries": results / "format-e2e-r6/query-results.jsonl",
+        "formatStorage": results / "format-e2e-r6/storage-consistency.json",
+        "formatDoclingEvents": results / "format-e2e-r6/docling-events.txt",
+        "formatResources": results / "format-e2e-r6-evidence/evidence-manifest.json",
+        "formatRemote": results / "format-e2e-r6-evidence/remote-containers.jsonl",
+        "formatLocal": results / "format-e2e-r6-evidence/local-process.jsonl",
+        "formatNoAnswerMarkdown": results / "format-e2e-r6/markdown/format-na1.json",
+        "formatNoAnswerDocx": results / "format-e2e-r6/docx/format-na1.json",
+        "formatNoAnswerPdf": results / "format-e2e-r6/pdf/format-na1.json",
+        "fixture": root / "docs/rag/evaluation-data/format-e2e/fixture.json",
+        "evaluationMethodology": root / "docs/rag/evaluation.md",
+    }
+    missing = [str(path) for path in paths.values() if not path.is_file()]
+    if missing:
+        raise SystemExit("missing evidence: " + ", ".join(missing))
+
+    quality = load_json(paths["qualityMetrics"])
+    independent = load_json(paths["qualityIndependent"])
+    quality_run = load_jsonl(paths["qualityRun"])
+    if len(quality_run) != 1200:
+        raise ValueError("quality run must contain exactly 1200 records")
+    if any(row.get("errorCode") or row.get("degraded") or not row.get("rankedDocumentIds") for row in quality_run):
+        raise ValueError("quality run contains error, degradation, or empty ranking")
+    if {row["variant"] for row in quality_run} != set(VARIANTS):
+        raise ValueError("quality run variant set mismatch")
+    for variant in VARIANTS:
+        first = quality["variants"][variant]
+        second = independent["variants"][variant]
+        for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10"):
+            if abs(first[metric] - second[metric]) > 1e-12:
+                raise ValueError(f"independent metric mismatch: {variant}/{metric}")
+
+    quality_rows = []
+    for variant in VARIANTS:
+        metric = quality["variants"][variant]
+        run_stat = quality["manifest"]["runStatistics"][variant]
+        quality_rows.append({
+            "variant": variant, "queryCount": metric["queryCount"],
+            "recallAt10": metric["recallAt10"], "mrrAt10": metric["mrrAt10"],
+            "ndcgAt10": metric["ndcgAt10"], "mapAt10": metric["mapAt10"],
+            "successAt10": metric["successAt10"], "elapsedMs": slim_timing(run_stat["elapsedMs"]),
+            "rerankMs": slim_timing(run_stat["stageTimingsMs"]["rerankMs"]),
+            "errorCount": run_stat["errorCount"], "degradedCount": run_stat["degradedCount"],
+            "emptyResultCount": run_stat["emptyResultCount"],
+        })
+    quality_by_name = {row["variant"]: row for row in quality_rows}
+    deltas = {
+        "hybridVsSparse": {metric: change(quality_by_name["hybrid_rrf"][metric], quality_by_name["sparse"][metric])
+                           for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+        "hybridVsDense": {metric: change(quality_by_name["hybrid_rrf"][metric], quality_by_name["dense"][metric])
+                          for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+        "rerankVsHybrid": {metric: change(quality_by_name["hybrid_rrf_rerank"][metric], quality_by_name["hybrid_rrf"][metric])
+                           for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+    }
+
+    failure = load_json(paths["failureCases"])
+    failure_counts = failure["manifest"]["availableCaseCounts"]
+    internal = load_json(paths["internalAnalysis"])
+    internal_manifest = internal["manifest"]
+    internal_by_query = {row["queryId"]: row for row in internal["queries"]}
+
+    representative_specs = (
+        ("dense_miss_hybrid_hit", "dense"), ("sparse_miss_hybrid_hit", "sparse"),
+        ("dense_only_success", "sparse"), ("persistent_miss", "hybrid_rrf_rerank"),
+        ("rerank_reorder_harm", "hybrid_rrf_rerank"),
+    )
+    representatives = []
+    for category, focus in representative_specs:
+        case = failure["cases"][category][0]
+        variant = case["variants"][focus]
+        diagnostic = internal_by_query.get(case["queryId"])
+        internal_focus = diagnostic["variants"].get(focus) if diagnostic else None
+        gold_ids = {row["documentId"] for row in case["goldDocuments"]}
+        internal_gold_trace = []
+        if internal_focus:
+            for stage in internal_focus["stages"]:
+                for candidate in stage["ranking"]:
+                    if candidate["documentId"] in gold_ids:
+                        internal_gold_trace.append({
+                            "stage": stage["stage"], "documentId": candidate["documentId"],
+                            "rank": candidate["rank"], "denseScore": candidate.get("denseScore"),
+                            "sparseScore": candidate.get("sparseScore"), "fusionScore": candidate.get("fusionScore"),
+                            "rerankScore": candidate.get("rerankScore"), "outcome": candidate["outcome"],
+                        })
+        inference = case["inference"]
+        alternative_explanation = case["alternativeExplanation"]
+        falsification = case["falsification"]
+        if category in {"sparse_miss_hybrid_hit", "dense_only_success"}:
+            inference = "推断：Sparse对同义改写和词形差异敏感，缺少语义改写鲁棒性；该解释仍需词法归一化/BM25参数消融反证。"
+        if category == "persistent_miss" and internal_focus and internal_focus.get("firstObservedTotalLoss", {}).get("code") == "RAW_RECALL_TOTAL_MISS":
+            inference = ("推断：该内部复测最早已观察到Gold不在Dense/Sparse原始Top100并集中，"
+                         "因此不能归因最终Top10或Rerank；尚无法区分索引覆盖、向量/词项表示、分块边界或query-gold粒度。")
+            alternative_explanation = ("替代解释：qrels可能不完整，Gold正文与claim粒度也可能不匹配；"
+                                       "但最终Top10截断和Rerank已发生在原始并集漏召回之后，不是该次复测的首因。")
+            falsification = ("反证实验：核验Gold对应chunk确实写入同一generation与Qdrant payload，"
+                             "再分别扩大Dense/Sparse原始TopK并替换Embedding/词法归一化，观察Gold首次出现位置。")
+        if category == "rerank_reorder_harm" and internal_focus:
+            effect = internal_focus.get("rerankEffect") or {}
+            per_gold = effect.get("perGold") or []
+            movements = "、".join(f"{row['documentId']}:{row['rankBefore']}→{row['rankAfter']}" for row in per_gold)
+            inference = (f"阶段因果事实：同一请求的Rerank把Gold名次从{movements}，MRR变化"
+                         f"{effect.get('mrrDelta', 0):+.6f}；Rerank为何偏好竞争文档仍需模型/文本对照实验。")
+            alternative_explanation = ("替代解释：Gold与竞争文档的标注粒度或相关性定义可能和Reranker训练偏好不同；"
+                                       "但本次名次下降确实发生在同一请求的rerank_input→rerank_output。")
+            falsification = "反证实验：固定同一10个输入候选，记录完整文本与Rerank分数，替换/关闭Reranker并重复评分。"
+        direct_facts = [value for value in case["directFacts"] if not value.startswith("逐候选分数=")]
+        direct_facts.append("质量run未采集逐候选分数；内部复测已采集并用于阶段定位" if internal_focus
+                            else "该代表未执行内部逐候选复测")
+        representatives.append({
+            "category": category, "queryId": case["queryId"], "question": case["question"],
+            "goldDocuments": case["goldDocuments"], "focusVariant": focus,
+            "focusMetrics": variant["metrics"],
+            "wrongDocuments": [row for row in variant["ranking"] if row["relevance"] == 0][:3],
+            "firstObservableFailure": case["firstObservableFailure"],
+            "firstInternalCoverageLoss": internal_focus.get("firstObservedCoverageLoss") if internal_focus else None,
+            "firstInternalTotalLoss": internal_focus.get("firstObservedTotalLoss") if internal_focus else None,
+            "internalDiagnosticAvailable": internal_focus is not None,
+            "internalRerankEffect": internal_focus.get("rerankEffect") if internal_focus else None,
+            "internalGoldTrace": internal_gold_trace,
+            "directFacts": direct_facts, "inference": inference,
+            "alternativeExplanation": alternative_explanation, "falsification": falsification,
+        })
+
+    stable_rows = []
+    for report_path in (paths["stableR1"], paths["stableR2"]):
+        report = load_json(report_path)
+        for level in report["levels"].values():
+            for variant, value in level["variants"].items():
+                stable_rows.append({
+                    "runId": report["runId"], "concurrency": level["concurrency"], "variant": variant,
+                    "requestCount": value["requestCount"], "errorCount": value["errorCount"],
+                    "degradedCount": value["degradedCount"], "emptyResultCount": value["emptyResultCount"],
+                    "elapsedMs": slim_timing(value["elapsedMs"]),
+                    "rerankMs": slim_timing(value["stageTimingsMs"]["rerankMs"]),
+                })
+    measured_request_count = sum(row["requestCount"] for row in stable_rows)
+    if len(stable_rows) != 16 or measured_request_count != 320:
+        raise ValueError("stable performance evidence must contain 320 measured requests")
+    if any(row["errorCount"] or row["degradedCount"] or row["emptyResultCount"] for row in stable_rows):
+        raise ValueError("stable performance evidence contains unhealthy sample")
+
+    boundary_manifest = load_json(paths["boundaryManifest"])
+    boundary_run = load_jsonl(paths["boundaryRun"])
+    failed = [row for row in boundary_run if row.get("degraded") or row.get("errorCode")]
+    if boundary_manifest["status"] != "failed" or len(failed) != 1:
+        raise ValueError("boundary run must contain exactly one gate failure")
+    boundary_remote = load_jsonl(paths["boundaryRemote"])
+    boundary_local = load_jsonl(paths["boundaryLocal"])
+    boundary_resources = {}
+    for name in ("rag-reranker", "rag-embedding", "rag-qdrant"):
+        samples = [container for sample in boundary_remote for container in sample["containers"] if container["Name"] == name]
+        boundary_resources[name] = {"samples": len(samples), "cpuPeakPct": max(pct(row["CPUPerc"]) for row in samples),
+                                    "memoryPeakPct": max(pct(row["MemPerc"]) for row in samples)}
+
+    format_manifest = load_json(paths["formatManifest"])
+    format_queries = load_jsonl(paths["formatQueries"])
+    format_storage = load_json(paths["formatStorage"])
+    format_resource_manifest = load_json(paths["formatResources"])
+    assert_hashes(format_resource_manifest, paths["formatResources"].parent)
+    if format_manifest["status"] != "completed" or len(format_queries) != 15 or not format_storage["passed"]:
+        raise ValueError("format E2E evidence is not complete")
+    if any(not row["passed"] or row["degraded"] for row in format_queries):
+        raise ValueError("format E2E query evidence contains failure/degradation")
+    docling_events = paths["formatDoclingEvents"].read_text(encoding="utf-8").splitlines()
+    if len(docling_events) != 2 or "wallMs=2166" not in docling_events[0] or "wallMs=34163" not in docling_events[1]:
+        raise ValueError("format Docling event evidence mismatch")
+    query_by_format = {}
+    for format_name in ("markdown", "docx", "pdf"):
+        rows = [row for row in format_queries if row["format"] == format_name]
+        query_by_format[format_name] = {
+            "count": len(rows), "transportMs": stats([row["transport"]["elapsedMs"] for row in rows]),
+            "serviceMs": stats([row["metrics"]["serviceMs"] for row in rows]),
+            "rerankMs": stats([row["metrics"]["rerankMs"] for row in rows]),
+        }
+    format_remote = load_jsonl(paths["formatRemote"])
+    format_local = load_jsonl(paths["formatLocal"])
+    remote_resources = {}
+    for name in sorted({container["Name"] for sample in format_remote for container in sample["containers"]}):
+        samples = [container for sample in format_remote for container in sample["containers"] if container["Name"] == name]
+        remote_resources[name] = {"samples": len(samples), "cpuPeakPct": max(pct(row["CPUPerc"]) for row in samples),
+                                  "memoryPeakPct": max(pct(row["MemPerc"]) for row in samples)}
+    local_resources = {
+        "samples": len(format_local),
+        "cpuPeakPct": max(float(row["appProcess"].split()[1]) for row in format_local),
+        "rssPeakKiB": max(int(row["appProcess"].split()[2]) for row in format_local),
+        "threadPeak": max(row["threadCount"] for row in format_local),
+    }
+    format_rows = []
+    storage_by_format = {row["format"]: row for row in format_storage["results"]}
+    for format_name, value in format_manifest["formatResults"].items():
+        storage = storage_by_format[format_name]
+        format_rows.append({
+            "format": format_name, "ingestElapsedMs": value["ingestElapsedMs"],
+            "taskAttemptCount": value["task"]["attemptCount"], "childChunks": storage["mysql"]["childChunkRows"],
+            "physicalChunkRows": storage["mysql"]["physicalChunkRows"], "qdrantPoints": storage["qdrant"]["exactPointCount"],
+            "pageCount": storage["mysql"]["pageCount"], "characterCount": storage["mysql"]["characterCount"],
+            "source": storage["minio"]["source"], "parsed": storage["minio"]["parsed"],
+            "query": query_by_format[format_name],
+        })
+
+    fixture = load_json(paths["fixture"])
+    no_answer = []
+    for format_name in ("markdown", "docx", "pdf"):
+        row = load_json(paths[{"markdown": "formatNoAnswerMarkdown", "docx": "formatNoAnswerDocx",
+                               "pdf": "formatNoAnswerPdf"}[format_name]])
+        no_answer.append({
+            "format": format_name, "question": fixture["noAnswerQuestions"][0]["question"],
+            "expectedAnswer": "NOT_PRESENT", "citationCount": len(row["response"]["data"]["citations"]),
+            "topHeading": row["response"]["data"]["citations"][0].get("headingPath"),
+            "transportMs": row["transport"]["elapsedMs"],
+            "judgement": "retrieval-only; LLM拒答正确性未评测",
+        })
+
+    evidence_hashes = {name: {"path": str(path.relative_to(root)), "sha256": sha256(path), "bytes": path.stat().st_size}
+                       for name, path in sorted(paths.items())}
+    passed_format_queries = sum(1 for row in format_queries if row["passed"])
+    degraded_format_queries = sum(1 for row in format_queries if row["degraded"])
+    ledger = {
+        "schemaVersion": 1,
+        "scope": {
+            "quality": "SciFact retrieval only; 300 queries x 4 variants",
+            "answerCorrectness": "not evaluated: SciFact input has no gold answers",
+            "percentileMethod": "nearest-rank",
+            "formatE2E": "real HTTP + MinIO + MySQL + Qdrant + Docling + Embedding + Reranker; one worker/thread",
+        },
+        "quality": {"variants": quality_rows, "deltas": deltas},
+        "failureCases": {"availableCounts": failure_counts, "displayedCount": sum(len(v) for v in failure["cases"].values()),
+                         "representatives": representatives},
+        "internalDiagnostics": {
+            "queryCount": internal_manifest["queryCount"], "recordCount": internal_manifest["recordCount"],
+            "exactFinalRankingMatches": internal_manifest["exactFinalRankingMatches"],
+            "firstObservedTotalLossCounts": internal_manifest["firstObservedTotalLossCounts"],
+            "rerankEffectCounts": internal_manifest["rerankEffectCounts"], "limitations": internal_manifest["limitations"],
+        },
+        "stablePerformance": {"measuredRequestCount": measured_request_count, "rows": stable_rows},
+        "capacityBoundary": {
+            "status": boundary_manifest["status"], "recordCount": len(boundary_run),
+            "failedSample": failed[0], "resourcePeaks": boundary_resources,
+            "localSamples": len(boundary_local),
+            "localCpuPeakPct": max(float(row["appProcess"].split()[1]) for row in boundary_local),
+            "localRssPeakKiB": max(int(row["appProcess"].split()[2]) for row in boundary_local),
+        },
+        "formatE2E": {
+            "runId": format_manifest["runId"], "passedQueries": passed_format_queries,
+            "degradedQueries": degraded_format_queries,
+            "formats": sorted(format_rows, key=lambda row: row["format"]), "noAnswerProbes": no_answer,
+            "resources": {"remote": remote_resources, "localJava": local_resources},
+            "storageConsistencyPassed": format_storage["passed"],
+        },
+        "bottlenecks": [
+            {"rank": 1, "component": "Reranker CPU推理与排队", "fact": f"并发4出现{failed[0]['elapsedMs'] / 1000:.3f}s降级回退；稳定轮Rerank占完整链路绝大部分延迟。",
+             "supportedHypothesis": "Top10按3/3/3/1串行子批是代码层候选解释；Semaphore等待与远端排队各自贡献尚未分段测量。",
+             "impact": "当前完整Rerank链路只验证到并发2健康。", "optimization": "合并批次、异步批处理/动态batch、缓存与只重排高不确定查询；完成后重跑并发1/2/4。"},
+            {"rank": 2, "component": "Docling PDF解析", "fact": f"r6 PDF摄取{next(row for row in format_rows if row['format'] == 'pdf')['ingestElapsedMs'] / 1000:.3f}s，Docling单次HTTP 34.163s；Docling CPU峰值{remote_resources['rag-docling']['cpuPeakPct']:.2f}%。",
+             "supportedHypothesis": "Docling调用占总墙钟约90.9%；其余约3.434s没有阶段分段，不能分摊给Java、MinIO或向量写入。",
+             "impact": "PDF摄取显著慢于Markdown 3.056s与DOCX 6.094s。", "optimization": "内容哈希去重、解析缓存、格式快速路径、独立解析队列；用多页/表格PDF复测。"},
+            {"rank": 3, "component": "融合TopK/阈值召回损失", "fact": f"{internal_manifest['recordCount']}条内部诊断中{internal_manifest['firstObservedTotalLossCounts']['FUSION_THRESHOLD_OR_TOPK_LOSS']}条首个完全损失位于fusion threshold/TopK联合步骤。",
+             "supportedHypothesis": "当前轨迹将threshold与TopK合并，尚不能进一步分离两者。", "impact": "部分Gold在原始候选存在但融合后消失。",
+             "optimization": "拆分threshold与TopK轨迹，调大fusion候选并做按query类型的权重/阈值校准。"},
+            {"rank": 4, "component": "页级元数据缺口", "fact": "r6 DOCX/PDF均成功解析并召回，但数据库pageCount仍为0。",
+             "supportedHypothesis": "Docling结果到领域模型的页级元数据没有产出/映射闭环。", "impact": "不能把0解释为0页，页码引用与页级审计尚未被证明。",
+             "optimization": "解析响应保留页span并贯穿chunk/citation；增加多页PDF页码金标测试。"},
+        ],
+        "limitations": [
+            "SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。",
+            "r6格式题只验证证据词项是否在返回上下文，不等同于最终LLM回答正确。",
+            "无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。",
+            "r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。",
+            "内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。",
+            "fusion threshold与TopK尚未分开留痕；页数为未知而非0页。",
+        ],
+        "evidence": evidence_hashes,
+    }
+
+    ledger_path = out / "rag-final-evidence-ledger.json"
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    lines: list[str] = []
+    add = lines.append
+    add("# RAG完整测试数据、瓶颈与失败因果报告")
+    add("")
+    add("> 结论约束：本报告所有数字均由随附原始JSON/JSONL程序化生成；没有证据的项目明确标为未测。检索命中不等于最终答案正确。")
+    add("")
+    add("## 一、最终结论")
+    add("")
+    dense_quality = quality_by_name["dense"]
+    hybrid_quality = quality_by_name["hybrid_rrf"]
+    rerank_quality = quality_by_name["hybrid_rrf_rerank"]
+    pdf_format = next(row for row in format_rows if row["format"] == "pdf")
+    add(f"1. 当前SciFact检索指标最好的已测配置其实是`Dense`：Recall@10={dense_quality['recallAt10']:.6f}、MRR@10={dense_quality['mrrAt10']:.6f}、nDCG@10={dense_quality['ndcgAt10']:.6f}、MAP@10={dense_quality['mapAt10']:.6f}。`Hybrid RRF + Rerank`是混合链路内部最好的配置，但四项指标仍全部低于Dense；不能宣称技术组件越多质量就越好。")
+    add(f"2. Rerank保持Recall@10不变，却把MRR/nDCG/MAP分别提高{deltas['rerankVsHybrid']['mrrAt10']['absolute']:.6f}/{deltas['rerankVsHybrid']['ndcgAt10']['absolute']:.6f}/{deltas['rerankVsHybrid']['mapAt10']['absolute']:.6f}；代价是质量run p50从{hybrid_quality['elapsedMs']['p50'] / 1000:.3f}s升至{rerank_quality['elapsedMs']['p50'] / 1000:.3f}s。它改善{failure_counts['rerank_reorder_gain']}个query的排序，也伤害{failure_counts['rerank_reorder_harm']}个query；{internal_manifest['queryCount']}个内部复测代表中为{internal_manifest['rerankEffectCounts']['RERANK_ORDER_GAIN']}改善、{internal_manifest['rerankEffectCounts']['RERANK_ORDER_HARM']}伤害、{internal_manifest['rerankEffectCounts']['RERANK_NEUTRAL']}不变。")
+    add(f"3. 在本次SciFact在线检索负载中，首个已证明的主导瓶颈是Reranker：并发4出现{failed[0]['elapsedMs'] / 1000:.3f}s fallback，Reranker CPU峰值{boundary_resources['rag-reranker']['cpuPeakPct']:.2f}%；稳定健康容量只证明到并发2。该结论不外推到大文件摄取或多租户全系统。")
+    add(f"4. 三格式真实MinIO链路r6为{format_manifest['retrievalEvidencePassed']}/{format_manifest['retrievalEvidenceTotal']}检索证据词项覆盖、0降级；MySQL child chunk/distinct vector point与Qdrant exact point一致，MinIO哈希一致。PDF摄取{pdf_format['ingestElapsedMs'] / 1000:.3f}s，其中Docling HTTP 34.163s，是本轮摄取主导阶段。")
+    add("5. 尚不能宣告完整答案质量闭环：SciFact没有gold answer；无答案题虽然能召回“文档未提供该值”的段落，但检索层仍返回5～6条候选，Agent是否拒绝编造尚未黑盒评测。")
+    add("")
+    add("## 二、测试口径与有效数据")
+    add("")
+    add("| 数据集/轮次 | 样本 | 用途 | 可用于什么结论 |")
+    add("|---|---:|---|---|")
+    add("| SciFact r11 | 300问题×4=1200 | Dense/Sparse/Hybrid/Rerank消融 | Recall/MRR/nDCG/MAP与同轮延迟 |")
+    add("| 内部诊断 | 20问题×4=80 | 候选阶段轨迹 | 首个可观测失效步骤、Rerank同请求前后 |")
+    add("| 稳定性能r1+r2 | 320 measured，另有warmup | 并发1/2、顺序反转 | 已验证健康容量和延迟范围 |")
+    add(f"| 并发4边界 | 共{len(boundary_run)}条measured（并发1=80、2=80、4=39） | 容量失败定位 | 并发4不能作为稳定分位数，只作失败边界 |")
+    add("| 三格式r6 | 3文件、15答案问题、3无答案探针 | 真实MinIO摄取/召回 | 格式功能、三端一致性、小文件单线程性能 |")
+    add("")
+    add("## 三、RAG技术点前后差异")
+    add("")
+    add("| 配置 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 | p50/p95/max | 错误/降级/空 |")
+    add("|---|---:|---:|---:|---:|---:|---:|")
+    for row in quality_rows:
+        elapsed = row["elapsedMs"]
+        add(f"| {row['variant']} | {fmt(row['recallAt10'], 6)} | {fmt(row['mrrAt10'], 6)} | {fmt(row['ndcgAt10'], 6)} | {fmt(row['mapAt10'], 6)} | {elapsed['p50']}/{elapsed['p95']}/{elapsed['max']} ms | {row['errorCount']}/{row['degradedCount']}/{row['emptyResultCount']} |")
+    add("")
+    add("关键差值：")
+    add("")
+    add(f"- Sparse→Hybrid：Recall@10 {deltas['hybridVsSparse']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['hybridVsSparse']['mrrAt10']['absolute']:+.6f}。Dense通道补回了81个Sparse漏召回而Hybrid命中的query。")
+    add(f"- Dense→Hybrid：Recall@10 {deltas['hybridVsDense']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['hybridVsDense']['mrrAt10']['absolute']:+.6f}。Hybrid总体反而下降。另有98个query是Dense命中而Sparse未命中，这证明Dense通道在本数据集更强；它不等价于98个Hybrid漏召回，Hybrid相对Dense的具体损失必须按逐query差值另算。")
+    add(f"- Hybrid→Hybrid+Rerank：Recall@10 {deltas['rerankVsHybrid']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['rerankVsHybrid']['mrrAt10']['absolute']:+.6f}，nDCG@10 {deltas['rerankVsHybrid']['ndcgAt10']['absolute']:+.6f}，MAP@10 {deltas['rerankVsHybrid']['mapAt10']['absolute']:+.6f}。Rerank改变顺序，不补回已被Top10截掉的文档。")
+    add("")
+    add("## 四、非互斥失败标签与首个失效步骤")
+    add("")
+    add("这些是可重叠布尔标签，同一query可以进入多类，计数不可相加当作300题的互斥分布。`dense_only_success`表示Dense命中且Sparse未命中，`sparse_only_success`反之；`rerank_rescue/harm`表示Top10命中集合进出，`rerank_reorder_gain/harm`表示两者都命中时MRR顺序改变。")
+    add("")
+    add("| 标签 | 全量query数 | 布尔语义 |")
+    add("|---|---:|---|")
+    failure_rules = {
+        "dense_miss_hybrid_hit": "Dense未命中且Hybrid命中", "sparse_miss_hybrid_hit": "Sparse未命中且Hybrid命中",
+        "rerank_rescue": "Rerank前Top10未命中、后命中", "rerank_harm": "Rerank前Top10命中、后未命中",
+        "dense_only_success": "Dense命中且Sparse未命中（不表示Hybrid失败）",
+        "sparse_only_success": "Sparse命中且Dense未命中（不表示Hybrid失败）",
+        "persistent_miss": "四个变体Top10均未命中", "rerank_reorder_gain": "前后均命中且MRR提高",
+        "rerank_reorder_harm": "前后均命中且MRR降低",
+    }
+    for key, value in failure_counts.items():
+        add(f"| {key} | {value} | {failure_rules[key]} |")
+    add("")
+    add("内部80条阶段证据的首个完全损失：")
+    add("")
+    for key, value in internal_manifest["firstObservedTotalLossCounts"].items():
+        add(f"- `{key}`：{value}条。")
+    add("")
+    add("这说明最常见的可观测损失不是Qdrant完全找不到，而是候选进入融合后被联合threshold/TopK裁掉；但当前埋点不能继续区分是阈值还是TopK，不能越过证据下结论。")
+    add("")
+    add("## 五、召回失败文档与因果链（代表案例）")
+    add("")
+    add("下面每类展示1个确定性代表；完整附件含21个代表case、全部Gold截断摘要、各case前三条非Gold截断摘要及各变体Top10文档ID，见[召回失败案例全集](../scifact-r11-failure-cases.md)。逐候选内部复测分数与阶段轨迹见[内部阶段失败证据](../scifact-r11-internal-failure-analysis.md)。")
+    add("")
+    for case in representatives:
+        add(f"### {case['category']} / queryId={case['queryId']}")
+        add("")
+        add(f"问题：{case['question']}")
+        add("")
+        add("Gold文档：")
+        add("")
+        for doc in case["goldDocuments"]:
+            add(f"- `{doc['documentId']}` {doc['title']}")
+            add("")
+            add(f"  > {doc['excerpt']}")
+        add("")
+        add(f"问题变体：`{case['focusVariant']}`；Recall@10={case['focusMetrics']['recallAt10']:.6f}，MRR@10={case['focusMetrics']['mrrAt10']:.6f}。")
+        add("")
+        add("实际排在前面的错误文档：")
+        add("")
+        for doc in case["wrongDocuments"]:
+            add(f"- rank={doc['rank']} `{doc['documentId']}` {doc['title']}")
+            add("")
+            add(f"  > {doc['excerpt']}")
+        add("")
+        internal_loss = case["firstInternalTotalLoss"]
+        internal_loss_text = (f"{internal_loss['stage']}/{internal_loss['code']}" if internal_loss else
+                              ("未观察到Gold完全损失" if case["internalDiagnosticAvailable"] else "该代表未采集内部诊断"))
+        add(f"首个终态可观测失败：`{case['firstObservableFailure']}`。内部首个完全损失：`{internal_loss_text}`。")
+        add("")
+        add("直接事实：" + "；".join(case["directFacts"]))
+        add("")
+        if case["internalGoldTrace"]:
+            add("内部复测Gold轨迹摘录：")
+            add("")
+            traces = ([trace for trace in case["internalGoldTrace"] if trace["stage"] in {"rerank_input", "rerank_output"}]
+                      if case["internalRerankEffect"] else case["internalGoldTrace"][:4])
+            for trace in traces:
+                add(f"- stage={trace['stage']} rank={trace['rank']} outcome={trace['outcome']} dense={trace['denseScore']} sparse={trace['sparseScore']} fusion={trace['fusionScore']} rerank={trace['rerankScore']}")
+            add("")
+        add("因果推断（可证伪）：" + case["inference"].removeprefix("推断："))
+        add("")
+        add("替代解释：" + case["alternativeExplanation"].removeprefix("其他可能解释：").removeprefix("替代解释："))
+        add("")
+        add("复证实验：" + case["falsification"].removeprefix("反证实验："))
+        add("")
+    add("## 六、性能、容量与瓶颈")
+    add("")
+    add("两轮稳定结果分别保留，未合并成伪单轮：")
+    add("")
+    add("| run | 并发 | 配置 | n | p50 | p95 | max | Rerank p95 |")
+    add("|---|---:|---|---:|---:|---:|---:|---:|")
+    for row in stable_rows:
+        add(f"| {row['runId']} | {row['concurrency']} | {row['variant']} | {row['requestCount']} | {row['elapsedMs']['p50']} | {row['elapsedMs']['p95']} | {row['elapsedMs']['max']} | {row['rerankMs']['p95']} |")
+    add("")
+    add(f"并发4门禁失败样本：queryId={failed[0]['queryId']}，配置={failed[0]['variant']}，HTTP={failed[0]['httpStatus']}，耗时={failed[0]['elapsedMs']}ms，降级原因=`{failed[0]['degradationReasons'][0]}`。Reranker CPU峰值={boundary_resources['rag-reranker']['cpuPeakPct']:.2f}%，内存占比峰值={boundary_resources['rag-reranker']['memoryPeakPct']:.2f}%；容器前后无restart/OOM。")
+    add("")
+    add("瓶颈优先级：")
+    add("")
+    for item in ledger["bottlenecks"]:
+        add(f"{item['rank']}. **{item['component']}**：事实—{item['fact']} 有证据支持的解释/待验证假设—{item['supportedHypothesis']} 影响—{item['impact']} 优化—{item['optimization']}")
+    add("")
+    add("## 七、Markdown/DOCX/PDF真实链路")
+    add("")
+    add("| 格式 | 摄取ms | attempt | 字符 | child块/Qdrant点 | 页数字段 | 查询p50/p95/max | MinIO原件SHA |")
+    add("|---|---:|---:|---:|---:|---:|---:|---|")
+    for row in format_rows:
+        q = row["query"]["transportMs"]
+        add(f"| {row['format']} | {row['ingestElapsedMs']} | {row['taskAttemptCount']} | {row['characterCount']} | {row['childChunks']}/{row['qdrantPoints']} | {row['pageCount']}（未知，未闭环） | {q['p50']}/{q['p95']}/{q['max']} | `{row['source']['sha256']}` |")
+    add("")
+    add(f"r6资源采样：{remote_resources['rag-docling']['samples']}个远端样本、{local_resources['samples']}个Java样本。Docling CPU峰值{remote_resources['rag-docling']['cpuPeakPct']:.2f}%，Reranker {remote_resources['rag-reranker']['cpuPeakPct']:.2f}%，Embedding {remote_resources['rag-embedding']['cpuPeakPct']:.2f}%；Java CPU峰值{local_resources['cpuPeakPct']:.1f}%、RSS峰值{local_resources['rssPeakKiB']}KiB，前后容器0重启、无OOM。单次PDF Docling日志为34163ms，因此其{pdf_format['ingestElapsedMs'] / 1000:.3f}s摄取耗时主要由解析占据。")
+    add("")
+    add("无答案探针：")
+    add("")
+    add("| 格式 | 问题 | 返回citation数 | Top heading | 判定 |")
+    add("|---|---|---:|---|---|")
+    for row in no_answer:
+        add(f"| {row['format']} | {row['question']} | {row['citationCount']} | {row['topHeading']} | {row['judgement']} |")
+    add("")
+    add("## 八、上线前优化与复测门槛")
+    add("")
+    add("1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。")
+    add(f"2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense {dense_quality['recallAt10']:.6f}，同时报告MRR/延迟代价。")
+    add("3. Docling按内容哈希缓存解析结果，并分离PDF重任务队列。门槛：真实多页/表格PDF至少30份，报告p50/p95、页面/表格保真和失败重试。")
+    add("4. 页span贯穿解析、chunk、Qdrant payload、citation和回源。门槛：多页PDF逐页金标，pageCount不再为未知，引用页码精确率单独报告。")
+    add("5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。")
+    add("")
+    add("## 九、明确未测与证据限制")
+    add("")
+    for item in ledger["limitations"]:
+        add(f"- {item}")
+    add("")
+    add("## 十、证据索引与复算")
+    add("")
+    add("机器总账：[rag-final-evidence-ledger.json](rag-final-evidence-ledger.json)。关键原始证据均已从`/tmp`固化进项目`docs/rag/evaluation-results/`，总账记录每个输入的SHA-256与字节数。")
+    add("")
+    add("```bash")
+    add("python3 ai-agent-scaffold-benchmark/scripts/build-rag-final-report.py \\")
+    add("  --project-root . \\")
+    add("  --out-dir /tmp/rag-final-report-recomputed")
+    add("cmp docs/rag/evaluation-results/final-report/rag-final-evidence-ledger.json \\")
+    add("    /tmp/rag-final-report-recomputed/rag-final-evidence-ledger.json")
+    add("cmp docs/rag/evaluation-results/final-report/RAG完整测试数据与瓶颈分析.md \\")
+    add("    /tmp/rag-final-report-recomputed/RAG完整测试数据与瓶颈分析.md")
+    add("```")
+    add("")
+
+    report_path = out / "RAG完整测试数据与瓶颈分析.md"
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

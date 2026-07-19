@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "currentGeneration": 0,
+      "description": "Synthetic docx parser fidelity fixture",
+      "embeddingDimension": 768,
+      "knowledgeBaseId": "kb_cce3bd7f801347e29069ef40f00b7697",
+      "name": "format_format-e2e-r1-c9adf64_docx",
+      "revision": 0,
+      "status": "active",
+      "visibility": "tenant"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 7,
+    "httpStatus": 200,
+    "responseBytes": 294
+  }
+}

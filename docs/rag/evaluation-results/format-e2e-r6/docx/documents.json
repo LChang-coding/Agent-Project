@@ -1,0 +1,25 @@
+{
+  "response": {
+    "code": "0000",
+    "data": [
+      {
+        "activeGeneration": 1,
+        "activeVersionId": "ragver_da171b3a7b2d4f45b67bafc72791430c",
+        "chunkCount": 6,
+        "displayName": "format-fidelity.docx",
+        "documentId": "doc_4d36a877156843a0ad616dd917d8a6dd",
+        "knowledgeBaseId": "kb_7b663173c9684b498a1d290677794849",
+        "pageCount": 0,
+        "revision": 1,
+        "status": "ready",
+        "targetGeneration": null
+      }
+    ],
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 5,
+    "httpStatus": 200,
+    "responseBytes": 351
+  }
+}

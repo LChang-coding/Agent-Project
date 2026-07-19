@@ -1,0 +1,86 @@
+{
+  "formats": {
+    "docx": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_9d56c9d6e55d452e89944d7febda1173",
+      "documentId": "doc_d7cfa70710484f33bcb2364610d5427e",
+      "ingestElapsedMs": 136082,
+      "knowledgeBaseId": "kb_f3f64ebf06ca4e79b3703fb5f89874c5",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_d7cfa70710484f33bcb2364610d5427e",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_f3f64ebf06ca4e79b3703fb5f89874c5",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 6,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_14499a60026b4fb1a3d4f4be393b888c",
+        "totalChunks": 6,
+        "versionId": "ragver_9d56c9d6e55d452e89944d7febda1173"
+      },
+      "taskId": "ragtask_14499a60026b4fb1a3d4f4be393b888c",
+      "totalQueries": 5
+    },
+    "markdown": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_bedc8e9850a7456ca50fbf2fbc802270",
+      "documentId": "doc_2adee64803d1471ebaeeb7fa5fb30242",
+      "ingestElapsedMs": 5074,
+      "knowledgeBaseId": "kb_afeb33fb983f47c4aeed375ff30e8ecb",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_2adee64803d1471ebaeeb7fa5fb30242",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_afeb33fb983f47c4aeed375ff30e8ecb",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 5,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_22ab9dbba90d4604bbb4606f2abdbabf",
+        "totalChunks": 5,
+        "versionId": "ragver_bedc8e9850a7456ca50fbf2fbc802270"
+      },
+      "taskId": "ragtask_22ab9dbba90d4604bbb4606f2abdbabf",
+      "totalQueries": 5
+    },
+    "pdf": {
+      "activeGeneration": 1,
+      "activeVersionId": "ragver_78d5551ab47b4380842076b8ee08de5a",
+      "documentId": "doc_5e0a562264e5473487ecb446dd6e87e3",
+      "ingestElapsedMs": 47701,
+      "knowledgeBaseId": "kb_c86a479a66b24792bca2b7ece4ac9251",
+      "passedQueries": 5,
+      "task": {
+        "attemptCount": 1,
+        "cancelReason": null,
+        "documentId": "doc_5e0a562264e5473487ecb446dd6e87e3",
+        "errorCode": null,
+        "knowledgeBaseId": "kb_c86a479a66b24792bca2b7ece4ac9251",
+        "maxAttempts": 3,
+        "operation": "ingest",
+        "processedChunks": 6,
+        "revision": 8,
+        "stage": "completed",
+        "status": "completed",
+        "taskId": "ragtask_7a1e466dee384552b60da8d646509e04",
+        "totalChunks": 6,
+        "versionId": "ragver_78d5551ab47b4380842076b8ee08de5a"
+      },
+      "taskId": "ragtask_7a1e466dee384552b60da8d646509e04",
+      "totalQueries": 5
+    }
+  },
+  "passed": 15,
+  "runId": "format-e2e-r2-c9adf64",
+  "status": "completed",
+  "total": 15
+}

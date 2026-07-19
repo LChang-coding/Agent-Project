@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "currentGeneration": 0,
+      "description": "Synthetic markdown parser fidelity fixture",
+      "embeddingDimension": 768,
+      "knowledgeBaseId": "kb_088d3e0a86444a31aa5911bfdf8c8f52",
+      "name": "format_format-e2e-r1-c9adf64_markdown",
+      "revision": 0,
+      "status": "active",
+      "visibility": "tenant"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 11,
+    "httpStatus": 200,
+    "responseBytes": 302
+  }
+}

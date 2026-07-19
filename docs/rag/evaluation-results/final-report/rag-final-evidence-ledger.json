@@ -1,0 +1,1669 @@
+{
+  "bottlenecks": [
+    {
+      "component": "Reranker CPU推理与排队",
+      "fact": "并发4出现67.190s降级回退；稳定轮Rerank占完整链路绝大部分延迟。",
+      "impact": "当前完整Rerank链路只验证到并发2健康。",
+      "optimization": "合并批次、异步批处理/动态batch、缓存与只重排高不确定查询；完成后重跑并发1/2/4。",
+      "rank": 1,
+      "supportedHypothesis": "Top10按3/3/3/1串行子批是代码层候选解释；Semaphore等待与远端排队各自贡献尚未分段测量。"
+    },
+    {
+      "component": "Docling PDF解析",
+      "fact": "r6 PDF摄取37.597s，Docling单次HTTP 34.163s；Docling CPU峰值461.93%。",
+      "impact": "PDF摄取显著慢于Markdown 3.056s与DOCX 6.094s。",
+      "optimization": "内容哈希去重、解析缓存、格式快速路径、独立解析队列；用多页/表格PDF复测。",
+      "rank": 2,
+      "supportedHypothesis": "Docling调用占总墙钟约90.9%；其余约3.434s没有阶段分段，不能分摊给Java、MinIO或向量写入。"
+    },
+    {
+      "component": "融合TopK/阈值召回损失",
+      "fact": "80条内部诊断中17条首个完全损失位于fusion threshold/TopK联合步骤。",
+      "impact": "部分Gold在原始候选存在但融合后消失。",
+      "optimization": "拆分threshold与TopK轨迹，调大fusion候选并做按query类型的权重/阈值校准。",
+      "rank": 3,
+      "supportedHypothesis": "当前轨迹将threshold与TopK合并，尚不能进一步分离两者。"
+    },
+    {
+      "component": "页级元数据缺口",
+      "fact": "r6 DOCX/PDF均成功解析并召回，但数据库pageCount仍为0。",
+      "impact": "不能把0解释为0页，页码引用与页级审计尚未被证明。",
+      "optimization": "解析响应保留页span并贯穿chunk/citation；增加多页PDF页码金标测试。",
+      "rank": 4,
+      "supportedHypothesis": "Docling结果到领域模型的页级元数据没有产出/映射闭环。"
+    }
+  ],
+  "capacityBoundary": {
+    "failedSample": {
+      "candidateCounts": {
+        "denseCandidateCount": 100,
+        "fusionCandidateCount": 10,
+        "rerankCandidateCount": 0,
+        "sparseCandidateCount": 100
+      },
+      "concurrency": 4,
+      "degradationReasons": [
+        "rerank_fallback:profile_9a6bf176635448799c5b219d7765bc46"
+      ],
+      "degraded": true,
+      "elapsedMs": 67190,
+      "errorCode": null,
+      "finishedAt": "2026-07-19T17:31:28.894514Z",
+      "httpStatus": 200,
+      "queryId": "1024",
+      "querySha256": "132009378ca61e6b8f57892b3e76da4880f0ce0170be7e4f687da29cc42856bf",
+      "rankedDocumentIds": [
+        "5373138",
+        "4312169",
+        "24995939",
+        "8494570",
+        "140874",
+        "24896957",
+        "20261352",
+        "6078882",
+        "23664875",
+        "36271512"
+      ],
+      "responseBytes": 32355,
+      "retrievalId": "ret_322eec1f69344c5d9cb5a4ab7c8c084b",
+      "runId": "scifact-load-smoke-ef7e906-r1",
+      "sequence": 15,
+      "stageTimingsMs": {
+        "assemblyMs": 6,
+        "auditMs": 6,
+        "configurationMs": 1,
+        "denseMs": 2583,
+        "embeddingMs": 3248,
+        "fusionMs": 0,
+        "hydrationMs": 11,
+        "rerankMs": 0,
+        "serviceMs": 67185,
+        "sparseMs": 1322,
+        "totalMs": 67179
+      },
+      "startedAt": "2026-07-19T17:30:21.703652Z",
+      "variant": "hybrid_rrf_rerank",
+      "worker": "rag-load-4-2"
+    },
+    "localCpuPeakPct": 16.2,
+    "localRssPeakKiB": 506528,
+    "localSamples": 435,
+    "recordCount": 199,
+    "resourcePeaks": {
+      "rag-embedding": {
+        "cpuPeakPct": 490.44,
+        "memoryPeakPct": 64.33,
+        "samples": 210
+      },
+      "rag-qdrant": {
+        "cpuPeakPct": 310.35,
+        "memoryPeakPct": 3.71,
+        "samples": 210
+      },
+      "rag-reranker": {
+        "cpuPeakPct": 566.5,
+        "memoryPeakPct": 67.07,
+        "samples": 210
+      }
+    },
+    "status": "failed"
+  },
+  "evidence": {
+    "boundaryEvidence": {
+      "bytes": 694,
+      "path": "docs/rag/evaluation-results/scifact-load-boundary-c4-evidence/evidence-manifest.json",
+      "sha256": "f9c36dc8cfb4d9f5f5dbe6aede68848b31414321232adee1ce5785a56e280321"
+    },
+    "boundaryLocal": {
+      "bytes": 77809,
+      "path": "docs/rag/evaluation-results/scifact-load-boundary-c4-evidence/local-process.jsonl",
+      "sha256": "272c62438e724745541e3124e3ed232250bf972c42afbf02ec60d2c0d0e12555"
+    },
+    "boundaryManifest": {
+      "bytes": 2119,
+      "path": "docs/rag/evaluation-results/scifact-load-boundary-c4/load-manifest.json",
+      "sha256": "5b88b16a4443e6ee915a8644b31ca26b03017f01c3717f7ab28b7ef9c56ce52b"
+    },
+    "boundaryRemote": {
+      "bytes": 348357,
+      "path": "docs/rag/evaluation-results/scifact-load-boundary-c4-evidence/remote-containers.jsonl",
+      "sha256": "5e85e6ae7b7be2cf04006ff635564018bb7dd0b8145b89f24aee7db3fb86129d"
+    },
+    "boundaryRun": {
+      "bytes": 178011,
+      "path": "docs/rag/evaluation-results/scifact-load-boundary-c4/load.jsonl",
+      "sha256": "5fbf81b4ceb065c075bf4bb5f9002791bfdecd081cbc03cadf321033119cefe2"
+    },
+    "diagnosticJsonl": {
+      "bytes": 10608078,
+      "path": "docs/rag/evaluation-results/scifact-r11-internal-diagnostics/diagnostic.jsonl",
+      "sha256": "f74d1c923e4ea457ae290f0816d73b73267b5399141775d1482e46ef10554f40"
+    },
+    "diagnosticManifest": {
+      "bytes": 698,
+      "path": "docs/rag/evaluation-results/scifact-r11-internal-diagnostics/diagnostic-manifest.json",
+      "sha256": "55af55561896d6da69b2c6bd485bc8bc1bb969828719e3e1848548d14e7f0171"
+    },
+    "evaluationMethodology": {
+      "bytes": 21385,
+      "path": "docs/rag/evaluation.md",
+      "sha256": "02e24fb8e6da6abcbff5ad871c5759f5aa53d3f2292b51178869c190a8f1dc0a"
+    },
+    "failureCases": {
+      "bytes": 867700,
+      "path": "docs/rag/evaluation-results/scifact-r11-failure-cases.json",
+      "sha256": "61f6f34aadccf7c64311a7be6db2653793e9dc5c4410742a65b97b7ccb5536f0"
+    },
+    "failureCasesMarkdown": {
+      "bytes": 102930,
+      "path": "docs/rag/evaluation-results/scifact-r11-failure-cases.md",
+      "sha256": "6da9cb37537682b733476eba8942418fb05dd226a6be08c933e8f1afbe3a4657"
+    },
+    "fixture": {
+      "bytes": 2030,
+      "path": "docs/rag/evaluation-data/format-e2e/fixture.json",
+      "sha256": "2d55a3baa532bded0b9b67e95afe15219da5f8b227eb57cfa12e1d2620753ad8"
+    },
+    "formatDoclingEvents": {
+      "bytes": 191,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/docling-events.txt",
+      "sha256": "268d02ee2c5cc3178d9c69c323c4d15c13dcd5630194351045e9ccb5a8de97de"
+    },
+    "formatLocal": {
+      "bytes": 8098,
+      "path": "docs/rag/evaluation-results/format-e2e-r6-evidence/local-process.jsonl",
+      "sha256": "1b01101f0ab910898698503f898b9e382e2636b0386b7868266a43ea14090624"
+    },
+    "formatManifest": {
+      "bytes": 4292,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/manifest.json",
+      "sha256": "aab93db8b6361b0a7513393e4a86fc05074c7ec10f78459ae6a11892ecc221e7"
+    },
+    "formatNoAnswerDocx": {
+      "bytes": 43329,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/docx/format-na1.json",
+      "sha256": "a142656841f90c521de8b7d7fbb1ec17952e95e0cf3222b113530a6b9349122e"
+    },
+    "formatNoAnswerMarkdown": {
+      "bytes": 35684,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/markdown/format-na1.json",
+      "sha256": "38819b394620a93e959ce29350f10ebfae953a789d49842caee757dfc9613142"
+    },
+    "formatNoAnswerPdf": {
+      "bytes": 42553,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/pdf/format-na1.json",
+      "sha256": "a841c2cdcd9de0d1cda59972db6533ee8b005ed570ec86b921a9f81aa2240dc9"
+    },
+    "formatQueries": {
+      "bytes": 10188,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/query-results.jsonl",
+      "sha256": "faa6098a0a1713dbf500fd9a9ee4272791d9faa9d5fc3cb8c82835f3f0d509bc"
+    },
+    "formatRemote": {
+      "bytes": 34845,
+      "path": "docs/rag/evaluation-results/format-e2e-r6-evidence/remote-containers.jsonl",
+      "sha256": "dbb9b9da98f52a68d8e17e4165b4b97575581f27957303cda740bb132fef2875"
+    },
+    "formatResources": {
+      "bytes": 784,
+      "path": "docs/rag/evaluation-results/format-e2e-r6-evidence/evidence-manifest.json",
+      "sha256": "cde0c53ec2c9787bb8d6769fd02dde55e76e45e6bd7b727563440da8104b5e24"
+    },
+    "formatStorage": {
+      "bytes": 4119,
+      "path": "docs/rag/evaluation-results/format-e2e-r6/storage-consistency.json",
+      "sha256": "2672de1d2c47f591788c986821551a84b26d6747fbcfbf0f29f171745e2d48dc"
+    },
+    "internalAnalysis": {
+      "bytes": 5679301,
+      "path": "docs/rag/evaluation-results/scifact-r11-internal-failure-analysis.json",
+      "sha256": "de5e829a559a39c9542d9518ed2ece1678ff5cda8d888143bbd74fc8150e5016"
+    },
+    "internalMarkdown": {
+      "bytes": 121034,
+      "path": "docs/rag/evaluation-results/scifact-r11-internal-failure-analysis.md",
+      "sha256": "0435f2038f133663ce26e279b9d223210f4ef1eef44854471847dd8bcf7c6c46"
+    },
+    "qualityIndependent": {
+      "bytes": 384714,
+      "path": "docs/rag/evaluation-results/scifact-r11-quality/metrics-independent.json",
+      "sha256": "e3ac2eb39bb494df425de0140900bc47d0656f2b7c42989cbd80a06dc320b352"
+    },
+    "qualityManifest": {
+      "bytes": 3111,
+      "path": "docs/rag/evaluation-results/scifact-r11-quality/run-manifest.json",
+      "sha256": "2f4f41ac752c6e479ddf5a24dce176d19ed4f8f96b1748194e7aa6550d896c4f"
+    },
+    "qualityMetrics": {
+      "bytes": 399715,
+      "path": "docs/rag/evaluation-results/scifact-r11-quality/metrics.json",
+      "sha256": "e48c03a097ae8b02198b5af70cd6ff7703cf91daa4cf9fac0ba26ee046674c3e"
+    },
+    "qualityRun": {
+      "bytes": 867185,
+      "path": "docs/rag/evaluation-results/scifact-r11-quality/run.jsonl",
+      "sha256": "24331ecdbb58978e37a92bff9c1afad5c09d1abadba68b88fdbf4d0b0ee792a5"
+    },
+    "stableR1": {
+      "bytes": 29966,
+      "path": "docs/rag/evaluation-results/scifact-load-stable-r1/load-report.json",
+      "sha256": "79bd1c5fb7db020b9fe14756cddb4006c2124d5aae78750937f51d7fd814a759"
+    },
+    "stableR2": {
+      "bytes": 29879,
+      "path": "docs/rag/evaluation-results/scifact-load-stable-r2/load-report.json",
+      "sha256": "97d7a5a64bf8500c73fa28a27190c21293d291678d57a6ef88fd64ea6bf5143b"
+    }
+  },
+  "failureCases": {
+    "availableCounts": {
+      "dense_miss_hybrid_hit": 10,
+      "dense_only_success": 98,
+      "persistent_miss": 45,
+      "rerank_harm": 0,
+      "rerank_reorder_gain": 67,
+      "rerank_reorder_harm": 29,
+      "rerank_rescue": 0,
+      "sparse_miss_hybrid_hit": 81,
+      "sparse_only_success": 3
+    },
+    "displayedCount": 21,
+    "representatives": [
+      {
+        "alternativeExplanation": "其他可能解释：相关性标注不完整、gold摘要与claim粒度不同、分块边界或Top10截断；当前终态run不能排除这些因素（dense_miss_hybrid_hit）。",
+        "category": "dense_miss_hybrid_hit",
+        "directFacts": [
+          "Dense gold首名次=Top10未命中",
+          "Sparse gold首名次=1",
+          "Hybrid-RRF gold首名次=2",
+          "Hybrid-RRF+Rerank gold首名次=6",
+          "分类规则=dense_miss_hybrid_hit",
+          "质量run未采集逐候选分数；内部复测已采集并用于阶段定位"
+        ],
+        "falsification": "反证实验：固定同一索引和query，额外留存Dense/Sparse候选Top100、融合逐项贡献、Rerank输入输出分数及chunk文本，再复跑该query验证首个内部失效点（dense_miss_hybrid_hit）。",
+        "firstInternalCoverageLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "25742130"
+          ],
+          "stage": "fusion"
+        },
+        "firstInternalTotalLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "25742130"
+          ],
+          "stage": "fusion"
+        },
+        "firstObservableFailure": "dense_final_top10",
+        "focusMetrics": {
+          "mapAt10": 0.0,
+          "mrrAt10": 0.0,
+          "ndcgAt10": 0.0,
+          "precisionAt10": 0.0,
+          "queryId": "598",
+          "recallAt1": 0.0,
+          "recallAt10": 0.0,
+          "recallAt5": 0.0,
+          "successAt1": 0.0,
+          "successAt10": 0.0,
+          "successAt5": 0.0
+        },
+        "focusVariant": "dense",
+        "goldDocuments": [
+          {
+            "documentId": "25742130",
+            "excerpt": "With respect to cervical cancer management, Finland and the Netherlands are comparable in relevant characteristics, e.g., fertility rate, age-of-mother at first birth and a national screening programme for several years. The aim of this study is to compare trends in incidence of and mortality from cervical cancer in Finland and the Netherlands in relation to the introduction and intensity of the screening programmes. Therefore, incidence and mortality rates were calculated using the Cancer Registries of Finland and the Netherlands. Data on screening intensity were obtained from the Finnish Can…",
+            "headingMarker": "BENCH_DOC_B64_MjU3NDIxMzA",
+            "title": "Mass screening programmes and trends in cervical cancer in Finland and the Netherlands."
+          }
+        ],
+        "inference": "推断：Dense语义向量把主题相近干扰文档排在gold之前，而精确术语帮助Sparse命中；最大词项Jaccard=0.1250。",
+        "internalDiagnosticAvailable": true,
+        "internalGoldTrace": [
+          {
+            "denseScore": 0.83227265,
+            "documentId": "25742130",
+            "fusionScore": null,
+            "outcome": "returned_by_vector_store",
+            "rank": 14,
+            "rerankScore": null,
+            "sparseScore": null,
+            "stage": "dense_raw"
+          }
+        ],
+        "internalRerankEffect": null,
+        "queryId": "598",
+        "question": "Incidence rates of cervical cancer have increased due to nationwide screening programs based primarily on cytology to detect uterine cervical cancer.",
+        "wrongDocuments": [
+          {
+            "documentId": "9764256",
+            "excerpt": "BACKGROUND Human papillomavirus (HPV) testing is more sensitive for the detection of high-grade cervical lesions than is cytology, but detection of HPV by DNA screening in two screening rounds 5 years apart has not been assessed. The aim of this study was to assess whether HPV DNA testing in the first screen decreases detection of cervical intraepithelial neoplasia (CIN) grade 3 or worse, CIN grade 2 or worse, and cervical cancer in the second screening. METHODS In this randomised trial, women aged 29-56 years participating in the cervical screening programme in the Netherlands were randomly a…",
+            "headingMarker": "BENCH_DOC_B64_OTc2NDI1Ng",
+            "rank": 1,
+            "relevance": 0,
+            "score": null,
+            "title": "Human papillomavirus testing for the detection of high-grade cervical intraepithelial neoplasia and cancer: final results of the POBASCAM randomised controlled trial."
+          },
+          {
+            "documentId": "6561200",
+            "excerpt": "BACKGROUND Primary cervical screening with both human papillomavirus (HPV) DNA testing and cytological examination of cervical cells with a Pap test (cytology) has been evaluated in randomized clinical trials. Because the vast majority of women with positive cytology are also HPV DNA positive, screening strategies that use HPV DNA testing as the primary screening test may be more effective. METHODS We used the database from the intervention arm (n = 6,257 women) of a population-based randomized trial of double screening with cytology and HPV DNA testing to evaluate the efficacy of 11 possible…",
+            "headingMarker": "BENCH_DOC_B64_NjU2MTIwMA",
+            "rank": 2,
+            "relevance": 0,
+            "score": null,
+            "title": "Efficacy of HPV DNA testing with cytology triage and/or repeat HPV DNA testing in primary cervical cancer screening."
+          },
+          {
+            "documentId": "27873158",
+            "excerpt": "BACKGROUND Human papillomavirus (HPV) testing is known to be more sensitive, but less specific than cytology for detecting cervical intraepithelial neoplasia (CIN). We assessed the efficacy of cervical-cancer screening policies that are based on HPV testing. METHODS Between March, 2004, and December, 2004, in two separate recruitment phases, women aged 25-60 years were randomly assigned to conventional cytology or to HPV testing in combination with liquid-based cytology (first phase) or alone (second phase). Randomisation was done by computer in two screening centres and by sequential opening…",
+            "headingMarker": "BENCH_DOC_B64_Mjc4NzMxNTg",
+            "rank": 3,
+            "relevance": 0,
+            "score": null,
+            "title": "Efficacy of human papillomavirus testing for the detection of invasive cervical cancers and cervical intraepithelial neoplasia: a randomised controlled trial."
+          }
+        ]
+      },
+      {
+        "alternativeExplanation": "其他可能解释：相关性标注不完整、gold摘要与claim粒度不同、分块边界或Top10截断；当前终态run不能排除这些因素（sparse_miss_hybrid_hit）。",
+        "category": "sparse_miss_hybrid_hit",
+        "directFacts": [
+          "Dense gold首名次=1",
+          "Sparse gold首名次=Top10未命中",
+          "Hybrid-RRF gold首名次=1",
+          "Hybrid-RRF+Rerank gold首名次=1",
+          "分类规则=sparse_miss_hybrid_hit",
+          "质量run未采集逐候选分数；内部复测已采集并用于阶段定位"
+        ],
+        "falsification": "反证实验：固定同一索引和query，额外留存Dense/Sparse候选Top100、融合逐项贡献、Rerank输入输出分数及chunk文本，再复跑该query验证首个内部失效点（sparse_miss_hybrid_hit）。",
+        "firstInternalCoverageLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "21366394"
+          ],
+          "stage": "fusion"
+        },
+        "firstInternalTotalLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "21366394"
+          ],
+          "stage": "fusion"
+        },
+        "firstObservableFailure": "sparse_final_top10",
+        "focusMetrics": {
+          "mapAt10": 0.0,
+          "mrrAt10": 0.0,
+          "ndcgAt10": 0.0,
+          "precisionAt10": 0.0,
+          "queryId": "216",
+          "recallAt1": 0.0,
+          "recallAt10": 0.0,
+          "recallAt5": 0.0,
+          "successAt1": 0.0,
+          "successAt10": 0.0,
+          "successAt5": 0.0
+        },
+        "focusVariant": "sparse",
+        "goldDocuments": [
+          {
+            "documentId": "21366394",
+            "excerpt": "Allergic asthma is a T helper type 2 (T(H)2)-dominated disease of the lung. In people with asthma, a fraction of CD4(+) T cells express the CX3CL1 receptor, CX3CR1, and CX3CL1 expression is increased in airway smooth muscle, lung endothelium and epithelium upon allergen challenge. Here we found that untreated CX3CR1-deficient mice or wild-type (WT) mice treated with CX3CR1-blocking reagents show reduced lung disease upon allergen sensitization and challenge. Transfer of WT CD4(+) T cells into CX3CR1-deficient mice restored the cardinal features of asthma, and CX3CR1-blocking reagents prevented…",
+            "headingMarker": "BENCH_DOC_B64_MjEzNjYzOTQ",
+            "title": "CX3CR1 is required for airway inflammation by promoting T helper cell survival and maintenance in inflamed lung"
+          }
+        ],
+        "inference": "推断：Sparse对同义改写和词形差异敏感，缺少语义改写鲁棒性；该解释仍需词法归一化/BM25参数消融反证。",
+        "internalDiagnosticAvailable": true,
+        "internalGoldTrace": [
+          {
+            "denseScore": null,
+            "documentId": "21366394",
+            "fusionScore": null,
+            "outcome": "returned_by_vector_store",
+            "rank": 14,
+            "rerankScore": null,
+            "sparseScore": 0.28246087,
+            "stage": "sparse_raw"
+          }
+        ],
+        "internalRerankEffect": null,
+        "queryId": "216",
+        "question": "CX3CR1 on the Th2 cells impairs T cell survival",
+        "wrongDocuments": [
+          {
+            "documentId": "11666252",
+            "excerpt": "The persistence of naive and memory T cells has long been of interest to immunologists, but the factors that influence the survival and homeostasis of these subsets have remained obscure. In recent years, it has become evident that the homeostasis of both naive and memory T-cell pools is highly dynamic and tightly regulated by internal stimuli, including cytokines and self-peptide–MHC ligands for the T-cell receptor. These homeostatic mechanisms might have a vital influence on the capacity of the T-cell pool to respond to both foreign and self-antigens.",
+            "headingMarker": "BENCH_DOC_B64_MTE2NjYyNTI",
+            "rank": 1,
+            "relevance": 0,
+            "score": null,
+            "title": "Maintaining the norm: T-cell homeostasis"
+          },
+          {
+            "documentId": "22210434",
+            "excerpt": "The kinase TAK1 is critical for innate and B cell immunity. The function of TAK1 in T cells is unclear, however. We show here that T cell–specific deletion of the gene encoding TAK1 resulted in reduced development of thymocytes, especially of regulatory T cells expressing the transcription factor Foxp3. In mature thymocytes, TAK1 was required for interleukin 7–mediated survival and T cell receptor–dependent activation of transcription factor NF-κB and the kinase Jnk. In effector T cells, TAK1 was dispensable for T cell receptor–dependent NF-κB activation and cytokine production, but was import…",
+            "headingMarker": "BENCH_DOC_B64_MjIyMTA0MzQ",
+            "rank": 2,
+            "relevance": 0,
+            "score": null,
+            "title": "The kinase TAK1 integrates antigen and cytokine receptor signaling for T cell development, survival and function"
+          },
+          {
+            "documentId": "20610557",
+            "excerpt": "In recent years, the immune-potentiating effects of some widely used chemotherapeutic agents have been increasingly appreciated. This provides a rationale for combining conventional chemotherapy with immunotherapy strategies to achieve durable therapeutic benefits. Previous studies have implicated the immunomodulatory effects of melphalan, an alkylating agent commonly used to treat multiple myeloma, but the underlying mechanisms remain obscure. In the present study, we investigated the impact of melphalan on endogenous immune cells as well as adoptively transferred tumor-specific CD4(+) T cell…",
+            "headingMarker": "BENCH_DOC_B64_MjA2MTA1NTc",
+            "rank": 3,
+            "relevance": 0,
+            "score": null,
+            "title": "Alkylating agent melphalan augments the efficacy of adoptive immunotherapy using tumor-specific CD4+ T cells."
+          }
+        ]
+      },
+      {
+        "alternativeExplanation": "其他可能解释：相关性标注不完整、gold摘要与claim粒度不同、分块边界或Top10截断；当前终态run不能排除这些因素（dense_only_success）。",
+        "category": "dense_only_success",
+        "directFacts": [
+          "Dense gold首名次=1",
+          "Sparse gold首名次=Top10未命中",
+          "Hybrid-RRF gold首名次=2",
+          "Hybrid-RRF+Rerank gold首名次=1",
+          "分类规则=dense_only_success",
+          "质量run未采集逐候选分数；内部复测已采集并用于阶段定位"
+        ],
+        "falsification": "反证实验：固定同一索引和query，额外留存Dense/Sparse候选Top100、融合逐项贡献、Rerank输入输出分数及chunk文本，再复跑该query验证首个内部失效点（dense_only_success）。",
+        "firstInternalCoverageLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "6277638"
+          ],
+          "stage": "fusion"
+        },
+        "firstInternalTotalLoss": {
+          "code": "FUSION_THRESHOLD_OR_TOPK_LOSS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "6277638"
+          ],
+          "stage": "fusion"
+        },
+        "firstObservableFailure": "sparse_final_top10",
+        "focusMetrics": {
+          "mapAt10": 0.0,
+          "mrrAt10": 0.0,
+          "ndcgAt10": 0.0,
+          "precisionAt10": 0.0,
+          "queryId": "1014",
+          "recallAt1": 0.0,
+          "recallAt10": 0.0,
+          "recallAt5": 0.0,
+          "successAt1": 0.0,
+          "successAt10": 0.0,
+          "successAt5": 0.0
+        },
+        "focusVariant": "sparse",
+        "goldDocuments": [
+          {
+            "documentId": "6277638",
+            "excerpt": "The target of rapamycin (TOR) pathway is a major nutrient-sensing pathway that, when genetically downregulated, increases life span in evolutionarily diverse organisms including mammals. The central component of this pathway, TOR kinase, is the target of the inhibitory drug rapamycin, a highly specific and well-described drug approved for human use. We show here that feeding rapamycin to adult Drosophila produces the life span extension seen in some TOR mutants. Increase in life span by rapamycin was associated with increased resistance to both starvation and paraquat. Analysis of the underlyi…",
+            "headingMarker": "BENCH_DOC_B64_NjI3NzYzOA",
+            "title": "Mechanisms of Life Span Extension by Rapamycin in the Fruit Fly Drosophila melanogaster"
+          }
+        ],
+        "inference": "推断：Sparse对同义改写和词形差异敏感，缺少语义改写鲁棒性；该解释仍需词法归一化/BM25参数消融反证。",
+        "internalDiagnosticAvailable": true,
+        "internalGoldTrace": [
+          {
+            "denseScore": null,
+            "documentId": "6277638",
+            "fusionScore": null,
+            "outcome": "returned_by_vector_store",
+            "rank": 49,
+            "rerankScore": null,
+            "sparseScore": 0.33438396,
+            "stage": "sparse_raw"
+          }
+        ],
+        "internalRerankEffect": null,
+        "queryId": "1014",
+        "question": "Rapamycin decreases the concentration of triacylglycerols in fruit flies.",
+        "wrongDocuments": [
+          {
+            "documentId": "10530014",
+            "excerpt": "Monogenic deficiency diseases provide unique opportunities to define the contributions of individual molecules to human physiology and to identify pathologies arising from their dysfunction. Here we describe a deficiency disease in two human siblings that presented with severe bleeding, frequent infections and osteopetrosis at an early age. These symptoms are consistent with but more severe than those reported for people with leukocyte adhesion deficiency III (LAD-III). Mechanistically, these symptoms arose from an inability to activate the integrins expressed on hematopoietic cells, including…",
+            "headingMarker": "BENCH_DOC_B64_MTA1MzAwMTQ",
+            "rank": 1,
+            "relevance": 0,
+            "score": null,
+            "title": "A point mutation in KINDLIN3 ablates activation of three integrin subfamilies in humans"
+          },
+          {
+            "documentId": "36271512",
+            "excerpt": "INTRODUCTION • • CELLULAR AND MOLECULAR REQUIREMENTS FOR T-CELL ACTIVATION . The T-Cell Antigen Receptor Complex . . . .. . . . ..... . . . . . . . . . . . . . . . . ...... . . . T-Cell Activation by Antibodies and Leetins . . . . . . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . Other Cell Surface Structures (Accessory Molecules) Involved in Antigen Recognition and Activation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .…",
+            "headingMarker": "BENCH_DOC_B64_MzYyNzE1MTI",
+            "rank": 2,
+            "relevance": 0,
+            "score": null,
+            "title": "T-cell activation."
+          },
+          {
+            "documentId": "8065561",
+            "excerpt": "Fluorometric titration of E. coli single-stranded DNA binding protein with various RNAs showed that the protein specifically and cooperatively binds to its own mRNA. The binding inhibited in vitro expression of ssb and bla but not nusA. This inhibition takes place at a physiological concentration of SSB. The function of the protein in gene regulation is discussed.",
+            "headingMarker": "BENCH_DOC_B64_ODA2NTU2MQ",
+            "rank": 3,
+            "relevance": 0,
+            "score": null,
+            "title": "Specific and cooperative binding of E. coli single-stranded DNA binding protein to mRNA."
+          }
+        ]
+      },
+      {
+        "alternativeExplanation": "替代解释：qrels可能不完整，Gold正文与claim粒度也可能不匹配；但最终Top10截断和Rerank已发生在原始并集漏召回之后，不是该次复测的首因。",
+        "category": "persistent_miss",
+        "directFacts": [
+          "Dense gold首名次=Top10未命中",
+          "Sparse gold首名次=Top10未命中",
+          "Hybrid-RRF gold首名次=Top10未命中",
+          "Hybrid-RRF+Rerank gold首名次=Top10未命中",
+          "分类规则=persistent_miss",
+          "质量run未采集逐候选分数；内部复测已采集并用于阶段定位"
+        ],
+        "falsification": "反证实验：核验Gold对应chunk确实写入同一generation与Qdrant payload，再分别扩大Dense/Sparse原始TopK并替换Embedding/词法归一化，观察Gold首次出现位置。",
+        "firstInternalCoverageLoss": {
+          "code": "RAW_RECALL_TOTAL_MISS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "31715818"
+          ],
+          "stage": "raw_union"
+        },
+        "firstInternalTotalLoss": {
+          "code": "RAW_RECALL_TOTAL_MISS",
+          "evidenceLevel": "derived_from_stage_trace",
+          "lostGoldDocumentIds": [
+            "31715818"
+          ],
+          "stage": "raw_union"
+        },
+        "firstObservableFailure": "dense_and_sparse_final_top10",
+        "focusMetrics": {
+          "mapAt10": 0.0,
+          "mrrAt10": 0.0,
+          "ndcgAt10": 0.0,
+          "precisionAt10": 0.0,
+          "queryId": "1",
+          "recallAt1": 0.0,
+          "recallAt10": 0.0,
+          "recallAt5": 0.0,
+          "successAt1": 0.0,
+          "successAt10": 0.0,
+          "successAt5": 0.0
+        },
+        "focusVariant": "hybrid_rrf_rerank",
+        "goldDocuments": [
+          {
+            "documentId": "31715818",
+            "excerpt": "Nanotechnologies are emerging platforms that could be useful in measuring, understanding, and manipulating stem cells. Examples include magnetic nanoparticles and quantum dots for stem cell labeling and in vivo tracking; nanoparticles, carbon nanotubes, and polyplexes for the intracellular delivery of genes/oligonucleotides and protein/peptides; and engineered nanometer-scale scaffolds for stem cell differentiation and transplantation. This review examines the use of nanotechnologies for stem cell tracking, differentiation, and transplantation. We further discuss their utility and the potentia…",
+            "headingMarker": "BENCH_DOC_B64_MzE3MTU4MTg",
+            "title": "New opportunities: the use of nanotechnologies to manipulate and track stem cells."
+          }
+        ],
+        "inference": "推断：该内部复测最早已观察到Gold不在Dense/Sparse原始Top100并集中，因此不能归因最终Top10或Rerank；尚无法区分索引覆盖、向量/词项表示、分块边界或query-gold粒度。",
+        "internalDiagnosticAvailable": true,
+        "internalGoldTrace": [],
+        "internalRerankEffect": {
+          "basis": "same_retrieval_input_output_per_gold",
+          "classification": "RERANK_NEUTRAL",
+          "mrrAfter": 0.0,
+          "mrrBefore": 0.0,
+          "mrrDelta": 0.0,
+          "perGold": [
+            {
+              "direction": "NEUTRAL",
+              "documentId": "31715818",
+              "rankAfter": null,
+              "rankBefore": null
+            }
+          ],
+          "recallAfter": 0.0,
+          "recallBefore": 0.0,
+          "recallDelta": 0.0
+        },
+        "queryId": "1",
+        "question": "0-dimensional biomaterials show inductive properties.",
+        "wrongDocuments": [
+          {
+            "documentId": "86217760",
+            "excerpt": "INTRODUCTION . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 394 POLLINATION AND POLLEN TUBE GROWTH . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 395 Interaction s between the M ale G ameto phyte and Pistil . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 395 SelfIncom patibili ty Systems: Gameto phytic and S poro phyti c Determin ation of Pollen Phenoty pe . . . . . . . . . . . . . . . . .. . . . . . . . . . . .…",
+            "headingMarker": "BENCH_DOC_B64_ODYyMTc3NjA",
+            "rank": 1,
+            "relevance": 0,
+            "score": null,
+            "title": "The Self-Incompatibility Genes of Brassica: Expression and Use in Genetic Ablation of Floral Tissues"
+          },
+          {
+            "documentId": "12207167",
+            "excerpt": "PHENYLALANINE TOXICITY 158 Developing the 0. -M ethylphenylalanine Model. . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 160 Use of the a-Methyl phenylalanine Model in Brain Protein Synthesis . . . . . . . . . . . . . . . . . . . 161 TYROSINE TOXICITY 162 General Nutritional Observations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 162 Factors Affecting Tissue Concentrations of Tyrosine . ... .. .. .. ...... . . . . . . .. . . 163 Probable Cause of Tyrosine Toxicity . . .…",
+            "headingMarker": "BENCH_DOC_B64_MTIyMDcxNjc",
+            "rank": 2,
+            "relevance": 0,
+            "score": null,
+            "title": "Adverse effects of excessive consumption of amino acids."
+          },
+          {
+            "documentId": "19685306",
+            "excerpt": "This paper proposes and tests a technique for imaging orientationally invariant indices of axon diameter and density in white matter using diffusion magnetic resonance imaging. Such indices potentially provide more specific markers of white matter microstructure than standard indices from diffusion tensor imaging. Orientational invariance allows for combination with tractography and presents new opportunities for mapping brain connectivity and quantifying disease processes. The technique uses a four-compartment tissue model combined with an optimized multishell high-angular-resolution pulsed-g…",
+            "headingMarker": "BENCH_DOC_B64_MTk2ODUzMDY",
+            "rank": 3,
+            "relevance": 0,
+            "score": null,
+            "title": "Orientationally invariant indices of axon diameter and density from diffusion MRI."
+          }
+        ]
+      },
+      {
+        "alternativeExplanation": "替代解释：Gold与竞争文档的标注粒度或相关性定义可能和Reranker训练偏好不同；但本次名次下降确实发生在同一请求的rerank_input→rerank_output。",
+        "category": "rerank_reorder_harm",
+        "directFacts": [
+          "Dense gold首名次=6",
+          "Sparse gold首名次=6",
+          "Hybrid-RRF gold首名次=1",
+          "Hybrid-RRF+Rerank gold首名次=5",
+          "分类规则=rerank_reorder_harm",
+          "质量run未采集逐候选分数；内部复测已采集并用于阶段定位"
+        ],
+        "falsification": "反证实验：固定同一10个输入候选，记录完整文本与Rerank分数，替换/关闭Reranker并重复评分。",
+        "firstInternalCoverageLoss": null,
+        "firstInternalTotalLoss": null,
+        "firstObservableFailure": "rerank_final_top10",
+        "focusMetrics": {
+          "mapAt10": 0.2,
+          "mrrAt10": 0.2,
+          "ndcgAt10": 0.38685280723454163,
+          "precisionAt10": 0.1,
+          "queryId": "956",
+          "recallAt1": 0.0,
+          "recallAt10": 1.0,
+          "recallAt5": 1.0,
+          "successAt1": 0.0,
+          "successAt10": 1.0,
+          "successAt5": 1.0
+        },
+        "focusVariant": "hybrid_rrf_rerank",
+        "goldDocuments": [
+          {
+            "documentId": "12956194",
+            "excerpt": "Ligand-directed signal bias offers opportunities for sculpting molecular events, with the promise of better, safer therapeutics. Critical to the exploitation of signal bias is an understanding of the molecular events coupling ligand binding to intracellular signaling. Activation of class B G protein-coupled receptors is driven by interaction of the peptide N terminus with the receptor core. To understand how this drives signaling, we have used advanced analytical methods that enable separation of effects on pathway-specific signaling from those that modify agonist affinity and mapped the funct…",
+            "headingMarker": "BENCH_DOC_B64_MTI5NTYxOTQ",
+            "title": "The Extracellular Surface of the GLP-1 Receptor Is a Molecular Trigger for Biased Agonism"
+          }
+        ],
+        "inference": "阶段因果事实：同一请求的Rerank把Gold名次从12956194:1→5，MRR变化-0.800000；Rerank为何偏好竞争文档仍需模型/文本对照实验。",
+        "internalDiagnosticAvailable": true,
+        "internalGoldTrace": [
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": null,
+            "outcome": "returned_by_vector_store",
+            "rank": 6,
+            "rerankScore": null,
+            "sparseScore": null,
+            "stage": "raw_union"
+          },
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": 0.9242424242424242,
+            "outcome": "kept_after_fusion_threshold_topk",
+            "rank": 1,
+            "rerankScore": null,
+            "sparseScore": 0.325567,
+            "stage": "fusion"
+          },
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": 0.9242424242424242,
+            "outcome": "kept",
+            "rank": 1,
+            "rerankScore": null,
+            "sparseScore": 0.325567,
+            "stage": "candidate_filter"
+          },
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": 0.9242424242424242,
+            "outcome": "sent_to_reranker",
+            "rank": 1,
+            "rerankScore": null,
+            "sparseScore": 0.325567,
+            "stage": "rerank_input"
+          },
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": 0.9242424242424242,
+            "outcome": "kept_after_rerank",
+            "rank": 5,
+            "rerankScore": 0.030666487,
+            "sparseScore": 0.325567,
+            "stage": "rerank_output"
+          },
+          {
+            "denseScore": 0.847072,
+            "documentId": "12956194",
+            "fusionScore": 0.9242424242424242,
+            "outcome": "accepted_citation",
+            "rank": 5,
+            "rerankScore": 0.030666487,
+            "sparseScore": 0.325567,
+            "stage": "context_budget"
+          }
+        ],
+        "internalRerankEffect": {
+          "basis": "same_retrieval_input_output_per_gold",
+          "classification": "RERANK_ORDER_HARM",
+          "mrrAfter": 0.2,
+          "mrrBefore": 1.0,
+          "mrrDelta": -0.8,
+          "perGold": [
+            {
+              "direction": "HARM",
+              "documentId": "12956194",
+              "rankAfter": 5,
+              "rankBefore": 1
+            }
+          ],
+          "recallAfter": 1.0,
+          "recallBefore": 1.0,
+          "recallDelta": 0.0
+        },
+        "queryId": "956",
+        "question": "Pleiotropic coupling of GLP-1R to intracellular effectors promotes distinct profiles of cellular signaling.",
+        "wrongDocuments": [
+          {
+            "documentId": "31107919",
+            "excerpt": "G protein-coupled receptors (GPCRs) from the secretin-like (class B) family are key players in hormonal homeostasis and are important drug targets for the treatment of metabolic disorders and neuronal diseases. They consist of a large N-terminal extracellular domain (ECD) and a transmembrane domain (TMD) with the GPCR signature of seven transmembrane helices. Class B GPCRs are activated by peptide hormones with their C termini bound to the receptor ECD and their N termini bound to the TMD. It is thought that the ECD functions as an affinity trap to bind and localize the hormone to the receptor…",
+            "headingMarker": "BENCH_DOC_B64_MzExMDc5MTk",
+            "rank": 1,
+            "relevance": 0,
+            "score": null,
+            "title": "Differential Requirement of the Extracellular Domain in Activation of Class B G Protein-coupled Receptors."
+          },
+          {
+            "documentId": "7433668",
+            "excerpt": "Tuberculosis and helminthic infections coexist in many parts of the world, yet the impact of helminth-elicited Th2 responses on the ability of the host to control Mycobacterium tuberculosis (Mtb) infection has not been fully explored. We show that mice infected with the intestinal helminth Nippostrongylus brasiliensis (Nb) exhibit a transitory impairment of resistance to airborne Mtb infection. Furthermore, a second dose of Nb infection substantially increases the bacterial burden in the lungs of co-infected mice. Interestingly, the Th2 response in the co-infected animals did not impair the on…",
+            "headingMarker": "BENCH_DOC_B64_NzQzMzY2OA",
+            "rank": 2,
+            "relevance": 0,
+            "score": null,
+            "title": "Preexisting helminth infection induces inhibition of innate pulmonary anti-tuberculosis defense by engaging the IL-4 receptor pathway"
+          },
+          {
+            "documentId": "3127341",
+            "excerpt": "The glucagon-like peptide-1 receptor (GLP-1R) is a key physiological regulator of insulin secretion and a major therapeutic target for the treatment of type II diabetes. However, regulation of GLP-1R function is complex with multiple endogenous peptides that interact with the receptor, including full-length (1-37) and truncated (7-37) forms of GLP-1 that can exist in an amidated form (GLP-1(1-36)NH₂ and GLP-1(7-36)NH₂) and the related peptide oxyntomodulin. In addition, the GLP-1R possesses exogenous agonists, including exendin-4, and the allosteric modulator, compound 2 (6,7-dichloro-2-methyl…",
+            "headingMarker": "BENCH_DOC_B64_MzEyNzM0MQ",
+            "rank": 3,
+            "relevance": 0,
+            "score": null,
+            "title": "Polymorphism and ligand dependent changes in human glucagon-like peptide-1 receptor (GLP-1R) function: allosteric rescue of loss of function mutation."
+          }
+        ]
+      }
+    ]
+  },
+  "formatE2E": {
+    "degradedQueries": 0,
+    "formats": [
+      {
+        "characterCount": 1428,
+        "childChunks": 6,
+        "format": "docx",
+        "ingestElapsedMs": 6094,
+        "pageCount": 0,
+        "parsed": {
+          "bytes": 1428,
+          "exists": true,
+          "sha256": "c1af4a1e51bb1a8060cb126110596e63d287224845d90159661ff69a280f4b2b"
+        },
+        "physicalChunkRows": 12,
+        "qdrantPoints": 6,
+        "query": {
+          "count": 5,
+          "rerankMs": {
+            "count": 5,
+            "max": 4142,
+            "mean": 2771.6,
+            "min": 2028,
+            "p50": 2549,
+            "p95": 4142
+          },
+          "serviceMs": {
+            "count": 5,
+            "max": 4583,
+            "mean": 3421.8,
+            "min": 2695,
+            "p50": 3390,
+            "p95": 4583
+          },
+          "transportMs": {
+            "count": 5,
+            "max": 4588,
+            "mean": 3427.0,
+            "min": 2700,
+            "p50": 3396,
+            "p95": 4588
+          }
+        },
+        "source": {
+          "bytes": 10605,
+          "exists": true,
+          "sha256": "6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52"
+        },
+        "taskAttemptCount": 1
+      },
+      {
+        "characterCount": 1232,
+        "childChunks": 5,
+        "format": "markdown",
+        "ingestElapsedMs": 3056,
+        "pageCount": 0,
+        "parsed": {
+          "bytes": 1232,
+          "exists": true,
+          "sha256": "a7183cdf343754c54a569a8e64b135dd55528e767973256383cafc57a56d898d"
+        },
+        "physicalChunkRows": 10,
+        "qdrantPoints": 5,
+        "query": {
+          "count": 5,
+          "rerankMs": {
+            "count": 5,
+            "max": 1909,
+            "mean": 1650.8,
+            "min": 1306,
+            "p50": 1838,
+            "p95": 1909
+          },
+          "serviceMs": {
+            "count": 5,
+            "max": 2328,
+            "mean": 2088.8,
+            "min": 1684,
+            "p50": 2247,
+            "p95": 2328
+          },
+          "transportMs": {
+            "count": 5,
+            "max": 2333,
+            "mean": 2096.6,
+            "min": 1689,
+            "p50": 2264,
+            "p95": 2333
+          }
+        },
+        "source": {
+          "bytes": 1233,
+          "exists": true,
+          "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+        },
+        "taskAttemptCount": 1
+      },
+      {
+        "characterCount": 1375,
+        "childChunks": 6,
+        "format": "pdf",
+        "ingestElapsedMs": 37597,
+        "pageCount": 0,
+        "parsed": {
+          "bytes": 1375,
+          "exists": true,
+          "sha256": "8bc95d8da17ef9f1c8344735c46226b2d65488f80a7a13cb452ef480c96dc929"
+        },
+        "physicalChunkRows": 12,
+        "qdrantPoints": 6,
+        "query": {
+          "count": 5,
+          "rerankMs": {
+            "count": 5,
+            "max": 2674,
+            "mean": 1887.0,
+            "min": 1278,
+            "p50": 1697,
+            "p95": 2674
+          },
+          "serviceMs": {
+            "count": 5,
+            "max": 3028,
+            "mean": 2296.0,
+            "min": 1629,
+            "p50": 2304,
+            "p95": 3028
+          },
+          "transportMs": {
+            "count": 5,
+            "max": 3034,
+            "mean": 2300.8,
+            "min": 1632,
+            "p50": 2309,
+            "p95": 3034
+          }
+        },
+        "source": {
+          "bytes": 4180,
+          "exists": true,
+          "sha256": "5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448"
+        },
+        "taskAttemptCount": 1
+      }
+    ],
+    "noAnswerProbes": [
+      {
+        "citationCount": 5,
+        "expectedAnswer": "NOT_PRESENT",
+        "format": "markdown",
+        "judgement": "retrieval-only; LLM拒答正确性未评测",
+        "question": "What is the launch mass of Aurora Finch Observatory?",
+        "topHeading": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+        "transportMs": 1785
+      },
+      {
+        "citationCount": 6,
+        "expectedAnswer": "NOT_PRESENT",
+        "format": "docx",
+        "judgement": "retrieval-only; LLM拒答正确性未评测",
+        "question": "What is the launch mass of Aurora Finch Observatory?",
+        "topHeading": "RAG Format Fidelity Observatory Manual / Identity and access",
+        "transportMs": 3415
+      },
+      {
+        "citationCount": 6,
+        "expectedAnswer": "NOT_PRESENT",
+        "format": "pdf",
+        "judgement": "retrieval-only; LLM拒答正确性未评测",
+        "question": "What is the launch mass of Aurora Finch Observatory?",
+        "topHeading": "RAG Format Fidelity Observatory Manual / Deliberate omissions",
+        "transportMs": 1721
+      }
+    ],
+    "passedQueries": 15,
+    "resources": {
+      "localJava": {
+        "cpuPeakPct": 14.9,
+        "rssPeakKiB": 566608,
+        "samples": 46,
+        "threadPeak": 85
+      },
+      "remote": {
+        "rag-docling": {
+          "cpuPeakPct": 461.93,
+          "memoryPeakPct": 47.88,
+          "samples": 21
+        },
+        "rag-embedding": {
+          "cpuPeakPct": 359.77,
+          "memoryPeakPct": 64.38,
+          "samples": 21
+        },
+        "rag-model-gateway": {
+          "cpuPeakPct": 29.04,
+          "memoryPeakPct": 11.93,
+          "samples": 21
+        },
+        "rag-mysql": {
+          "cpuPeakPct": 46.46,
+          "memoryPeakPct": 52.34,
+          "samples": 21
+        },
+        "rag-node-exporter": {
+          "cpuPeakPct": 3.73,
+          "memoryPeakPct": 8.43,
+          "samples": 21
+        },
+        "rag-prometheus": {
+          "cpuPeakPct": 14.16,
+          "memoryPeakPct": 15.66,
+          "samples": 21
+        },
+        "rag-qdrant": {
+          "cpuPeakPct": 19.06,
+          "memoryPeakPct": 3.61,
+          "samples": 21
+        },
+        "rag-reranker": {
+          "cpuPeakPct": 408.24,
+          "memoryPeakPct": 67.79,
+          "samples": 21
+        }
+      }
+    },
+    "runId": "format-e2e-r6-eef28f1-minio-resources",
+    "storageConsistencyPassed": true
+  },
+  "internalDiagnostics": {
+    "exactFinalRankingMatches": 80,
+    "firstObservedTotalLossCounts": {
+      "DENSE_RAW_TOPK_MISS": 2,
+      "FUSION_THRESHOLD_OR_TOPK_LOSS": 17,
+      "NONE": 52,
+      "RAW_RECALL_TOTAL_MISS": 4,
+      "SPARSE_RAW_TOPK_MISS": 5
+    },
+    "limitations": [
+      "firstObserved字段表示阶段轨迹中首个可观测损失，不等同于模型或索引的不可反驳根因。",
+      "fusion实现将score threshold与TopK合并，轨迹只能定位到FUSION_THRESHOLD_OR_TOPK_LOSS。",
+      "context outcome可直接证明淘汰分支，但未采集具体Token差额与扩展上下文组成。",
+      "当前报告只支持每条请求恰好一个binding/profile；多binding局部排名不会被混成全局排名。",
+      "Hybrid raw union只表达Dense/Sparse两路覆盖并集，不提供跨分支全局名次语义。",
+      "每个变体记录并校验其binding/profile单作用域；四个消融target的binding/profile本来不同，跨变体指纹比较会归一化这两个target局部ID。",
+      "跨变体可比性校验共享知识库/文档/版本/generation/chunk、outcome与分数容差；未采集完整模型/index冻结指纹。"
+    ],
+    "queryCount": 20,
+    "recordCount": 80,
+    "rerankEffectCounts": {
+      "RERANK_NEUTRAL": 5,
+      "RERANK_ORDER_GAIN": 8,
+      "RERANK_ORDER_HARM": 7
+    }
+  },
+  "limitations": [
+    "SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。",
+    "r6格式题只验证证据词项是否在返回上下文，不等同于最终LLM回答正确。",
+    "无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。",
+    "r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。",
+    "内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。",
+    "fusion threshold与TopK尚未分开留痕；页数为未知而非0页。"
+  ],
+  "quality": {
+    "deltas": {
+      "hybridVsDense": {
+        "mapAt10": {
+          "absolute": -0.08824589947089945,
+          "relativePercent": -13.765010690935897
+        },
+        "mrrAt10": {
+          "absolute": -0.08920502645502648,
+          "relativePercent": -13.601755507643043
+        },
+        "ndcgAt10": {
+          "absolute": -0.07884670170637109,
+          "relativePercent": -11.53766120593891
+        },
+        "recallAt10": {
+          "absolute": -0.04727777777777786,
+          "relativePercent": -5.924946041913259
+        }
+      },
+      "hybridVsSparse": {
+        "mapAt10": {
+          "absolute": 0.24232142857142858,
+          "relativePercent": 78.03700895405403
+        },
+        "mrrAt10": {
+          "absolute": 0.24470767195767196,
+          "relativePercent": 76.01459488110842
+        },
+        "ndcgAt10": {
+          "absolute": 0.2490971411140825,
+          "relativePercent": 70.08102407714296
+        },
+        "recallAt10": {
+          "absolute": 0.2628888888888888,
+          "relativePercent": 53.895216400911124
+        }
+      },
+      "rerankVsHybrid": {
+        "mapAt10": {
+          "absolute": 0.07539550264550254,
+          "relativePercent": 13.637788342596814
+        },
+        "mrrAt10": {
+          "absolute": 0.07939814814814816,
+          "relativePercent": 14.012353748611028
+        },
+        "ndcgAt10": {
+          "absolute": 0.05870524924122689,
+          "relativePercent": 9.710749930714657
+        },
+        "recallAt10": {
+          "absolute": 0.0,
+          "relativePercent": 0.0
+        }
+      }
+    },
+    "variants": [
+      {
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 300,
+          "max": 6949,
+          "mean": 914.36,
+          "p50": 717,
+          "p95": 2380,
+          "p99": 3054
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "mapAt10": 0.31052116402116403,
+        "mrrAt10": 0.32192195767195764,
+        "ndcgAt10": 0.35544163972245085,
+        "queryCount": 300,
+        "recallAt10": 0.4877777777777778,
+        "rerankMs": {
+          "count": 300,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "successAt10": 0.5,
+        "variant": "sparse"
+      },
+      {
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 300,
+          "max": 10882,
+          "mean": 1693.5266666666666,
+          "p50": 1264,
+          "p95": 4016,
+          "p99": 7340
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "mapAt10": 0.641088492063492,
+        "mrrAt10": 0.6558346560846561,
+        "ndcgAt10": 0.6833854825429044,
+        "queryCount": 300,
+        "recallAt10": 0.7979444444444445,
+        "rerankMs": {
+          "count": 300,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "successAt10": 0.8166666666666667,
+        "variant": "dense"
+      },
+      {
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 300,
+          "max": 9548,
+          "mean": 2158.8166666666666,
+          "p50": 1851,
+          "p95": 4704,
+          "p99": 6738
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "mapAt10": 0.5528425925925926,
+        "mrrAt10": 0.5666296296296296,
+        "ndcgAt10": 0.6045387808365333,
+        "queryCount": 300,
+        "recallAt10": 0.7506666666666666,
+        "rerankMs": {
+          "count": 300,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "successAt10": 0.77,
+        "variant": "hybrid_rrf"
+      },
+      {
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 300,
+          "max": 89563,
+          "mean": 13451.076666666666,
+          "p50": 12408,
+          "p95": 21100,
+          "p99": 33399
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "mapAt10": 0.6282380952380952,
+        "mrrAt10": 0.6460277777777778,
+        "ndcgAt10": 0.6632440300777602,
+        "queryCount": 300,
+        "recallAt10": 0.7506666666666666,
+        "rerankMs": {
+          "count": 300,
+          "max": 45276,
+          "mean": 10990.443333333333,
+          "p50": 10209,
+          "p95": 17891,
+          "p99": 30827
+        },
+        "successAt10": 0.77,
+        "variant": "hybrid_rrf_rerank"
+      }
+    ]
+  },
+  "schemaVersion": 1,
+  "scope": {
+    "answerCorrectness": "not evaluated: SciFact input has no gold answers",
+    "formatE2E": "real HTTP + MinIO + MySQL + Qdrant + Docling + Embedding + Reranker; one worker/thread",
+    "percentileMethod": "nearest-rank",
+    "quality": "SciFact retrieval only; 300 queries x 4 variants"
+  },
+  "stablePerformance": {
+    "measuredRequestCount": 320,
+    "rows": [
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 612,
+          "mean": 320.35,
+          "p50": 276,
+          "p95": 582,
+          "p99": 612
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "sparse"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 3724,
+          "mean": 1479.85,
+          "p50": 1153,
+          "p95": 2439,
+          "p99": 3724
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "hybrid_rrf"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 31353,
+          "mean": 17194.2,
+          "p50": 15054,
+          "p95": 24862,
+          "p99": 31353
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 29722,
+          "mean": 15693.6,
+          "p50": 13983,
+          "p95": 23717,
+          "p99": 29722
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "hybrid_rrf_rerank"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 3792,
+          "mean": 1318.45,
+          "p50": 1194,
+          "p95": 2535,
+          "p99": 3792
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "dense"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 595,
+          "mean": 334.35,
+          "p50": 312,
+          "p95": 583,
+          "p99": 595
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "sparse"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 2382,
+          "mean": 1314.25,
+          "p50": 1173,
+          "p95": 2270,
+          "p99": 2382
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "hybrid_rrf"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 37055,
+          "mean": 21890.2,
+          "p50": 20984,
+          "p95": 33212,
+          "p99": 37055
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 36087,
+          "mean": 20435.15,
+          "p50": 19655,
+          "p95": 31806,
+          "p99": 36087
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "hybrid_rrf_rerank"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 1833,
+          "mean": 980.95,
+          "p50": 892,
+          "p95": 1691,
+          "p99": 1833
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r1-ebbe5d0",
+        "variant": "dense"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 28663,
+          "mean": 18949.1,
+          "p50": 18210,
+          "p95": 28004,
+          "p99": 28663
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 27519,
+          "mean": 17864.35,
+          "p50": 17312,
+          "p95": 27300,
+          "p99": 27519
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "hybrid_rrf_rerank"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 1280,
+          "mean": 894.9,
+          "p50": 844,
+          "p95": 1219,
+          "p99": 1280
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "hybrid_rrf"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 570,
+          "mean": 317.35,
+          "p50": 257,
+          "p95": 540,
+          "p99": 570
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "sparse"
+      },
+      {
+        "concurrency": 2,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 1259,
+          "mean": 643.2,
+          "p50": 572,
+          "p95": 1241,
+          "p99": 1259
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "dense"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 16263,
+          "mean": 11345.05,
+          "p50": 10966,
+          "p95": 15169,
+          "p99": 16263
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 14897,
+          "mean": 10271.4,
+          "p50": 10150,
+          "p95": 14351,
+          "p99": 14897
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "hybrid_rrf_rerank"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 1858,
+          "mean": 1116.7,
+          "p50": 1030,
+          "p95": 1808,
+          "p99": 1858
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "hybrid_rrf"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 707,
+          "mean": 289.0,
+          "p50": 242,
+          "p95": 435,
+          "p99": 707
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "sparse"
+      },
+      {
+        "concurrency": 1,
+        "degradedCount": 0,
+        "elapsedMs": {
+          "count": 20,
+          "max": 875,
+          "mean": 562.85,
+          "p50": 500,
+          "p95": 828,
+          "p99": 875
+        },
+        "emptyResultCount": 0,
+        "errorCount": 0,
+        "requestCount": 20,
+        "rerankMs": {
+          "count": 20,
+          "max": 0,
+          "mean": 0.0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0
+        },
+        "runId": "scifact-load-stable-r2-48f9099",
+        "variant": "dense"
+      }
+    ]
+  }
+}

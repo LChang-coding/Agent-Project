@@ -1,0 +1,23 @@
+{
+  "response": {
+    "code": "0000",
+    "data": [
+      {
+        "activeGeneration": 1,
+        "activeVersionId": "ragver_9d56c9d6e55d452e89944d7febda1173",
+        "displayName": "format-fidelity.docx",
+        "documentId": "doc_d7cfa70710484f33bcb2364610d5427e",
+        "knowledgeBaseId": "kb_f3f64ebf06ca4e79b3703fb5f89874c5",
+        "revision": 1,
+        "status": "ready",
+        "targetGeneration": null
+      }
+    ],
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 5,
+    "httpStatus": 200,
+    "responseBytes": 322
+  }
+}

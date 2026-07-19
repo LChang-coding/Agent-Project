@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-19T17:31:32Z",
+  "runId": "scifact-load-smoke-ef7e906-r1",
+  "loadExitCode": 1,
+  "files": [
+    {
+      "name": "local-process.jsonl",
+      "sha256": "272c62438e724745541e3124e3ed232250bf972c42afbf02ec60d2c0d0e12555"
+    },
+    {
+      "name": "remote-containers.jsonl",
+      "sha256": "5e85e6ae7b7be2cf04006ff635564018bb7dd0b8145b89f24aee7db3fb86129d"
+    },
+    {
+      "name": "remote-inspect-before.txt",
+      "sha256": "dafe587dfd0950f9853671535ffd15ca340314cf0638bdfd374110d70558101d"
+    },
+    {
+      "name": "remote-inspect-after.txt",
+      "sha256": "416bec803d31146cf2ce59d46d6d604b41034bd23d70d2888817c77a31fc8bf0"
+    }
+  ]
+}

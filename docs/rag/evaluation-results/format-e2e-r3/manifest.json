@@ -1,0 +1,40 @@
+{
+  "answerMetrics": "retrieval_evidence_term_coverage_only; no LLM answer judge",
+  "appJarSha256": "e6335927080af2a6e9aebbe2b27c18eaa5e77f89cd6ab059a7872c698c154043",
+  "baseUrl": "http://127.0.0.1:8092/api",
+  "cleanup": "keep synthetic tenant for audit",
+  "codeRevision": "eef28f1674ce1543d999bdc4c71a8eac80c9804e",
+  "error": "docx ingest ended failed/indexing/RAG_EMBEDDING_TIMEOUT",
+  "errorType": "RuntimeError",
+  "finishedAt": "2026-07-19T22:18:51.486667Z",
+  "fixtureFiles": {
+    "docx": {
+      "bytes": 10605,
+      "file": "format-fidelity.docx",
+      "sha256": "6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52"
+    },
+    "markdown": {
+      "bytes": 1233,
+      "file": "format-fidelity.md",
+      "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+    },
+    "pdf": {
+      "bytes": 4180,
+      "file": "format-fidelity.pdf",
+      "sha256": "5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448"
+    }
+  },
+  "fixtureSpecSha256": "2d55a3baa532bded0b9b67e95afe15219da5f8b227eb57cfa12e1d2620753ad8",
+  "ingestTimeoutSeconds": 900,
+  "noAnswerQuestionCountPerFormat": 1,
+  "queryThreads": 1,
+  "questionCountPerFormat": 5,
+  "requestTimeoutSeconds": 180,
+  "runId": "format-e2e-r3-eef28f1",
+  "schemaVersion": 1,
+  "startedAt": "2026-07-19T22:14:01.425312Z",
+  "status": "failed",
+  "syntheticUsername": "rag_format_1784499241-93a6b4",
+  "uploadThreads": 1,
+  "workerThreads": 1
+}

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "title": "RAG Format Fidelity Observatory Manual",
+  "facility": "Aurora Finch Observatory",
+  "facts": {
+    "activeAccessPhrase": "VIOLET-7291",
+    "retiredAccessPhrase": "CRIMSON-4180",
+    "northSensor": "North-17",
+    "northThresholdCelsius": "37.4",
+    "northCalibrationDays": 43,
+    "southSensor": "South-08",
+    "southThresholdCelsius": "41.2",
+    "southCalibrationDays": 28,
+    "shutdownApprover": "Mira Solano",
+    "shutdownDeadlineMinutes": 11,
+    "backupCapsuleLocker": "K-204"
+  },
+  "questions": [
+    {
+      "queryId": "format-q1",
+      "question": "What is the active access phrase for Aurora Finch Observatory?",
+      "expectedAnswer": "VIOLET-7291",
+      "expectedTerms": ["VIOLET-7291"],
+      "evidenceSection": "Identity and access"
+    },
+    {
+      "queryId": "format-q2",
+      "question": "How often must the North-17 sensor be calibrated?",
+      "expectedAnswer": "Every 43 days",
+      "expectedTerms": ["43 days"],
+      "evidenceSection": "Sensor limits"
+    },
+    {
+      "queryId": "format-q3",
+      "question": "Who authorizes a North-17 emergency shutdown, and within how many minutes?",
+      "expectedAnswer": "Mira Solano, within 11 minutes",
+      "expectedTerms": ["Mira Solano", "11 minutes"],
+      "evidenceSection": "Emergency procedure"
+    },
+    {
+      "queryId": "format-q4",
+      "question": "Which locker contains the backup calibration capsule?",
+      "expectedAnswer": "K-204",
+      "expectedTerms": ["K-204"],
+      "evidenceSection": "Cross-page continuity"
+    },
+    {
+      "queryId": "format-q5",
+      "question": "Which access phrase is retired and must not be used?",
+      "expectedAnswer": "CRIMSON-4180",
+      "expectedTerms": ["CRIMSON-4180", "retired", "must not be used"],
+      "evidenceSection": "Identity and access"
+    }
+  ],
+  "noAnswerQuestions": [
+    {
+      "queryId": "format-na1",
+      "question": "What is the launch mass of Aurora Finch Observatory?",
+      "expectedAnswer": "NOT_PRESENT"
+    }
+  ]
+}

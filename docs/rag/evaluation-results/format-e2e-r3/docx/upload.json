@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicated": false,
+      "documentId": "doc_636ccaaecc1c49cda3d63816f7f2ca1a",
+      "fileName": "format-fidelity.docx",
+      "sizeBytes": 10605,
+      "status": "queued",
+      "taskId": "ragtask_5d347c8c32a347b2881fbdc54dbbfb9b",
+      "versionId": "ragver_fd60188f0b734f5e9c95652220bf849a"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 9,
+    "httpStatus": 200,
+    "requestBytes": 10605,
+    "responseBytes": 289
+  }
+}
