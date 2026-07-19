@@ -168,13 +168,51 @@ java -jar ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar
   --concurrency-levels 1,2,4,8,16 \
   --warmup-per-variant 10 \
   --requests-per-variant 100 \
-  --request-timeout-seconds 120
+  --phase-timeout-seconds 7200 \
+  --request-timeout-seconds 240 \
+  --cli-jar-sha256 "$(shasum -a 256 ai-agent-scaffold-benchmark/target/ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar | awk '{print $1}')" \
+  --app-jar-sha256 "$(shasum -a 256 ai-agent-scaffold-app/target/ai-agent-scaffold-app.jar | awk '{print $1}')" \
+  --resource-evidence /path/to/evidence-manifest.json
 ```
 
-每轮必须记录端点、请求数、并发、线程、warmup、超时、吞吐、状态码、响应大小、error/degraded/empty rate、wall与阶段p50/p95/p99，并同步采集Java/Hikari/GC、MySQL、网络和RAG服务器各容器CPU/内存。工具使用closed-loop固定请求数，不代表open-loop指定到达率下的过载能力。
+每轮必须记录端点、请求数、并发、线程、warmup、超时、CLI/App JAR hash、吞吐、状态码、响应大小、error/degraded/empty rate、wall与阶段p50/p95/p99，并同步采集Java/GC、MySQL和RAG服务器各容器CPU/内存。`load`对warmup和measured逐条flush，任一错误、降级、空排名、重复排名、非法Rerank或缺失传输证据都会立即失败。工具使用closed-loop固定请求数，不代表open-loop指定到达率下的过载能力。项目内可使用`run-local-rag-load.sh`在登录、Qdrant隧道、质量run门禁和资源采样闭环下启动。
 
-## 当前运行状态
+## 已验证的 SciFact 质量结果
 
-完整 SciFact 第四次复评分目录为本机受控临时目录，运行代码 revision 为 `1e9ebbf422ada2f8be1781b0c3ee26f048f12143`。此前因Qdrant瞬态错误、Reranker降级和Embedding间歇超时产生的失败run均独立保留，不参与最终聚合。
+最终可发布质量产物位于本机受控目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-3d9510c-r11`。它通过严格断点门禁复用了553条健康前缀，只请求剩余647条，没有从头重跑1200条。最终为1200条、1200个唯一variant/query，四组各300，0 error、0 degraded、0 empty、0重复排名；300条Rerank均有正候选数和正耗时。
 
-本节故意不抄写运行中的部分 Recall/MRR/nDCG/MAP 或 p95/p99。只有评测器写出完成状态和 `metrics.json`，并通过上述1200条门禁后，才在最终报告中加入四组绝对值、差值、延迟分布、资源证据和瓶颈结论。
+| 变体 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 |
+|---|---:|---:|---:|---:|
+| Dense | 0.797944 | 0.655835 | 0.683385 | 0.641088 |
+| Sparse | 0.487778 | 0.321922 | 0.355442 | 0.310521 |
+| Hybrid RRF | 0.750667 | 0.566630 | 0.604539 | 0.552843 |
+| Hybrid RRF + Rerank | 0.750667 | 0.646028 | 0.663244 | 0.628238 |
+
+Rerank相对未重排Hybrid的MRR/nDCG/MAP分别提高约0.079398/0.058705/0.075396，Recall@10不变。但Dense在四项总体指标上仍略高，所以不能声称“组件越多质量必然越好”。CLI `score`生成独立`metrics-independent.json`，再用第二套标准库实现复算，最大绝对浮点差为`4.44e-16`。
+
+关键SHA-256：正式run `24331ecdbb58978e37a92bff9c1afad5c09d1abadba68b88fdbf4d0b0ee792a5`，metrics `e48c03a097ae8b02198b5af70cd6ff7703cf91daa4cf9fac0ba26ee046674c3e`，independent metrics `e3ac2eb39bb494df425de0140900bc47d0656f2b7c42989cbd80a06dc320b352`，CLI JAR `970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`，App JAR `484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。质量run由120/240秒客户策略的两个分段构成，其合并延迟不用作性能结论。
+
+## 已验证的稳定容量结果
+
+性能评测固定为同一SciFact prepared/targets、同一App JAR、Rerank Top10和3/3/3/1子批。两个独立completed run分别以`2,1`和`1,2`顺序执行，每轮40 warmup+160 measured；合计320条正式样本。每轮各160个唯一“并发×变体×query”组合，合并后仍为160个组合且每个恰有2次独立观测；若将runId纳入键则320个全部唯一。全部0 error/degraded/empty。原始目录为`/tmp/rag-load-stable-r1-ebbe5d0`、`/tmp/rag-load-stable-r2-48f9099`，资源证据目录分别在名为上述目录加`-evidence`后缀的同级路径。两轮CLI JAR均为`f1deb4d207d916827ebb4e673a196786e73520fafd42fecbda960c4ccd74559d`，App JAR均为`484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`。
+
+| 轮次 | 并发 | 成功吞吐 req/s | Dense p50/p95 ms | Sparse p50/p95 ms | Hybrid p50/p95 ms | Rerank p50/p95 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| stable-r1（顺序 2,1） | 1 | 0.1969 | 1194 / 2535 | 276 / 582 | 1153 / 2439 | 15054 / 24862 |
+| stable-r1（顺序 2,1） | 2 | 0.3199 | 892 / 1691 | 312 / 583 | 1173 / 2270 | 20984 / 33212 |
+| stable-r2（顺序 1,2） | 1 | 0.3004 | 500 / 828 | 242 / 435 | 1030 / 1808 | 10966 / 15169 |
+| stable-r2（顺序 1,2） | 2 | 0.3726 | 572 / 1241 | 257 / 540 | 844 / 1219 | 18210 / 28004 |
+| 两轮合并（每变体40样本） | 1 | 0.2379 | 695 / 1788 | 255 / 582 | 1130 / 2207 | 13866 / 24493 |
+| 两轮合并（每变体40样本） | 2 | 0.3442 | 630 / 1526 | 299 / 570 | 986 / 2006 | 20691 / 28701 |
+
+合并Rerank stage p95在并发1/2下为21764/27798ms，而Dense/Sparse/Hybrid的p95均不超过2.21s。两轮的长尾差异很大，说明公网路径和CPU推理队列有显著抖动；每组40样本的p99仍不足以作稳定SLA。
+
+并发4诊断run在第39条measured时命中Hybrid+Rerank fallback，失败样本为67.19s。当时Reranker容器峰值CPU 566.50%、内存限额占比67.07%，前后无restart/OOM；App自身峰值仅16.2% CPU。当前App `maxConcurrency=2`，一次Top10又被拆成4个串行子批，远端queue time最高11.41s，60秒Rerank总deadline被耗尽。因此当前完整Rerank链路的已验证健康边界是并发2，并发4不可作发布容量。
+
+子批A/B也保留失败证据：批次10在当前`max-concurrent-requests=8`部署下的每次重试均返回`no permits available`，证明该组合不可用；这与permit上限一致，但不从日志反推TEI内部permit的精确分配算法。批次8和5虽通过最小功能门禁，同query正式Rerank分别为15.215s和19.439s，都没有优于批次3的8.930s。样本不足以证明精确倍数，但不支持改默认值，所以已恢复批次3。
+
+两轮completed evidence中，Reranker峰值CPU为518.03%/539.45%、内存均67.84%左右；Embedding峰值290.53%/285.69%，Qdrant内存仅3.68%/3.71%，App峰值35.3%/20.3% CPU、约967MiB RSS。两轮前后8容器均running、restart=0、OOM=false，证据manifest的四个文件hash均已与实际文件复核一致。结论是Reranker CPU推理与排队是当前首要瓶颈，其次是Embedding CPU；MySQL、Qdrant内存和本地Java资源都不是本轮先触发的边界。
+
+两轮`load-manifest.json`的SHA-256分别为`b6027a7db13abd99ffb3aafd375e6adca2fb6e29b407794858b5f23c288e2a3c`、`1a31c7e435dffd7d6d970deb99a44864b60475b8c6c0cf8eaca1c28117f327f3`；`load-report.json`分别为`79bd1c5fb7db020b9fe14756cddb4006c2124d5aae78750937f51d7fd814a759`、`97d7a5a64bf8500c73fa28a27190c21293d291678d57a6ef88fd64ea6bf5143b`；`evidence-manifest.json`分别为`c5d306d57c1f5fb1896191a38f4a3f1a9eba9f142a1d745504d2225e5ab86092`、`98edf3c75ad4f5d846247188305acf62495ec704db248d885c65ca5f5f6f4692`。
+
+上述性能数据仅代表当前closed-loop、本地Java→公网RAG服务器、指定CPU模型和当时资源限额。它不证明open-loop到达率、跨地域生产SLA、生成答案正确率，也不能排除更长时间窗的更高p99。

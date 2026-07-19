@@ -1537,3 +1537,19 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 并发1整体成功吞吐`0.1969 req/s`：Dense p50/p95/max=1194/2535/3792ms，Sparse=276/582/612ms，Hybrid=1153/2439/3724ms，Hybrid+Rerank=15054/24862/31353ms。并发2吞吐`0.3199 req/s`：Dense=892/1691/1833ms，Sparse=312/583/595ms，Hybrid=1173/2270/2382ms，Hybrid+Rerank=20984/33212/37055ms。Rerank在两级都是主导stage；p99仅由20样本的最高一条构成，只留痕不当稳定尾分位。
 - evidence四文件hash全部与清单一致，远端192个样本、本地401个样本有效；前后8容器均running/restart=0/OOM=false。Reranker峰值CPU 518.03%/内存67.84%，Embedding 290.53%/64.39%，Qdrant 162.38%/3.68%；本地App峰值35.3% CPU、966.9MiB RSS、82线程。服务端推理资源高于本地Java是与stage延迟一致的瓶颈证据。
 - 第二轮继续既定`1,2`反向顺序与同样本数，使用全新目录和独立随机登录密码；不重启App/模型，避免引入新配置变量。
+
+###### 稳定容量复测第二轮执行结果与最终文档计划（执行前）
+
+- run `scifact-load-stable-r2-48f9099`按`1,2`顺序完成40 warmup+160 measured，manifest=completed/exitCode=0；本轮160个组合唯一、每级别/变体各20个不同query，0 error/degraded/empty。两轮合并后是160个组合各2次独立观测，不是320个不同query组合。warmup/load hash为`d0d297b9…17ed`/`0b8677cc…aaf0`并与manifest一致。
+- 第二轮并发1吞吐`0.3004 req/s`：Dense p50/p95/max=500/828/875ms，Sparse=242/435/707ms，Hybrid=1030/1808/1858ms，Hybrid+Rerank=10966/15169/16263ms。并发2吞吐`0.3726 req/s`：Dense=572/1241/1259ms，Sparse=257/540/570ms，Hybrid=844/1219/1280ms，Hybrid+Rerank=18210/28004/28663ms。
+- 两个completed轮次合并仅用于方向性统计：每并发-变体40样本。并发1合并吞吐`0.2379 req/s`，Dense/Sparse/Hybrid/Rerank p50为695/255/1130/13866ms，p95为1788/582/2207/24493ms；并发2吞吐`0.3442 req/s`，p50为630/299/986/20691ms，p95为1526/570/2006/28701ms。Rerank stage合并p95为21764/27798ms，是唯一随并发明显增长的主导阶段。
+- 第二轮evidence四hash全部匹配，远端152、本地323样本有效，前后快照running/restart=0/OOM=false。Reranker峰值539.45% CPU/67.84%内存限额，Embedding 285.69%/64.37%，Qdrant 212.00%/3.71%；App峰值20.3% CPU/967.9MiB RSS/78线程。
+- 更新`docs/rag/evaluation.md`：替换过期的“第四次运行中”状态，写入r11的1200条质量结果、独立复分、两轮completed性能表、并发4容量失败、3/5/8/10子批A/B和资源瓶颈；同时修正load CLI示例的强制hash/证据参数。
+- 文档只报告可从临时原始产物复算的数字，明确40样本p99、closed-loop、公网模型路径和分段质量run限制；不声称SLA、open-loop过载能力或生成答案质量。文档diff check通过后用中文提交形成评测结果闭环。
+
+###### 最终证据复核执行结果
+
+- 独立复核逐项校验了质量1200条、553+647断点续跑、四组指标、独立评分差值、两轮稳定压测分位数和资源峰值；除一处样本唯一性表述外全部通过。
+- 已修正“320个唯一并发×变体×query组合”：正确口径是320条正式记录、160个唯一组合，每个组合在两个独立run中各观测一次；包含runId时才是320个唯一键。
+- `docs/rag/evaluation.md`已补齐两轮原始目录、CLI/App JAR hash及manifest/report/evidence manifest的SHA-256；所有数字都能回溯到本机受控临时目录。
+- `git diff --check`作为提交前最后门禁；本次只纳入评测报告和本计划文档，不纳入运行日志与其他未跟踪目录。
