@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "datasetName": "scifact",
+  "sourceUrl": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip",
+  "sourceRevision": "536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165",
+  "license": "CC-BY-4.0_annotations_ODC-By-1.0_S2ORC",
+  "subsetStrategy": "full",
+  "seed": 20260719,
+  "documentCount": 5183,
+  "queryCount": 300,
+  "qrelCount": 339,
+  "shardMaxBytes": 16777216,
+  "generatedAt": "2026-07-18T20:48:40.145065Z",
+  "sourceArchive": {
+    "path": "source/scifact.zip",
+    "sizeBytes": 2816079,
+    "sha256": "536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165"
+  },
+  "sourceFiles": [
+    {
+      "name": "corpus",
+      "path": "source/scifact.zip!/scifact/corpus.jsonl",
+      "sizeBytes": 8106566,
+      "sha256": "dec31c8182f3d744c7d2c09423756fd1d17cbef75808db13ba01cc0aab4d1ac6"
+    },
+    {
+      "name": "queries",
+      "path": "source/scifact.zip!/scifact/queries.jsonl",
+      "sizeBytes": 209731,
+      "sha256": "8ff84a7c903f722981cd8d595c022660140c51867b27608a6d4910db86080313"
+    },
+    {
+      "name": "qrels",
+      "path": "source/scifact.zip!/scifact/qrels/test.tsv",
+      "sizeBytes": 5389,
+      "sha256": "0864bb985e0ca2367ba217977e72004d549054b2b06666ed9d4825ac7c21284c"
+    }
+  ],
+  "generatedFiles": [
+    {
+      "name": "document-map.jsonl",
+      "path": "prepared/document-map.jsonl",
+      "sizeBytes": 954895,
+      "sha256": "1718e1ed99f145f839156afccca3b13de7608a154232e5d829f20a36cb124c84"
+    },
+    {
+      "name": "documents/benchmark-0001.md",
+      "path": "prepared/documents/benchmark-0001.md",
+      "sizeBytes": 7957673,
+      "sha256": "0287493f09e9cb8d13d44bd46c01540229a7bad18d8c9da344f60429a89d6680"
+    },
+    {
+      "name": "qrels.tsv",
+      "path": "prepared/qrels.tsv",
+      "sizeBytes": 5049,
+      "sha256": "5602d9f31c96d309a906692e1b722a9acfc4138c5d52e06d47bbb89a9c4ab7c3"
+    },
+    {
+      "name": "queries.jsonl",
+      "path": "prepared/queries.jsonl",
+      "sizeBytes": 35577,
+      "sha256": "331f88f940774ac84e1fc6ef517720dd94d07deab77efbdc85f42fc405335ad0"
+    }
+  ]
+}

@@ -1595,3 +1595,34 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java 17首轮定向`RagDocumentControllerTest,RagDocumentManagementServiceTest,RagRepositoryTest` 20/20通过。随后新增Mapper契约测试，执行`mvn clean test -pl ai-agent-scaffold-app -am -DskipTests=false -Dtest='*Rag*Test' -Dsurefire.failIfNoSpecifiedTests=false`，134/134通过，0 failure/error/skipped，六模块BUILD SUCCESS，10.043秒。
 - 前端`npm run build`在最终修改后通过`vue-tsc --noEmit`和Vite生产构建，1916 modules transformed，884ms；RAG页面JS 33.16kB（gzip 10.95kB）。Java全reactor跳过重复测试的package成功，App JAR SHA-256为`6ab19821da2b55732552598afa065ce2ba8709ed2280c9917db2a8402223614a`。
 - 本切片没有重启正在服务的旧8092评测应用，因此不把Controller/前端的单元契约和生产构建写成真实浏览器E2E；新JAR的运行时黑盒验证与后续PDF/DOCX三格式E2E合并执行，避免为一个只读新端点单独中断当前服务。
+
+#### RAG文档删除生命周期切片计划（执行前）
+
+1. 本切片只实现“删除”，不与“重建”共用一个不完整状态机：删除必须先在MySQL以revision CAS把文档从READY切到DELETING，使检索后验立即拒绝；同事务创建`DELETE`任务与Outbox，不在HTTP线程执行慢清理。
+2. Worker对`DELETE`建立独立分支；每次Qdrant version delete、MySQL chunk delete和MinIO原件delete前后都经租约/fencing/取消屏障，各清理操作必须幂等。全部副作用成功后，同一本地事务把version/document/task收口为DELETED/DELETED/COMPLETED并清除活动版本和generation。
+3. 删除任务不接受管理员“取消删除”：一旦MySQL tombstone生效，任意外部清理可能已部分完成，恢复会产生伪READY。失败时保持DELETING且任务按现有有界重试/租约接管，不还原可检索状态。
+4. API使用可管理权限、document归属和`expectedRevision`门禁；重复删除已DELETING/DELETED文档幂等返回现有删除任务/终态，存在摄取任务时先要求管理员取消并等待闭合，禁止两个Worker竞争同一version。
+5. 前端文档行增加独立删除pending/确认/成功/失败反馈，DELETING期间禁止重复操作并依赖任务列表恢复进度。测试覆盖跨租户、revision冲突、活动摄取冲突、每个外部副作用前的fencing、失败重试和三表原子收口；运行Java 17 RAG回归与前端生产构建。
+
+#### RAG最终测试数据、瓶颈与失败样例交付要求（2026-07-20补充）
+
+1. 全部功能切片和最终测试完成后，输出一份统一最终报告：逐项列出功能测试、Java单元/契约/集成、前端构建/浏览器E2E、三格式摄取、质量消融、查询/摄取性能和资源证据；每项必须有样本量、命令/端点、环境、配置、通过/失败数、原始产物路径和hash。
+2. 对每个RAG技术点输出“执行前/关闭→执行后/开启”的可比较差异，至少包含Dense、Sparse、Dense+Sparse RRF、Rerank、去重、父/邻块扩展、Token预算、分块参数、TopK/候选数和已实现的网络/数据库/批处理优化。只用同数据快照、同超时口径和同样本集的数字计算绝对/相对变化，不用不同run的偶然波动伪造优化收益。
+3. 瓶颈结论必须串起阶段计时、端到端分位数、吞吐/错误/降级、Java资源、MySQL/Qdrant和Docling/Embedding/Reranker容器CPU/内存/排队证据；对每个瓶颈说明直接原因、受影响范围、当前容量边界、可选优化、预期代价和需要如何复测才能确认收益。
+4. 新增“组件屏蔽导致的召回失败案例”附录：从最终SciFact四变体原始JSONL与qrels/document-map中程序化提取有代表性的漏召回、错排和Rerank救回/伤害样本。每个样例必须列出queryId与问题、gold documentId/标题/可核验摘要、各变体TopK文档与名次、对应指标差、被关闭或新增的技术点及失败机制分析。
+5. 失败原因必须区分“原始证据可直接证明”与“根据排名/词项/语义差异做的推断”；推断要标注为推断并给出反证或进一步验证方法。公开语料可附可审计文档内容，不复制租户私有原文。
+6. 最终报告的指标、差值、样例和瓶颈均由脚本/程序从原始产物生成或独立复算；人工只写受证据支持的解释，禁止补写没有运行的数字。
+
+#### SciFact评测文档本地固化切片计划（执行前）
+
+1. 仅固化当前RAG质量评测使用的公开SciFact数据，不从MinIO导出租户私有文档；目标目录为`docs/rag/evaluation-data/scifact/`。
+2. 同时保留官方原始压缩包与实际摄取的Markdown分片，并保存`document-map`、300条查询、339条qrel、准备清单和许可证/来源说明，使数据准备、失败样例分析和结果复算不再依赖`/tmp`。
+3. 复制后逐文件核对字节数和SHA-256，并用程序核对5183篇文档、300个查询、339条相关性标注及映射唯一性；所有清单路径改为项目内相对路径，禁止遗留临时目录绝对路径。
+4. 该数据集约11MiB，只纳入公开语料和必要复现文件，不纳入运行日志、Token、登录信息、服务密钥或租户数据；验证后作为独立中文本地提交。
+
+#### SciFact评测文档本地固化切片执行结果
+
+- 新增`docs/rag/evaluation-data/scifact/`：保留官方`scifact.zip`、项目实际摄取的`benchmark-0001.md`、文档映射、查询、qrels、项目内相对路径清单和使用说明；没有导出MinIO租户文档，也没有纳入服务凭据或运行日志。
+- 原始压缩包为2,816,079字节，SHA-256=`536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`；实际摄取Markdown为7,957,673字节，SHA-256=`0287493f09e9cb8d13d44bd46c01540229a7bad18d8c9da344f60429a89d6680`。其余四个准备产物逐文件字节数与SHA-256均和`manifest.json`一致，压缩包内部corpus/queries/test qrels三个源文件摘要也逐项通过。
+- 程序核对Markdown标题标记、`document-map`行数和唯一documentId均为5,183；查询行数和唯一queryId均为300；`qrels.tsv`共340行，其中首行为表头，实际相关性标注为339条，与清单一致。
+- 首次校验脚本失败过一次，原因是zsh中循环变量误命名为保留的`path`数组，覆盖了命令搜索路径并导致后续`jq`显示`command not found`；改名为`rel`后完整重跑。随后一次把qrels物理行数340直接与数据行339比较而退出，确认表头后按`NR-1`复核为339；两次都属于校验脚本口径问题，不是数据摘要或数量损坏。
