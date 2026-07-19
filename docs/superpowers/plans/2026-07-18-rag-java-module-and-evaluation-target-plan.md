@@ -1367,3 +1367,34 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - `run`与`evaluate`共用原有manifest异常路径；Resume Gate把Measured Gate错误加入可恢复终态，因为其源文件只可能停在失败样本之前。后续若相同Qdrant瞬态再次出现，CLI会在第一条失败处自身终止，不再依赖5秒轮询和人工SIGINT，也不会多发后续请求。
 - 新增4个Gate测试覆盖健康、业务错误、降级/空结果和“有排名但Rerank候选/耗时为0”；新增Runner真实HTTP集成测试让服务端返回HTTP 200业务错误码，断言仅1次debug调用、无`run.jsonl`、failed manifest和原始错误摘要。测试第一次使用HTTP 503时客户端按协议记录通用`RAG_BENCHMARK_HTTP_503`而非响应体业务码，断言正确失败；夹具改为与生产本次响应一致的HTTP 200业务错误信封后通过，没有修改客户端错误语义。
 - benchmark全量34/34测试通过、0 failure/error/skipped；`mvn package`再次34/34并生成fat CLI，SHA-256为`970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`。作用域diff check通过。
+
+###### SciFact 第十次严格断点续评分计划（执行前）
+
+1. 使用提交`bfef8cd`、CLI SHA-256 `970621ed164b1d4af02a90cb81cde1d4cd5deda331e9e70cb787327e3a04932d`和全新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-resume-bfef8cd-r10`；仍从第七次553条健康源恢复，不读取或修剪第九次污染文件。
+2. 复核第七次四hash、prepared/targets、App/MySQL/Qdrant/模型健康与无其他evaluator；同条件唯一更新隔离账号密码。保持240秒客户端、App JAR、Qdrant 3秒单次/5次重试/30秒总预算、Embedding/Rerank、索引、targets、seed全部不变。
+3. Resume Gate通过后应复制553条；第554～557条会重复第九次已经成功但无法安全跨洞复用的4条。第558条重新调用queryId=560/Dense；若成功则继续，若仍出现`RAG_QDRANT_UNAVAILABLE`，Measured Gate必须在append前终止，源文件只能有557条且manifest为稳定门禁错误，不能再产生第559条。
+4. 第558条通过后持续监控总数/唯一/错误/降级/空/Rerank；最终仍以1200完整质量门禁和独立score为完成条件。第九次失败及重试次数单独作为可靠性证据，不纳入质量run的错误率或性能延迟。
+
+###### 第十次启动前 Qdrant 公网抖动结果与本地 SSH 转发计划（执行前）
+
+- 第十次预检在账号更新和评测启动前安全失败：本机访问`103.205.240.84:6333/collections/...`连续10秒0字节并由curl 28退出，因此没有新输出目录或检索调用。随后的服务器本机证据为healthz通过、collection green/7563点、容器running+healthy+0重启；公网5次healthz又立即全部HTTP 200。结合第九次21.5秒`RAG_QDRANT_UNAVAILABLE`，根因是公网路径间歇停滞而非Qdrant进程、索引或特定query故障。
+- 新增benchmark专用Qdrant SSH LaunchAgent：本机仅监听`127.0.0.1:16333`并转发到RAG服务器本机6333，使用既有`RAG-Server` SSH配置、BatchMode、ExitOnForwardFailure、ServerAliveInterval/CountMax；不上传Java项目、不关闭公网6333，也不改变浏览器Dashboard访问方式。
+- `ensure-local-rag-benchmark-qdrant.sh`必须用真实`/healthz`和目标collection状态门禁，不以本地端口监听替代；现有隧道失活则kickstart重建。`start-local-rag-benchmark-app.sh`在显式`RAG_BENCHMARK_QDRANT_TUNNEL=true`时先ensure并默认连接`http://127.0.0.1:16333`，false仍保留公网路径。
+- 同时把隔离benchmark启动脚本的Qdrant单请求上限改为环境可覆盖、默认10秒，总deadline默认60秒，最大重试仍5次；其目的为避免一次远端请求已经执行但公网响应超过3秒时立即重复搜索，降低额外服务器负载。只影响benchmark App启动环境，不修改生产application.yml默认，也不改变排序/质量。
+- 完成shell/plist语法、LaunchAgent启动/强制重建、30次health+collection真实查询、App重启与同query四变体无降级冒烟；记录新PID但App JAR hash必须不变。全部通过后中文提交，再以新提交/CLI和全新第十一次目录从553条启动。
+
+###### Qdrant 隧道实测结果与 HTTP 408 重试修复计划（执行前）
+
+- 公网路径30次真实collection count探测仅27次成功，观测到1次HTTP 408、2次empty reply，成功请求也出现11.06秒长尾；服务器本机Qdrant始终green/healthy/0重启。SSH隧道稳定后同一真实探测30/30成功，因此benchmark App已改为仅本机`127.0.0.1:16333`隧道，并实际以Qdrant单次20秒、总90秒、最多5次重试重启成功；Java项目未上传服务器。
+- 隧道下对queryId=783执行四变体冒烟时，第一条Dense仍在34.6秒后失败，数据库审计为`RAG_QDRANT_HTTP_ERROR`；结合前述真实HTTP 408证据和代码只把429/502/503/504归为瞬态状态，当前最小根因是408被直接按不可重试HTTP错误终止。该冒烟未进入正式第十次/第十一次质量run，也没有改变553条可复用前缀。
+- 在`QdrantVectorStoreAdapter`把HTTP 408加入瞬态重试集合；只处理已有现场证据，不扩大到没有证据的其他4xx。Qdrant查询、按确定点ID upsert和条件删除均具备幂等调用语义，408表示服务端/中间链路等待超时，重试不会改变检索排序配置或评价口径；普通400等客户端错误仍立即失败。
+- 增加协议测试：首次408、随后200时必须重试并成功；持续408时必须严格受`maxRetries`约束并返回稳定`RAG_QDRANT_HTTP_ERROR`；400必须一次失败且不重试。运行Qdrant适配器测试及受影响RAG测试，重建App JAR并记录hash。
+- 测试通过后提交一次中文闭环提交，再以新JAR和SSH隧道重启8092，重新执行queryId=783四变体冒烟并核对数据库审计0错误/0降级/非空排名。只有冒烟通过，才从第七次553条健康源创建全新续跑目录；仍不从头重跑1200条。
+
+###### Qdrant 隧道与 HTTP 408 重试修复执行结果
+
+- 新增仅本机监听的LaunchAgent定义`rag-qdrant-tunnel.plist`及`ensure-local-rag-benchmark-qdrant.sh`；ensure以`/healthz`和collection状态为准，发现旧转发失活时实际完成kickstart恢复。benchmark App启动脚本默认启用该隧道，实际endpoint为`http://127.0.0.1:16333`，并把benchmark隔离环境的Qdrant单次/总时限调整为20/90秒、最多5次重试；公网路径仍可显式关闭隧道后使用，Java项目没有上传服务器。
+- 隧道恢复后的目标collection精确count探测30/30成功，目标tenant/实际`kb_0477ee5a9ab143869fff219d7c90acd6`/generation=1均为7548点，最大墙钟1214ms。首次探测误用了计划阶段的人类标签`kb_scifact_20260719`，30次均是HTTP 200/count=0而非网络失败；已从真实Qdrant payload纠正物理kbId后得到上述有效结果，错误探测不作为稳定性样本。
+- `QdrantVectorStoreAdapter`仅把已有现场证据HTTP 408加入原有429/502/503/504瞬态集合，继续复用总deadline、最大重试和指数退避；400、401等客户端错误仍只调用一次。新增测试验证408后200成功、持续408严格3次后稳定`RAG_QDRANT_HTTP_ERROR`、400不重试。
+- Temurin Java 17下Qdrant协议测试12/12通过。扩大到RAG/Docling/TEI相关模式时，所有165个真实外层测试均通过，另有7个被旧Surefire 2.6错误发现为测试的私有嵌套fixture类报`No runnable methods`；项目全量308条中294条通过，14个既有错误来自上述旧测试发现问题及旧Agent示例缺租户上下文/Bean，与本次改动无关，按约定记录但不阻断。
+- Java 17 reactor跳过重复测试后的App打包成功，新JAR SHA-256为`484270ca47b4dfca65e8de075cf6e553b6679fbb4a5866441fb40a9b0c0775eb`；两个shell通过`bash -n`、plist通过`plutil -lint`。全仓`git diff --check`只被运行时日志中的既有尾随空格阻断，限定本次7个文件的diff check通过，日志不纳入提交。

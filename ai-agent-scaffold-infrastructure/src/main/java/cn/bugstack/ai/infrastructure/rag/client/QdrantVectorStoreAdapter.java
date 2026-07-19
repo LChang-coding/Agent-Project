@@ -387,7 +387,8 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     private boolean isTransient(int statusCode) {
-        return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+        return statusCode == 408 || statusCode == 429
+                || statusCode == 502 || statusCode == 503 || statusCode == 504;
     }
 
     private void backoff(int retryIndex, long deadlineNanos, RagProperties.Qdrant config)

@@ -161,6 +161,20 @@ public class QdrantVectorStoreAdapterTest {
     }
 
     @Test
+    public void shouldRetryRequestTimeout408AndThenSucceed() throws Exception {
+        AtomicInteger attempts = new AtomicInteger();
+        try (Fixture fixture = fixture(exchange -> {
+            if (attempts.getAndIncrement() == 0) respond(exchange, 408, "{}");
+            else respond(exchange, 200, schema(true));
+        })) {
+            fixture.adapter.ensureCollection();
+
+            Assert.assertEquals(2, attempts.get());
+            Assert.assertEquals(2, fixture.requests.size());
+        }
+    }
+
+    @Test
     public void shouldBoundRetriesWhenTransient503Persists() throws Exception {
         try (Fixture fixture = fixture(exchange -> respond(exchange, 503, "{}"))) {
             try {
@@ -170,6 +184,32 @@ public class QdrantVectorStoreAdapterTest {
                 Assert.assertEquals("RAG_QDRANT_HTTP_ERROR", e.getCode());
             }
             Assert.assertEquals(3, fixture.requests.size());
+        }
+    }
+
+    @Test
+    public void shouldBoundRetriesWhenRequestTimeout408Persists() throws Exception {
+        try (Fixture fixture = fixture(exchange -> respond(exchange, 408, "{}"))) {
+            try {
+                fixture.adapter.ensureCollection();
+                Assert.fail("预期408重试耗尽");
+            } catch (AppException e) {
+                Assert.assertEquals("RAG_QDRANT_HTTP_ERROR", e.getCode());
+            }
+            Assert.assertEquals(3, fixture.requests.size());
+        }
+    }
+
+    @Test
+    public void shouldNotRetryBadRequestResponse() throws Exception {
+        try (Fixture fixture = fixture(exchange -> respond(exchange, 400, "{}"))) {
+            try {
+                fixture.adapter.ensureCollection();
+                Assert.fail("预期请求错误");
+            } catch (AppException e) {
+                Assert.assertEquals("RAG_QDRANT_HTTP_ERROR", e.getCode());
+            }
+            Assert.assertEquals(1, fixture.requests.size());
         }
     }
 

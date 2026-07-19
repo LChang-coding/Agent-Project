@@ -38,6 +38,7 @@ reranker_key="$(read_table_cell '| Reranker API |' 5)"
 docling_key="$(read_table_cell '| Docling API |' 5)"
 mysql_password="$(read_table_cell 'root` 或应用配置中的数据库用户' 4)"
 local_mysql="${RAG_BENCHMARK_LOCAL_MYSQL:-false}"
+qdrant_tunnel="${RAG_BENCHMARK_QDRANT_TUNNEL:-true}"
 require_value AI_RAG_EMBEDDING_API_KEY "$embedding_key"
 require_value AI_RAG_RERANKER_API_KEY "$reranker_key"
 require_value AI_RAG_DOCLING_API_KEY "$docling_key"
@@ -45,6 +46,10 @@ require_value MYSQL_PASSWORD "$mysql_password"
 
 if [[ "$local_mysql" != "true" && "$local_mysql" != "false" ]]; then
   printf 'RAG_BENCHMARK_LOCAL_MYSQL must be true or false\n' >&2
+  exit 2
+fi
+if [[ "$qdrant_tunnel" != "true" && "$qdrant_tunnel" != "false" ]]; then
+  printf 'RAG_BENCHMARK_QDRANT_TUNNEL must be true or false\n' >&2
   exit 2
 fi
 if [[ "$local_mysql" == "true" ]]; then
@@ -57,6 +62,12 @@ else
   default_mysql_port=13306
   default_ssl_mode=REQUIRED
   default_public_key_retrieval=false
+fi
+if [[ "$qdrant_tunnel" == "true" ]]; then
+  "$SCRIPT_DIR/ensure-local-rag-benchmark-qdrant.sh"
+  default_qdrant_endpoint=http://127.0.0.1:16333
+else
+  default_qdrant_endpoint=http://103.205.240.84:6333
 fi
 
 export AI_RAG_EMBEDDING_API_KEY="$embedding_key"
@@ -82,13 +93,13 @@ export AI_RAG_KAFKA_LISTENER_ENABLED=false
 export AI_RAG_OUTBOX_ENABLED=false
 export AI_CONTEXT_ENABLED=false
 export AI_CONTEXT_KAFKA_ENABLED=false
-export AI_RAG_QDRANT_ENDPOINT="${AI_RAG_QDRANT_ENDPOINT:-http://103.205.240.84:6333}"
+export AI_RAG_QDRANT_ENDPOINT="${AI_RAG_QDRANT_ENDPOINT:-$default_qdrant_endpoint}"
 export AI_RAG_QDRANT_COLLECTION="${AI_RAG_QDRANT_COLLECTION:-ai_agent_rag_benchmark_v1}"
-export AI_RAG_QDRANT_TIMEOUT=3s
-export AI_RAG_QDRANT_MAX_RETRIES=5
-export AI_RAG_QDRANT_RETRY_INITIAL_BACKOFF=100ms
-export AI_RAG_QDRANT_RETRY_MAX_BACKOFF=1s
-export AI_RAG_QDRANT_TOTAL_TIMEOUT=30s
+export AI_RAG_QDRANT_TIMEOUT="${AI_RAG_QDRANT_TIMEOUT:-20s}"
+export AI_RAG_QDRANT_MAX_RETRIES="${AI_RAG_QDRANT_MAX_RETRIES:-5}"
+export AI_RAG_QDRANT_RETRY_INITIAL_BACKOFF="${AI_RAG_QDRANT_RETRY_INITIAL_BACKOFF:-100ms}"
+export AI_RAG_QDRANT_RETRY_MAX_BACKOFF="${AI_RAG_QDRANT_RETRY_MAX_BACKOFF:-1s}"
+export AI_RAG_QDRANT_TOTAL_TIMEOUT="${AI_RAG_QDRANT_TOTAL_TIMEOUT:-90s}"
 export AI_RAG_EMBEDDING_ENDPOINT="${AI_RAG_EMBEDDING_ENDPOINT:-http://103.205.240.84:8081}"
 export AI_RAG_EMBEDDING_BATCH_SIZE=8
 export AI_RAG_EMBEDDING_REQUEST_TIMEOUT=10s
