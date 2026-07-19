@@ -1278,3 +1278,19 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 门禁失败抛稳定错误码`RAG_BENCHMARK_WARMUP_GATE_FAILED`，异常消息只包含expected/actual/unique/balanced和各失败计数，不包含query文本、JWT或凭据；两种Runner manifest失败路径都会写入该errorCode后原样抛出，禁止继续评分。
 - 新增5个门禁测试，覆盖10×4健康样本、错误+降级+空排名、重复组合、缺失变体、以及“排名非空但Rerank候选/耗时为0”的fallback；原Runner warmup=0测试继续通过。新增`evaluate`真实本地HTTP集成测试，4条降级预热后断言异常、manifest=`failed`/errorCode正确、`warmup.jsonl=4`且正式`run.jsonl`不存在，直接证明没有外部轮询竞态。
 - benchmark全量20/20测试通过，0 failure/error/skipped，BUILD SUCCESS；随后跳过重复测试重建fat CLI成功，新JAR SHA-256为`d797138759c5656d647abbc3a024f0a128fefd9becc52c7cdf1b69aeafa90c06`。拟提交Java/测试/计划文件的`git diff --check`通过。
+
+###### SciFact 第七次独立复评分计划（执行前）
+
+1. 使用内建预热门禁提交`ea5631a`、CLI JAR SHA-256 `d797138759c5656d647abbc3a024f0a128fefd9becc52c7cdf1b69aeafa90c06`、App JAR SHA-256 `c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，以及全新空目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-ea5631a-r7`。App JAR的Java功能仍对应此前已测试提交，脚本/门禁提交不能冒充其构建revision。
+2. 固定prepared四文件原hash与targets SHA-256 `70273080edaa9507a03c4cb9e14099505034349c4cdcc07e7cc12e1eccfe5ffd`；复用同一隔离tenant、一个知识库、四个既有target，不重新摄取、不修改Qdrant索引、模型revision、Profile或候选数。
+3. 对本地13307副本中的原benchmark用户按username/userId/tenantId/password/active/未删除条件更新唯一密码行；随机明文只存在受限临时文件和评测子进程环境，结束即清理，不写manifest、计划、shell参数或Git。更新行数不等于1即停止。
+4. 固定seed=20260719、10 query×4 variant的40条warmup、请求上限120秒、load关闭。CLI内部门禁要求40记录、40唯一组合、四组各10、0错误、0降级、0空排名，并要求10条Rerank均有正候选数/正`rerankMs`；失败时manifest落稳定错误码且正式`run.jsonl`必须不存在。
+5. 只有内部门禁通过才进入300 query×4 variant的1200条measured。运行期间周期核对记录数、唯一组合、错误、降级、空排名、8092/本地MySQL存活；出现任一无效样本立即SIGINT并保留目录，不覆盖、不续写、不拼接。
+6. 只有1200条严格完整后才接受CLI原始metrics，并以独立`score`从prepared qrels和run重新计算，再核对两个报告hash、Recall@10/MRR@10/nDCG@10/MAP@10、分阶段延迟与四组件消融差异；任何缺失或不一致都不得称为成功run。
+
+###### SciFact 第七次预热门禁执行结果
+
+- 预执行核验HEAD为`ea5631a`，CLI fat JAR SHA-256为`d797138759c5656d647abbc3a024f0a128fefd9becc52c7cdf1b69aeafa90c06`，App JAR SHA-256为`c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，targets SHA-256为`70273080edaa9507a03c4cb9e14099505034349c4cdcc07e7cc12e1eccfe5ffd`；prepared manifest/queries/qrels/document-map原hash未变。8092应用PID 27659明确连接本地13307，Rerank实际参数为3候选子批、20秒单批、60秒总deadline、最多2次重试，启动前无其他benchmark evaluator且输出目录不存在。
+- 本地副本中隔离用户的唯一active password行按username/userId/tenantId同时匹配更新，影响严格为1；随机密码只进入受限临时文件和前台评测子进程环境，不在输出、manifest、计划或Git中出现。
+- 新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-ea5631a-r7`写满40条warmup后，CLI内部门禁通过：40个唯一variant/query组合，Dense/Sparse/Hybrid-RRF/Hybrid-RRF+Rerank各10，0 error、0 degraded、0空`rankedDocumentIds`、0非法Rerank；10条Rerank均有正候选数和正`rerankMs`。
+- 门禁期间持续核对正式`run.jsonl`不存在；第40条验证通过后CLI才创建正式文件并开始measured，首次观察为3条，manifest仍为running。当前只证明预热门禁闭环，不代表1200条完成；正式阶段继续逐条监控，禁止将该状态作为最终质量结果。
