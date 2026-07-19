@@ -1530,3 +1530,10 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 原`ef7e906-r1`已完整产生一轮并发1/2的四变体各20 measured健康数据，但整个manifest因后续并发4降级而failed；该前缀作为容量发现和诊断轮，不伪装为completed基线。
 - 恢复批次3并核对新PID后，使用两个全新独立run补做并发1/2，每轮每变体5 warmup+20 measured；第一轮顺序`2,1`、第二轮`1,2`，降低固定升序与热身时序混杂。两轮必须各自completed、0降级/错误/空结果才纳入正式统计。
 - 最终将两轮completed结果分轮报告，并可另附上原诊断轮的20样本做三轮方向性交叉验证；不将三个目录拼接成伪单轮，不把每组40或60样本的p99冒充稳定尾分位数。并发4已有可复现容量门禁，不再为“跑完表格”盲目重试。
+
+###### 稳定容量复测第一轮执行结果
+
+- 恢复默认批次3后，App PID 72978的数据源、Qdrant隧道、Rerank时限/重试均与原基线一致。run `scifact-load-stable-r1-ebbe5d0`按`2,1`顺序完成40 warmup+160 measured，manifest=completed/exitCode=0；每并发级别的四变体各20条，160个并发-变体-query组合唯一，0 error/degraded/empty。warmup/load hash为`1d1f871c…251e`/`5ad93692…3b55`且与manifest一致。
+- 并发1整体成功吞吐`0.1969 req/s`：Dense p50/p95/max=1194/2535/3792ms，Sparse=276/582/612ms，Hybrid=1153/2439/3724ms，Hybrid+Rerank=15054/24862/31353ms。并发2吞吐`0.3199 req/s`：Dense=892/1691/1833ms，Sparse=312/583/595ms，Hybrid=1173/2270/2382ms，Hybrid+Rerank=20984/33212/37055ms。Rerank在两级都是主导stage；p99仅由20样本的最高一条构成，只留痕不当稳定尾分位。
+- evidence四文件hash全部与清单一致，远端192个样本、本地401个样本有效；前后8容器均running/restart=0/OOM=false。Reranker峰值CPU 518.03%/内存67.84%，Embedding 290.53%/64.39%，Qdrant 162.38%/3.68%；本地App峰值35.3% CPU、966.9MiB RSS、82线程。服务端推理资源高于本地Java是与stage延迟一致的瓶颈证据。
+- 第二轮继续既定`1,2`反向顺序与同样本数，使用全新目录和独立随机登录密码；不重启App/模型，避免引入新配置变量。
