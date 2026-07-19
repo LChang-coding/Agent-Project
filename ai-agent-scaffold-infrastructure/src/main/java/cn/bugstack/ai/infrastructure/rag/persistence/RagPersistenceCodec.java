@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -53,12 +54,19 @@ public class RagPersistenceCodec {
             throw new IllegalArgumentException("RAG 摄取检查点不能为空");
         }
         try {
-            return objectMapper.writeValueAsString(Map.of(
-                    "stage", databaseValue(checkpoint.stage()),
-                    "processedChunks", checkpoint.processedChunks(),
-                    "totalChunks", checkpoint.totalChunks(),
-                    "embeddingBatchIndex", checkpoint.embeddingBatchIndex(),
-                    "vectorUpsertIndex", checkpoint.vectorUpsertIndex()));
+            Map<String, Object> value = new LinkedHashMap<>();
+            value.put("stage", databaseValue(checkpoint.stage()));
+            value.put("processedChunks", checkpoint.processedChunks());
+            value.put("totalChunks", checkpoint.totalChunks());
+            value.put("embeddingBatchIndex", checkpoint.embeddingBatchIndex());
+            value.put("vectorUpsertIndex", checkpoint.vectorUpsertIndex());
+            value.put("pageCount", checkpoint.pageCount());
+            value.put("characterCount", checkpoint.characterCount());
+            value.put("parsedObjectBucket", checkpoint.parsedObjectBucket());
+            value.put("parsedObjectKey", checkpoint.parsedObjectKey());
+            value.put("parsedContentHash", checkpoint.parsedContentHash());
+            value.put("parsedSizeBytes", checkpoint.parsedSizeBytes());
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("RAG 摄取检查点无法序列化", exception);
         }
@@ -82,7 +90,10 @@ public class RagPersistenceCodec {
             }
             return new RagIngestCheckpoint(checkpointStage,
                     requiredInt(root, "processedChunks"), requiredInt(root, "totalChunks"),
-                    requiredInt(root, "embeddingBatchIndex"), requiredInt(root, "vectorUpsertIndex"));
+                    requiredInt(root, "embeddingBatchIndex"), requiredInt(root, "vectorUpsertIndex"),
+                    optionalInt(root, "pageCount"), optionalLong(root, "characterCount"),
+                    optionalText(root, "parsedObjectBucket"), optionalText(root, "parsedObjectKey"),
+                    optionalText(root, "parsedContentHash"), optionalLong(root, "parsedSizeBytes"));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("RAG 摄取检查点 JSON 非法", exception);
         }
@@ -122,5 +133,32 @@ public class RagPersistenceCodec {
             throw new IllegalStateException("RAG checkpoint 缺少整数字段：" + fieldName);
         }
         return value.intValue();
+    }
+
+    private int optionalInt(JsonNode root, String fieldName) {
+        JsonNode value = root == null ? null : root.get(fieldName);
+        if (value == null || value.isNull()) return 0;
+        if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+            throw new IllegalStateException("RAG checkpoint 整数字段非法：" + fieldName);
+        }
+        return value.intValue();
+    }
+
+    private long optionalLong(JsonNode root, String fieldName) {
+        JsonNode value = root == null ? null : root.get(fieldName);
+        if (value == null || value.isNull()) return 0L;
+        if (!value.isIntegralNumber() || !value.canConvertToLong()) {
+            throw new IllegalStateException("RAG checkpoint 长整数字段非法：" + fieldName);
+        }
+        return value.longValue();
+    }
+
+    private String optionalText(JsonNode root, String fieldName) {
+        JsonNode value = root == null ? null : root.get(fieldName);
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual() || value.textValue().isBlank()) {
+            throw new IllegalStateException("RAG checkpoint 文本字段非法：" + fieldName);
+        }
+        return value.textValue();
     }
 }

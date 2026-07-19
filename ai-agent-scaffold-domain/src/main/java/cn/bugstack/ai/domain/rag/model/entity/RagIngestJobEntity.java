@@ -190,7 +190,9 @@ public record RagIngestJobEntity(String tenantId,
         }
         RagIngestCheckpoint completed = new RagIngestCheckpoint(RagIngestStage.COMPLETED,
                 checkpoint.processedChunks(), checkpoint.totalChunks(), checkpoint.embeddingBatchIndex(),
-                checkpoint.vectorUpsertIndex());
+                checkpoint.vectorUpsertIndex(), checkpoint.pageCount(), checkpoint.characterCount(),
+                checkpoint.parsedObjectBucket(), checkpoint.parsedObjectKey(),
+                checkpoint.parsedContentHash(), checkpoint.parsedSizeBytes());
         return copy(RagIngestJobStatus.COMPLETED, completed, attemptCount, null, null,
                 fencingToken, null, null, null);
     }

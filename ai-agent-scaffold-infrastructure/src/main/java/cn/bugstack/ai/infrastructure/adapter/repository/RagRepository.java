@@ -12,6 +12,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
+import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobCandidate;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
@@ -256,10 +257,14 @@ public class RagRepository implements IRagRepository {
         LocalDateTime indexedAt = LocalDateTime.ofInstant(now, ZoneOffset.UTC);
         requireChanged(documentVersionDao.markReadyByTenantAndRevision(tenantId,
                 activation.knowledgeBaseId(), activation.documentId(), activation.versionId(),
-                activation.generation(), activation.expectedVersionRevision(), indexedAt));
+                activation.generation(), activation.expectedVersionRevision(), activation.pageCount(),
+                activation.characterCount(), activation.chunkCount(), activation.parsedObjectBucket(),
+                activation.parsedObjectKey(), activation.parsedContentHash(), activation.parsedSizeBytes(),
+                indexedAt));
         requireChanged(documentDao.activateVersionByTenantAndRevision(tenantId,
                 activation.knowledgeBaseId(), activation.documentId(), activation.versionId(),
-                activation.generation(), activation.expectedDocumentRevision(), indexedAt));
+                activation.generation(), activation.expectedDocumentRevision(), activation.pageCount(),
+                activation.chunkCount(), indexedAt));
         requireChanged(knowledgeBaseDao.activateGenerationByTenantAndRevision(tenantId,
                 activation.knowledgeBaseId(), activation.generation(),
                 activation.expectedKnowledgeBaseRevision()));
@@ -545,7 +550,12 @@ public class RagRepository implements IRagRepository {
         if (activation == null || !activation.knowledgeBaseId().equals(job.knowledgeBaseId())
                 || !activation.documentId().equals(job.documentId())
                 || !activation.versionId().equals(job.versionId())
-                || activation.generation() != job.generation()) {
+                || activation.generation() != job.generation()
+                || activation.chunkCount() != job.checkpoint().totalChunks()
+                || activation.pageCount() != job.checkpoint().pageCount()
+                || activation.characterCount() != job.checkpoint().characterCount()
+                || !RagObjectStorageScope.containsVersionObject(activation.parsedObjectKey(), job.tenantId(),
+                job.knowledgeBaseId(), job.documentId(), job.versionId())) {
             throw new IllegalArgumentException("RAG 激活范围与任务不一致");
         }
     }

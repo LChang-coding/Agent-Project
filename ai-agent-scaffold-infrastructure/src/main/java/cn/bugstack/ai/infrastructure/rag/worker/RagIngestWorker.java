@@ -21,6 +21,8 @@ import cn.bugstack.ai.domain.rag.service.StructuredRagChunker;
 import cn.bugstack.ai.domain.rag.service.DeterministicSparseEncoder;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadResultEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
@@ -30,6 +32,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -138,7 +142,7 @@ public class RagIngestWorker {
         List<RagChunkEntity> children = loadOrCreateChunks(job, scope, leaseOwner, heartbeat);
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
         if (job.checkpoint().stage() == RagIngestStage.EMBEDDING) {
-            job = advance(job, leaseOwner, new RagIngestCheckpoint(RagIngestStage.INDEXING,
+            job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.INDEXING,
                     job.checkpoint().processedChunks(), job.checkpoint().totalChunks(),
                     job.checkpoint().embeddingBatchIndex(), job.checkpoint().vectorUpsertIndex()));
         }
@@ -155,7 +159,7 @@ public class RagIngestWorker {
         if (vectorCount != children.size() || databaseCount != children.size()) {
             throw new AppException("RAG_INGEST_INDEX_COUNT_MISMATCH", "向量索引与分块快照数量不一致");
         }
-        job = advance(job, leaseOwner, new RagIngestCheckpoint(RagIngestStage.VERIFYING,
+        job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.VERIFYING,
                 children.size(), children.size(), job.checkpoint().embeddingBatchIndex(), children.size()));
         activate(job, leaseOwner, heartbeat);
     }
@@ -322,7 +326,14 @@ public class RagIngestWorker {
                     scope.version().mimeType(), download.getTargetPath(), download.getSizeBytes(), false));
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
             if (job.checkpoint().stage() == RagIngestStage.PARSING) {
-                job = advance(job, leaseOwner, checkpoint(RagIngestStage.CHUNKING, 0, 0, 0, 0));
+                ObjectStorageResultEntity parsedObject = persistParsedArtifact(job, parsed, workspace);
+                job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+                int characterCount = parsed.normalizedMarkdown().codePointCount(
+                        0, parsed.normalizedMarkdown().length());
+                job = advance(job, leaseOwner, new RagIngestCheckpoint(RagIngestStage.CHUNKING,
+                        0, 0, 0, 0, parsed.pageCount(), characterCount,
+                        parsedObject.getBucket(), parsedObject.getObjectKey(), parsedObject.getSha256(),
+                        parsedObject.getSizeBytes()));
             }
             StructuredRagChunker.ChunkingResult result = chunker.chunk(job.versionId(), parsed, chunkConfig());
             List<RagChunkEntity> records = toChunkEntities(scope, result.chunks());
@@ -339,7 +350,7 @@ public class RagIngestWorker {
     private List<RagChunkEntity> advanceToEmbedding(RagIngestJobEntity job, List<RagChunkEntity> children,
                                                      String leaseOwner) {
         RagIngestJobEntity advanced = advance(job, leaseOwner,
-                checkpoint(RagIngestStage.EMBEDDING, 0, children.size(), 0, 0));
+                carry(job.checkpoint(), RagIngestStage.EMBEDDING, 0, children.size(), 0, 0));
         return childSnapshot(advanced, children.size());
     }
 
@@ -382,7 +393,7 @@ public class RagIngestWorker {
             }
             vectorStore.upsert(job.tenantId(), job.versionId(), points);
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
-            job = advance(job, leaseOwner, checkpoint(RagIngestStage.INDEXING, to, children.size(),
+            job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.INDEXING, to, children.size(),
                     ++batchIndex, to));
         }
         return job;
@@ -396,7 +407,11 @@ public class RagIngestWorker {
         repository.completeClaimedIngestJob(job.tenantId(), completed, expectedTaskRevision, leaseOwner,
                 job.fencingToken(), new RagIndexActivation(job.knowledgeBaseId(), job.documentId(),
                         job.versionId(), job.generation(), current.version().revision(),
-                        current.document().revision(), current.knowledgeBase().revision()), clock.instant());
+                        current.document().revision(), current.knowledgeBase().revision(),
+                        job.checkpoint().pageCount(), job.checkpoint().characterCount(),
+                        job.checkpoint().totalChunks(), job.checkpoint().parsedObjectBucket(),
+                        job.checkpoint().parsedObjectKey(), job.checkpoint().parsedContentHash(),
+                        job.checkpoint().parsedSizeBytes()), clock.instant());
     }
 
     private void cleanupCancelled(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
@@ -406,6 +421,7 @@ public class RagIngestWorker {
         current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
                 current.fencingToken(), heartbeat);
         repository.deleteChunks(current.tenantId(), current.versionId());
+        current = deleteParsedArtifactWithBarrier(current, leaseOwner, heartbeat);
         Scope scope = loadScopeForClosing(current);
         long expectedTaskRevision = current.revision();
         if (RagIngestJobEntity.FAILURE_CLEANUP_FAILED.equals(current.cancelReason())
@@ -589,8 +605,48 @@ public class RagIngestWorker {
     }
 
     private RagIngestCheckpoint checkpoint(RagIngestStage stage, int processed, int total,
-                                           int embeddingBatch, int vectorIndex) {
+                                            int embeddingBatch, int vectorIndex) {
         return new RagIngestCheckpoint(stage, processed, total, embeddingBatch, vectorIndex);
+    }
+
+    private RagIngestCheckpoint carry(RagIngestCheckpoint source, RagIngestStage stage,
+                                       int processed, int total, int embeddingBatch, int vectorIndex) {
+        return new RagIngestCheckpoint(stage, processed, total, embeddingBatch, vectorIndex,
+                source.pageCount(), source.characterCount(), source.parsedObjectBucket(),
+                source.parsedObjectKey(), source.parsedContentHash(), source.parsedSizeBytes());
+    }
+
+    private ObjectStorageResultEntity persistParsedArtifact(RagIngestJobEntity job,
+                                                             RagDocumentParserPort.ParsedDocument parsed,
+                                                             RagIngestWorkspace workspace) {
+        try {
+            Path path = workspace.parsedMarkdownPath();
+            Files.writeString(path, parsed.normalizedMarkdown(), StandardCharsets.UTF_8);
+            return objectStorageService.putFile(ObjectStorageFileCommandEntity.builder()
+                    .bucket(objectStorageService.ragBucket())
+                    .objectKey(RagObjectStorageScope.parsedObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()))
+                    .sourcePath(path).sizeBytes(Files.size(path))
+                    .contentType("text/markdown; charset=utf-8").build());
+        } catch (java.io.IOException error) {
+            throw new AppException("RAG_PARSED_ARTIFACT_WRITE_FAILED", "规范化解析产物暂存失败", error);
+        }
+    }
+
+    private RagIngestJobEntity deleteParsedArtifactWithBarrier(RagIngestJobEntity job, String leaseOwner,
+                                                                 LeaseHeartbeat heartbeat) {
+        String key = RagObjectStorageScope.parsedObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                job.documentId(), job.versionId());
+        RagIngestJobEntity current = cancellationBarrier(job.tenantId(), job.jobId(), leaseOwner,
+                job.fencingToken(), heartbeat);
+        objectStorageService.deleteObject(objectStorageService.ragBucket(), key);
+        current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
+                current.fencingToken(), heartbeat);
+        if (objectStorageService.objectExists(objectStorageService.ragBucket(), key)) {
+            throw new AppException("RAG_DELETE_OBJECT_REMAINS", "解析产物删除后仍然存在");
+        }
+        return cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
+                current.fencingToken(), heartbeat);
     }
 
     private Scope loadScopeForClosing(RagIngestJobEntity job) {

@@ -32,7 +32,8 @@ public class RagPersistenceMapperTest {
                 "rag-source", "tenant-a/doc-1/v2.pdf", "rag-parsed", "tenant-a/doc-1/v2.json",
                 "manual.pdf", "a".repeat(64),
                 "application/pdf", 4096L, RagDocumentVersionStatus.PROCESSING,
-                "docling-2", "chunker-1", "e5-v1", 4L);
+                "docling-2", "chunker-1", "e5-v1", 4L,
+                8, 1234L, 10, Map.of("parsedContentHash", "c".repeat(64)));
         RagChunkEntity chunk = new RagChunkEntity("tenant-a", "owner-1", RagVisibility.TENANT,
                 "kb-1", "doc-1", "version-1", 2, 3L, "chunk-1", 0,
                 null, null, "chunk-2", "正文", 2, 1, "标题", "b".repeat(64),

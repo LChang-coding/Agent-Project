@@ -7,15 +7,39 @@ public record RagIndexActivation(String knowledgeBaseId,
                                  long generation,
                                  long expectedVersionRevision,
                                  long expectedDocumentRevision,
-                                 long expectedKnowledgeBaseRevision) {
+                                 long expectedKnowledgeBaseRevision,
+                                 int pageCount,
+                                 long characterCount,
+                                 int chunkCount,
+                                 String parsedObjectBucket,
+                                 String parsedObjectKey,
+                                 String parsedContentHash,
+                                 long parsedSizeBytes) {
+
+    /** 兼容旧调用；只用于不携带解析指标的既有测试或历史任务。 */
+    public RagIndexActivation(String knowledgeBaseId, String documentId, String versionId,
+                              long generation, long expectedVersionRevision,
+                              long expectedDocumentRevision, long expectedKnowledgeBaseRevision) {
+        this(knowledgeBaseId, documentId, versionId, generation, expectedVersionRevision,
+                expectedDocumentRevision, expectedKnowledgeBaseRevision,
+                0, 0L, 0, null, null, null, 0L);
+    }
 
     public RagIndexActivation {
         requireText(knowledgeBaseId, "knowledgeBaseId");
         requireText(documentId, "documentId");
         requireText(versionId, "versionId");
         if (generation < 1 || expectedVersionRevision < 0 || expectedDocumentRevision < 0
-                || expectedKnowledgeBaseRevision < 0) {
+                || expectedKnowledgeBaseRevision < 0 || pageCount < 0 || characterCount < 0
+                || chunkCount < 0 || parsedSizeBytes < 0) {
             throw new IllegalArgumentException("RAG 索引激活版本参数非法");
+        }
+        boolean anyParsed = hasText(parsedObjectBucket) || hasText(parsedObjectKey)
+                || hasText(parsedContentHash) || parsedSizeBytes > 0;
+        if (anyParsed && (!hasText(parsedObjectBucket) || !hasText(parsedObjectKey)
+                || parsedContentHash == null || !parsedContentHash.matches("[0-9a-f]{64}")
+                || parsedSizeBytes < 1 || characterCount < 1 || chunkCount < 1)) {
+            throw new IllegalArgumentException("RAG 解析产物激活参数非法");
         }
     }
 
@@ -23,5 +47,9 @@ public record RagIndexActivation(String knowledgeBaseId,
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + "不能为空");
         }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

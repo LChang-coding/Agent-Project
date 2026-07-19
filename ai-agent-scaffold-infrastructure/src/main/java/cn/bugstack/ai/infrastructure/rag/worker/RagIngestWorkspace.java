@@ -48,6 +48,11 @@ public final class RagIngestWorkspace implements AutoCloseable {
         return Path.of("source.bin");
     }
 
+    /** 规范化解析产物的受控暂存路径。 */
+    public Path parsedMarkdownPath() {
+        return root.resolve("normalized.md").normalize();
+    }
+
     @Override
     public void close() {
         try {

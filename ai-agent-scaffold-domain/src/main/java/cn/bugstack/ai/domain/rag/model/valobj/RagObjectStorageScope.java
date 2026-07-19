@@ -24,6 +24,12 @@ public final class RagObjectStorageScope {
                 + requireSegment(fileName, "fileName");
     }
 
+    /** 每个不可变版本唯一的规范化 Markdown 解析产物键，重试会覆盖同一对象。 */
+    public static String parsedObjectKey(String tenantId, String knowledgeBaseId,
+                                         String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId) + "parsed/normalized.md";
+    }
+
     public static boolean containsVersionObject(String objectKey, String tenantId, String knowledgeBaseId,
                                                 String documentId, String versionId) {
         String prefix = versionPrefix(tenantId, knowledgeBaseId, documentId, versionId);

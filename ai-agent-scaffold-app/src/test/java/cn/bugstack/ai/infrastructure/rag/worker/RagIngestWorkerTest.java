@@ -15,11 +15,13 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagLease;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadResultEntity;
+import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
@@ -73,7 +75,12 @@ public class RagIngestWorkerTest {
         Assert.assertEquals(Fixture.VERSION_ID, fixture.document.get().activeVersionId());
         Assert.assertEquals(1, fixture.vectorPoints.size());
         verify(fixture.repository, times(1)).completeClaimedIngestJob(
-                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any());
+                anyString(), any(), anyLong(), anyString(), anyLong(),
+                org.mockito.ArgumentMatchers.argThat((RagIndexActivation activation) -> activation.chunkCount() == 1
+                        && activation.characterCount() == new String(Fixture.MARKDOWN, StandardCharsets.UTF_8)
+                        .codePointCount(0, new String(Fixture.MARKDOWN, StandardCharsets.UTF_8).length())
+                        && activation.parsedObjectKey().endsWith("/parsed/normalized.md")), any());
+        verify(fixture.objectStorageService).putFile(any());
         verify(fixture.vectorStore, never()).deleteVersion(anyString(), anyString());
         Assert.assertNotNull(fixture.downloadedTarget.get());
         Assert.assertFalse(Files.exists(fixture.downloadedTarget.get()));
@@ -89,6 +96,9 @@ public class RagIngestWorkerTest {
         verify(fixture.embedding, never()).embed(any());
         verify(fixture.vectorStore, never()).upsert(anyString(), anyString(), any());
         verify(fixture.vectorStore, times(1)).deleteVersion(Fixture.TENANT, Fixture.VERSION_ID);
+        verify(fixture.objectStorageService).deleteObject(eq("rag-bucket"),
+                eq(RagObjectStorageScope.parsedObjectKey(Fixture.TENANT, Fixture.KB_ID,
+                        Fixture.DOCUMENT_ID, Fixture.VERSION_ID)));
         verify(fixture.repository, times(1)).cancelClaimedIngestJob(
                 anyString(), any(), anyLong(), anyLong(), anyLong(), anyString(), anyLong(), any());
         Assert.assertEquals(RagIngestJobStatus.CANCELLED, fixture.job.get().status());
@@ -436,6 +446,7 @@ public class RagIngestWorkerTest {
         }
 
         private void stubExternalServices() {
+            when(objectStorageService.ragBucket()).thenReturn("rag-bucket");
             when(objectStorageService.downloadToFile(any())).thenAnswer(invocation -> {
                 var command = (cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadCommandEntity)
                         invocation.getArgument(0);
@@ -444,6 +455,14 @@ public class RagIngestWorkerTest {
                 downloadedTarget.set(target);
                 return ObjectStorageDownloadResultEntity.builder().bucket("rag-bucket").objectKey("source")
                         .targetPath(target).sizeBytes(MARKDOWN.length).sha256(sha256(MARKDOWN)).build();
+            });
+            when(objectStorageService.putFile(any())).thenAnswer(invocation -> {
+                var command = (cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity)
+                        invocation.getArgument(0);
+                byte[] bytes = Files.readAllBytes(command.getSourcePath());
+                return ObjectStorageResultEntity.builder().bucket(command.getBucket())
+                        .objectKey(command.getObjectKey()).sizeBytes((long) bytes.length)
+                        .sha256(sha256(bytes)).build();
             });
             when(parser.parse(any())).thenReturn(new RagDocumentParserPort.ParsedDocument(
                     new String(MARKDOWN, StandardCharsets.UTF_8), List.of(), 0,

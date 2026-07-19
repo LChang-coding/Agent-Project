@@ -20,7 +20,8 @@ public class RagPersistenceCodecTest {
     public void shouldRoundTripMetadataAndCheckpoint() {
         Map<String, String> metadata = Map.of("language", "zh-CN", "source", "manual");
         RagIngestCheckpoint checkpoint = new RagIngestCheckpoint(
-                RagIngestStage.EMBEDDING, 4, 10, 2, 0);
+                RagIngestStage.EMBEDDING, 4, 10, 2, 0, 8, 1234L,
+                "rag-bucket", "tenant/parsed/normalized.md", "a".repeat(64), 2048L);
 
         Assert.assertEquals(metadata, codec.readMetadata(codec.writeMetadata(metadata)));
         Assert.assertEquals(checkpoint,
@@ -39,6 +40,17 @@ public class RagPersistenceCodecTest {
     public void shouldOnlyDefaultMissingInitialCheckpoint() {
         Assert.assertEquals(RagIngestCheckpoint.initial(), codec.readCheckpoint(null, "received"));
         assertIllegalState(() -> codec.readCheckpoint(null, "parsing"));
+    }
+
+    @Test
+    public void shouldReadLegacyCheckpointWithoutInventingParsedFacts() {
+        RagIngestCheckpoint value = codec.readCheckpoint(
+                "{\"stage\":\"embedding\",\"processedChunks\":0,\"totalChunks\":1,"
+                        + "\"embeddingBatchIndex\":0,\"vectorUpsertIndex\":0}", "embedding");
+
+        Assert.assertEquals(0, value.pageCount());
+        Assert.assertEquals(0L, value.characterCount());
+        Assert.assertNull(value.parsedObjectKey());
     }
 
     private void assertIllegalState(Runnable action) {

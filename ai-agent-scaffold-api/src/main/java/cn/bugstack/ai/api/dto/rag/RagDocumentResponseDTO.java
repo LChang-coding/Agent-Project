@@ -15,4 +15,6 @@ public class RagDocumentResponseDTO {
     private Long activeGeneration;
     private Long targetGeneration;
     private Long revision;
+    private Integer pageCount;
+    private Integer chunkCount;
 }

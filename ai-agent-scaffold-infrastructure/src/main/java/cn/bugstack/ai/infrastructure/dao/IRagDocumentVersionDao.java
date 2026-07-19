@@ -39,6 +39,13 @@ public interface IRagDocumentVersionDao {
                                      @Param("versionId") String versionId,
                                      @Param("generation") long generation,
                                      @Param("expectedRevision") long expectedRevision,
+                                     @Param("pageCount") int pageCount,
+                                     @Param("characterCount") long characterCount,
+                                     @Param("chunkCount") int chunkCount,
+                                     @Param("parsedBucket") String parsedBucket,
+                                     @Param("parsedObjectKey") String parsedObjectKey,
+                                     @Param("parsedContentHash") String parsedContentHash,
+                                     @Param("parsedSizeBytes") long parsedSizeBytes,
                                      @Param("indexedAt") LocalDateTime indexedAt);
 
     /** 取消或失败时关闭未激活版本。 */

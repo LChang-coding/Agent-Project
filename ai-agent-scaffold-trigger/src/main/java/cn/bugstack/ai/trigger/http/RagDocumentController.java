@@ -156,7 +156,8 @@ public class RagDocumentController {
                 .knowledgeBaseId(value.knowledgeBaseId()).displayName(value.displayName())
                 .status(value.status().name().toLowerCase(java.util.Locale.ROOT))
                 .activeVersionId(value.activeVersionId()).activeGeneration(value.activeGeneration())
-                .targetGeneration(value.targetGeneration()).revision(value.revision()).build();
+                .targetGeneration(value.targetGeneration()).revision(value.revision())
+                .pageCount(value.pageCount()).chunkCount(value.chunkCount()).build();
     }
 
     private RagIngestTaskResponseDTO taskResponse(RagIngestJobEntity value) {

@@ -42,6 +42,7 @@ public class DoclingDocumentParserAdapterProtocolTest {
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicInteger status = new AtomicInteger(200);
     private final AtomicInteger closeWithoutResponse = new AtomicInteger();
+    private final AtomicInteger responseDelayMs = new AtomicInteger();
     private volatile byte[] responseBody;
     private HttpServer server;
     private RagProperties properties;
@@ -111,6 +112,10 @@ public class DoclingDocumentParserAdapterProtocolTest {
         Assert.assertEquals("# Parsed\nremote body", result.normalizedMarkdown());
         Assert.assertEquals("docling-serve-test-revision", result.parserVersion());
         Assert.assertEquals("0.125", result.metadata().get("processingTimeSeconds"));
+        Assert.assertEquals("1", result.metadata().get("transportAttempts"));
+        Assert.assertNotNull(result.metadata().get("transportWallMs"));
+        Assert.assertNotNull(result.metadata().get("permitWaitMs"));
+        Assert.assertNotNull(result.metadata().get("adapterWallMs"));
         CapturedRequest request = requests.get(0);
         Assert.assertEquals("POST", request.method());
         Assert.assertEquals("/v1/convert/file", request.path());
@@ -161,6 +166,21 @@ public class DoclingDocumentParserAdapterProtocolTest {
 
         Assert.assertEquals("# Parsed\nremote body", result.normalizedMarkdown());
         Assert.assertEquals(2, requests.size());
+        Assert.assertEquals("2", result.metadata().get("transportAttempts"));
+    }
+
+    @Test
+    public void shouldNotTransparentlyRetryAFullRequestTimeout() throws Exception {
+        properties.getDocling().setTimeout(Duration.ofMillis(100));
+        adapter = new DoclingDocumentParserAdapter(properties, objectMapper);
+        responseDelayMs.set(500);
+        Path path = write("timeout.pdf", "%PDF-timeout".getBytes(StandardCharsets.US_ASCII));
+
+        AppException error = expectFailure(
+                () -> adapter.parse(command(path, "timeout.pdf", "application/pdf", false)));
+
+        Assert.assertEquals("RAG_DOCLING_UNAVAILABLE", error.getCode());
+        Assert.assertEquals(1, requests.size());
     }
 
     @Test
@@ -262,6 +282,16 @@ public class DoclingDocumentParserAdapterProtocolTest {
         if (closeWithoutResponse.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
             exchange.close();
             return;
+        }
+        int delay = responseDelayMs.get();
+        if (delay > 0) {
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+                return;
+            }
         }
         byte[] currentResponse = responseBody == null ? new byte[0] : responseBody;
         exchange.getResponseHeaders().set("Content-Type", "application/json");

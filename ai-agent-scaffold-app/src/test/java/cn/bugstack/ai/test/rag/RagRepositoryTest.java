@@ -12,6 +12,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.infrastructure.adapter.repository.RagRepository;
 import cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao;
@@ -206,13 +207,17 @@ public class RagRepositoryTest {
         Instant now = Instant.parse("2026-07-18T15:00:00Z");
         RagIngestJobEntity completed = terminalJob(RagIngestJobStatus.COMPLETED);
         RagIndexActivation activation = new RagIndexActivation(
-                "kb-1", "doc-1", "version-1", 2L, 3L, 4L, 5L);
+                "kb-1", "doc-1", "version-1", 2L, 3L, 4L, 5L,
+                3, 2048L, 7, "rag-bucket", parsedKey(), "a".repeat(64), 4096L);
         Mockito.when(documentVersionDao.markReadyByTenantAndRevision(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
-                Mockito.anyLong(), Mockito.anyLong(), Mockito.any())).thenReturn(1);
+                Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyLong(), Mockito.anyInt(),
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyLong(),
+                Mockito.any())).thenReturn(1);
         Mockito.when(documentDao.activateVersionByTenantAndRevision(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
-                Mockito.anyLong(), Mockito.anyLong(), Mockito.any())).thenReturn(1);
+                Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyInt(),
+                Mockito.any())).thenReturn(1);
         Mockito.when(knowledgeBaseDao.activateGenerationByTenantAndRevision(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyLong(), Mockito.anyLong())).thenReturn(1);
         Mockito.when(ingestTaskDao.updateClaimedByTenantFenceAndRevision(
@@ -226,9 +231,11 @@ public class RagRepositoryTest {
 
         Mockito.verify(documentVersionDao).markReadyByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, 3L,
+                3, 2048L, 7, "rag-bucket", parsedKey(), "a".repeat(64), 4096L,
                 LocalDateTime.ofInstant(now, ZoneOffset.UTC));
         Mockito.verify(documentDao).activateVersionByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, 4L,
+                3, 7,
                 LocalDateTime.ofInstant(now, ZoneOffset.UTC));
         Mockito.verify(knowledgeBaseDao).activateGenerationByTenantAndRevision("tenant-a", "kb-1", 2L, 5L);
         Mockito.verify(ingestTaskDao).updateClaimedByTenantFenceAndRevision(
@@ -322,10 +329,13 @@ public class RagRepositoryTest {
     public void shouldStopLifecycleWhenOldVersionRevisionLosesCas() {
         RagIngestJobEntity completed = terminalJob(RagIngestJobStatus.COMPLETED);
         RagIndexActivation activation = new RagIndexActivation(
-                "kb-1", "doc-1", "version-1", 2L, 3L, 4L, 5L);
+                "kb-1", "doc-1", "version-1", 2L, 3L, 4L, 5L,
+                3, 2048L, 7, "rag-bucket", parsedKey(), "a".repeat(64), 4096L);
         Mockito.when(documentVersionDao.markReadyByTenantAndRevision(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
-                Mockito.anyLong(), Mockito.anyLong(), Mockito.any())).thenReturn(0);
+                Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyLong(), Mockito.anyInt(),
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyLong(),
+                Mockito.any())).thenReturn(0);
 
         try {
             repository.completeClaimedIngestJob("tenant-a", completed, 7L, "worker-a", 11L,
@@ -399,7 +409,8 @@ public class RagRepositoryTest {
 
     private RagIngestJobEntity terminalJob(RagIngestJobStatus status) {
         RagIngestCheckpoint checkpoint = status == RagIngestJobStatus.COMPLETED
-                ? new RagIngestCheckpoint(RagIngestStage.COMPLETED, 3, 3, 1, 1)
+                ? new RagIngestCheckpoint(RagIngestStage.COMPLETED, 7, 7, 1, 7,
+                3, 2048L, "rag-bucket", parsedKey(), "a".repeat(64), 4096L)
                 : RagIngestCheckpoint.initial();
         return new RagIngestJobEntity("tenant-a", "kb-1", "doc-1", "version-1", "job-1",
                 "task-key-1", RagIngestOperation.INGEST, 2L, status, checkpoint, 1, 3,
@@ -413,5 +424,9 @@ public class RagRepositoryTest {
                 "rag", "source/" + versionId, null, null, versionId + ".md", "a".repeat(64),
                 "text/markdown", 10L, RagDocumentVersionStatus.DELETED,
                 null, null, null, revision);
+    }
+
+    private String parsedKey() {
+        return RagObjectStorageScope.parsedObjectKey("tenant-a", "kb-1", "doc-1", "version-1");
     }
 }

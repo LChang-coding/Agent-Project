@@ -1801,3 +1801,42 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 最终Java 17精确门禁覆盖全部RAG测试文件以及Mapper、Session Controller/Domain、Run Control和SSE Controller，共41个报告、190/190通过，0 failure/error/skipped。最后一次干净测试后的包装脚本曾因zsh把`status`作为只读变量而返回1，但该次Maven本身190项全通过；改为`rc`后同一精确清单再跑一次，命令退出0且仍为190/190。
 - 最终全reactor Java 17 `mvn -DskipTests package`退出0；App JAR SHA-256=`d8e5efd0c9c768bd8267c701ef67164aef050f77c921e6053bf8730111ead1aa`，benchmark CLI JAR=`0c57f796a1b8b0f0e5bc81bbb76dd6dc66e83b8142149117ceead1b4fbbb4c34`。`git diff --check`对本切片通过；既有运行日志和用户未跟踪目录未修改、未暂存。
 - 本切片还没有在隔离的真实LLM + MySQL应用上执行Agent/Workflow流式与非流式黑盒，因此不把Controller/Domain测试写成端到端已证明；该项与PDF/DOCX/Markdown真实摄取、前端引用交互一起进入下一验收切片。
+
+#### RAG三格式真实E2E与最终证据总账切片计划（执行前）
+
+1. 冻结待测基线为本地commit `c9adf64`，记录Java/App JAR、前端产物、MySQL、MinIO、Kafka、Qdrant、Docling、Embedding和Reranker的实际版本/地址/健康状态及CPU内存配置；仅用SSH隧道或远程中间件接口，不向RAG服务器上传Java项目。
+2. 在项目`docs/rag/evaluation-data/`下固化内容等价、带唯一可核验事实的Markdown、DOCX、PDF三份小语料，保存生成脚本/源文本/题目与标准答案/SHA-256；另选择真实多页、标题、表格和跨页样例，避免只证明“能上传”。
+3. 通过真实HTTP鉴权、知识库和文档上传接口发起三格式摄取，由单Worker走完MinIO取件→解析→切块→Embedding→Qdrant写入→MySQL激活；记录文件字节、页数/字符/块数、checkpoint、各阶段耗时、重试/降级和最终三端数据一致性。
+4. 对每种格式执行固定问题集和非答案干扰问题，保存Dense/Sparse/Hybrid/Rerank的TopK、引用、诊断阶段和延迟，核对正文、页码、heading与标准答案；解析丢失、切块断裂、候选漏召回、融合/重排错排和Token截断必须区分首个失效阶段。
+5. 在可隔离且不污染现有SciFact评测的前提下，用最终JAR验证普通Agent和至少一个Workflow的非流式、SSE终态、会话历史和引用回源，不同用户/私有库/失效版本的跨范围请求必须拒绝；若缺少可用LLM或隔离配置，标注“未测”并保留阻塞证据。
+6. 对摄取与查询分别做单线程基线和服务器可承受的低并发复测，记录p50/p95/max、吞吐、错误/降级/空结果和阶段耗时；同时采集Java、MySQL、Qdrant和三个模型/解析容器的CPU、内存、队列和连接证据，不用单次延迟猜测瓶颈。
+7. 新增可重算最终报告生成器或脚本，将已有SciFact 1200条质量run、80条内部诊断、性能轮次、三格式E2E、Java/前端门禁和失败case汇总到固定交付格式。所有数值从原始JSONL/manifest/Surefire/命令产物提取，文档展示query、Gold文档标题/正文片段、实际错误TopK、首个失效步骤、直接事实与可证伪推断；缺数据项显式写“未测/证据不足”。
+8. 完成后用独立复算和字节级确定性校验报告，列出所有输入/输出SHA-256、命令、接口、线程/并发/超时和环境；执行结果、首次失败、修复及未完成范围追加到本节，再做中文本地提交。
+
+#### RAG三格式E2E数据完整性缺陷修复计划（执行前）
+
+1. 保留`format-e2e-r2`为修复前不可改写证据：三个版本均为READY且实际存在5/6/6个向量点和10/12/12条父子分块，但`rag_document_version.chunk_count=0`、页数/字符数为空、解析产物定位为空；重新核验MySQL、Qdrant和MinIO三端后，将事实与推断分栏记录。
+2. 沿现有领域模型、Repository和MyBatis规范扩展版本激活契约，在Worker完成解析、切块、向量写入后，以租户、版本、任务revision和generation围栏原子写入真实`pageCount/characterCount/chunkCount`以及解析器、切块器、Embedding版本；`chunkCount`统一定义为实际可检索子块/向量点数，不把父块重复计数。
+3. 审计当前解析产物契约和MinIO对象生命周期；若架构已定义parsed asset，则在数据库事务之外先上传内容寻址/版本隔离的解析文本，激活事务只提交已成功对象定位与哈希，并在取消、失败、删除及重试路径保证幂等清理。若现有契约不允许安全补入，本轮明确保留为空并把原因写成设计边界，不能伪造已持久化。
+4. 增加领域、持久化和Worker测试，覆盖成功指标落库、CAS/旧revision拒绝、重试幂等、父子块计数、对象上传失败不激活、激活失败后的孤儿对象处理、取消/删除清理以及既有版本兼容；使用Java 17运行定向测试和全部RAG回归。
+5. 以修复后的最终JAR执行独立`format-e2e-r3`真实HTTP链路，使用全新租户/知识库/版本且不覆盖r1/r2；核验原文件MinIO存在与大小、解析产物（若实现）、MySQL指标、Qdrant按tenant/version过滤计数、固定问题召回、无降级、资源峰值和全链路耗时。
+6. 将r2作为修复前基线、r3作为修复后复测，追加代码改动、首次失败、测试数量、三端一致性、原始证据路径与SHA-256；只有真实改善项才写“修复”，未解决或无法归因项继续进入最终瓶颈和限制清单。
+
+#### Docling同步解析超时与透明重试优化计划（执行前）
+
+1. 固化r2事实口径：DOCX最后一次received为1024ms、首次parsing为2041ms、最后parsing为122889ms、首次indexing为123908ms，按1秒轮询只能确定PARSING约120.848～122.884秒；远端最终成功响应的`processing_time≈0.1s`不是Java端到端耗时。
+2. 修复适配器观测盲区：为每次Docling发送记录有界的attempt、结果类型和wall time，成功结果metadata写总调用耗时/尝试数；日志不含正文、文件名、multipart、凭据或响应体，最终报告可以区分permit等待、HTTP尝试和服务自报处理时间。
+3. 禁止对完整请求超时做适配器内透明立即重发：`HttpTimeoutException`交给已有MySQL任务账本重试、退避、租约和取消机制，避免单Worker在一次attempt中无留痕占用最多两倍timeout；只对连接被提前关闭等短暂普通`IOException`保留一次有记录的重试。
+4. 将连接建立超时与完整请求超时拆开，连接超时取明确短上限且不大于请求timeout；不改变服务端`document_timeout`语义。补成功一次、普通I/O重试、请求超时不重试、指标字段和脱敏测试。
+5. Java 17定向门禁与全部RAG回归通过后纳入最终JAR；`format-e2e-r3`真实复测比较r2/r3摄取阶段、请求attempt和资源峰值。若r3未复现120秒，只能写“本轮未复现”；若复现则用新证据明确首个失败请求，不能倒推旧run。
+
+#### RAG摄取数据完整性与Docling超时优化阶段结果
+
+- 修复前真实r2库表核验：三个版本虽均READY，`rag_document_version.chunk_count`均为0，`page_count/character_count/parsed_bucket/parsed_object_key`为空；实际`rag_chunk`为Markdown 10行/5个可检索子块、DOCX 12行/6个子块、PDF 12行/6个子块。根因已定位为领域版本实体不承载指标、持久化映射固定写0、激活SQL只更新状态。
+- 摄取检查点新增页数、Unicode字符数、解析对象位置/哈希/字节数，并保持旧五字段JSON可读；解析后规范化Markdown通过受控临时文件流式写入同版本确定性MinIO对象键，重试覆盖同一对象，取消/失败清理按确定性键执行。
+- 原子激活现在同时写版本表解析位置、页数、字符数、可检索子块数、解析产物哈希/大小，以及逻辑文档页数/块数；`chunkCount`明确只计实际具备vectorPointId的child块，不把父块重复计入。Repository在事务前核对任务scope、checkpoint指标和解析对象键范围。
+- 文档与版本领域映射不再丢弃数据库指标，文档列表DTO新增`pageCount/chunkCount`；旧构造调用通过无指标兼容构造器保持可读，后续状态复制保留指标，删除完成归零逻辑文档指标。
+- Docling客户端把连接超时从完整120秒请求时限中拆出，取不大于10秒的上限；每次发送记录attempt/outcome/status/errorType/wallMs，成功解析metadata包含transportAttempts、transportWallMs、permitWaitMs、adapterWallMs。完整`HttpTimeoutException`不再在单次Worker attempt内透明重发，交由任务账本退避重试；普通短暂IOException仍只重试一次。
+- 真实开发失败轨迹：第一次干净定向编译因DAO激活方法新增参数导致`RagRepositoryTest`7处testCompile错误，更新mock与精确指标断言后恢复；第一次复用旧进程命令启动新JAR因模型密钥原先仅在父进程环境而失败，重新从本机受限配置注入同一环境后启动成功。这两次失败均未计为通过数据。
+- Java 17门禁：数据修复定向38/38通过；加入Docling协议后41/41通过，其中真实本地HTTP超时测试测得101ms且仅1次请求、普通连接关闭测试2次请求后成功；文件名筛选的全部RAG测试176/176通过，均为0 failure/error/skipped。全reactor跳过重复测试打包成功，当前待测App JAR SHA-256=`e6335927080af2a6e9aebbe2b27c18eaa5e77f89cd6ab059a7872c698c154043`。
+- 尚未宣告真实修复闭环：必须由全新r3租户完成MinIO、MySQL、Qdrant三端一致性、三格式召回、Docling attempt日志和资源证据复测；r2继续作为修复前基线保留。

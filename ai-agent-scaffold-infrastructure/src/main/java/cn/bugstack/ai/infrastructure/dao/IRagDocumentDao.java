@@ -52,6 +52,8 @@ public interface IRagDocumentDao {
                                            @Param("versionId") String versionId,
                                            @Param("generation") long generation,
                                            @Param("expectedRevision") long expectedRevision,
+                                           @Param("pageCount") int pageCount,
+                                           @Param("chunkCount") int chunkCount,
                                            @Param("indexedAt") LocalDateTime indexedAt);
 
     /** 取消或失败时清除本次目标 generation，保留已有活动版本。 */

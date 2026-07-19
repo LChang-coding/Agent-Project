@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,6 +18,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,6 +38,7 @@ import java.util.concurrent.Semaphore;
  * <p>Markdown 在本地有界流式读取，PDF 和 DOCX 以 multipart 文件发布器流式上传。</p>
  */
 @Component
+@Slf4j
 public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
     private static final long MAX_DOCUMENT_BYTES = 50L * 1024 * 1024;
@@ -60,7 +63,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
     @Autowired
     public DoclingDocumentParserAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
-                .connectTimeout(properties.getDocling().getTimeout()).build());
+                .connectTimeout(connectTimeout(properties.getDocling().getTimeout())).build());
     }
 
     DoclingDocumentParserAdapter(RagProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
@@ -106,10 +109,13 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         RagProperties.Docling config = properties.getDocling();
         TeiEmbeddingAdapter.requireApiKey(config.getApiKey());
         validateRemoteFileName(command.fileName());
+        long adapterStarted = System.nanoTime();
         TeiEmbeddingAdapter.acquire(concurrency, config.getTimeout(), "Docling");
+        long permitWaitMs = elapsedMillis(adapterStarted);
         try {
             HttpRequest request = buildRequest(command, path, mimeType, config);
-            HttpResponse<InputStream> response = sendWithOneRetry(request);
+            TransportResponse transport = sendWithOneRetry(request);
+            HttpResponse<InputStream> response = transport.response();
             byte[] body = readBounded(response.body(), config.getMaxResponseBytes());
             if (response.statusCode() != 200) {
                 throw new AppException("RAG_DOCLING_HTTP_ERROR", "Docling 服务返回状态 " + response.statusCode());
@@ -123,6 +129,10 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
             metadata.put("parser", "docling");
             metadata.put("mimeType", mimeType);
             metadata.put("status", payload.status());
+            metadata.put("transportAttempts", Integer.toString(transport.attempts()));
+            metadata.put("transportWallMs", Long.toString(transport.wallMs()));
+            metadata.put("permitWaitMs", Long.toString(permitWaitMs));
+            metadata.put("adapterWallMs", Long.toString(elapsedMillis(adapterStarted)));
             if (payload.document().fileName() != null && !payload.document().fileName().isBlank()) {
                 metadata.put("sourceFileName", payload.document().fileName());
             }
@@ -168,18 +178,46 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 .build();
     }
 
-    private HttpResponse<InputStream> sendWithOneRetry(HttpRequest request)
+    private TransportResponse sendWithOneRetry(HttpRequest request)
             throws IOException, InterruptedException {
+        long started = System.nanoTime();
         try {
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            long wallMs = elapsedMillis(started);
+            log.info("event=rag_docling_http attempt=1 outcome=response status={} wallMs={}",
+                    response.statusCode(), wallMs);
+            return new TransportResponse(response, 1, wallMs);
+        } catch (HttpTimeoutException timeout) {
+            log.warn("event=rag_docling_http attempt=1 outcome=timeout wallMs={}", elapsedMillis(started));
+            throw timeout;
         } catch (IOException firstFailure) {
+            log.warn("event=rag_docling_http attempt=1 outcome=io_failure errorType={} wallMs={}",
+                    firstFailure.getClass().getSimpleName(), elapsedMillis(started));
             try {
-                return httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                HttpResponse<InputStream> response = httpClient.send(request,
+                        HttpResponse.BodyHandlers.ofInputStream());
+                long wallMs = elapsedMillis(started);
+                log.info("event=rag_docling_http attempt=2 outcome=response status={} wallMs={}",
+                        response.statusCode(), wallMs);
+                return new TransportResponse(response, 2, wallMs);
             } catch (IOException retryFailure) {
+                log.warn("event=rag_docling_http attempt=2 outcome={} errorType={} wallMs={}",
+                        retryFailure instanceof HttpTimeoutException ? "timeout" : "io_failure",
+                        retryFailure.getClass().getSimpleName(), elapsedMillis(started));
                 retryFailure.addSuppressed(firstFailure);
                 throw retryFailure;
             }
         }
+    }
+
+    private static Duration connectTimeout(Duration requestTimeout) {
+        Duration upperBound = Duration.ofSeconds(10);
+        return requestTimeout.compareTo(upperBound) < 0 ? requestTimeout : upperBound;
+    }
+
+    private static long elapsedMillis(long startedNanos) {
+        return Math.max(0L, java.util.concurrent.TimeUnit.NANOSECONDS
+                .toMillis(System.nanoTime() - startedNanos));
     }
 
     private HttpRequest.BodyPublisher textPart(String boundary, String name, String value) {
@@ -200,6 +238,9 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
     private long documentTimeoutSeconds(Duration timeout) {
         return Math.max(1L, timeout.toSeconds());
+    }
+
+    private record TransportResponse(HttpResponse<InputStream> response, int attempts, long wallMs) {
     }
 
     private URI endpoint(URI base, String path) {

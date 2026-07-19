@@ -3,6 +3,8 @@ package cn.bugstack.ai.domain.rag.model.entity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.types.exception.AppException;
 
+import java.util.Map;
+
 /**
  * 不可变文档版本实体。
  */
@@ -24,7 +26,24 @@ public record RagDocumentVersionEntity(String tenantId,
                                        String parserVersion,
                                        String chunkerVersion,
                                        String embeddingModelRevision,
-                                       long revision) {
+                                       long revision,
+                                       int pageCount,
+                                       long characterCount,
+                                       int chunkCount,
+                                       Map<String, String> metadata) {
+
+    /** 兼容创建阶段尚无解析指标的调用。 */
+    public RagDocumentVersionEntity(String tenantId, String knowledgeBaseId, String documentId,
+                                    String versionId, int versionNumber, long generation,
+                                    String objectBucket, String objectKey, String parsedObjectBucket,
+                                    String parsedObjectKey, String fileName, String sha256, String mimeType,
+                                    long sizeBytes, RagDocumentVersionStatus status, String parserVersion,
+                                    String chunkerVersion, String embeddingModelRevision, long revision) {
+        this(tenantId, knowledgeBaseId, documentId, versionId, versionNumber, generation,
+                objectBucket, objectKey, parsedObjectBucket, parsedObjectKey, fileName, sha256, mimeType,
+                sizeBytes, status, parserVersion, chunkerVersion, embeddingModelRevision, revision,
+                0, 0L, 0, Map.of());
+    }
 
     public RagDocumentVersionEntity {
         requireText(tenantId, "租户ID");
@@ -45,9 +64,11 @@ public record RagDocumentVersionEntity(String tenantId,
         requireText(fileName, "文件名");
         requireText(sha256, "文件摘要");
         requireText(mimeType, "文件类型");
-        if (versionNumber < 1 || generation < 1 || sizeBytes < 0 || status == null || revision < 0) {
+        if (versionNumber < 1 || generation < 1 || sizeBytes < 0 || status == null || revision < 0
+                || pageCount < 0 || characterCount < 0 || chunkCount < 0) {
             throw new IllegalArgumentException("文档版本参数非法");
         }
+        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }
 
     private static void requireText(String value, String name) {
@@ -111,6 +132,7 @@ public record RagDocumentVersionEntity(String tenantId,
         return new RagDocumentVersionEntity(tenantId, knowledgeBaseId, documentId, versionId, versionNumber,
                 generation, objectBucket, objectKey, parsedObjectBucket, parsedObjectKey,
                 fileName, sha256, mimeType, sizeBytes, targetStatus,
-                parserRevision, chunkerRevision, embeddingRevision, revision + 1);
+                parserRevision, chunkerRevision, embeddingRevision, revision + 1,
+                pageCount, characterCount, chunkCount, metadata);
     }
 }

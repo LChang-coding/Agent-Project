@@ -64,14 +64,15 @@ public class RagPersistenceMapper {
         return new RagDocumentEntity(po.getTenantId(), po.getOwnerUserId(), readVisibility(po.getVisibility()),
                 po.getKnowledgeBaseId(), po.getDocumentId(), po.getFileName(), po.getActiveVersionId(),
                 requiredLong(po.getActiveGeneration(), "文档activeGeneration"), po.getTargetGeneration(),
-                readDocumentStatus(po.getStatus()), requiredLong(po.getRevision(), "文档revision"));
+                readDocumentStatus(po.getStatus()), requiredLong(po.getRevision(), "文档revision"),
+                optionalInt(po.getPageCount()), optionalInt(po.getChunkCount()));
     }
 
     public RagDocumentPO toDocumentPo(RagDocumentEntity entity) {
         return RagDocumentPO.builder().tenantId(entity.tenantId()).ownerUserId(entity.ownerUserId())
                 .visibility(writeVisibility(entity.visibility())).knowledgeBaseId(entity.knowledgeBaseId())
                 .documentId(entity.documentId()).fileName(entity.displayName()).sourceType("upload")
-                .documentVersion(1).chunkCount(0)
+                .documentVersion(1).pageCount(entity.pageCount()).chunkCount(entity.chunkCount())
                 .activeVersionId(entity.activeVersionId()).activeGeneration(entity.activeGeneration())
                 .targetGeneration(entity.targetGeneration()).status(codec.databaseValue(entity.status()))
                 .revision(entity.revision()).build();
@@ -87,7 +88,9 @@ public class RagPersistenceMapper {
                 requiredLong(po.getSizeBytes(), "文档字节数"),
                 codec.enumValue(RagDocumentVersionStatus.class, po.getStatus(), "文档版本状态"),
                 po.getParserVersion(), po.getChunkerVersion(), po.getEmbeddingModelRevision(),
-                requiredLong(po.getRowVersion(), "文档版本rowVersion"));
+                requiredLong(po.getRowVersion(), "文档版本rowVersion"), optionalInt(po.getPageCount()),
+                optionalLong(po.getCharacterCount()), optionalInt(po.getChunkCount()),
+                codec.readMetadata(po.getMetadata()));
     }
 
     public RagDocumentVersionPO toDocumentVersionPo(RagDocumentVersionEntity entity) {
@@ -99,7 +102,9 @@ public class RagPersistenceMapper {
                 .parsedObjectKey(entity.parsedObjectKey()).fileName(entity.fileName()).mimeType(entity.mimeType())
                 .sizeBytes(entity.sizeBytes()).contentHash(entity.sha256()).parserVersion(entity.parserVersion())
                 .chunkerVersion(entity.chunkerVersion()).embeddingModelRevision(entity.embeddingModelRevision())
-                .chunkCount(0).status(codec.databaseValue(entity.status())).rowVersion(entity.revision()).build();
+                .pageCount(entity.pageCount()).characterCount(entity.characterCount()).chunkCount(entity.chunkCount())
+                .metadata(codec.writeMetadata(entity.metadata()))
+                .status(codec.databaseValue(entity.status())).rowVersion(entity.revision()).build();
     }
 
     public RagChunkEntity toChunk(RagChunkPO po) {
@@ -262,6 +267,14 @@ public class RagPersistenceMapper {
     private long requiredLong(Long value, String fieldName) {
         if (value == null) throw new IllegalStateException(fieldName + "为空");
         return value;
+    }
+
+    private int optionalInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private long optionalLong(Long value) {
+        return value == null ? 0L : value;
     }
 
     private Instant toInstant(LocalDateTime value) {
