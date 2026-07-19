@@ -1874,3 +1874,29 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 修复后报告再次在两个全新临时目录独立生成，JSON与Markdown两两`cmp`相同，并与正式目录字节相同；最终Markdown SHA-256=`be08c7be1f32a6c8d9089687789d70ceeb2b6becabdde8cc52d1eb3d4d2acd46`，机器总账=`d7fa0d3a86bdd5efad01275acce9a688f4f134789642a4f33a15af71e27f6894`。生成器另通过`py_compile`、关键字段`jq -e`和所有输入hash门禁。
 - Java 17发布门禁：全部文件名匹配RAG测试176/176通过，0 failure/error/skipped；benchmark独立`clean test package`为50/50通过；全reactor`mvn -DskipTests package` BUILD SUCCESS。当前重新打包App JAR=`d7c6b83122a780a1c948540730fe02852179b21bca309c26e7f11cb3b92829bd`、benchmark CLI=`57238691e2ed9a6217775216d0f3fcd5377d9366d30ba7ff1a9164ec7e2de957`；r6真实请求仍严格归属其manifest记录的旧App JAR，未用新hash反写测试环境。
 - 未完成项继续明确：SciFact无gold answer，未测Faithfulness/Answer Correctness；三格式只是一份小文件、单Worker/线程；无答案探针仍返回5～6个候选，Agent是否正确拒答未做最终LLM黑盒；页码元数据未闭环；fusion threshold与TopK仍无法拆分。这些均列在报告限制与复测门槛中。
+
+#### RAG总目标剩余缺口闭环计划（2026-07-20，执行前）
+
+1. 以当前提交`84a509a`和工作树为唯一事实来源，重新对照本计划的总体架构目标、管理员前端目标、上线门槛与最终固定报告格式；逐项检查生产代码、SQL、API、Vue页面、自动化测试和真实运行证据，不能用历史计划中的“已完成”文字替代当前文件或运行结果。
+2. 并行审计五类剩余风险：文档重建与知识库删除生命周期、运行中取消/租约接管的真实故障注入、PDF/DOCX页级元数据、真实Agent/Workflow流式与非流式回答引用、尚未实测的父邻块/Token预算/chunk/TopK等细粒度消融。每项输出“已证明/证据不足/未实现”、权威证据和最小闭环路径。
+3. 优先实现会导致数据不一致、权限越界或已开放UI无法完成的生产缺口；每个实现切片继续在本文件先写计划，再编码，并覆盖tenant scope、revision CAS、fencing、取消副作用屏障、幂等与失败恢复。
+4. 对能够在现有环境真实复现的缺口执行隔离黑盒或故障注入；所有真实请求绑定commit/JAR、配置、并发、超时、输入hash和原始输出。无法安全隔离的项目保留为未完成，不用Mockito、单次成功或不同数据快照替代。
+5. 扩展确定性报告生成器，使新增消融、回答引用、页级元数据和生命周期结果只能从机器证据生成；若某技术点仍无同快照A/B，报告必须继续显示“未测试/证据不足”，不得填写估算收益。
+6. 每个重大闭环运行Java 17相关测试、前端生产构建、必要的真实中间件验证和全reactor package；把首次失败、修复、样本量、原始路径、SHA-256及遗留风险追加到本节，只暂存相关文件并使用中文本地提交。
+
+#### Docling页级元数据闭环切片计划（执行前）
+
+1. 以2026-07-20真实Docling协议探针为基线：仅请求`md`时`json_content=null`；同一PDF同时请求`md+json`时HTTP 200，`pages`为3项，正文元素`prov[].page_no`存在。原始响应只保存在受控`/tmp`且不含凭据，不把探针耗时冒充业务性能数据。
+2. 修改Docling适配器同时请求Markdown和结构化JSON；对`pages`对象键与`page_no`做严格正整数校验，页数按实际唯一页集合计算。结构化字段缺失、非法或与正文完全无法映射时只保留页数/空章节页码，不根据换页符、文档长度或标题顺序猜测。
+3. 章节页码仅使用Docling可证明的provenance：按结构化`section_header`层级建立heading path到起始页的有序映射，并与规范化Markdown章节路径精确匹配；重复标题按出现顺序消费，未匹配保持`null`。Markdown本地解析继续明确`pageCount=0`/页码未知。
+4. 增加协议与适配器测试，覆盖三页响应、嵌套/重复标题、缺失JSON、非法页码、无匹配标题以及请求确实包含两个`to_formats`；确保错误响应与日志不泄露正文、结构化JSON或密钥。
+5. Java 17定向测试和全部RAG回归通过后，用最终JAR、全新租户和真实MinIO重新摄取三页PDF及DOCX，验证数据库`page_count`、chunk/citation页码和查询引用回源；旧r6保持不变作为修复前证据，新run不得覆盖旧目录。
+6. 把代码、首次失败、测试数、真实页数/页码、输入输出hash和仍未知的跨页chunk语义追加到本节，更新最终报告生成器并完成中文本地提交。
+
+#### Docling页级元数据闭环阶段结果（一）：协议与Java链路
+
+- 真实协议探针使用项目固化的三页PDF调用现有Docling服务：只请求`to_formats=md`时HTTP 200、响应1870字节但`json_content=null`；同文件同时请求`md+json`时HTTP 200、响应16892字节，结构化`pages`为3项，`texts[0].prov[0].page_no=1`。两次响应仅保存在`/tmp`，API Key未写入命令输出、响应、计划或Git；探针处理耗时不计入业务性能结果。
+- `DoclingDocumentParserAdapter`现在一次请求同时获取Markdown和结构化JSON；严格验证page对象键与`page_no`一致、正整数、唯一、从1连续且不超过配置上限。结构化JSON缺失时继续明确返回页数未知0，类型/页集合非法时返回稳定`RAG_DOCLING_PAGE_METADATA_INVALID`，不猜测页数。
+- 章节页码只从`section_header`的provenance建立完整heading path映射；与Markdown标题路径精确匹配后赋值，重复同路径按出现顺序消费。无法匹配、缺provenance或非标题正文保持`null`；本地Markdown仍没有虚构页码。
+- 协议测试新增三页、重复标题、未知匹配、非法页对象和双`to_formats`断言；定向`DoclingDocumentParserAdapterProtocolTest`为11/11通过。Java 17按真实文件名生成36个RAG测试类清单后干净执行，Maven权威结果176/176通过、0 failure/error/skipped，六模块BUILD SUCCESS、总耗时9.379秒。
+- 全reactor `mvn -DskipTests package`成功；当前待黑盒App JAR SHA-256=`5bf8b3abaa0644da4709fd43e37c3a6ed7ed2b2aed2332d718ed767230c00e6c`。尚未把单元结果冒充页码E2E；下一步先提交当前代码，再以该提交和同一JAR执行全新真实MinIO三格式run。

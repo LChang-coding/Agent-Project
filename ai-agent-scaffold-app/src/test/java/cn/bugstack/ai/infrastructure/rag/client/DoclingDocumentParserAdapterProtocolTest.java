@@ -111,6 +111,8 @@ public class DoclingDocumentParserAdapterProtocolTest {
 
         Assert.assertEquals("# Parsed\nremote body", result.normalizedMarkdown());
         Assert.assertEquals("docling-serve-test-revision", result.parserVersion());
+        Assert.assertEquals(0, result.pageCount());
+        Assert.assertNull(result.sections().get(0).pageNumber());
         Assert.assertEquals("0.125", result.metadata().get("processingTimeSeconds"));
         Assert.assertEquals("1", result.metadata().get("transportAttempts"));
         Assert.assertNotNull(result.metadata().get("transportWallMs"));
@@ -127,7 +129,9 @@ public class DoclingDocumentParserAdapterProtocolTest {
         String multipart = new String(request.body(), StandardCharsets.ISO_8859_1);
         assertTextPart(multipart, "target_type", "inbody");
         assertTextPart(multipart, "from_formats", "pdf");
+        Assert.assertEquals(2, textPartCount(multipart, "to_formats"));
         assertTextPart(multipart, "to_formats", "md");
+        assertTextPart(multipart, "to_formats", "json");
         assertTextPart(multipart, "do_ocr", "false");
         assertTextPart(multipart, "force_ocr", "false");
         assertTextPart(multipart, "include_images", "false");
@@ -139,6 +143,47 @@ public class DoclingDocumentParserAdapterProtocolTest {
         Assert.assertTrue(multipart.contains("name=\"files\"; filename=\"source.pdf\""));
         Assert.assertTrue(multipart.contains("Content-Type: application/pdf"));
         Assert.assertTrue(multipart.contains("PDF_STREAM_SENTINEL"));
+    }
+
+    @Test
+    public void pdfShouldMapDoclingPagesAndRepeatedHeadingProvenance() throws Exception {
+        String markdown = "# Overview\nintro\n## Repeated\nfirst\n## Repeated\nsecond\n# Last\nend";
+        respondPageSuccess(markdown, Map.of(
+                "1", Map.of("page_no", 1),
+                "2", Map.of("page_no", 2),
+                "3", Map.of("page_no", 3)), List.of(
+                header("Overview", 1, 1),
+                header("Repeated", 2, 1),
+                header("Repeated", 2, 2),
+                header("Last", 1, 3)));
+        Path path = write("pages.pdf", "%PDF-pages".getBytes(StandardCharsets.US_ASCII));
+
+        ParsedDocument result = adapter.parse(command(path, "pages.pdf", "application/pdf", false));
+
+        Assert.assertEquals(3, result.pageCount());
+        Assert.assertEquals(4, result.sections().size());
+        Assert.assertEquals(Integer.valueOf(1), result.sections().get(0).pageNumber());
+        Assert.assertEquals(Integer.valueOf(1), result.sections().get(1).pageNumber());
+        Assert.assertEquals(Integer.valueOf(2), result.sections().get(2).pageNumber());
+        Assert.assertEquals(Integer.valueOf(3), result.sections().get(3).pageNumber());
+    }
+
+    @Test
+    public void pdfShouldKeepUnknownSectionPageAndRejectMalformedPageMetadata() throws Exception {
+        respondPageSuccess("# Actual\nbody", Map.of("1", Map.of("page_no", 1)),
+                List.of(header("Different", 1, 1)));
+        Path path = write("unknown-page.pdf", "%PDF-unknown".getBytes(StandardCharsets.US_ASCII));
+
+        ParsedDocument result = adapter.parse(command(path, "unknown-page.pdf", "application/pdf", false));
+
+        Assert.assertEquals(1, result.pageCount());
+        Assert.assertNull(result.sections().get(0).pageNumber());
+
+        respondPageSuccess("# Actual\nbody", Map.of("1", Map.of("page_no", 2)),
+                List.of(header("Actual", 1, 2)));
+        AppException error = expectFailure(
+                () -> adapter.parse(command(path, "unknown-page.pdf", "application/pdf", false)));
+        Assert.assertEquals("RAG_DOCLING_PAGE_METADATA_INVALID", error.getCode());
     }
 
     @Test
@@ -265,6 +310,24 @@ public class DoclingDocumentParserAdapterProtocolTest {
         response.put("timings", Map.of());
         response.put("confidence", Map.of("mean_grade", "good"));
         respond(response);
+    }
+
+    private void respondPageSuccess(String markdown, Map<String, ?> pages, List<Map<String, ?>> texts)
+            throws Exception {
+        Map<String, Object> document = new LinkedHashMap<>();
+        document.put("filename", "pages.pdf");
+        document.put("md_content", markdown);
+        document.put("json_content", Map.of("pages", pages, "texts", texts));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("document", document);
+        response.put("status", "success");
+        response.put("processing_time", 0.25D);
+        respond(response);
+    }
+
+    private Map<String, ?> header(String text, int level, int pageNumber) {
+        return Map.of("label", "section_header", "text", text, "level", level,
+                "prov", List.of(Map.of("page_no", pageNumber)));
     }
 
     private void respond(Map<String, ?> response) throws Exception {

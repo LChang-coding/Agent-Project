@@ -5,6 +5,7 @@ import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -25,11 +26,15 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
 
@@ -102,7 +107,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
         String markdown = readUtf8Bounded(path, config.getMaxResponseBytes());
         return parsedDocument(markdown, LOCAL_MARKDOWN_PARSER, command,
-                Map.of("parser", "local", "mimeType", MARKDOWN_MIME));
+                Map.of("parser", "local", "mimeType", MARKDOWN_MIME), PageMetadata.empty());
     }
 
     private ParsedDocument parseWithDocling(ParseCommand command, Path path, String mimeType) {
@@ -139,7 +144,9 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
             if (payload.processingTime() != null && Double.isFinite(payload.processingTime())) {
                 metadata.put("processingTimeSeconds", Double.toString(payload.processingTime()));
             }
-            return parsedDocument(payload.document().markdown(), config.getParserRevision(), command, metadata);
+            PageMetadata pageMetadata = pageMetadata(payload.document().jsonContent(), config.getMaxPages());
+            return parsedDocument(payload.document().markdown(), config.getParserRevision(), command, metadata,
+                    pageMetadata);
         } catch (AppException e) {
             throw e;
         } catch (InterruptedException e) {
@@ -159,6 +166,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 textPart(boundary, "target_type", "inbody"),
                 textPart(boundary, "from_formats", PDF_MIME.equals(mimeType) ? "pdf" : "docx"),
                 textPart(boundary, "to_formats", "md"),
+                textPart(boundary, "to_formats", "json"),
                 textPart(boundary, "do_ocr", Boolean.toString(command.ocrEnabled())),
                 textPart(boundary, "force_ocr", "false"),
                 textPart(boundary, "include_images", "false"),
@@ -332,7 +340,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
     }
 
     private ParsedDocument parsedDocument(String markdown, String parserVersion, ParseCommand command,
-                                          Map<String, String> metadata) {
+                                          Map<String, String> metadata, PageMetadata pageMetadata) {
         String normalized = markdown.replace("\r\n", "\n").replace('\r', '\n').strip();
         if (normalized.isBlank()) {
             throw new AppException("RAG_DOCUMENT_TEXT_INVALID", "文档解析结果不能为空");
@@ -341,13 +349,15 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         resultMetadata.put("tenantId", command.tenantId());
         resultMetadata.put("jobId", command.jobId());
         resultMetadata.put("versionId", command.versionId());
-        return new ParsedDocument(normalized, sections(normalized), 0, parserVersion, resultMetadata);
+        return new ParsedDocument(normalized, sections(normalized, pageMetadata.headingPages()),
+                pageMetadata.pageCount(), parserVersion, resultMetadata);
     }
 
-    private List<ParsedSection> sections(String markdown) {
+    private List<ParsedSection> sections(String markdown, HeadingPageResolver headingPages) {
         List<ParsedSection> result = new ArrayList<>();
         List<String> headingPath = new ArrayList<>();
         String currentPath = "";
+        Integer currentPage = null;
         StringBuilder content = new StringBuilder();
         for (String line : markdown.split("\n", -1)) {
             Heading heading = heading(line);
@@ -358,26 +368,110 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 content.append(line);
                 continue;
             }
-            addSection(result, currentPath, content);
+            addSection(result, currentPath, currentPage, content);
             while (headingPath.size() >= heading.level()) {
                 headingPath.remove(headingPath.size() - 1);
             }
             headingPath.add(heading.text());
             currentPath = String.join(" / ", headingPath);
+            currentPage = headingPages.nextPage(currentPath);
         }
-        addSection(result, currentPath, content);
+        addSection(result, currentPath, currentPage, content);
         if (result.isEmpty()) {
             result.add(new ParsedSection("", markdown, null, 0));
         }
         return List.copyOf(result);
     }
 
-    private void addSection(List<ParsedSection> sections, String headingPath, StringBuilder content) {
+    private void addSection(List<ParsedSection> sections, String headingPath, Integer pageNumber,
+                            StringBuilder content) {
         String value = content.toString().strip();
         content.setLength(0);
         if (!value.isBlank()) {
-            sections.add(new ParsedSection(headingPath, value, null, sections.size()));
+            sections.add(new ParsedSection(headingPath, value, pageNumber, sections.size()));
         }
+    }
+
+    private PageMetadata pageMetadata(JsonNode jsonContent, int maxPages) {
+        if (jsonContent == null || jsonContent.isNull() || jsonContent.isMissingNode()) {
+            return PageMetadata.empty();
+        }
+        if (!jsonContent.isObject()) {
+            throw invalidPageMetadata();
+        }
+        JsonNode pages = jsonContent.get("pages");
+        if (pages == null || pages.isNull()) {
+            return PageMetadata.empty();
+        }
+        if (!pages.isObject() || pages.isEmpty()) {
+            throw invalidPageMetadata();
+        }
+        Set<Integer> pageNumbers = new HashSet<>();
+        pages.fields().forEachRemaining(entry -> {
+            JsonNode page = entry.getValue();
+            JsonNode pageNumber = page == null ? null : page.get("page_no");
+            int keyPageNumber;
+            try {
+                keyPageNumber = Integer.parseInt(entry.getKey());
+            } catch (NumberFormatException ignored) {
+                throw invalidPageMetadata();
+            }
+            if (pageNumber == null || !pageNumber.isIntegralNumber() || !pageNumber.canConvertToInt()) {
+                throw invalidPageMetadata();
+            }
+            int value = pageNumber.intValue();
+            if (value != keyPageNumber || value < 1 || value > maxPages || !pageNumbers.add(value)) {
+                throw invalidPageMetadata();
+            }
+        });
+        for (int expected = 1; expected <= pageNumbers.size(); expected++) {
+            if (!pageNumbers.contains(expected)) {
+                throw invalidPageMetadata();
+            }
+        }
+
+        List<HeadingPage> headings = new ArrayList<>();
+        List<String> headingPath = new ArrayList<>();
+        JsonNode texts = jsonContent.get("texts");
+        if (texts != null && !texts.isNull()) {
+            if (!texts.isArray()) {
+                throw invalidPageMetadata();
+            }
+            for (JsonNode text : texts) {
+                if (!"section_header".equals(text.path("label").asText())) {
+                    continue;
+                }
+                String headingText = text.path("text").asText("").strip();
+                int level = text.path("level").asInt(0);
+                Integer pageNumber = provenancePage(text.get("prov"), pageNumbers);
+                if (headingText.isBlank() || level < 1 || level > 6 || pageNumber == null) {
+                    continue;
+                }
+                while (headingPath.size() >= level) {
+                    headingPath.remove(headingPath.size() - 1);
+                }
+                headingPath.add(headingText);
+                headings.add(new HeadingPage(String.join(" / ", headingPath), pageNumber));
+            }
+        }
+        return new PageMetadata(pageNumbers.size(), new HeadingPageResolver(headings));
+    }
+
+    private Integer provenancePage(JsonNode provenance, Set<Integer> pageNumbers) {
+        if (provenance == null || !provenance.isArray() || provenance.isEmpty()) {
+            return null;
+        }
+        JsonNode first = provenance.get(0);
+        JsonNode pageNumber = first == null ? null : first.get("page_no");
+        if (pageNumber == null || !pageNumber.isIntegralNumber() || !pageNumber.canConvertToInt()) {
+            return null;
+        }
+        int value = pageNumber.intValue();
+        return pageNumbers.contains(value) ? value : null;
+    }
+
+    private AppException invalidPageMetadata() {
+        return new AppException("RAG_DOCLING_PAGE_METADATA_INVALID", "Docling 返回的页级元数据不合法");
     }
 
     private Heading heading(String line) {
@@ -399,6 +493,31 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
     private record Heading(int level, String text) {
     }
 
+    private record HeadingPage(String path, int pageNumber) {
+    }
+
+    private record PageMetadata(int pageCount, HeadingPageResolver headingPages) {
+
+        private static PageMetadata empty() {
+            return new PageMetadata(0, new HeadingPageResolver(List.of()));
+        }
+    }
+
+    private static final class HeadingPageResolver {
+
+        private final Map<String, Deque<Integer>> pagesByPath = new LinkedHashMap<>();
+
+        private HeadingPageResolver(List<HeadingPage> headings) {
+            headings.forEach(heading -> pagesByPath.computeIfAbsent(heading.path(), ignored -> new ArrayDeque<>())
+                    .addLast(heading.pageNumber()));
+        }
+
+        private Integer nextPage(String path) {
+            Deque<Integer> pages = pagesByPath.get(path);
+            return pages == null || pages.isEmpty() ? null : pages.removeFirst();
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ConvertDocumentResponse(DoclingDocument document, String status,
                                            @JsonProperty("processing_time") Double processingTime) {
@@ -406,6 +525,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record DoclingDocument(@JsonProperty("filename") String fileName,
-                                   @JsonProperty("md_content") String markdown) {
+                                   @JsonProperty("md_content") String markdown,
+                                   @JsonProperty("json_content") JsonNode jsonContent) {
     }
 }
