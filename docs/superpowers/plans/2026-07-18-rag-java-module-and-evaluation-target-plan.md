@@ -1142,3 +1142,43 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 两个脚本`bash -n`通过；existing-target模式缺失原租户凭据时在认证或写入前退出2且不创建run目录。本机未安装shellcheck，未把缺失工具冒充检查通过。
 - 本轮没有修改Java源码，当前JAR仍对应代码提交`1e9ebbf`；脚本、文档和本计划将在本地中文提交后，以该新提交号和全新空目录启动第五次独立复评分。
 - 关于迁移决策：7548是5183篇SciFact文档切分后的Qdrant子块数。现有MySQL约15.3MiB，迁移可改善跨公网配置、审计与hydration往返，但不能修复Qdrant/模型公网链路的间歇0字节挂起；第五次同条件评分期间继续冻结迁移，闭环后再用迁移前后基线决定是否切换。Kafka、MinIO、Nacos、XXL-JOB和观测组件不默认迁到RAG推理机，避免与Qdrant和CPU模型争抢资源。
+
+###### SciFact 第五次独立复评分计划（执行前）
+
+1. 以本地提交`2796bdc`、当前8092应用PID 21567和全新空目录启动；复用同一prepared与原隔离租户targets，四个variant、300条query、10条query warmup等实验条件不变。应用JAR虽仍对应Java源码提交`1e9ebbf`，但`2796bdc`只改变隔离启动/评测脚本和文档，manifest按当前完整工作树提交记录；进程环境另行作为运行配置证据保存。
+2. 只在单个受限shell中为原benchmark用户生成临时随机密码、更新密码摘要、登录并把凭据注入评测进程；不在命令输出、计划、日志或Git中留下明文。existing-target脚本必须证明没有新注册租户。
+3. warmup落满40条后要求四个variant各10条、0业务错误、0降级、0空排名；任一不满足立即终止并保留失败run。通过后继续1200条measured，运行期间周期核验唯一组合和错误/降级/空结果，不修改远端服务、不迁移MySQL、不做并发压测。
+4. 只有1200条全部完成后才执行完整性/hash/组件实际执行门禁和独立`score`重算，生成四组Recall、MRR、nDCG等质量指标及阶段延迟分布；失败run永不参与最终报告。
+
+###### SciFact 第五次启动与 MySQL 断链结果
+
+- 首次目录`run-scifact-quality-eval-2796bdc`只生成`running` manifest与targets后，评测进程随非交互父会话退出；没有warmup或measured请求。目录原样保留为启动中断证据，不计作质量运行。
+- 托管会话在新目录`run-scifact-quality-eval-2796bdc-r2`启动后，warmup写入18条、0 measured；门禁捕获1个错误、0降级、1个空排名后立即停止。失败记录为queryId=716的`hybrid_rrf_rerank`，评测端耗时66592ms、`RAG_BENCHMARK_API_FAILED`。
+- 同一请求trace的服务端日志给出确定根因：Rerank前后链路已运行，随后`RagRepository.listChunksByIds`调用`queryListByTenantAndChunkIds`批量hydration时，MySQL连接在最后收发约52.7秒后以0字节EOF断开，抛出SQLSTATE `08S01`/`Communications link failure`；HTTP观测总耗时66585ms。约81秒后，独立的Worker到期任务扫描又在另一连接上发生相同断链，排除单个query或单条SQL的确定性错误。
+- 因此旧MySQL公网链路现已被实证为第二个稳定性瓶颈；此前“迁移只能改善往返、不是当次Qdrant失败根因”的判断仍适用于第四次run，但不再适用于本次第五次warmup失败。`-r2`永久不参与聚合。
+
+###### 业务 MySQL 迁移至新服务器计划（执行前）
+
+1. 先只读核对新RAG服务器的CPU、内存、Swap、磁盘、容器资源上限/实时占用、端口和Docker网络；同时核对旧MySQL版本、字符集/时区、库大小、表/行数、账号权限和关键全局变量。若新机没有足够的常驻内存/磁盘余量，则不强行同机迁移，改为先优化连接与网络或另选数据库节点。
+2. 若容量允许，只部署固定版本MySQL与独立数据卷/配置/健康检查/资源上限，不上传Java/Vue源码，不改Qdrant collection和模型容器；端口仅对本地开发机当前公网来源或受限规则开放，创建最小权限应用账号。
+3. 对旧库执行事务一致性逻辑备份，记录库级/表级结构、行数与备份SHA-256；在新实例恢复后核验表数、逐表行数、关键租户/RAG对象数量、字符集与约束。旧库保持只读可用作为回滚源，不做删除。
+4. 迁移切换前停止8092应用，避免评测/Worker写入；恢复校验后只通过本地进程环境切换数据库地址，重新启动并执行认证、知识库/targets、配置、Dense/Sparse/Hybrid/Rerank真实查询及连接稳定性门禁。失败立即停新应用并切回旧库。
+5. 切换成功后先做串行真实门禁与MySQL连续探测，再以全新提交/空目录重启SciFact；迁移前后的数据库阶段延迟和断链率分别留痕。Kafka、MinIO、Nacos、XXL-JOB、Grafana/日志栈暂不迁移，除非后续资源和链路数据证明收益大于与模型/Qdrant争用风险。
+
+###### MySQL 迁移公网直连阶段结果与自动隧道计划（执行前）
+
+- 新机容量核验为15 GiB内存、约9.9 GiB可用、26 GiB空闲磁盘；MySQL 8.0.46固定镜像已部署为1 CPU/768 MiB/256 PID、256 MiB Buffer Pool，容器healthy。首次因非敏感配置误设600导致容器内mysql用户不可读，初始化未开始；改为644后正常初始化，密钥env始终600。
+- 迁移期间8092已停止且无评测器。事务一致性dump完整结束，大小93443397 bytes、SHA-256 `ffc2bae94a16d4d68c7a468bb63f28e3ec8ba91e54b8c5c1a6f12b26d8e86aba`、34张表；新旧逐表精确行数一致，总计45374行，其中`rag_chunk=38295`、`rag_retrieval_citation=5661`、`chat_message=163`。旧库未删除。
+- 新库公网先以DOCKER-USER只允许当前开发网络`223.104.79.0/24`并要求TLS；初次按浏览代理IP放行被正确阻断，服务器抓包确认终端经运营商NAT实际为同/24的另一地址后修正。公网真实queryId=716 Hybrid+Rerank成功、10引用、无降级，总耗时27979ms，数据库相关配置/hydration/audit约2.8秒。
+- 随后的脚本重启在MySQL TLS握手阶段再次出现15秒0字节`SocketTimeout`，证明同一新服务器的公网链路仍存在与Qdrant/模型类似的间歇挂起；迁移服务器不能单独消除该故障。当前状态不得宣称迁移闭环。
+- 下一步增加由benchmark启动脚本自动确保的持久SSH本地转发：使用已核验host key和本机SSH key，把本机`127.0.0.1:13306`转到RAG服务器`127.0.0.1:3306`，开启ExitOnForwardFailure/ServerAlive并校验本地监听及MySQL握手；应用JDBC改连本地端口并继续`sslMode=REQUIRED`。用户无需手工建立隧道。
+- 先为RAG服务器安装本机公钥并验证BatchMode；实现幂等启动、陈旧PID/端口冲突fail-fast和不输出凭据。连续数据库与真实检索门禁通过后，删除公网3306发布和DOCKER-USER放行，重启/SSH断线恢复测试通过才视为迁移完成；失败则切回旧库。
+
+###### MySQL 自动隧道与应用切换阶段结果
+
+- RAG服务器原`sshd -T`明确为`pubkeyauthentication no`；本机ED25519公钥写入后仍只广告password。已备份`/etc/ssh/sshd_config.pre-key-auth-20260719`，只把`PubkeyAuthentication`改为yes，`sshd -t`通过后reload；BatchMode公钥登录实测成功，密码登录仍保留作回滚。
+- 新增LaunchAgent `cn.bugstack.ai.rag-mysql-tunnel`，以`KeepAlive`维护`127.0.0.1:13306 → RAG-Server 127.0.0.1:3306`，固定BatchMode、ExitOnForwardFailure、10秒连接时限和15秒ServerAlive；幂等ensure脚本由应用启动脚本自动调用。首次前置SSH探测可能在认证前公网卡住，已删除该同步阻塞点，交由LaunchAgent后台重连并用20秒本地端口门禁判定。
+- 隧道建立后30/30次独立TLS数据库连接和`tenant`计数全部成功：min 561ms、mean 995.6ms、P95 1421ms、max 2781ms。强制`launchctl kickstart -k`后PID从69644切换为73430，本地端口自动恢复，数据库计数仍为22。
+- 第一次用新脚本启动时出现`Access denied`，根因不是数据库：`read_table_cell '| MySQL |' 5`先匹配到组件资源表，把35字符的资源描述当密码；进程值与9字符真实凭据不一致。脚本已改为只匹配“root或应用配置中的数据库用户”凭据行，随后进程密码等值核验通过。
+- 修正后应用PID 71769通过自动隧道启动，Hikari成功建连；实际进程环境为本机13306、TLS REQUIRED、连接/Socket时限5/15秒，连接池min/max为1/6、idle/maxLifetime/keepalive为120/600/60秒。queryId=716的Hybrid+Rerank再次真实成功，10引用、无降级、服务端总耗时19216ms。
+- 用户随后使用数据库客户端公网直连，服务端已识别账号但客户端未启用安全连接，返回`caching_sha2_password`要求secure connection。当前按用户直连需要暂保留公网3306，仅允许`223.104.79.0/24`且强制客户端`SSL Mode=REQUIRED`；项目运行仍默认自动隧道。公网关闭项延后到用户确认不再需要直连，不能把计划目标误记为已执行。

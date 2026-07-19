@@ -36,13 +36,29 @@ fi
 embedding_key="$(read_table_cell '| Embedding API |' 5)"
 reranker_key="$(read_table_cell '| Reranker API |' 5)"
 docling_key="$(read_table_cell '| Docling API |' 5)"
+mysql_password="$(read_table_cell 'root` 或应用配置中的数据库用户' 4)"
 require_value AI_RAG_EMBEDDING_API_KEY "$embedding_key"
 require_value AI_RAG_RERANKER_API_KEY "$reranker_key"
 require_value AI_RAG_DOCLING_API_KEY "$docling_key"
+require_value MYSQL_PASSWORD "$mysql_password"
+
+"$SCRIPT_DIR/ensure-rag-mysql-tunnel.sh"
 
 export AI_RAG_EMBEDDING_API_KEY="$embedding_key"
 export AI_RAG_RERANKER_API_KEY="$reranker_key"
 export AI_RAG_DOCLING_API_KEY="$docling_key"
+export MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
+export MYSQL_PORT="${MYSQL_PORT:-13306}"
+export MYSQL_DATABASE="${MYSQL_DATABASE:-ai_agent_scaffold}"
+export MYSQL_USERNAME="${MYSQL_USERNAME:-ai_agent_app}"
+export MYSQL_PASSWORD="${MYSQL_PASSWORD:-$mysql_password}"
+export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-jdbc:mysql://$MYSQL_HOST:$MYSQL_PORT/$MYSQL_DATABASE?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&sslMode=REQUIRED&allowPublicKeyRetrieval=false&connectTimeout=5000&socketTimeout=15000&tcpKeepAlive=true}"
+export MYSQL_POOL_MIN_IDLE="${MYSQL_POOL_MIN_IDLE:-1}"
+export MYSQL_POOL_MAX_SIZE="${MYSQL_POOL_MAX_SIZE:-6}"
+export MYSQL_POOL_IDLE_TIMEOUT_MS="${MYSQL_POOL_IDLE_TIMEOUT_MS:-120000}"
+export MYSQL_POOL_MAX_LIFETIME_MS="${MYSQL_POOL_MAX_LIFETIME_MS:-600000}"
+export MYSQL_POOL_KEEPALIVE_MS="${MYSQL_POOL_KEEPALIVE_MS:-60000}"
+export MYSQL_POOL_CONNECTION_TIMEOUT_MS="${MYSQL_POOL_CONNECTION_TIMEOUT_MS:-5000}"
 export SERVER_PORT="${SERVER_PORT:-8092}"
 export AI_RAG_ENABLED=true
 export AI_RAG_WORKER_ENABLED=true
@@ -94,4 +110,5 @@ exec "$JAVA_BIN" -jar "$APP_JAR" \
   --ai.storage.type=local \
   "--ai.storage.local-root=$OBJECT_STORAGE_LOCAL_ROOT" \
   --spring.cloud.nacos.config.enabled=false \
-  --spring.cloud.nacos.discovery.enabled=false
+  --spring.cloud.nacos.discovery.enabled=false \
+  "$@"
