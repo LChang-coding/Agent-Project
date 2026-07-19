@@ -904,3 +904,17 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - CLI可从独立用户名/密码环境变量启用刷新；脚本在受限临时认证目录之外只导出进程环境，并在退出trap中清除。新增 `evaluate` 模式可读取严格四变体唯一targets、同一prepared数据与独立空输出目录，只执行warmup、1200查询和评分；manifest记录targets SHA-256及复评分模式，不重新上传/摄取。
 - 新增401→刷新→重放测试，验证首请求使用过期token、第二请求使用新token、只刷新一次且返回正常引用。benchmark全量14/14通过，0 failure/error/skipped，BUILD SUCCESS 3.027秒；`bash -n`通过，随后含依赖CLI打包再次14/14通过，BUILD SUCCESS 2.501秒。
 - 既有benchmark tenant只存在一个active owner；其 `user_secret` 恰有一条active password记录和一条refresh_token记录，password hash长度60。后续密码条件更新将限定tenant/user/secret_type/status/deleted并核对影响1行。
+
+#### 模型网关失活恢复计划（执行前）
+
+1. 复评分启动后首批warmup暴露新的基础设施故障：Sparse可返回但耗时13秒，Dense/Hybrid约32秒并报 `RAG_EMBEDDING_UNAVAILABLE`；公网健康检查显示Embedding 8081在10秒内0字节超时，而Reranker端口可立即返回404、Qdrant healthz为200。立即中断该无效run并保留3条warmup，不进入measured。
+2. 通过只读SSH检查 `rag-model-gateway`、`rag-embedding` 的容器状态、资源与最近日志，确认是gateway阻塞、TEI失活还是网络问题；不上传本地项目。若容器进程失去服务能力，则只重启最小相关容器，等待Docker health和真实授权Embedding请求恢复。
+3. 同时重启已连续运行约11.5小时且Hikari出现多次通信断开的本机隔离app，以新JVM重建数据库连接池；参数保持batch=8/重试/lease配置不变。先用单次真实debug验证Dense、Sparse、Hybrid和Rerank链路，再开启新的空目录复评分。
+4. 第三轮必须从warmup起0错误；若Rerank仍降级，先定位Reranker接口契约/超时，不能把 fallback 结果当“加rerank”组。只有四组实际组件均按配置执行，才允许完成质量消融。
+
+##### 模型网关与本机应用恢复的阶段结果
+
+- 只读服务器核验显示 `rag-model-gateway`、`rag-embedding`、`rag-reranker`、Qdrant 均持续运行，Embedding 经 gateway 的真实请求返回200，Qdrant `/healthz` 返回200；公网8081的 `/health` 超时是 gateway 没有该健康路由，不能据此判定 TEI 宕机，因此没有无依据地重启服务器容器。
+- 第二次复评分无效 run `/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-63ae2a0` 只产生3条warmup：Sparse成功，Dense/Hybrid报 `RAG_EMBEDDING_UNAVAILABLE`，未产生 measured；该进程已中断并保留现场。旧本机 app 同时出现远程 MySQL stale connection/Hikari 通信失败，已优雅停止并用相同批次、重试、lease、heartbeat参数启动新 JVM，Tomcat 8092 与新 Hikari 连接均恢复。
+- 服务器日志进一步证明 Reranker 对16候选请求稳定在约7–8秒返回429，而不是容器退出或Qdrant故障。为让 `finalTopK=10` 的全部指标仍有完整候选空间，同时不超过当前重排服务的令牌/许可容量，本轮把新 profile 的 `fusionTopK` 与 `rerankTopK` 从16收敛为10；Dense/Sparse各自召回100、最终Top‑10、语料、qrels及其余变量保持不变。
+- 调整后的 benchmark 全量测试14/14通过，0 failure/error/skipped，BUILD SUCCESS 3.325秒，含依赖CLI JAR已重新生成。下一步只更新本次 SciFact 既有4个专用 profile（带 revision 乐观锁），逐组做真实debug；必须四组均 `error=null`、`degraded=false`，且Rerank实际候选数和耗时大于0，才启动新的1200条复评分。

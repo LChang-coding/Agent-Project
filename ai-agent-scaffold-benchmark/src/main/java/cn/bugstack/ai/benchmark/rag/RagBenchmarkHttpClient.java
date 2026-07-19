@@ -114,9 +114,9 @@ public final class RagBenchmarkHttpClient {
         payload.put("sparseWeight", value.sparseEnabled() ? 1 : 0);
         payload.put("denseTopK", 100);
         payload.put("sparseTopK", 100);
-        payload.put("fusionTopK", 16);
+        payload.put("fusionTopK", 10);
         payload.put("rerankEnabled", value.rerankEnabled());
-        payload.put("rerankTopK", 16);
+        payload.put("rerankTopK", 10);
         payload.put("finalTopK", 10);
         payload.put("neighborWindow", 0);
         payload.put("maxContextTokens", 32768);
