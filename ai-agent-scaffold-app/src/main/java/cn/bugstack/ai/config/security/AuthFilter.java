@@ -78,33 +78,44 @@ public class AuthFilter extends OncePerRequestFilter {
         }
 
         try {
-            LoginUser loginUser = jwtTokenService.parseToken(authorization.substring(BEARER_PREFIX.length()));
-            request.setAttribute(REQUEST_ATTR_TENANT_ID, loginUser.getTenantId());
-            request.setAttribute(REQUEST_ATTR_USER_ID, loginUser.getUserId());
-            request.setAttribute(REQUEST_ATTR_USERNAME, loginUser.getUsername());
-            request.setAttribute(REQUEST_ATTR_ROLE_CODE, loginUser.getRoleCode());
-            TenantContextHolder.set(TenantContext.builder()
-                    .tenantId(loginUser.getTenantId())
-                    .userId(loginUser.getUserId())
-                    .username(loginUser.getUsername())
-                    .roleCode(loginUser.getRoleCode())
-                    .build());
-
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    loginUser,
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_" + loginUser.getRoleCode().toUpperCase()))
-            );
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            filterChain.doFilter(request, response);
-        } catch (Exception e) {
-            SecurityContextHolder.clearContext();
-            TenantContextHolder.clear();
+            authenticate(request, authorization.substring(BEARER_PREFIX.length()));
+        } catch (RuntimeException exception) {
+            clearAuthentication();
             writeUnauthorized(response);
-        } finally {
-            SecurityContextHolder.clearContext();
-            TenantContextHolder.clear();
+            return;
         }
+
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            clearAuthentication();
+        }
+    }
+
+    private void authenticate(HttpServletRequest request, String token) {
+        LoginUser loginUser = jwtTokenService.parseToken(token);
+        request.setAttribute(REQUEST_ATTR_TENANT_ID, loginUser.getTenantId());
+        request.setAttribute(REQUEST_ATTR_USER_ID, loginUser.getUserId());
+        request.setAttribute(REQUEST_ATTR_USERNAME, loginUser.getUsername());
+        request.setAttribute(REQUEST_ATTR_ROLE_CODE, loginUser.getRoleCode());
+        TenantContextHolder.set(TenantContext.builder()
+                .tenantId(loginUser.getTenantId())
+                .userId(loginUser.getUserId())
+                .username(loginUser.getUsername())
+                .roleCode(loginUser.getRoleCode())
+                .build());
+
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                loginUser,
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + loginUser.getRoleCode().toUpperCase()))
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+        TenantContextHolder.clear();
     }
 
     /**

@@ -1199,3 +1199,30 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 第六次run使用全新目录`/tmp/rag-quality-scifact-20260719/run-scifact-quality-eval-5e49f30-r6`，保持warmup query=10、四个variant、load关闭、请求上限120秒和原targets。历史成功/失败目录均未删除、覆盖或拼接。
 - 预热最终恰好40条：Dense/Sparse/Hybrid-RRF/Hybrid-RRF+Rerank各10条，40个唯一variant/query组合，0业务错误、0降级、0空`rankedDocumentIds`；10条Rerank组均有正候选数和正`rerankMs`。门禁命令退出码0，随后正式measured开始写入。
 - 当前只证明“迁移后预热稳定性门禁通过”，不代表1200条正式质量评测完成；评测继续由前台托管会话运行，任何业务错误、降级、空结果或重复组合仍将触发停止并保留失败证据。
+
+###### SciFact 第六次正式阶段认证失败结果与诊断计划（执行前）
+
+- 预热通过后正式阶段写入3条，其中前2条成功，第3条queryId=880、variant=`hybrid_rrf`返回`RAG_BENCHMARK_HTTP_401`并产生空排名；发现后立即向托管前台会话发送SIGINT，进程退出码130。第六次目录保持40条完整预热与3条正式记录原状，不修改manifest状态、不参与最终聚合。
+- 只读复核此前`run-scifact-quality-recover-dba0df8`发现：它虽然manifest标记completed且有1200个唯一组合，但包含1123个HTTP 401、1123个空结果和20个降级；其中四组各300只是形状完整，不满足质量有效性。其`metrics.json`不能作为成功基线或最终指标，之前将其称为“唯一完成run”只能表示进程写满，不表示验收通过。
+- 下一步对照当前benchmark CLI源码与实际JAR SHA/构建时间/类字节码，确认401后重新登录逻辑是否已经打入运行JAR，以及刷新触发是否覆盖正式阶段；同时只读检查该隔离用户的password与refresh-token记录数量、状态、过期时间及服务端认证日志，不输出hash、token或明文。
+- 若源码已有修复但CLI JAR陈旧，则只重建benchmark模块并以JAR SHA留痕，不改变应用JAR、远端索引或模型参数；若源码逻辑有缺陷，先补可重复的CLI单测，覆盖“首请求401→重新登录→同请求只重试一次→成功”和“重试仍401→明确失败”，禁止无限刷新。
+- 修复后先用短寿命或确定性stub完成认证回归，再恢复隔离账号并针对单个query连续跨越当前JWT有效期做真实门禁；只有确认自动重新登录生效，才以新的提交/JAR SHA/空目录启动第七次40+1200复评。
+
+###### 伪401与SSH隧道半失活根因、修复计划（执行前）
+
+- 实际CLI JAR包含`RefreshingLoginTokenProvider`，字节码明确在首次401后重新登录、替换Authorization并只重放一次；第六次manifest也记录`refresh=enabled`。服务端在失败窗口记录了刷新登录成功，且JWT access有效期为7200秒，因此不是“刷新代码未打包”或五分钟正常过期。
+- `AuthFilter`当前把JWT解析、身份写入和`filterChain.doFilter`放在同一个广义`catch (Exception)`内；下游Hikari/MySQL异常因此被错误改写为HTTP 401。CLI收到伪401后按设计重新登录并重放，重放再次撞到数据库断链，最终才记录`RAG_BENCHMARK_HTTP_401`。
+- 同一trace的权威日志显示Hikari连接closed、`CannotGetJdbcConnectionException`、SQLSTATE `08S01`和`Communications link failure`；经13306执行10次独立TLS `SELECT 1`出现约4.8～65.2秒延迟且至少1次5秒连接失败，新SSH命令本身也长时间无输出。LaunchAgent仍为running、端口仍监听，证明原`nc`门禁只能证明监听，不能证明转发可用。
+- 代码修复一：收窄`AuthFilter`捕获边界，只把缺失/非法/过期JWT映射401；有效JWT进入下游后，过滤链异常必须原样传播给全局技术异常处理，`finally`只清理SecurityContext与TenantContext。补无效JWT仍401、有效JWT+下游异常不被改写、上下文必清理的定向测试。
+- 代码修复二：`ensure-rag-mysql-tunnel.sh`改用真实MySQL TLS `SELECT 1`作为健康门禁；端口存在但查询失败时先`kickstart -k`重建而不是把半失活判健康。数据库凭据从受控`codex.md`读取且不打印；缺少mysql客户端/凭据时fail-fast，避免退回弱`nc`假阳性。
+- 验证顺序：先定向Java测试与shell/plist语法，再强制制造下游异常验证HTTP不再伪401；随后重建隧道并做至少30次真实数据库查询、覆盖keepalive/空闲周期。若底层公网链路仍导致查询失败，则不扩大超时掩盖，转为评估用户态WireGuard/本地评测只读副本，并把生产链路与质量评测环境分别留痕。
+
+###### 伪401修复与真实隧道门禁执行结果
+
+- `AuthFilter`现将身份解析/构造与`filterChain.doFilter`拆成两个异常边界：只捕获认证阶段`RuntimeException`并写401，下游`ServletException`/`IOException`/运行时技术异常原样传播；成功或异常结束都在`finally`清理Spring Security与租户上下文。
+- 新增`AuthFilterTest`覆盖非法JWT不进入下游且返回401、有效JWT下游抛`ServletException`必须原样传播且响应不变为401、成功下游调用前身份/请求属性可见且调用后上下文清理。首次测试编译因误用不存在的`generateAccessToken`失败，改为项目实际`generateToken`；第二次因app模块仍使用旧Surefire/JUnit4 runner，把新增测试由JUnit5改为JUnit4。最终Auth/JWT/Trace过滤器共8/8通过，0 failure/error/skipped。
+- `ensure-rag-mysql-tunnel.sh`不再用`nc`监听判活；现在要求本机mysql与perl，在5秒进程硬上限、3秒connect timeout内通过`ssl-mode=REQUIRED`的真实`SELECT 1`。已有服务健康则直接返回；查询失败即打印stale摘要并`kickstart -k`，最多10轮真实数据库门禁，凭据只从环境或受控`codex.md`读取且不输出。
+- 链路恢复窗口中先做15次查询，空闲65秒跨越keepalive周期后再做15次：30/30成功，min约597ms、max约3478ms。随后对LaunchAgent SSH PID 73430发送STOP模拟“进程活着但转发停滞”，新门禁在硬超时内识别stale并重建，PID变为3450，tenant计数22成功，证明旧`nc`假阳性已消除。
+- Java17全模块跳过重复测试打包成功，旧PID 71769先TERM退出；新App JAR由隔离脚本在8092启动，PID 4101，Hikari经真实门禁后的13306成功建连。新App JAR SHA-256为`c3bcd08910a52f0653663bfd89a14ac3275d08fbf8ab37f4924b9da7dec30af9`，重组后的CLI JAR SHA-256为`12036b795f3dcdf149c4da9468407a78741ad0ad0fd4f32ba60edd3f0582ead6`。
+- 真实故障注入先恢复隔离用户并成功登录，再STOP当前隧道、以有效JWT调用原Hybrid目标；请求在数据库通信失败后由新JAR明确返回HTTP 500、curl退出0，没有伪401或认证重登。第一次采集脚本误用zsh只读变量`status`，HTTP请求已产生服务端`ServletException/RecoverableDataAccessException`证据但shell打印阶段失败；改用`http_code`完整复测得到`forced_downstream_http_status=500`。两次trap均尝试恢复，最终ensure和TLS查询通过。
+- 本轮修复了错误分类和半失活发现，不声称消除了公网传输抖动；此前实测仍出现4.8～65.2秒及连接失败。第七次复评分前必须重新通过连续数据库/真实检索门禁，正式run任一5xx/降级/空结果仍立即停止。
