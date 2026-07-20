@@ -120,7 +120,7 @@ export AI_RAG_RERANKER_RETRY_MAX_BACKOFF="${AI_RAG_RERANKER_RETRY_MAX_BACKOFF:-1
 export AI_RAG_DOCLING_ENDPOINT="${AI_RAG_DOCLING_ENDPOINT:-http://103.205.240.84:5001/v1}"
 export AI_RAG_WORKER_LEASE_DURATION_MS=600000
 export AI_RAG_WORKER_HEARTBEAT_INTERVAL_MS=30000
-export OBJECT_STORAGE_TYPE=local
+export OBJECT_STORAGE_TYPE="${OBJECT_STORAGE_TYPE:-local}"
 export OBJECT_STORAGE_LOCAL_ROOT="${OBJECT_STORAGE_LOCAL_ROOT:-/tmp/ai-agent-rag-benchmark/object-storage}"
 export OBS_LOG_DIR="${OBS_LOG_DIR:-/tmp/ai-agent-rag-benchmark/log}"
 export SPRING_CLOUD_NACOS_DISCOVERY_ENABLED=false
@@ -136,7 +136,7 @@ exec "$JAVA_BIN" -jar "$APP_JAR" \
   --ai.rag.outbox.enabled=false \
   --ai.context.enabled=false \
   --ai.context.kafka.enabled=false \
-  --ai.storage.type=local \
+  "--ai.storage.type=$OBJECT_STORAGE_TYPE" \
   "--ai.storage.local-root=$OBJECT_STORAGE_LOCAL_ROOT" \
   --spring.cloud.nacos.config.enabled=false \
   --spring.cloud.nacos.discovery.enabled=false \

@@ -2081,3 +2081,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java定向Controller首次扩展后3/3通过；随后补充领域刷新恢复测试。第一次“全部RAG”命令只扫描`cn/bugstack/ai/test/rag`目录，实际仅执行158项，虽全部通过但被判定为选择范围不完整，未作为最终门禁。纠正为从全部test源码路径按RAG文件名生成47个测试类后，实测274/274通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗4.187秒；其中包含12项MinIO对象存储测试，故不把274表述为纯RAG领域测试数。
 - Java 17全八模块`mvn -DskipTests package`通过，包含App可执行JAR与benchmark依赖打包，BUILD SUCCESS、Maven总耗5.868秒；测试已在上一条独立运行，本条不重复计数。
 - 本阶段尚未对真实MySQL应用迁移，也未完成至少两文档的MySQL/Qdrant/MinIO级联删除和故障恢复E2E；API/前端已闭合代码路径，但上线结论仍由下一阶段真实证据决定。
+
+#### 知识库级联删除真实中间件E2E计划（执行前）
+
+1. 以`codex.md`和当前配置为唯一环境来源，先只读核验MySQL TLS连接、Qdrant/MinIO/Docling/TEI健康状态、应用端口占用、当前commit与JAR hash；所有命令输出脱敏，禁止把凭据写入新日志或报告。
+2. 检查删除迁移当前是否已应用；未应用时先记录相关表/索引前态，再执行项目内可重入迁移并二次执行验证幂等。只修改项目数据库，不接触其他schema，不删除既有租户数据。
+3. 启动当前`f99f67a`构建的本地Java应用，使用全新E2E tenant/owner、知识库、绑定和至少两份小型Markdown/PDF或DOCX文档；通过真实HTTP上传并等待READY，记录request/task/document/version、耗时和输入SHA，不用SQL伪造摄取完成。
+4. 通过真实HTTP受理知识库删除并轮询父任务；完成后用只读SQL核验知识库/父任务/子DELETE状态、非DELETED文档与版本、物理chunk、活动摄取、活动绑定六项残留，用Qdrant filter count核验各版本point=0，用MinIO对象检查核验原件/解析件不存在。
+5. 在第二个全新知识库制造一次可恢复外部故障：优先只暂停本地应用所依赖且可安全恢复的RAG服务，不改远端永久配置；证明确实出现FAILED/RETRYING/WAITING和checkpoint保留，再恢复服务并调用FAILED/DEAD恢复API直至COMPLETED。若故障只触发自动退避或无法安全隔离，按真实状态记录，禁止强行宣告手工恢复已测。
+6. 将时间线、脱敏HTTP、SQL计数、Qdrant/MinIO证据、JAR/输入hash、首次失败、未覆盖边界追加到本节；E2E证据保存到新的项目内目录且不覆盖历史run。闭环后中文本地提交，再更新最终报告生成器和机器总账。
+
+#### 知识库级联删除真实E2E准备阶段结果
+
+- 环境只读核验：本机`127.0.0.1:13306`连接MySQL 8.0.46成功且会话cipher为`TLS_AES_128_GCM_SHA256`；Qdrant REST与MinIO live探针返回成功。8091已有用户从IDE启动的长期进程，未终止或覆盖，本轮隔离使用8092。
+- 数据库前态为删除任务表0、绑定复合索引0。项目可重入迁移连续执行两次均成功；后态为任务表存在、23列，绑定索引存在（`information_schema.statistics`按索引列返回5行）。未删除或改写既有租户记录。
+- 现有基准启动器原先在命令行再次强制`local`，即使环境指定MinIO也不会生效；已保持local默认不变，同时允许显式`OBJECT_STORAGE_TYPE=minio`。新增两文档HTTP E2E脚本，固定记录commit/JAR/input hash、单上传/单Worker/单轮询线程、全部受理与任务时间线，并建立真实已发布Workflow和RAG绑定。
+- 第一次使用新JAR启动在业务请求前失败：Spring报告`RagKnowledgeBaseDeleteCoordinator`没有默认构造器。根因是该组件同时存在生产构造器和Clock测试构造器，生产构造器遗漏`@Autowired`，此前Mock/反射门禁未在最终JAR容器中暴露。已为唯一生产构造器显式标注注入点；协调器与Spring构造器门禁3/3通过，全八模块跳过重复测试打包成功、Maven耗时3.982秒。修复后隔离应用在8092真实启动成功，Spring启动3.613秒。
+- 为保证后续manifest中的commit与实际JAR一致，准备阶段先形成中文本地提交，再基于该提交重建并重启8092；当前这次修复后启动只证明容器装配恢复，不计入双文档删除结果。

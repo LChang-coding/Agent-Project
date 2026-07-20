@@ -12,6 +12,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteStage;
 import cn.bugstack.ai.domain.rag.service.RagDocumentDeletionService;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +33,7 @@ public class RagKnowledgeBaseDeleteCoordinator {
     private final Clock clock;
     private final RagIngestErrorClassifier errorClassifier = new RagIngestErrorClassifier();
 
+    @Autowired
     public RagKnowledgeBaseDeleteCoordinator(RagKnowledgeBaseDeletionRepository deletionRepository,
                                               IRagRepository repository,
                                               RagDocumentDeletionService documentDeletionService,
