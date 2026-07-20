@@ -1,0 +1,36 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicated": false,
+      "documentId": "doc_590cd2e7791c479eaf80e958d611cfbb",
+      "fileName": "README.md",
+      "sizeBytes": 1434,
+      "status": "queued",
+      "taskId": "ragtask_040cdede7c344babac0138378ce001e9",
+      "versionId": "ragver_48b95e09dd67456f87ea88e9d37fa371"
+    },
+    "info": "成功"
+  },
+  "terminalTask": {
+    "attemptCount": 1,
+    "cancelReason": null,
+    "documentId": "doc_590cd2e7791c479eaf80e958d611cfbb",
+    "errorCode": null,
+    "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+    "maxAttempts": 3,
+    "operation": "ingest",
+    "processedChunks": 6,
+    "revision": 8,
+    "stage": "completed",
+    "status": "completed",
+    "taskId": "ragtask_040cdede7c344babac0138378ce001e9",
+    "totalChunks": 6,
+    "versionId": "ragver_48b95e09dd67456f87ea88e9d37fa371"
+  },
+  "transport": {
+    "elapsedMs": 815,
+    "httpStatus": 200,
+    "responseBytes": 277
+  }
+}

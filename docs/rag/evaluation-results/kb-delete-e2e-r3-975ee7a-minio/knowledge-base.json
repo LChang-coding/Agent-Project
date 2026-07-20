@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "currentGeneration": 0,
+      "description": "two-document real cascade-delete E2E",
+      "embeddingDimension": 768,
+      "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+      "name": "kb_delete_kb-delete-r3-975ee7a-minio",
+      "revision": 0,
+      "status": "active",
+      "visibility": "tenant"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 426,
+    "httpStatus": 200,
+    "responseBytes": 295
+  }
+}

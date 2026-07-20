@@ -2098,3 +2098,14 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 现有基准启动器原先在命令行再次强制`local`，即使环境指定MinIO也不会生效；已保持local默认不变，同时允许显式`OBJECT_STORAGE_TYPE=minio`。新增两文档HTTP E2E脚本，固定记录commit/JAR/input hash、单上传/单Worker/单轮询线程、全部受理与任务时间线，并建立真实已发布Workflow和RAG绑定。
 - 第一次使用新JAR启动在业务请求前失败：Spring报告`RagKnowledgeBaseDeleteCoordinator`没有默认构造器。根因是该组件同时存在生产构造器和Clock测试构造器，生产构造器遗漏`@Autowired`，此前Mock/反射门禁未在最终JAR容器中暴露。已为唯一生产构造器显式标注注入点；协调器与Spring构造器门禁3/3通过，全八模块跳过重复测试打包成功、Maven耗时3.982秒。修复后隔离应用在8092真实启动成功，Spring启动3.613秒。
 - 为保证后续manifest中的commit与实际JAR一致，准备阶段先形成中文本地提交，再基于该提交重建并重启8092；当前这次修复后启动只证明容器装配恢复，不计入双文档删除结果。
+
+#### 知识库级联删除真实成功链路与失败留痕
+
+- 迁移后基于提交`975ee7af5891050b3e98aa58a2e53e3a436fe39d`重建JAR，SHA-256=`4614db991cbf0de793361d66b9f812d178b2f2a29b893a87cd4baed781ff28e4`；8092隔离应用使用真实TLS MySQL、Qdrant tunnel、远端MinIO、Docling与Embedding，固定单上传/单Worker/单轮询线程。
+- r1输入为1233字节Markdown和4180字节三页PDF。Markdown一次摄取成功；PDF从`2026-07-20T00:41:35.427635Z`到`00:47:59.391798Z`共320个一秒轮询样本，3次attempt均停在parsing，应用日志分别记录3次Docling单请求约120004/120004/120002ms超时，终态`dead/parsing/RAG_DOCLING_UNAVAILABLE`、0 chunks。删除未受理，不能把r1列为删除失败；首因是远端Docling在本轮无法于120秒deadline内返回。
+- r2改用两份不同Markdown隔离删除链路；两文档均READY并建立真实published Workflow与binding，但脚本错误复用创建知识库时的revision，上传激活已推进revision，删除API正确返回`RAG_KNOWLEDGE_BASE_REVISION_CONFLICT`。该run保留为CAS防覆盖证据；脚本修复为删除前重新GET知识库并使用最新revision。
+- r3两份Markdown摄取均attempt=1，按首末一秒轮询样本计算分别约8481ms（5 chunks）和8530ms（6 chunks）。删除受理HTTP 200/953ms，父任务从首样本到终样本约27355ms、23个样本，状态真实经过pending/running/waiting/completed，阶段经过received/deleting_documents/verifying/completed；终态2/2文档、attempt=1、revision=12、无错误。
+- 首版残留采集器在系统Python因缺`minio`模块失败，未生成结果；隔离`/tmp` venv安装实测`minio 7.2.20`与`requests 2.32.5`后执行。第一次JSON把通用`deleted`位误当领域删除状态，因而错误报false；项目实际保留`status=deleted, deleted=0`审计墓碑。保留`residual-evidence.json`作为错误判定留痕，修正状态口径后生成权威`residual-evidence-v2.json`，SHA-256=`fdc8e65bbc52b46d10fbe8e4695bf6b92f94498aee2f08e8602978d252ed9a18`、`passed=true`。
+- 权威残留结果：知识库status=deleted；父任务completed/2/2；文档墓碑2且非deleted状态0；非deleted版本0；物理chunk 0；活动摄取任务0；完成DELETE子任务2；活动binding 0且disabled binding 1；两个version的Qdrant exact point count均0；两个version的MinIO source/parsed对象均不存在。该结论来自真实MySQL/Qdrant/MinIO只读复核，不是父任务状态推断。
+- 真实复核同时发现列表SQL只看`deleted=0`，会把`status=deleted`审计墓碑重新返回前端。已在两个知识库列表查询增加`status <> 'deleted'`，并新增Mapper合同测试；定向1/1、按全部源码路径RAG文件名生成的最终门禁275/275通过，0 failure/error/skipped，六模块BUILD SUCCESS、Maven总耗4.248秒。
+- 当前成功链路尚未覆盖外部服务中途不可达后FAILED/DEAD手工恢复；下一步单独故障注入，不覆盖r1/r2/r3证据。

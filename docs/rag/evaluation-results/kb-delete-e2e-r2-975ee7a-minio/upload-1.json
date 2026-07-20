@@ -1,0 +1,36 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicated": false,
+      "documentId": "doc_47221c92a6f141a9a17bcead793be086",
+      "fileName": "format-fidelity.md",
+      "sizeBytes": 1233,
+      "status": "queued",
+      "taskId": "ragtask_bf8c39e2258740688a5e1d77385bb7d2",
+      "versionId": "ragver_44ea55f71e1b42718edfc6d55e281a8f"
+    },
+    "info": "成功"
+  },
+  "terminalTask": {
+    "attemptCount": 1,
+    "cancelReason": null,
+    "documentId": "doc_47221c92a6f141a9a17bcead793be086",
+    "errorCode": null,
+    "knowledgeBaseId": "kb_bf746c496c7d4a77a2fcd02557deff3d",
+    "maxAttempts": 3,
+    "operation": "ingest",
+    "processedChunks": 5,
+    "revision": 8,
+    "stage": "completed",
+    "status": "completed",
+    "taskId": "ragtask_bf8c39e2258740688a5e1d77385bb7d2",
+    "totalChunks": 5,
+    "versionId": "ragver_44ea55f71e1b42718edfc6d55e281a8f"
+  },
+  "transport": {
+    "elapsedMs": 1281,
+    "httpStatus": 200,
+    "responseBytes": 286
+  }
+}

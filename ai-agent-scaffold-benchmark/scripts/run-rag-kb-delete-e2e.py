@@ -210,8 +210,15 @@ def main() -> None:
         })
         dump(out / "binding.json", {"response": binding, "transport": transport})
 
+        refreshed_bases, refreshed_transport = api.call("GET", "/v1/rag/knowledge-bases")
+        refreshed_kb = next((item for item in refreshed_bases["data"]
+                             if item.get("knowledgeBaseId") == kb_id), None)
+        if not refreshed_kb:
+            raise RuntimeError("knowledge base disappeared before delete acceptance")
+        dump(out / "knowledge-base-before-delete.json",
+             {"knowledgeBase": refreshed_kb, "transport": refreshed_transport})
         accepted, transport = api.call("POST", f"/v1/rag/knowledge-bases/{kb_id}/delete-tasks",
-                                       json={"expectedRevision": kb["data"]["revision"]})
+                                       json={"expectedRevision": refreshed_kb["revision"]})
         dump(out / "delete-accepted.json", {"response": accepted, "transport": transport})
         terminal = wait_delete(api, accepted["data"]["taskId"], out / "delete-timeline.jsonl", args.timeout_seconds)
         dump(out / "delete-terminal.json", terminal)

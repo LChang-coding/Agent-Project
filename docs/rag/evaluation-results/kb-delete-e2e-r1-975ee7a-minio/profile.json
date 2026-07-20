@@ -1,0 +1,31 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicateEnabled": true,
+      "denseTopK": 20,
+      "denseWeight": 1,
+      "finalTopK": 5,
+      "fusionStrategy": "rrf",
+      "fusionTopK": 10,
+      "maxContextTokens": 2048,
+      "mode": "hybrid",
+      "name": "kb_delete_kb-delete-r1-975ee7a-minio",
+      "neighborWindow": 0,
+      "profileId": "profile_7556f2e8cc48479da5be7e8b6e6986c1",
+      "queryRewriteEnabled": false,
+      "rerankEnabled": false,
+      "rerankTopK": 10,
+      "revision": 0,
+      "scoreThreshold": null,
+      "sparseTopK": 20,
+      "sparseWeight": 1
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 333,
+    "httpStatus": 200,
+    "responseBytes": 444
+  }
+}

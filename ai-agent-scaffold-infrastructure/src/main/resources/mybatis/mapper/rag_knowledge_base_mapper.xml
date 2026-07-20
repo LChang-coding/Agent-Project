@@ -56,12 +56,13 @@
 
     <select id="queryListByTenantId" resultMap="RagKnowledgeBaseMap">
         SELECT <include refid="Columns"/> FROM rag_knowledge_base
-        WHERE tenant_id = #{tenantId} AND deleted = 0 ORDER BY id DESC
+        WHERE tenant_id = #{tenantId} AND status &lt;&gt; 'deleted' AND deleted = 0 ORDER BY id DESC
     </select>
 
     <select id="queryListByTenantIdAndVisibility" resultMap="RagKnowledgeBaseMap">
         SELECT <include refid="Columns"/> FROM rag_knowledge_base
-        WHERE tenant_id = #{tenantId} AND visibility = #{visibility} AND deleted = 0 ORDER BY id DESC
+        WHERE tenant_id = #{tenantId} AND visibility = #{visibility}
+          AND status &lt;&gt; 'deleted' AND deleted = 0 ORDER BY id DESC
     </select>
 
     <update id="updateByTenantAndRevision">

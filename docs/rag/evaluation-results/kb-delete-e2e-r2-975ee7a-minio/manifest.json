@@ -1,0 +1,30 @@
+{
+  "appJarSha256": "4614db991cbf0de793361d66b9f812d178b2f2a29b893a87cd4baed781ff28e4",
+  "baseUrl": "http://127.0.0.1:8092/api",
+  "cleanup": "keep synthetic tenant and tombstones for audit",
+  "codeRevision": "975ee7af5891050b3e98aa58a2e53e3a436fe39d",
+  "error": "business error RAG_KNOWLEDGE_BASE_REVISION_CONFLICT for POST /v1/rag/knowledge-bases/kb_bf746c496c7d4a77a2fcd02557deff3d/delete-tasks: 知识库已变化，请刷新后重试",
+  "errorType": "RuntimeError",
+  "finishedAt": "2026-07-20T00:48:45.175815Z",
+  "inputFiles": [
+    {
+      "bytes": 1233,
+      "name": "format-fidelity.md",
+      "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+    },
+    {
+      "bytes": 1434,
+      "name": "README.md",
+      "sha256": "b9fbf519145494f13e518c8c2df9f3fca22335ee62dd1084554efcbaeae34bd6"
+    }
+  ],
+  "pollThreads": 1,
+  "runId": "kb-delete-r2-975ee7a-minio",
+  "schemaVersion": 1,
+  "startedAt": "2026-07-20T00:48:13.823502Z",
+  "status": "failed",
+  "syntheticUsername": "rag_kb_delete_1784508493-aec09f",
+  "timeoutSeconds": 600,
+  "uploadThreads": 1,
+  "workerThreads": 1
+}

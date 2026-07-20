@@ -1,0 +1,56 @@
+{
+  "appJarSha256": "4614db991cbf0de793361d66b9f812d178b2f2a29b893a87cd4baed781ff28e4",
+  "baseUrl": "http://127.0.0.1:8092/api",
+  "bindingId": "binding_c88206a0caa94bfca24735c77a68eeeb",
+  "cleanup": "keep synthetic tenant and tombstones for audit",
+  "codeRevision": "975ee7af5891050b3e98aa58a2e53e3a436fe39d",
+  "deleteTaskId": "ragkbdel_82942cd90c964db6b215179eb9c40e63",
+  "documentIds": [
+    "doc_f311884ae035461fa7e8556a1e3b268c",
+    "doc_590cd2e7791c479eaf80e958d611cfbb"
+  ],
+  "finishedAt": "2026-07-20T00:50:02.832325Z",
+  "inputFiles": [
+    {
+      "bytes": 1233,
+      "name": "format-fidelity.md",
+      "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+    },
+    {
+      "bytes": 1434,
+      "name": "README.md",
+      "sha256": "b9fbf519145494f13e518c8c2df9f3fca22335ee62dd1084554efcbaeae34bd6"
+    }
+  ],
+  "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+  "pollThreads": 1,
+  "runId": "kb-delete-r3-975ee7a-minio",
+  "schemaVersion": 1,
+  "startedAt": "2026-07-20T00:49:10.757522Z",
+  "status": "completed",
+  "syntheticUsername": "rag_kb_delete_1784508550-5647ee",
+  "terminalDeleteTask": {
+    "attemptCount": 1,
+    "completedDocuments": 2,
+    "currentDocumentId": null,
+    "errorCode": null,
+    "errorMessage": null,
+    "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+    "maxAttempts": 5,
+    "nextRetryAt": null,
+    "requestedByUserId": "user_761b9b2d-db32-4408-a5b1-f67ebf9703c1",
+    "revision": 12,
+    "stage": "completed",
+    "status": "completed",
+    "taskId": "ragkbdel_82942cd90c964db6b215179eb9c40e63",
+    "totalDocuments": 2
+  },
+  "timeoutSeconds": 600,
+  "uploadThreads": 1,
+  "versionIds": [
+    "ragver_7e05970a28064b82b40aba194e4c4d3b",
+    "ragver_48b95e09dd67456f87ea88e9d37fa371"
+  ],
+  "workerThreads": 1,
+  "workflowId": "wf_c067687f-da07-438b-89af-195ae10f9b73"
+}

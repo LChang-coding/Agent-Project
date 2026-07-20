@@ -1,0 +1,37 @@
+{
+  "response": {
+    "code": "0000",
+    "data": [
+      {
+        "activeGeneration": 1,
+        "activeVersionId": "ragver_48b95e09dd67456f87ea88e9d37fa371",
+        "chunkCount": 6,
+        "displayName": "README.md",
+        "documentId": "doc_590cd2e7791c479eaf80e958d611cfbb",
+        "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+        "pageCount": 0,
+        "revision": 1,
+        "status": "ready",
+        "targetGeneration": null
+      },
+      {
+        "activeGeneration": 1,
+        "activeVersionId": "ragver_7e05970a28064b82b40aba194e4c4d3b",
+        "chunkCount": 5,
+        "displayName": "format-fidelity.md",
+        "documentId": "doc_f311884ae035461fa7e8556a1e3b268c",
+        "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+        "pageCount": 0,
+        "revision": 1,
+        "status": "ready",
+        "targetGeneration": null
+      }
+    ],
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 172,
+    "httpStatus": 200,
+    "responseBytes": 649
+  }
+}

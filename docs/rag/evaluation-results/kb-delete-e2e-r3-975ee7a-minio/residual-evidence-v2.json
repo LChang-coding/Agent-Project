@@ -1,0 +1,73 @@
+{
+  "capturedAt": "2026-07-20T00:54:14.582663Z",
+  "checks": {
+    "allVersionTombstonesRemain": true,
+    "bindingDisabled": true,
+    "knowledgeBaseTombstoned": true,
+    "noActiveBindings": true,
+    "noActiveIngestTasks": true,
+    "noMinioObjects": true,
+    "noNonDeletedDocuments": true,
+    "noNonDeletedVersions": true,
+    "noPhysicalChunks": true,
+    "noQdrantPoints": true,
+    "parentTaskCompleted": true,
+    "twoCompletedDeleteChildren": true,
+    "twoDocumentTombstonesRemain": true
+  },
+  "collection": "ai_agent_rag_benchmark_v1",
+  "deleteTaskId": "ragkbdel_82942cd90c964db6b215179eb9c40e63",
+  "knowledgeBaseId": "kb_2c4d1c38e0cd4b5393096592475be534",
+  "mysql": {
+    "counts": {
+      "activeBindings": 0,
+      "activeIngestTasks": 0,
+      "completedDeleteChildren": 2,
+      "disabledBindings": 1,
+      "documentRows": 2,
+      "nonDeletedDocuments": 0,
+      "nonDeletedVersions": 0,
+      "physicalChunkRows": 0
+    },
+    "knowledgeBase": [
+      [
+        "deleted",
+        "0",
+        "4"
+      ]
+    ],
+    "parentTask": [
+      [
+        "completed",
+        "COMPLETED",
+        "2",
+        "2",
+        "1",
+        "12",
+        ""
+      ]
+    ]
+  },
+  "passed": true,
+  "runId": "kb-delete-r3-975ee7a-minio",
+  "schemaVersion": 1,
+  "tenantId": "tenant_ba8040dd-e72c-4371-9d36-1c6ec83f3ef9",
+  "versions": [
+    {
+      "deleted": 0,
+      "minioParsedExists": false,
+      "minioSourceExists": false,
+      "qdrantExactPointCount": 0,
+      "status": "deleted",
+      "versionId": "ragver_48b95e09dd67456f87ea88e9d37fa371"
+    },
+    {
+      "deleted": 0,
+      "minioParsedExists": false,
+      "minioSourceExists": false,
+      "qdrantExactPointCount": 0,
+      "status": "deleted",
+      "versionId": "ragver_7e05970a28064b82b40aba194e4c4d3b"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "create": {
+    "code": "0000",
+    "data": {
+      "currentVersion": 1,
+      "defaultModelCode": "deepseek-v4-flash",
+      "description": "cascade delete binding target",
+      "publishedVersion": 0,
+      "status": "draft",
+      "visibility": "private",
+      "workflowId": "wf_9c394791-d66c-485a-b49f-48a7c3f9293a",
+      "workflowName": "KB delete target 1784508079-f29687"
+    },
+    "info": "成功"
+  },
+  "createTransport": {
+    "elapsedMs": 421,
+    "httpStatus": 200,
+    "responseBytes": 312
+  },
+  "draft": {
+    "code": "0000",
+    "data": {
+      "graph": {
+        "edges": [],
+        "mode": "sequential",
+        "nodes": [
+          {
+            "description": null,
+            "instruction": "Return test evidence.",
+            "maxIterations": 1,
+            "mcpIds": [],
+            "modelCode": "deepseek-v4-flash",
+            "name": "E2E node",
+            "nodeId": "node_1784508079-f29687",
+            "nodeType": "llm",
+            "skillIds": [],
+            "x": null,
+            "y": null
+          }
+        ],
+        "rootNodeId": "node_1784508079-f29687"
+      },
+      "version": 1,
+      "versionStatus": "draft",
+      "workflow": {
+        "currentVersion": 1,
+        "defaultModelCode": "deepseek-v4-flash",
+        "description": "cascade delete binding target",
+        "publishedVersion": 0,
+        "status": "draft",
+        "visibility": "private",
+        "workflowId": "wf_9c394791-d66c-485a-b49f-48a7c3f9293a",
+        "workflowName": "KB delete target 1784508079-f29687"
+      }
+    },
+    "info": "成功"
+  },
+  "draftTransport": {
+    "elapsedMs": 601,
+    "httpStatus": 200,
+    "responseBytes": 672
+  },
+  "publishTransport": {
+    "elapsedMs": 472,
+    "httpStatus": 200,
+    "responseBytes": 680
+  },
+  "published": {
+    "code": "0000",
+    "data": {
+      "graph": {
+        "edges": [],
+        "mode": "sequential",
+        "nodes": [
+          {
+            "description": null,
+            "instruction": "Return test evidence.",
+            "maxIterations": 1,
+            "mcpIds": [],
+            "modelCode": "deepseek-v4-flash",
+            "name": "E2E node",
+            "nodeId": "node_1784508079-f29687",
+            "nodeType": "llm",
+            "skillIds": [],
+            "x": null,
+            "y": null
+          }
+        ],
+        "rootNodeId": "node_1784508079-f29687"
+      },
+      "version": 1,
+      "versionStatus": "published",
+      "workflow": {
+        "currentVersion": 1,
+        "defaultModelCode": "deepseek-v4-flash",
+        "description": "cascade delete binding target",
+        "publishedVersion": 1,
+        "status": "published",
+        "visibility": "private",
+        "workflowId": "wf_9c394791-d66c-485a-b49f-48a7c3f9293a",
+        "workflowName": "KB delete target 1784508079-f29687"
+      }
+    },
+    "info": "成功"
+  }
+}
