@@ -2128,3 +2128,15 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 4. 对每个代表性召回失败显式给出问题、数据集gold证据或gold文档ID、项目内原文文件链接、实际Top文档及其分数/排序、首次失效阶段、后续阶段是否可恢复、反事实对照和失败原因。SciFact没有自然语言gold answer时明确写“数据集未提供”，不得生成答案。
 5. 将接口/摄取/解析/Embedding/Qdrant/稀疏检索/融合/重排/数据库回源/删除恢复的实测瓶颈分层；每项给证据、直接原因、影响范围、可执行优化、验证方法和优先级，区分环境瞬态故障、算法质量退化与代码缺口。
 6. 更新机器可读总账和人类报告后，在两个全新目录确定性重建并逐字节比较；执行报告测试、全部RAG回归、前端生产构建和全模块打包。首次失败与修复继续追加，完成一个重大闭环后中文本地提交。
+
+#### 最终测评报告与失败因果链阶段结果
+
+- 报告生成器新增跨证据强门禁：质量manifest必须completed且300问题，四变体必须各有同一组300个唯一query；runId、targets来源指纹、queries/qrels/documentMap/Markdown正文及failure/internal diagnostic声明的SHA必须与实际冻结文件一致。第一次复算因此真实失败于`targetsSha256`：该字段是`targets.json.sourceSha256`而非文件本身SHA；按原协议校验source identity并继续单独记录targets文件SHA后复算通过，未绕过门禁。
+- 质量报告补齐R@1/R@5/R@10、P@10、MRR/nDCG/MAP@10、S@1/S@5/S@10、missing、错误/降级/空结果、mean/p50/p95/p99/max、全部stage分位和候选计数；稳定性能表补齐mean/p99、层级吞吐和观测主导stage。机器总账保留完整mean/p50/p95/p99/max，不只保留报告中的p95摘要。
+- 对同一300问题程序化配对：Sparse→Hybrid的Recall@10改善/持平/退化为85/215/0；Dense→Hybrid为14/256/30；Hybrid→Rerank为0/300/0。MRR对应为150/149/1、45/169/86、67/204/29。报告明确这些只是在冻结数据与配置下的同问题观测，不外推为普遍因果。
+- 失败标签共9类，其中7类有样本并各展示1个确定性代表；`rerank_rescue`和`rerank_harm`均为0，报告明确无案例。每个代表现在显式给问题、SciFact无自然语言gold answer的边界、Gold文档、前三个错误文档、完整正文副本、原始冻结分片、heading marker、正文SHA、终态首失效、内部首覆盖下降、内部首完全损失、Gold阶段分数轨迹、可证伪推断、替代解释和复证实验。24个涉及的Gold/错误文档正文均从冻结Markdown分片按marker提取，并逐份用document-map正文SHA校验后生成，不是人工转录。
+- Rerank改善/伤害案例均由同请求`rerank_input→rerank_output`的Gold rankBefore→rankAfter和MRR delta生成阶段事实，不再给改善案例套用Sparse解释。质量run本身没有最终逐候选score，错误Top文档继续诚实标“未采集”；内部20问题复测的具体分数另在轨迹中展示，不冒充全量run字段。
+- 报告新增知识库删除健康链路和MinIO断链自动恢复：健康父任务观测27355ms/23样本；故障链路129529ms/107样本，现场child retrying/deleting_source、`OBJECT_STORAGE_DELETE_FAILED`、parent waiting，恢复转发且未调用retry API后完成2/2，两轮MySQL/Qdrant/MinIO零残留门禁均通过。attempt现场2而终态1被明确列为审计缺口。
+- 两个新的空输出目录分别运行生成器，项目最终目录与第二次输出`diff -qr`无差异，证明确定性重建。最终人类报告SHA-256=`6cdd6d4ac6953fdda6d3d90f69c9e110e636fa36eba83ed5e82c20247af260a0`，机器总账SHA-256=`e7627786d83de67c01e13a277d1cf0314e73f5234d9dff67daa47ff730c60216`；`py_compile`和总账关键断言通过。
+- Java 17按所有test源码中的`/rag/|Rag|Minio`生成63个测试类清单，真实执行275/275，0 failure/error/skipped。全八模块`mvn -DskipTests package`通过。前端`npm run build`通过，`vue-tsc --noEmit`无类型错误、Vite 1916 modules transformed、生产构建947ms。
+- 当前仍未测有自然语言gold answer的最终Agent回答正确率/Faithfulness/幻觉率、无答案黑盒拒答率、全300问题算子级轨迹、Reranker semaphore/HTTP排队/模型计算独立分段、fusion threshold与TopK独立消融以及任何优化实施后的新结果；报告全部列为未测，没有用检索指标替代答案指标。

@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import math
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -53,8 +54,54 @@ def fmt(value: float, digits: int = 4) -> str:
     return f"{value:.{digits}f}"
 
 
+def timeline_elapsed_ms(rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        raise ValueError("timeline must not be empty")
+    start = datetime.fromisoformat(rows[0]["observedAt"].replace("Z", "+00:00"))
+    end = datetime.fromisoformat(rows[-1]["observedAt"].replace("Z", "+00:00"))
+    return round((end - start).total_seconds() * 1000)
+
+
 def change(after: float, before: float) -> dict[str, float]:
     return {"absolute": after - before, "relativePercent": ((after / before) - 1) * 100 if before else 0.0}
+
+
+def paired_change(after: dict[str, Any], before: dict[str, Any], metric: str) -> dict[str, int]:
+    before_by_query = {row["queryId"]: float(row[metric]) for row in before["queries"]}
+    after_by_query = {row["queryId"]: float(row[metric]) for row in after["queries"]}
+    if before_by_query.keys() != after_by_query.keys() or len(before_by_query) != 300:
+        raise ValueError(f"paired query set mismatch: {metric}")
+    delta = [after_by_query[query_id] - value for query_id, value in before_by_query.items()]
+    epsilon = 1e-12
+    return {
+        "improved": sum(value > epsilon for value in delta),
+        "unchanged": sum(abs(value) <= epsilon for value in delta),
+        "degraded": sum(value < -epsilon for value in delta),
+    }
+
+
+def extract_scifact_document(root: Path, document_map: dict[str, dict[str, Any]], document_id: str) -> dict[str, Any]:
+    mapping = document_map[document_id]
+    shard = root / "docs/rag/evaluation-data/scifact/prepared/documents" / mapping["shardFile"]
+    text = shard.read_text(encoding="utf-8")
+    marker = "# " + mapping["headingMarker"]
+    start = text.find(marker)
+    if start < 0:
+        raise ValueError(f"SciFact marker missing: {document_id}")
+    end = text.find("\n# BENCH_DOC_", start + len(marker))
+    section = text[start:end if end >= 0 else len(text)].strip()
+    heading, body = section.split("\n\n", 1)
+    body = body.strip()
+    if hashlib.sha256(body.encode("utf-8")).hexdigest() != mapping["contentSha256"]:
+        raise ValueError(f"SciFact document content hash mismatch: {document_id}")
+    return {
+        "documentId": document_id,
+        "title": heading.split(" — ", 1)[1],
+        "body": body,
+        "contentSha256": mapping["contentSha256"],
+        "shardFile": mapping["shardFile"],
+        "headingMarker": mapping["headingMarker"],
+    }
 
 
 def assert_hashes(manifest: dict[str, Any], base: Path) -> None:
@@ -81,6 +128,11 @@ def main() -> None:
         "qualityIndependent": results / "scifact-r11-quality/metrics-independent.json",
         "qualityRun": results / "scifact-r11-quality/run.jsonl",
         "qualityManifest": results / "scifact-r11-quality/run-manifest.json",
+        "qualityTargets": results / "scifact-r11-quality/targets.json",
+        "scifactDocumentMap": root / "docs/rag/evaluation-data/scifact/prepared/document-map.jsonl",
+        "scifactQueries": root / "docs/rag/evaluation-data/scifact/prepared/queries.jsonl",
+        "scifactQrels": root / "docs/rag/evaluation-data/scifact/prepared/qrels.tsv",
+        "scifactDocuments": root / "docs/rag/evaluation-data/scifact/prepared/documents/benchmark-0001.md",
         "failureCases": results / "scifact-r11-failure-cases.json",
         "failureCasesMarkdown": results / "scifact-r11-failure-cases.md",
         "internalAnalysis": results / "scifact-r11-internal-failure-analysis.json",
@@ -115,6 +167,13 @@ def main() -> None:
         "pageDocxDocument": root / "docs/rag/evaluation-data/format-e2e/format-fidelity.docx",
         "pagePdfDocument": root / "docs/rag/evaluation-data/format-e2e/format-fidelity.pdf",
         "evaluationMethodology": root / "docs/rag/evaluation.md",
+        "deleteSuccessManifest": results / "kb-delete-e2e-r3-975ee7a-minio/manifest.json",
+        "deleteSuccessResidual": results / "kb-delete-e2e-r3-975ee7a-minio/residual-evidence-v2.json",
+        "deleteSuccessTimeline": results / "kb-delete-e2e-r3-975ee7a-minio/delete-timeline.jsonl",
+        "deleteFaultManifest": results / "kb-delete-fault-r1-e6c6d54-minio/manifest.json",
+        "deleteFaultObservation": results / "kb-delete-fault-r1-e6c6d54-minio/fault-observation.json",
+        "deleteFaultResidual": results / "kb-delete-fault-r1-e6c6d54-minio/residual-evidence.json",
+        "deleteFaultTimeline": results / "kb-delete-fault-r1-e6c6d54-minio/delete-timeline.jsonl",
     }
     missing = [str(path) for path in paths.values() if not path.is_file()]
     if missing:
@@ -123,12 +182,30 @@ def main() -> None:
     quality = load_json(paths["qualityMetrics"])
     independent = load_json(paths["qualityIndependent"])
     quality_run = load_jsonl(paths["qualityRun"])
+    quality_manifest = load_json(paths["qualityManifest"])
+    if quality_manifest["status"] != "completed" or quality_manifest["queryCount"] != 300:
+        raise ValueError("quality manifest is not a completed 300-query run")
+    if quality["manifest"]["runId"] != quality_manifest["runId"] \
+            or quality["manifest"]["targetsSha256"] != quality_manifest["targetsSha256"]:
+        raise ValueError("quality metrics/manifest identity mismatch")
+    expected_quality_hashes = {
+        "queriesSha256": paths["scifactQueries"], "qrelsSha256": paths["scifactQrels"],
+        "documentMapSha256": paths["scifactDocumentMap"], "markdownSha256": paths["scifactDocuments"],
+    }
+    for field, path in expected_quality_hashes.items():
+        if quality_manifest[field] != sha256(path):
+            raise ValueError(f"quality manifest hash mismatch: {field}")
+    if load_json(paths["qualityTargets"])["sourceSha256"] != quality_manifest["targetsSha256"]:
+        raise ValueError("quality targets source identity mismatch")
     if len(quality_run) != 1200:
         raise ValueError("quality run must contain exactly 1200 records")
     if any(row.get("errorCode") or row.get("degraded") or not row.get("rankedDocumentIds") for row in quality_run):
         raise ValueError("quality run contains error, degradation, or empty ranking")
     if {row["variant"] for row in quality_run} != set(VARIANTS):
         raise ValueError("quality run variant set mismatch")
+    query_sets = [{row["queryId"] for row in quality_run if row["variant"] == variant} for variant in VARIANTS]
+    if any(len(query_ids) != 300 for query_ids in query_sets) or any(query_ids != query_sets[0] for query_ids in query_sets[1:]):
+        raise ValueError("quality run must contain the same 300 unique queries for every variant")
     for variant in VARIANTS:
         first = quality["variants"][variant]
         second = independent["variants"][variant]
@@ -142,9 +219,15 @@ def main() -> None:
         run_stat = quality["manifest"]["runStatistics"][variant]
         quality_rows.append({
             "variant": variant, "queryCount": metric["queryCount"],
+            "recallAt1": metric["recallAt1"], "recallAt5": metric["recallAt5"],
             "recallAt10": metric["recallAt10"], "mrrAt10": metric["mrrAt10"],
             "ndcgAt10": metric["ndcgAt10"], "mapAt10": metric["mapAt10"],
-            "successAt10": metric["successAt10"], "elapsedMs": slim_timing(run_stat["elapsedMs"]),
+            "precisionAt10": metric["precisionAt10"],
+            "successAt1": metric["successAt1"], "successAt5": metric["successAt5"],
+            "successAt10": metric["successAt10"], "missingRunCount": metric["missingRunCount"],
+            "elapsedMs": slim_timing(run_stat["elapsedMs"]),
+            "stageTimingsMs": {name: slim_timing(value) for name, value in run_stat["stageTimingsMs"].items()},
+            "candidateCounts": {name: slim_timing(value) for name, value in run_stat["candidateCounts"].items()},
             "rerankMs": slim_timing(run_stat["stageTimingsMs"]["rerankMs"]),
             "errorCount": run_stat["errorCount"], "degradedCount": run_stat["degradedCount"],
             "emptyResultCount": run_stat["emptyResultCount"],
@@ -158,16 +241,45 @@ def main() -> None:
         "rerankVsHybrid": {metric: change(quality_by_name["hybrid_rrf_rerank"][metric], quality_by_name["hybrid_rrf"][metric])
                            for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
     }
+    paired_deltas = {
+        "hybridVsSparse": {metric: paired_change(quality["variants"]["hybrid_rrf"], quality["variants"]["sparse"], metric)
+                           for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+        "hybridVsDense": {metric: paired_change(quality["variants"]["hybrid_rrf"], quality["variants"]["dense"], metric)
+                          for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+        "rerankVsHybrid": {metric: paired_change(quality["variants"]["hybrid_rrf_rerank"], quality["variants"]["hybrid_rrf"], metric)
+                           for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")},
+    }
+
+    document_map_rows = load_jsonl(paths["scifactDocumentMap"])
+    document_map = {row["documentId"]: row for row in document_map_rows}
+    if len(document_map) != len(document_map_rows):
+        raise ValueError("duplicate SciFact document map ID")
 
     failure = load_json(paths["failureCases"])
+    failure_inputs = failure["manifest"]["inputSha256"]
+    expected_failure_hashes = {
+        "queries": paths["scifactQueries"], "qrels": paths["scifactQrels"],
+        "documents": paths["scifactDocuments"], "documentMap": paths["scifactDocumentMap"],
+        "run": paths["qualityRun"],
+    }
+    for field, path in expected_failure_hashes.items():
+        if failure_inputs[field] != sha256(path):
+            raise ValueError(f"failure evidence hash mismatch: {field}")
     failure_counts = failure["manifest"]["availableCaseCounts"]
     internal = load_json(paths["internalAnalysis"])
     internal_manifest = internal["manifest"]
+    internal_inputs = internal_manifest["inputSha256"]
+    if internal_inputs["failureReport"] != sha256(paths["failureCases"]) \
+            or internal_inputs["diagnostics"] != sha256(paths["diagnosticJsonl"]) \
+            or internal_inputs["diagnosticManifest"] != sha256(paths["diagnosticManifest"]):
+        raise ValueError("internal diagnostic input hash mismatch")
     internal_by_query = {row["queryId"]: row for row in internal["queries"]}
 
     representative_specs = (
         ("dense_miss_hybrid_hit", "dense"), ("sparse_miss_hybrid_hit", "sparse"),
-        ("dense_only_success", "sparse"), ("persistent_miss", "hybrid_rrf_rerank"),
+        ("dense_only_success", "sparse"), ("sparse_only_success", "dense"),
+        ("persistent_miss", "hybrid_rrf_rerank"),
+        ("rerank_reorder_gain", "hybrid_rrf_rerank"),
         ("rerank_reorder_harm", "hybrid_rrf_rerank"),
     )
     representatives = []
@@ -200,23 +312,35 @@ def main() -> None:
                                        "但最终Top10截断和Rerank已发生在原始并集漏召回之后，不是该次复测的首因。")
             falsification = ("反证实验：核验Gold对应chunk确实写入同一generation与Qdrant payload，"
                              "再分别扩大Dense/Sparse原始TopK并替换Embedding/词法归一化，观察Gold首次出现位置。")
-        if category == "rerank_reorder_harm" and internal_focus:
+        if category in {"rerank_reorder_gain", "rerank_reorder_harm"} and internal_focus:
             effect = internal_focus.get("rerankEffect") or {}
             per_gold = effect.get("perGold") or []
             movements = "、".join(f"{row['documentId']}:{row['rankBefore']}→{row['rankAfter']}" for row in per_gold)
             inference = (f"阶段因果事实：同一请求的Rerank把Gold名次从{movements}，MRR变化"
                          f"{effect.get('mrrDelta', 0):+.6f}；Rerank为何偏好竞争文档仍需模型/文本对照实验。")
+            direction = "上升" if category == "rerank_reorder_gain" else "下降"
             alternative_explanation = ("替代解释：Gold与竞争文档的标注粒度或相关性定义可能和Reranker训练偏好不同；"
-                                       "但本次名次下降确实发生在同一请求的rerank_input→rerank_output。")
+                                       f"但本次名次{direction}确实发生在同一请求的rerank_input→rerank_output。")
             falsification = "反证实验：固定同一10个输入候选，记录完整文本与Rerank分数，替换/关闭Reranker并重复评分。"
         direct_facts = [value for value in case["directFacts"] if not value.startswith("逐候选分数=")]
         direct_facts.append("质量run未采集逐候选分数；内部复测已采集并用于阶段定位" if internal_focus
                             else "该代表未执行内部逐候选复测")
+        gold_documents = []
+        for row in case["goldDocuments"]:
+            source = extract_scifact_document(root, document_map, row["documentId"])
+            gold_documents.append({**row, "source": {key: source[key] for key in
+                                                      ("contentSha256", "shardFile", "headingMarker")}})
+        wrong_documents = []
+        for row in [value for value in variant["ranking"] if value["relevance"] == 0][:3]:
+            source = extract_scifact_document(root, document_map, row["documentId"])
+            wrong_documents.append({**row, "source": {key: source[key] for key in
+                                                       ("contentSha256", "shardFile", "headingMarker")}})
         representatives.append({
             "category": category, "queryId": case["queryId"], "question": case["question"],
-            "goldDocuments": case["goldDocuments"], "focusVariant": focus,
+            "goldAnswer": None, "goldAnswerStatus": "not_provided_by_scifact",
+            "goldDocuments": gold_documents, "focusVariant": focus,
             "focusMetrics": variant["metrics"],
-            "wrongDocuments": [row for row in variant["ranking"] if row["relevance"] == 0][:3],
+            "wrongDocuments": wrong_documents,
             "firstObservableFailure": case["firstObservableFailure"],
             "firstInternalCoverageLoss": internal_focus.get("firstObservedCoverageLoss") if internal_focus else None,
             "firstInternalTotalLoss": internal_focus.get("firstObservedTotalLoss") if internal_focus else None,
@@ -235,8 +359,11 @@ def main() -> None:
                 stable_rows.append({
                     "runId": report["runId"], "concurrency": level["concurrency"], "variant": variant,
                     "requestCount": value["requestCount"], "errorCount": value["errorCount"],
+                    "levelThroughputRequestsPerSecond": level["throughputRequestsPerSecond"],
                     "degradedCount": value["degradedCount"], "emptyResultCount": value["emptyResultCount"],
                     "elapsedMs": slim_timing(value["elapsedMs"]),
+                    "stageTimingsMs": {name: slim_timing(timing) for name, timing in value["stageTimingsMs"].items()},
+                    "observedDominantLatencyComponent": value["observedDominantLatencyComponent"],
                     "rerankMs": slim_timing(value["stageTimingsMs"]["rerankMs"]),
                 })
     measured_request_count = sum(row["requestCount"] for row in stable_rows)
@@ -358,6 +485,53 @@ def main() -> None:
             "judgement": "retrieval-only; LLM拒答正确性未评测",
         })
 
+    failure_document_dir = out / "failure-documents"
+    failure_document_dir.mkdir()
+    failure_document_ids = sorted({doc["documentId"] for case in representatives
+                                   for doc in case["goldDocuments"] + case["wrongDocuments"]})
+    for document_id in failure_document_ids:
+        document = extract_scifact_document(root, document_map, document_id)
+        content = (
+            f"# SciFact document {document_id}\n\n"
+            f"- 标题：{document['title']}\n"
+            f"- 原始分片：`{document['shardFile']}`\n"
+            f"- 标题标记：`{document['headingMarker']}`\n"
+            f"- 正文SHA-256：`{document['contentSha256']}`\n\n"
+            f"## 原始正文\n\n{document['body']}\n"
+        )
+        (failure_document_dir / f"{document_id}.md").write_text(content, encoding="utf-8")
+
+    delete_success_manifest = load_json(paths["deleteSuccessManifest"])
+    delete_success_residual = load_json(paths["deleteSuccessResidual"])
+    delete_success_timeline = load_jsonl(paths["deleteSuccessTimeline"])
+    delete_fault_manifest = load_json(paths["deleteFaultManifest"])
+    delete_fault_observation = load_json(paths["deleteFaultObservation"])
+    delete_fault_residual = load_json(paths["deleteFaultResidual"])
+    delete_fault_timeline = load_jsonl(paths["deleteFaultTimeline"])
+    if not delete_success_residual["passed"] or not delete_fault_residual["passed"]:
+        raise ValueError("knowledge-base delete residual evidence failed")
+    delete_lifecycle = {
+        "healthy": {
+            "runId": delete_success_manifest["runId"], "documentCount": 2,
+            "status": delete_success_manifest["status"],
+            "startedAt": delete_success_manifest["startedAt"], "finishedAt": delete_success_manifest["finishedAt"],
+            "deleteTimelineSamples": len(delete_success_timeline),
+            "deleteObservedElapsedMs": timeline_elapsed_ms(delete_success_timeline),
+            "parent": delete_success_manifest["terminalDeleteTask"],
+            "residualChecks": delete_success_residual["checks"],
+        },
+        "objectStorageFault": {
+            "runId": delete_fault_manifest["runId"], "documentCount": 2,
+            "status": delete_fault_manifest["status"],
+            "startedAt": delete_fault_manifest["startedAt"], "finishedAt": delete_fault_manifest["finishedAt"],
+            "deleteTimelineSamples": len(delete_fault_timeline),
+            "deleteObservedElapsedMs": timeline_elapsed_ms(delete_fault_timeline),
+            "fault": delete_fault_observation, "parent": delete_fault_manifest["terminalDeleteTask"],
+            "residualChecks": delete_fault_residual["checks"],
+            "manualRetryApiCalled": False,
+        },
+    }
+
     evidence_hashes = {name: {"path": str(path.relative_to(root)), "sha256": sha256(path), "bytes": path.stat().st_size}
                        for name, path in sorted(paths.items())}
     passed_format_queries = sum(1 for row in format_queries if row["passed"])
@@ -370,12 +544,14 @@ def main() -> None:
             "percentileMethod": "nearest-rank",
             "formatE2E": "real HTTP + MinIO + MySQL + Qdrant + Docling + Embedding + Reranker; one worker/thread",
         },
-        "quality": {"variants": quality_rows, "deltas": deltas},
-        "failureCases": {"availableCounts": failure_counts, "displayedCount": sum(len(v) for v in failure["cases"].values()),
-                         "representatives": representatives},
+        "quality": {"variants": quality_rows, "deltas": deltas, "pairedQueryChanges": paired_deltas},
+        "failureCases": {"availableCounts": failure_counts,
+                         "materializedCaseCount": sum(len(v) for v in failure["cases"].values()),
+                         "renderedRepresentativeCount": len(representatives), "representatives": representatives},
         "internalDiagnostics": {
             "queryCount": internal_manifest["queryCount"], "recordCount": internal_manifest["recordCount"],
             "exactFinalRankingMatches": internal_manifest["exactFinalRankingMatches"],
+            "firstObservedCoverageLossCounts": internal_manifest["firstObservedCoverageLossCounts"],
             "firstObservedTotalLossCounts": internal_manifest["firstObservedTotalLossCounts"],
             "rerankEffectCounts": internal_manifest["rerankEffectCounts"], "limitations": internal_manifest["limitations"],
         },
@@ -402,6 +578,7 @@ def main() -> None:
             "formats": page_rows, "storageConsistencyPassed": page_storage["passed"],
             "goldSha256": page_storage["pageGold"]["sha256"],
         },
+        "knowledgeBaseDeleteLifecycle": delete_lifecycle,
         "bottlenecks": [
             {"rank": 1, "component": "Reranker CPU推理与排队", "fact": f"并发4出现{failed[0]['elapsedMs'] / 1000:.3f}s降级回退；稳定轮Rerank占完整链路绝大部分延迟。",
              "supportedHypothesis": "Top10按3/3/3/1串行子批是代码层候选解释；Semaphore等待与远端排队各自贡献尚未分段测量。",
@@ -459,20 +636,52 @@ def main() -> None:
     add(f"| 并发4边界 | 共{len(boundary_run)}条measured（并发1=80、2=80、4=39） | 容量失败定位 | 并发4不能作为稳定分位数，只作失败边界 |")
     add("| 三格式r6 | 3文件、15答案问题、3无答案探针 | 真实MinIO摄取/召回 | 格式功能、三端一致性、小文件单线程性能 |")
     add("| 页码r4 | 同一3文件、15答案问题、PDF 6章节金标 | 真实MinIO重新摄取/召回 | PDF页码准确性、未知页语义不猜测 |")
+    add("| 知识库删除r3+故障r1 | 2个双文档知识库 | MySQL/Qdrant/MinIO级联删除 | 健康删除、对象存储断链自动恢复、零残留 |")
     add("")
     add("## 三、RAG技术点前后差异")
     add("")
-    add("| 配置 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 | p50/p95/max | 错误/降级/空 |")
-    add("|---|---:|---:|---:|---:|---:|---:|")
+    add("| 配置 | R@1 | R@5 | R@10 | P@10 | MRR@10 | nDCG@10 | MAP@10 | S@1/S@5/S@10 |")
+    add("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    for row in quality_rows:
+        add(f"| {row['variant']} | {fmt(row['recallAt1'], 6)} | {fmt(row['recallAt5'], 6)} | {fmt(row['recallAt10'], 6)} | {fmt(row['precisionAt10'], 6)} | {fmt(row['mrrAt10'], 6)} | {fmt(row['ndcgAt10'], 6)} | {fmt(row['mapAt10'], 6)} | {fmt(row['successAt1'], 6)}/{fmt(row['successAt5'], 6)}/{fmt(row['successAt10'], 6)} |")
+    add("")
+    add("| 配置 | n/missing | elapsed mean/p50/p95/p99/max ms | 错误/降级/空 |")
+    add("|---|---:|---:|---:|")
     for row in quality_rows:
         elapsed = row["elapsedMs"]
-        add(f"| {row['variant']} | {fmt(row['recallAt10'], 6)} | {fmt(row['mrrAt10'], 6)} | {fmt(row['ndcgAt10'], 6)} | {fmt(row['mapAt10'], 6)} | {elapsed['p50']}/{elapsed['p95']}/{elapsed['max']} ms | {row['errorCount']}/{row['degradedCount']}/{row['emptyResultCount']} |")
+        add(f"| {row['variant']} | {row['queryCount']}/{row['missingRunCount']} | {elapsed['mean']:.3f}/{elapsed['p50']}/{elapsed['p95']}/{elapsed['p99']}/{elapsed['max']} | {row['errorCount']}/{row['degradedCount']}/{row['emptyResultCount']} |")
+    add("")
+    add("质量run阶段p95与候选均值（完整mean/p50/p95/p99/max保存在机器总账）：")
+    add("")
+    add("| 配置 | embedding/dense/sparse/fusion/rerank/hydration/service p95 ms | dense/sparse/fusion/rerank候选均值 |")
+    add("|---|---:|---:|")
+    for row in quality_rows:
+        stage = row["stageTimingsMs"]
+        candidates = row["candidateCounts"]
+        stage_values = "/".join(str(stage[name]["p95"]) for name in
+                                ("embeddingMs", "denseMs", "sparseMs", "fusionMs", "rerankMs", "hydrationMs", "serviceMs"))
+        candidate_values = "/".join(f"{candidates[name]['mean']:.3f}" for name in
+                                    ("denseCandidateCount", "sparseCandidateCount", "fusionCandidateCount", "rerankCandidateCount"))
+        add(f"| {row['variant']} | {stage_values} | {candidate_values} |")
     add("")
     add("关键差值：")
     add("")
     add(f"- Sparse→Hybrid：Recall@10 {deltas['hybridVsSparse']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['hybridVsSparse']['mrrAt10']['absolute']:+.6f}。Dense通道补回了81个Sparse漏召回而Hybrid命中的query。")
     add(f"- Dense→Hybrid：Recall@10 {deltas['hybridVsDense']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['hybridVsDense']['mrrAt10']['absolute']:+.6f}。Hybrid总体反而下降。另有98个query是Dense命中而Sparse未命中，这证明Dense通道在本数据集更强；它不等价于98个Hybrid漏召回，Hybrid相对Dense的具体损失必须按逐query差值另算。")
     add(f"- Hybrid→Hybrid+Rerank：Recall@10 {deltas['rerankVsHybrid']['recallAt10']['absolute']:+.6f}，MRR@10 {deltas['rerankVsHybrid']['mrrAt10']['absolute']:+.6f}，nDCG@10 {deltas['rerankVsHybrid']['ndcgAt10']['absolute']:+.6f}，MAP@10 {deltas['rerankVsHybrid']['mapAt10']['absolute']:+.6f}。Rerank改变顺序，不补回已被Top10截掉的文档。")
+    add("")
+    add("同一300问题的配对变化（改善/持平/退化）：")
+    add("")
+    add("| 对比 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 |")
+    add("|---|---:|---:|---:|---:|")
+    comparison_labels = {"hybridVsSparse": "Sparse→Hybrid", "hybridVsDense": "Dense→Hybrid",
+                         "rerankVsHybrid": "Hybrid→Hybrid+Rerank"}
+    for comparison, values in paired_deltas.items():
+        cells = [f"{values[metric]['improved']}/{values[metric]['unchanged']}/{values[metric]['degraded']}"
+                 for metric in ("recallAt10", "mrrAt10", "ndcgAt10", "mapAt10")]
+        add(f"| {comparison_labels[comparison]} | {' | '.join(cells)} |")
+    add("")
+    add("上述是同一问题配对后的观测差值，不自动证明组件在其他数据集上的普遍因果；组件归因只限于本轮冻结索引、配置和问题集。")
     add("")
     add("## 四、非互斥失败标签与首个失效步骤")
     add("")
@@ -500,17 +709,19 @@ def main() -> None:
     add("")
     add("## 五、召回失败文档与因果链（代表案例）")
     add("")
-    add("下面每类展示1个确定性代表；完整附件含21个代表case、全部Gold截断摘要、各case前三条非Gold截断摘要及各变体Top10文档ID，见[召回失败案例全集](../scifact-r11-failure-cases.md)。逐候选内部复测分数与阶段轨迹见[内部阶段失败证据](../scifact-r11-internal-failure-analysis.md)。")
+    add("下面对7个有样本的关键类别各展示1个确定性代表；`rerank_rescue`和`rerank_harm`在本轮均为0，因此没有伪造案例。完整附件含21个代表case、全部Gold截断摘要、各case前三条非Gold截断摘要及各变体Top10文档ID，见[召回失败案例全集](../scifact-r11-failure-cases.md)。逐候选内部复测分数与阶段轨迹见[内部阶段失败证据](../scifact-r11-internal-failure-analysis.md)。")
     add("")
     for case in representatives:
         add(f"### {case['category']} / queryId={case['queryId']}")
         add("")
         add(f"问题：{case['question']}")
         add("")
+        add("Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。")
+        add("")
         add("Gold文档：")
         add("")
         for doc in case["goldDocuments"]:
-            add(f"- `{doc['documentId']}` {doc['title']}")
+            add(f"- [`{doc['documentId']}` {doc['title']}](failure-documents/{doc['documentId']}.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/{doc['source']['shardFile']})；正文SHA-256=`{doc['source']['contentSha256']}`；标记=`{doc['source']['headingMarker']}`）")
             add("")
             add(f"  > {doc['excerpt']}")
         add("")
@@ -519,7 +730,8 @@ def main() -> None:
         add("实际排在前面的错误文档：")
         add("")
         for doc in case["wrongDocuments"]:
-            add(f"- rank={doc['rank']} `{doc['documentId']}` {doc['title']}")
+            score = "未采集" if doc.get("score") is None else doc["score"]
+            add(f"- rank={doc['rank']} score={score} [`{doc['documentId']}` {doc['title']}](failure-documents/{doc['documentId']}.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/{doc['source']['shardFile']})；标记=`{doc['source']['headingMarker']}`）")
             add("")
             add(f"  > {doc['excerpt']}")
         add("")
@@ -527,6 +739,11 @@ def main() -> None:
         internal_loss_text = (f"{internal_loss['stage']}/{internal_loss['code']}" if internal_loss else
                               ("未观察到Gold完全损失" if case["internalDiagnosticAvailable"] else "该代表未采集内部诊断"))
         add(f"首个终态可观测失败：`{case['firstObservableFailure']}`。内部首个完全损失：`{internal_loss_text}`。")
+        add("")
+        internal_coverage = case["firstInternalCoverageLoss"]
+        coverage_text = (f"{internal_coverage['stage']}/{internal_coverage['code']}" if internal_coverage else
+                         ("未观察到Gold覆盖下降" if case["internalDiagnosticAvailable"] else "该代表未采集内部诊断"))
+        add(f"内部首个覆盖下降：`{coverage_text}`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。")
         add("")
         add("直接事实：" + "；".join(case["directFacts"]))
         add("")
@@ -548,10 +765,11 @@ def main() -> None:
     add("")
     add("两轮稳定结果分别保留，未合并成伪单轮：")
     add("")
-    add("| run | 并发 | 配置 | n | p50 | p95 | max | Rerank p95 |")
-    add("|---|---:|---|---:|---:|---:|---:|---:|")
+    add("| run | 并发 | 配置 | n | mean/p50/p95/p99/max ms | Rerank p95 | 层级吞吐req/s | 主导stage |")
+    add("|---|---:|---|---:|---:|---:|---:|---|")
     for row in stable_rows:
-        add(f"| {row['runId']} | {row['concurrency']} | {row['variant']} | {row['requestCount']} | {row['elapsedMs']['p50']} | {row['elapsedMs']['p95']} | {row['elapsedMs']['max']} | {row['rerankMs']['p95']} |")
+        elapsed = row["elapsedMs"]
+        add(f"| {row['runId']} | {row['concurrency']} | {row['variant']} | {row['requestCount']} | {elapsed['mean']:.3f}/{elapsed['p50']}/{elapsed['p95']}/{elapsed['p99']}/{elapsed['max']} | {row['rerankMs']['p95']} | {row['levelThroughputRequestsPerSecond']:.6f} | {row['observedDominantLatencyComponent']} |")
     add("")
     add(f"并发4门禁失败样本：queryId={failed[0]['queryId']}，配置={failed[0]['variant']}，HTTP={failed[0]['httpStatus']}，耗时={failed[0]['elapsedMs']}ms，降级原因=`{failed[0]['degradationReasons'][0]}`。Reranker CPU峰值={boundary_resources['rag-reranker']['cpuPeakPct']:.2f}%，内存占比峰值={boundary_resources['rag-reranker']['memoryPeakPct']:.2f}%；容器前后无restart/OOM。")
     add("")
@@ -601,7 +819,23 @@ def main() -> None:
     for row in no_answer:
         add(f"| {row['format']} | {row['question']} | {row['citationCount']} | {row['topHeading']} | {row['judgement']} |")
     add("")
-    add("## 八、上线前优化与复测门槛")
+    add("## 八、知识库级联删除、故障恢复与残留")
+    add("")
+    healthy_delete = delete_lifecycle["healthy"]
+    fault_delete = delete_lifecycle["objectStorageFault"]
+    fault_child = fault_delete["fault"]["failedChild"]
+    add("| 场景 | 文档 | 删除观测耗时/样本 | 故障现场 | 终态 | 外部残留 |")
+    add("|---|---:|---:|---|---|---|")
+    add(f"| 健康链路 `{healthy_delete['runId']}` | 2 | {healthy_delete['deleteObservedElapsedMs']} ms / {healthy_delete['deleteTimelineSamples']} | 无 | parent completed 2/2 | MySQL/Qdrant/MinIO全门禁通过 |")
+    add(f"| MinIO断链 `{fault_delete['runId']}` | 2 | {fault_delete['deleteObservedElapsedMs']} ms / {fault_delete['deleteTimelineSamples']} | child retrying `{fault_child['stage']}` attempt={fault_child['attemptCount']}/{fault_child['maxAttempts']} `{fault_child['errorCode']}`；parent waiting | parent completed 2/2，未调用retry API | MySQL/Qdrant/MinIO全门禁通过 |")
+    add("")
+    add("故障因果链：删除子Worker进入MinIO原件删除 → 本地MinIO SSH转发被测试故意断开 → MySQL现场记录`OBJECT_STORAGE_DELETE_FAILED`且checkpoint停在`deleting_source` → 父协调器进入WAITING并保留进度 → 恢复同一转发 → Dispatcher从数据库账本自动续跑 → 两个DELETE子任务完成 → 父任务验证文档/版本/chunk/binding后完成 → 独立采集器再次确认两版本Qdrant点数为0、MinIO source/parsed不存在。")
+    add("")
+    add("观测缺口：故障现场同一子任务attempt=2，终态数据库却为attempt=1，说明当前恢复路径会重置attempt；因此终态attempt不能代表累计故障次数。优化应保持累计attempt单调或新增不可变任务事件表，并把错误开始/恢复时间、退避原因和外部依赖写入审计。该轮验证的是自动恢复，不是FAILED/DEAD后的管理员手工恢复。")
+    add("")
+    add("证据：[健康删除manifest](../kb-delete-e2e-r3-975ee7a-minio/manifest.json)、[健康零残留](../kb-delete-e2e-r3-975ee7a-minio/residual-evidence-v2.json)、[故障瞬时快照](../kb-delete-fault-r1-e6c6d54-minio/fault-observation.json)、[故障终态零残留](../kb-delete-fault-r1-e6c6d54-minio/residual-evidence.json)。")
+    add("")
+    add("## 九、上线前优化与复测门槛")
     add("")
     add("1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。")
     add(f"2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense {dense_quality['recallAt10']:.6f}，同时报告MRR/延迟代价。")
@@ -609,12 +843,12 @@ def main() -> None:
     add("4. PDF页span已贯穿解析、chunk、Qdrant payload和citation并通过单份三页金标；下一门槛是至少30份多页/表格/扫描PDF以及引用回源黑盒。DOCX若刚需固定页码，需增加固定版式转换或替换解析器后用相同金标门禁。")
     add("5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。")
     add("")
-    add("## 九、明确未测与证据限制")
+    add("## 十、明确未测与证据限制")
     add("")
     for item in ledger["limitations"]:
         add(f"- {item}")
     add("")
-    add("## 十、证据索引与复算")
+    add("## 十一、证据索引与复算")
     add("")
     add("机器总账：[rag-final-evidence-ledger.json](rag-final-evidence-ledger.json)。关键原始证据均已从`/tmp`固化进项目`docs/rag/evaluation-results/`，总账记录每个输入的SHA-256与字节数。")
     add("")

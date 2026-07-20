@@ -21,21 +21,48 @@
 | 并发4边界 | 共199条measured（并发1=80、2=80、4=39） | 容量失败定位 | 并发4不能作为稳定分位数，只作失败边界 |
 | 三格式r6 | 3文件、15答案问题、3无答案探针 | 真实MinIO摄取/召回 | 格式功能、三端一致性、小文件单线程性能 |
 | 页码r4 | 同一3文件、15答案问题、PDF 6章节金标 | 真实MinIO重新摄取/召回 | PDF页码准确性、未知页语义不猜测 |
+| 知识库删除r3+故障r1 | 2个双文档知识库 | MySQL/Qdrant/MinIO级联删除 | 健康删除、对象存储断链自动恢复、零残留 |
 
 ## 三、RAG技术点前后差异
 
-| 配置 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 | p50/p95/max | 错误/降级/空 |
-|---|---:|---:|---:|---:|---:|---:|
-| sparse | 0.487778 | 0.321922 | 0.355442 | 0.310521 | 717/2380/6949 ms | 0/0/0 |
-| dense | 0.797944 | 0.655835 | 0.683385 | 0.641088 | 1264/4016/10882 ms | 0/0/0 |
-| hybrid_rrf | 0.750667 | 0.566630 | 0.604539 | 0.552843 | 1851/4704/9548 ms | 0/0/0 |
-| hybrid_rrf_rerank | 0.750667 | 0.646028 | 0.663244 | 0.628238 | 12408/21100/89563 ms | 0/0/0 |
+| 配置 | R@1 | R@5 | R@10 | P@10 | MRR@10 | nDCG@10 | MAP@10 | S@1/S@5/S@10 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| sparse | 0.243889 | 0.383611 | 0.487778 | 0.053000 | 0.321922 | 0.355442 | 0.310521 | 0.256667/0.403333/0.500000 |
+| dense | 0.552611 | 0.728500 | 0.797944 | 0.089000 | 0.655835 | 0.683385 | 0.641088 | 0.576667/0.746667/0.816667 |
+| hybrid_rrf | 0.448611 | 0.669833 | 0.750667 | 0.082667 | 0.566630 | 0.604539 | 0.552843 | 0.470000/0.690000/0.770000 |
+| hybrid_rrf_rerank | 0.556111 | 0.714000 | 0.750667 | 0.082667 | 0.646028 | 0.663244 | 0.628238 | 0.580000/0.736667/0.770000 |
+
+| 配置 | n/missing | elapsed mean/p50/p95/p99/max ms | 错误/降级/空 |
+|---|---:|---:|---:|
+| sparse | 300/0 | 914.360/717/2380/3054/6949 | 0/0/0 |
+| dense | 300/0 | 1693.527/1264/4016/7340/10882 | 0/0/0 |
+| hybrid_rrf | 300/0 | 2158.817/1851/4704/6738/9548 | 0/0/0 |
+| hybrid_rrf_rerank | 300/0 | 13451.077/12408/21100/33399/89563 | 0/0/0 |
+
+质量run阶段p95与候选均值（完整mean/p50/p95/p99/max保存在机器总账）：
+
+| 配置 | embedding/dense/sparse/fusion/rerank/hydration/service p95 ms | dense/sparse/fusion/rerank候选均值 |
+|---|---:|---:|
+| sparse | 0/0/2359/0/0/8/2373 | 0.000/100.000/10.000/0.000 |
+| dense | 928/3571/0/0/0/8/4012 | 100.000/0.000/10.000/0.000 |
+| hybrid_rrf | 995/2344/1769/0/0/8/4699 | 100.000/100.000/10.000/0.000 |
+| hybrid_rrf_rerank | 970/2377/2116/0/17891/10/21094 | 100.000/100.000/10.000/10.000 |
 
 关键差值：
 
 - Sparse→Hybrid：Recall@10 +0.262889，MRR@10 +0.244708。Dense通道补回了81个Sparse漏召回而Hybrid命中的query。
 - Dense→Hybrid：Recall@10 -0.047278，MRR@10 -0.089205。Hybrid总体反而下降。另有98个query是Dense命中而Sparse未命中，这证明Dense通道在本数据集更强；它不等价于98个Hybrid漏召回，Hybrid相对Dense的具体损失必须按逐query差值另算。
 - Hybrid→Hybrid+Rerank：Recall@10 +0.000000，MRR@10 +0.079398，nDCG@10 +0.058705，MAP@10 +0.075396。Rerank改变顺序，不补回已被Top10截掉的文档。
+
+同一300问题的配对变化（改善/持平/退化）：
+
+| 对比 | Recall@10 | MRR@10 | nDCG@10 | MAP@10 |
+|---|---:|---:|---:|---:|
+| Sparse→Hybrid | 85/215/0 | 150/149/1 | 156/143/1 | 156/143/1 |
+| Dense→Hybrid | 14/256/30 | 45/169/86 | 50/161/89 | 50/161/89 |
+| Hybrid→Hybrid+Rerank | 0/300/0 | 67/204/29 | 68/197/35 | 68/197/35 |
+
+上述是同一问题配对后的观测差值，不自动证明组件在其他数据集上的普遍因果；组件归因只限于本轮冻结索引、配置和问题集。
 
 ## 四、非互斥失败标签与首个失效步骤
 
@@ -65,15 +92,17 @@
 
 ## 五、召回失败文档与因果链（代表案例）
 
-下面每类展示1个确定性代表；完整附件含21个代表case、全部Gold截断摘要、各case前三条非Gold截断摘要及各变体Top10文档ID，见[召回失败案例全集](../scifact-r11-failure-cases.md)。逐候选内部复测分数与阶段轨迹见[内部阶段失败证据](../scifact-r11-internal-failure-analysis.md)。
+下面对7个有样本的关键类别各展示1个确定性代表；`rerank_rescue`和`rerank_harm`在本轮均为0，因此没有伪造案例。完整附件含21个代表case、全部Gold截断摘要、各case前三条非Gold截断摘要及各变体Top10文档ID，见[召回失败案例全集](../scifact-r11-failure-cases.md)。逐候选内部复测分数与阶段轨迹见[内部阶段失败证据](../scifact-r11-internal-failure-analysis.md)。
 
 ### dense_miss_hybrid_hit / queryId=598
 
 问题：Incidence rates of cervical cancer have increased due to nationwide screening programs based primarily on cytology to detect uterine cervical cancer.
 
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
 Gold文档：
 
-- `25742130` Mass screening programmes and trends in cervical cancer in Finland and the Netherlands.
+- [`25742130` Mass screening programmes and trends in cervical cancer in Finland and the Netherlands.](failure-documents/25742130.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`3f82e6a9d32079df5c9c89f6e29b2fceef017e173df23fe029f7124cad3bf8e3`；标记=`BENCH_DOC_B64_MjU3NDIxMzA`）
 
   > With respect to cervical cancer management, Finland and the Netherlands are comparable in relevant characteristics, e.g., fertility rate, age-of-mother at first birth and a national screening programme for several years. The aim of this study is to compare trends in incidence of and mortality from cervical cancer in Finland and the Netherlands in relation to the introduction and intensity of the screening programmes. Therefore, incidence and mortality rates were calculated using the Cancer Registries of Finland and the Netherlands. Data on screening intensity were obtained from the Finnish Can…
 
@@ -81,17 +110,19 @@ Gold文档：
 
 实际排在前面的错误文档：
 
-- rank=1 `9764256` Human papillomavirus testing for the detection of high-grade cervical intraepithelial neoplasia and cancer: final results of the POBASCAM randomised controlled trial.
+- rank=1 score=未采集 [`9764256` Human papillomavirus testing for the detection of high-grade cervical intraepithelial neoplasia and cancer: final results of the POBASCAM randomised controlled trial.](failure-documents/9764256.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_OTc2NDI1Ng`）
 
   > BACKGROUND Human papillomavirus (HPV) testing is more sensitive for the detection of high-grade cervical lesions than is cytology, but detection of HPV by DNA screening in two screening rounds 5 years apart has not been assessed. The aim of this study was to assess whether HPV DNA testing in the first screen decreases detection of cervical intraepithelial neoplasia (CIN) grade 3 or worse, CIN grade 2 or worse, and cervical cancer in the second screening. METHODS In this randomised trial, women aged 29-56 years participating in the cervical screening programme in the Netherlands were randomly a…
-- rank=2 `6561200` Efficacy of HPV DNA testing with cytology triage and/or repeat HPV DNA testing in primary cervical cancer screening.
+- rank=2 score=未采集 [`6561200` Efficacy of HPV DNA testing with cytology triage and/or repeat HPV DNA testing in primary cervical cancer screening.](failure-documents/6561200.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_NjU2MTIwMA`）
 
   > BACKGROUND Primary cervical screening with both human papillomavirus (HPV) DNA testing and cytological examination of cervical cells with a Pap test (cytology) has been evaluated in randomized clinical trials. Because the vast majority of women with positive cytology are also HPV DNA positive, screening strategies that use HPV DNA testing as the primary screening test may be more effective. METHODS We used the database from the intervention arm (n = 6,257 women) of a population-based randomized trial of double screening with cytology and HPV DNA testing to evaluate the efficacy of 11 possible…
-- rank=3 `27873158` Efficacy of human papillomavirus testing for the detection of invasive cervical cancers and cervical intraepithelial neoplasia: a randomised controlled trial.
+- rank=3 score=未采集 [`27873158` Efficacy of human papillomavirus testing for the detection of invasive cervical cancers and cervical intraepithelial neoplasia: a randomised controlled trial.](failure-documents/27873158.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_Mjc4NzMxNTg`）
 
   > BACKGROUND Human papillomavirus (HPV) testing is known to be more sensitive, but less specific than cytology for detecting cervical intraepithelial neoplasia (CIN). We assessed the efficacy of cervical-cancer screening policies that are based on HPV testing. METHODS Between March, 2004, and December, 2004, in two separate recruitment phases, women aged 25-60 years were randomly assigned to conventional cytology or to HPV testing in combination with liquid-based cytology (first phase) or alone (second phase). Randomisation was done by computer in two screening centres and by sequential opening…
 
 首个终态可观测失败：`dense_final_top10`。内部首个完全损失：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。
+
+内部首个覆盖下降：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
 
 直接事实：Dense gold首名次=Top10未命中；Sparse gold首名次=1；Hybrid-RRF gold首名次=2；Hybrid-RRF+Rerank gold首名次=6；分类规则=dense_miss_hybrid_hit；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
 
@@ -109,9 +140,11 @@ Gold文档：
 
 问题：CX3CR1 on the Th2 cells impairs T cell survival
 
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
 Gold文档：
 
-- `21366394` CX3CR1 is required for airway inflammation by promoting T helper cell survival and maintenance in inflamed lung
+- [`21366394` CX3CR1 is required for airway inflammation by promoting T helper cell survival and maintenance in inflamed lung](failure-documents/21366394.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`1528506861c3c142fdd97105d1860952092a64b6d5f96d71ffaca5aa00953d50`；标记=`BENCH_DOC_B64_MjEzNjYzOTQ`）
 
   > Allergic asthma is a T helper type 2 (T(H)2)-dominated disease of the lung. In people with asthma, a fraction of CD4(+) T cells express the CX3CL1 receptor, CX3CR1, and CX3CL1 expression is increased in airway smooth muscle, lung endothelium and epithelium upon allergen challenge. Here we found that untreated CX3CR1-deficient mice or wild-type (WT) mice treated with CX3CR1-blocking reagents show reduced lung disease upon allergen sensitization and challenge. Transfer of WT CD4(+) T cells into CX3CR1-deficient mice restored the cardinal features of asthma, and CX3CR1-blocking reagents prevented…
 
@@ -119,17 +152,19 @@ Gold文档：
 
 实际排在前面的错误文档：
 
-- rank=1 `11666252` Maintaining the norm: T-cell homeostasis
+- rank=1 score=未采集 [`11666252` Maintaining the norm: T-cell homeostasis](failure-documents/11666252.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MTE2NjYyNTI`）
 
   > The persistence of naive and memory T cells has long been of interest to immunologists, but the factors that influence the survival and homeostasis of these subsets have remained obscure. In recent years, it has become evident that the homeostasis of both naive and memory T-cell pools is highly dynamic and tightly regulated by internal stimuli, including cytokines and self-peptide–MHC ligands for the T-cell receptor. These homeostatic mechanisms might have a vital influence on the capacity of the T-cell pool to respond to both foreign and self-antigens.
-- rank=2 `22210434` The kinase TAK1 integrates antigen and cytokine receptor signaling for T cell development, survival and function
+- rank=2 score=未采集 [`22210434` The kinase TAK1 integrates antigen and cytokine receptor signaling for T cell development, survival and function](failure-documents/22210434.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MjIyMTA0MzQ`）
 
   > The kinase TAK1 is critical for innate and B cell immunity. The function of TAK1 in T cells is unclear, however. We show here that T cell–specific deletion of the gene encoding TAK1 resulted in reduced development of thymocytes, especially of regulatory T cells expressing the transcription factor Foxp3. In mature thymocytes, TAK1 was required for interleukin 7–mediated survival and T cell receptor–dependent activation of transcription factor NF-κB and the kinase Jnk. In effector T cells, TAK1 was dispensable for T cell receptor–dependent NF-κB activation and cytokine production, but was import…
-- rank=3 `20610557` Alkylating agent melphalan augments the efficacy of adoptive immunotherapy using tumor-specific CD4+ T cells.
+- rank=3 score=未采集 [`20610557` Alkylating agent melphalan augments the efficacy of adoptive immunotherapy using tumor-specific CD4+ T cells.](failure-documents/20610557.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MjA2MTA1NTc`）
 
   > In recent years, the immune-potentiating effects of some widely used chemotherapeutic agents have been increasingly appreciated. This provides a rationale for combining conventional chemotherapy with immunotherapy strategies to achieve durable therapeutic benefits. Previous studies have implicated the immunomodulatory effects of melphalan, an alkylating agent commonly used to treat multiple myeloma, but the underlying mechanisms remain obscure. In the present study, we investigated the impact of melphalan on endogenous immune cells as well as adoptively transferred tumor-specific CD4(+) T cell…
 
 首个终态可观测失败：`sparse_final_top10`。内部首个完全损失：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。
+
+内部首个覆盖下降：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
 
 直接事实：Dense gold首名次=1；Sparse gold首名次=Top10未命中；Hybrid-RRF gold首名次=1；Hybrid-RRF+Rerank gold首名次=1；分类规则=sparse_miss_hybrid_hit；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
 
@@ -147,9 +182,11 @@ Gold文档：
 
 问题：Rapamycin decreases the concentration of triacylglycerols in fruit flies.
 
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
 Gold文档：
 
-- `6277638` Mechanisms of Life Span Extension by Rapamycin in the Fruit Fly Drosophila melanogaster
+- [`6277638` Mechanisms of Life Span Extension by Rapamycin in the Fruit Fly Drosophila melanogaster](failure-documents/6277638.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`8f838066966cb486311d496486975717a0deadca5b6d59c7f185457a48a886ac`；标记=`BENCH_DOC_B64_NjI3NzYzOA`）
 
   > The target of rapamycin (TOR) pathway is a major nutrient-sensing pathway that, when genetically downregulated, increases life span in evolutionarily diverse organisms including mammals. The central component of this pathway, TOR kinase, is the target of the inhibitory drug rapamycin, a highly specific and well-described drug approved for human use. We show here that feeding rapamycin to adult Drosophila produces the life span extension seen in some TOR mutants. Increase in life span by rapamycin was associated with increased resistance to both starvation and paraquat. Analysis of the underlyi…
 
@@ -157,17 +194,19 @@ Gold文档：
 
 实际排在前面的错误文档：
 
-- rank=1 `10530014` A point mutation in KINDLIN3 ablates activation of three integrin subfamilies in humans
+- rank=1 score=未采集 [`10530014` A point mutation in KINDLIN3 ablates activation of three integrin subfamilies in humans](failure-documents/10530014.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MTA1MzAwMTQ`）
 
   > Monogenic deficiency diseases provide unique opportunities to define the contributions of individual molecules to human physiology and to identify pathologies arising from their dysfunction. Here we describe a deficiency disease in two human siblings that presented with severe bleeding, frequent infections and osteopetrosis at an early age. These symptoms are consistent with but more severe than those reported for people with leukocyte adhesion deficiency III (LAD-III). Mechanistically, these symptoms arose from an inability to activate the integrins expressed on hematopoietic cells, including…
-- rank=2 `36271512` T-cell activation.
+- rank=2 score=未采集 [`36271512` T-cell activation.](failure-documents/36271512.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MzYyNzE1MTI`）
 
   > INTRODUCTION • • CELLULAR AND MOLECULAR REQUIREMENTS FOR T-CELL ACTIVATION . The T-Cell Antigen Receptor Complex . . . .. . . . ..... . . . . . . . . . . . . . . . . ...... . . . T-Cell Activation by Antibodies and Leetins . . . . . . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . Other Cell Surface Structures (Accessory Molecules) Involved in Antigen Recognition and Activation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .…
-- rank=3 `8065561` Specific and cooperative binding of E. coli single-stranded DNA binding protein to mRNA.
+- rank=3 score=未采集 [`8065561` Specific and cooperative binding of E. coli single-stranded DNA binding protein to mRNA.](failure-documents/8065561.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_ODA2NTU2MQ`）
 
   > Fluorometric titration of E. coli single-stranded DNA binding protein with various RNAs showed that the protein specifically and cooperatively binds to its own mRNA. The binding inhibited in vitro expression of ssb and bla but not nusA. This inhibition takes place at a physiological concentration of SSB. The function of the protein in gene regulation is discussed.
 
 首个终态可观测失败：`sparse_final_top10`。内部首个完全损失：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。
+
+内部首个覆盖下降：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
 
 直接事实：Dense gold首名次=1；Sparse gold首名次=Top10未命中；Hybrid-RRF gold首名次=2；Hybrid-RRF+Rerank gold首名次=1；分类规则=dense_only_success；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
 
@@ -181,13 +220,57 @@ Gold文档：
 
 复证实验：固定同一索引和query，额外留存Dense/Sparse候选Top100、融合逐项贡献、Rerank输入输出分数及chunk文本，再复跑该query验证首个内部失效点（dense_only_success）。
 
+### sparse_only_success / queryId=598
+
+问题：Incidence rates of cervical cancer have increased due to nationwide screening programs based primarily on cytology to detect uterine cervical cancer.
+
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
+Gold文档：
+
+- [`25742130` Mass screening programmes and trends in cervical cancer in Finland and the Netherlands.](failure-documents/25742130.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`3f82e6a9d32079df5c9c89f6e29b2fceef017e173df23fe029f7124cad3bf8e3`；标记=`BENCH_DOC_B64_MjU3NDIxMzA`）
+
+  > With respect to cervical cancer management, Finland and the Netherlands are comparable in relevant characteristics, e.g., fertility rate, age-of-mother at first birth and a national screening programme for several years. The aim of this study is to compare trends in incidence of and mortality from cervical cancer in Finland and the Netherlands in relation to the introduction and intensity of the screening programmes. Therefore, incidence and mortality rates were calculated using the Cancer Registries of Finland and the Netherlands. Data on screening intensity were obtained from the Finnish Can…
+
+问题变体：`dense`；Recall@10=0.000000，MRR@10=0.000000。
+
+实际排在前面的错误文档：
+
+- rank=1 score=未采集 [`9764256` Human papillomavirus testing for the detection of high-grade cervical intraepithelial neoplasia and cancer: final results of the POBASCAM randomised controlled trial.](failure-documents/9764256.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_OTc2NDI1Ng`）
+
+  > BACKGROUND Human papillomavirus (HPV) testing is more sensitive for the detection of high-grade cervical lesions than is cytology, but detection of HPV by DNA screening in two screening rounds 5 years apart has not been assessed. The aim of this study was to assess whether HPV DNA testing in the first screen decreases detection of cervical intraepithelial neoplasia (CIN) grade 3 or worse, CIN grade 2 or worse, and cervical cancer in the second screening. METHODS In this randomised trial, women aged 29-56 years participating in the cervical screening programme in the Netherlands were randomly a…
+- rank=2 score=未采集 [`6561200` Efficacy of HPV DNA testing with cytology triage and/or repeat HPV DNA testing in primary cervical cancer screening.](failure-documents/6561200.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_NjU2MTIwMA`）
+
+  > BACKGROUND Primary cervical screening with both human papillomavirus (HPV) DNA testing and cytological examination of cervical cells with a Pap test (cytology) has been evaluated in randomized clinical trials. Because the vast majority of women with positive cytology are also HPV DNA positive, screening strategies that use HPV DNA testing as the primary screening test may be more effective. METHODS We used the database from the intervention arm (n = 6,257 women) of a population-based randomized trial of double screening with cytology and HPV DNA testing to evaluate the efficacy of 11 possible…
+- rank=3 score=未采集 [`27873158` Efficacy of human papillomavirus testing for the detection of invasive cervical cancers and cervical intraepithelial neoplasia: a randomised controlled trial.](failure-documents/27873158.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_Mjc4NzMxNTg`）
+
+  > BACKGROUND Human papillomavirus (HPV) testing is known to be more sensitive, but less specific than cytology for detecting cervical intraepithelial neoplasia (CIN). We assessed the efficacy of cervical-cancer screening policies that are based on HPV testing. METHODS Between March, 2004, and December, 2004, in two separate recruitment phases, women aged 25-60 years were randomly assigned to conventional cytology or to HPV testing in combination with liquid-based cytology (first phase) or alone (second phase). Randomisation was done by computer in two screening centres and by sequential opening…
+
+首个终态可观测失败：`dense_final_top10`。内部首个完全损失：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。
+
+内部首个覆盖下降：`fusion/FUSION_THRESHOLD_OR_TOPK_LOSS`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
+
+直接事实：Dense gold首名次=Top10未命中；Sparse gold首名次=1；Hybrid-RRF gold首名次=2；Hybrid-RRF+Rerank gold首名次=6；分类规则=sparse_only_success；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
+
+内部复测Gold轨迹摘录：
+
+- stage=dense_raw rank=14 outcome=returned_by_vector_store dense=0.83227265 sparse=None fusion=None rerank=None
+
+因果推断（可证伪）：Dense语义向量把主题相近干扰文档排在gold之前，而精确术语帮助Sparse命中；最大词项Jaccard=0.1250。
+
+替代解释：相关性标注不完整、gold摘要与claim粒度不同、分块边界或Top10截断；当前终态run不能排除这些因素（sparse_only_success）。
+
+复证实验：固定同一索引和query，额外留存Dense/Sparse候选Top100、融合逐项贡献、Rerank输入输出分数及chunk文本，再复跑该query验证首个内部失效点（sparse_only_success）。
+
 ### persistent_miss / queryId=1
 
 问题：0-dimensional biomaterials show inductive properties.
 
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
 Gold文档：
 
-- `31715818` New opportunities: the use of nanotechnologies to manipulate and track stem cells.
+- [`31715818` New opportunities: the use of nanotechnologies to manipulate and track stem cells.](failure-documents/31715818.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`bdb1651b1a299746faf502ab213e61b5d81cfc3c6907f4769354cfe3d4661a8f`；标记=`BENCH_DOC_B64_MzE3MTU4MTg`）
 
   > Nanotechnologies are emerging platforms that could be useful in measuring, understanding, and manipulating stem cells. Examples include magnetic nanoparticles and quantum dots for stem cell labeling and in vivo tracking; nanoparticles, carbon nanotubes, and polyplexes for the intracellular delivery of genes/oligonucleotides and protein/peptides; and engineered nanometer-scale scaffolds for stem cell differentiation and transplantation. This review examines the use of nanotechnologies for stem cell tracking, differentiation, and transplantation. We further discuss their utility and the potentia…
 
@@ -195,17 +278,19 @@ Gold文档：
 
 实际排在前面的错误文档：
 
-- rank=1 `86217760` The Self-Incompatibility Genes of Brassica: Expression and Use in Genetic Ablation of Floral Tissues
+- rank=1 score=未采集 [`86217760` The Self-Incompatibility Genes of Brassica: Expression and Use in Genetic Ablation of Floral Tissues](failure-documents/86217760.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_ODYyMTc3NjA`）
 
   > INTRODUCTION . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 394 POLLINATION AND POLLEN TUBE GROWTH . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 395 Interaction s between the M ale G ameto phyte and Pistil . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 395 SelfIncom patibili ty Systems: Gameto phytic and S poro phyti c Determin ation of Pollen Phenoty pe . . . . . . . . . . . . . . . . .. . . . . . . . . . . .…
-- rank=2 `12207167` Adverse effects of excessive consumption of amino acids.
+- rank=2 score=未采集 [`12207167` Adverse effects of excessive consumption of amino acids.](failure-documents/12207167.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MTIyMDcxNjc`）
 
   > PHENYLALANINE TOXICITY 158 Developing the 0. -M ethylphenylalanine Model. . . . . . .. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 160 Use of the a-Methyl phenylalanine Model in Brain Protein Synthesis . . . . . . . . . . . . . . . . . . . 161 TYROSINE TOXICITY 162 General Nutritional Observations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 162 Factors Affecting Tissue Concentrations of Tyrosine . ... .. .. .. ...... . . . . . . .. . . 163 Probable Cause of Tyrosine Toxicity . . .…
-- rank=3 `19685306` Orientationally invariant indices of axon diameter and density from diffusion MRI.
+- rank=3 score=未采集 [`19685306` Orientationally invariant indices of axon diameter and density from diffusion MRI.](failure-documents/19685306.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MTk2ODUzMDY`）
 
   > This paper proposes and tests a technique for imaging orientationally invariant indices of axon diameter and density in white matter using diffusion magnetic resonance imaging. Such indices potentially provide more specific markers of white matter microstructure than standard indices from diffusion tensor imaging. Orientational invariance allows for combination with tractography and presents new opportunities for mapping brain connectivity and quantifying disease processes. The technique uses a four-compartment tissue model combined with an optimized multishell high-angular-resolution pulsed-g…
 
 首个终态可观测失败：`dense_and_sparse_final_top10`。内部首个完全损失：`raw_union/RAW_RECALL_TOTAL_MISS`。
+
+内部首个覆盖下降：`raw_union/RAW_RECALL_TOTAL_MISS`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
 
 直接事实：Dense gold首名次=Top10未命中；Sparse gold首名次=Top10未命中；Hybrid-RRF gold首名次=Top10未命中；Hybrid-RRF+Rerank gold首名次=Top10未命中；分类规则=persistent_miss；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
 
@@ -215,13 +300,58 @@ Gold文档：
 
 复证实验：核验Gold对应chunk确实写入同一generation与Qdrant payload，再分别扩大Dense/Sparse原始TopK并替换Embedding/词法归一化，观察Gold首次出现位置。
 
+### rerank_reorder_gain / queryId=1204
+
+问题：The combination of H3K4me3 and H3K79me2 is found in quiescent hair follicle stem cells.
+
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
+Gold文档：
+
+- [`31141365` Genome-wide maps of histone modifications unwind in vivo chromatin states of the hair follicle lineage.](failure-documents/31141365.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`39a6ddd13806367aeaf098c51a465662263af1ccbecbe5256183751bde9e71f5`；标记=`BENCH_DOC_B64_MzExNDEzNjU`）
+
+  > Using mouse skin, where bountiful reservoirs of synchronized hair follicle stem cells (HF-SCs) fuel cycles of regeneration, we explore how adult SCs remodel chromatin in response to activating cues. By profiling global mRNA and chromatin changes in quiescent and activated HF-SCs and their committed, transit-amplifying (TA) progeny, we show that polycomb-group (PcG)-mediated H3K27-trimethylation features prominently in HF-lineage progression by mechanisms distinct from embryonic-SCs. In HF-SCs, PcG represses nonskin lineages and HF differentiation. In TA progeny, nonskin regulators remain PcG-r…
+
+问题变体：`hybrid_rrf_rerank`；Recall@10=1.000000，MRR@10=1.000000。
+
+实际排在前面的错误文档：
+
+- rank=2 score=未采集 [`17271462` Tie2/Angiopoietin-1 Signaling Regulates Hematopoietic Stem Cell Quiescence in the Bone Marrow Niche](failure-documents/17271462.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MTcyNzE0NjI`）
+
+  > The quiescent state is thought to be an indispensable property for the maintenance of hematopoietic stem cells (HSCs). Interaction of HSCs with their particular microenvironments, known as the stem cell niches, is critical for adult hematopoiesis in the bone marrow (BM). Here, we demonstrate that HSCs expressing the receptor tyrosine kinase Tie2 are quiescent and antiapoptotic, and comprise a side-population (SP) of HSCs, which adhere to osteoblasts (OBs) in the BM niche. The interaction of Tie2 with its ligand Angiopoietin-1 (Ang-1) induced cobblestone formation of HSCs in vitro and maintaine…
+- rank=3 score=未采集 [`20996244` Nonproductive human immunodeficiency virus type 1 infection in nucleoside-treated G0 lymphocytes.](failure-documents/20996244.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MjA5OTYyNDQ`）
+
+  > Productive infection by human immunodeficiency virus type 1 (HIV-1) requires the activation of target cells. Infection of quiescent peripheral CD4 lymphocytes by HIV-1 results in incomplete, labile, reverse transcripts. We have previously identified G1b as the cell cycle stage required for the optimal completion of the reverse transcription process in T lymphocytes. However, the mechanism(s) involved in the blockage of reverse transcription remains undefined. In this study we investigated whether nucleotide levels influence viral reverse transcription in G0 cells. For this purpose the role of…
+- rank=4 score=未采集 [`25597580` Quiescent and active hippocampal neural stem cells with distinct morphologies respond selectively to physiological and pathological stimuli and aging.](failure-documents/25597580.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MjU1OTc1ODA`）
+
+  > New neurons are generated in the adult hippocampus throughout life by neural stem/progenitor cells (NSCs), and neurogenesis is a plastic process responsive to external stimuli. We show that canonical Notch signaling through RBP-J is required for hippocampal neurogenesis. Notch signaling distinguishes morphologically distinct Sox2(+) NSCs, and within these pools subpopulations can shuttle between mitotically active or quiescent. Radial and horizontal NSCs respond selectively to neurogenic stimuli. Physical exercise activates the quiescent radial population whereas epileptic seizures induce expa…
+
+首个终态可观测失败：`hybrid_rrf_rank_order`。内部首个完全损失：`未观察到Gold完全损失`。
+
+内部首个覆盖下降：`未观察到Gold覆盖下降`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
+
+直接事实：Dense gold首名次=1；Sparse gold首名次=Top10未命中；Hybrid-RRF gold首名次=10；Hybrid-RRF+Rerank gold首名次=1；分类规则=rerank_reorder_gain；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
+
+内部复测Gold轨迹摘录：
+
+- stage=rerank_input rank=10 outcome=sent_to_reranker dense=0.842868 sparse=None fusion=0.5 rerank=None
+- stage=rerank_output rank=1 outcome=kept_after_rerank dense=0.842868 sparse=None fusion=0.5 rerank=0.097084545
+
+因果推断（可证伪）：阶段因果事实：同一请求的Rerank把Gold名次从31141365:10→1，MRR变化+0.900000；Rerank为何偏好竞争文档仍需模型/文本对照实验。
+
+替代解释：Gold与竞争文档的标注粒度或相关性定义可能和Reranker训练偏好不同；但本次名次上升确实发生在同一请求的rerank_input→rerank_output。
+
+复证实验：固定同一10个输入候选，记录完整文本与Rerank分数，替换/关闭Reranker并重复评分。
+
 ### rerank_reorder_harm / queryId=956
 
 问题：Pleiotropic coupling of GLP-1R to intracellular effectors promotes distinct profiles of cellular signaling.
 
+Gold答案：**SciFact数据集未提供自然语言gold answer**；本轮只能按qrels中的相关文档评测检索，不能把文档摘要冒充答案。
+
 Gold文档：
 
-- `12956194` The Extracellular Surface of the GLP-1 Receptor Is a Molecular Trigger for Biased Agonism
+- [`12956194` The Extracellular Surface of the GLP-1 Receptor Is a Molecular Trigger for Biased Agonism](failure-documents/12956194.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；正文SHA-256=`fbd73e6181d392a7ff33328395678c205f7bc1c2b8b433f8cbe76ca7d6c2cc61`；标记=`BENCH_DOC_B64_MTI5NTYxOTQ`）
 
   > Ligand-directed signal bias offers opportunities for sculpting molecular events, with the promise of better, safer therapeutics. Critical to the exploitation of signal bias is an understanding of the molecular events coupling ligand binding to intracellular signaling. Activation of class B G protein-coupled receptors is driven by interaction of the peptide N terminus with the receptor core. To understand how this drives signaling, we have used advanced analytical methods that enable separation of effects on pathway-specific signaling from those that modify agonist affinity and mapped the funct…
 
@@ -229,17 +359,19 @@ Gold文档：
 
 实际排在前面的错误文档：
 
-- rank=1 `31107919` Differential Requirement of the Extracellular Domain in Activation of Class B G Protein-coupled Receptors.
+- rank=1 score=未采集 [`31107919` Differential Requirement of the Extracellular Domain in Activation of Class B G Protein-coupled Receptors.](failure-documents/31107919.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MzExMDc5MTk`）
 
   > G protein-coupled receptors (GPCRs) from the secretin-like (class B) family are key players in hormonal homeostasis and are important drug targets for the treatment of metabolic disorders and neuronal diseases. They consist of a large N-terminal extracellular domain (ECD) and a transmembrane domain (TMD) with the GPCR signature of seven transmembrane helices. Class B GPCRs are activated by peptide hormones with their C termini bound to the receptor ECD and their N termini bound to the TMD. It is thought that the ECD functions as an affinity trap to bind and localize the hormone to the receptor…
-- rank=2 `7433668` Preexisting helminth infection induces inhibition of innate pulmonary anti-tuberculosis defense by engaging the IL-4 receptor pathway
+- rank=2 score=未采集 [`7433668` Preexisting helminth infection induces inhibition of innate pulmonary anti-tuberculosis defense by engaging the IL-4 receptor pathway](failure-documents/7433668.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_NzQzMzY2OA`）
 
   > Tuberculosis and helminthic infections coexist in many parts of the world, yet the impact of helminth-elicited Th2 responses on the ability of the host to control Mycobacterium tuberculosis (Mtb) infection has not been fully explored. We show that mice infected with the intestinal helminth Nippostrongylus brasiliensis (Nb) exhibit a transitory impairment of resistance to airborne Mtb infection. Furthermore, a second dose of Nb infection substantially increases the bacterial burden in the lungs of co-infected mice. Interestingly, the Th2 response in the co-infected animals did not impair the on…
-- rank=3 `3127341` Polymorphism and ligand dependent changes in human glucagon-like peptide-1 receptor (GLP-1R) function: allosteric rescue of loss of function mutation.
+- rank=3 score=未采集 [`3127341` Polymorphism and ligand dependent changes in human glucagon-like peptide-1 receptor (GLP-1R) function: allosteric rescue of loss of function mutation.](failure-documents/3127341.md)（校验后完整正文副本；[原始冻结分片](../../evaluation-data/scifact/prepared/documents/benchmark-0001.md)；标记=`BENCH_DOC_B64_MzEyNzM0MQ`）
 
   > The glucagon-like peptide-1 receptor (GLP-1R) is a key physiological regulator of insulin secretion and a major therapeutic target for the treatment of type II diabetes. However, regulation of GLP-1R function is complex with multiple endogenous peptides that interact with the receptor, including full-length (1-37) and truncated (7-37) forms of GLP-1 that can exist in an amidated form (GLP-1(1-36)NH₂ and GLP-1(7-36)NH₂) and the related peptide oxyntomodulin. In addition, the GLP-1R possesses exogenous agonists, including exendin-4, and the allosteric modulator, compound 2 (6,7-dichloro-2-methyl…
 
 首个终态可观测失败：`rerank_final_top10`。内部首个完全损失：`未观察到Gold完全损失`。
+
+内部首个覆盖下降：`未观察到Gold覆盖下降`。这三个字段分别是消融终态、算子级完全丢失和算子级部分覆盖下降，不能混为同一根因。
 
 直接事实：Dense gold首名次=6；Sparse gold首名次=6；Hybrid-RRF gold首名次=1；Hybrid-RRF+Rerank gold首名次=5；分类规则=rerank_reorder_harm；质量run未采集逐候选分数；内部复测已采集并用于阶段定位
 
@@ -258,24 +390,24 @@ Gold文档：
 
 两轮稳定结果分别保留，未合并成伪单轮：
 
-| run | 并发 | 配置 | n | p50 | p95 | max | Rerank p95 |
-|---|---:|---|---:|---:|---:|---:|---:|
-| scifact-load-stable-r1-ebbe5d0 | 1 | sparse | 20 | 276 | 582 | 612 | 0 |
-| scifact-load-stable-r1-ebbe5d0 | 1 | hybrid_rrf | 20 | 1153 | 2439 | 3724 | 0 |
-| scifact-load-stable-r1-ebbe5d0 | 1 | hybrid_rrf_rerank | 20 | 15054 | 24862 | 31353 | 23717 |
-| scifact-load-stable-r1-ebbe5d0 | 1 | dense | 20 | 1194 | 2535 | 3792 | 0 |
-| scifact-load-stable-r1-ebbe5d0 | 2 | sparse | 20 | 312 | 583 | 595 | 0 |
-| scifact-load-stable-r1-ebbe5d0 | 2 | hybrid_rrf | 20 | 1173 | 2270 | 2382 | 0 |
-| scifact-load-stable-r1-ebbe5d0 | 2 | hybrid_rrf_rerank | 20 | 20984 | 33212 | 37055 | 31806 |
-| scifact-load-stable-r1-ebbe5d0 | 2 | dense | 20 | 892 | 1691 | 1833 | 0 |
-| scifact-load-stable-r2-48f9099 | 2 | hybrid_rrf_rerank | 20 | 18210 | 28004 | 28663 | 27300 |
-| scifact-load-stable-r2-48f9099 | 2 | hybrid_rrf | 20 | 844 | 1219 | 1280 | 0 |
-| scifact-load-stable-r2-48f9099 | 2 | sparse | 20 | 257 | 540 | 570 | 0 |
-| scifact-load-stable-r2-48f9099 | 2 | dense | 20 | 572 | 1241 | 1259 | 0 |
-| scifact-load-stable-r2-48f9099 | 1 | hybrid_rrf_rerank | 20 | 10966 | 15169 | 16263 | 14351 |
-| scifact-load-stable-r2-48f9099 | 1 | hybrid_rrf | 20 | 1030 | 1808 | 1858 | 0 |
-| scifact-load-stable-r2-48f9099 | 1 | sparse | 20 | 242 | 435 | 707 | 0 |
-| scifact-load-stable-r2-48f9099 | 1 | dense | 20 | 500 | 828 | 875 | 0 |
+| run | 并发 | 配置 | n | mean/p50/p95/p99/max ms | Rerank p95 | 层级吞吐req/s | 主导stage |
+|---|---:|---|---:|---:|---:|---:|---|
+| scifact-load-stable-r1-ebbe5d0 | 1 | sparse | 20 | 320.350/276/582/612/612 | 0 | 0.196896 | sparseMs |
+| scifact-load-stable-r1-ebbe5d0 | 1 | hybrid_rrf | 20 | 1479.850/1153/2439/3724/3724 | 0 | 0.196896 | embeddingMs |
+| scifact-load-stable-r1-ebbe5d0 | 1 | hybrid_rrf_rerank | 20 | 17194.200/15054/24862/31353/31353 | 23717 | 0.196896 | rerankMs |
+| scifact-load-stable-r1-ebbe5d0 | 1 | dense | 20 | 1318.450/1194/2535/3792/3792 | 0 | 0.196896 | embeddingMs |
+| scifact-load-stable-r1-ebbe5d0 | 2 | sparse | 20 | 334.350/312/583/595/595 | 0 | 0.319885 | sparseMs |
+| scifact-load-stable-r1-ebbe5d0 | 2 | hybrid_rrf | 20 | 1314.250/1173/2270/2382/2382 | 0 | 0.319885 | embeddingMs |
+| scifact-load-stable-r1-ebbe5d0 | 2 | hybrid_rrf_rerank | 20 | 21890.200/20984/33212/37055/37055 | 31806 | 0.319885 | rerankMs |
+| scifact-load-stable-r1-ebbe5d0 | 2 | dense | 20 | 980.950/892/1691/1833/1833 | 0 | 0.319885 | embeddingMs |
+| scifact-load-stable-r2-48f9099 | 2 | hybrid_rrf_rerank | 20 | 18949.100/18210/28004/28663/28663 | 27300 | 0.372575 | rerankMs |
+| scifact-load-stable-r2-48f9099 | 2 | hybrid_rrf | 20 | 894.900/844/1219/1280/1280 | 0 | 0.372575 | embeddingMs |
+| scifact-load-stable-r2-48f9099 | 2 | sparse | 20 | 317.350/257/540/570/570 | 0 | 0.372575 | sparseMs |
+| scifact-load-stable-r2-48f9099 | 2 | dense | 20 | 643.200/572/1241/1259/1259 | 0 | 0.372575 | embeddingMs |
+| scifact-load-stable-r2-48f9099 | 1 | hybrid_rrf_rerank | 20 | 11345.050/10966/15169/16263/16263 | 14351 | 0.300397 | rerankMs |
+| scifact-load-stable-r2-48f9099 | 1 | hybrid_rrf | 20 | 1116.700/1030/1808/1858/1858 | 0 | 0.300397 | denseMs |
+| scifact-load-stable-r2-48f9099 | 1 | sparse | 20 | 289.000/242/435/707/707 | 0 | 0.300397 | sparseMs |
+| scifact-load-stable-r2-48f9099 | 1 | dense | 20 | 562.850/500/828/875/875 | 0 | 0.300397 | denseMs |
 
 并发4门禁失败样本：queryId=1024，配置=hybrid_rrf_rerank，HTTP=200，耗时=67190ms，降级原因=`rerank_fallback:profile_9a6bf176635448799c5b219d7765bc46`。Reranker CPU峰值=566.50%，内存占比峰值=67.07%；容器前后无restart/OOM。
 
@@ -327,7 +459,20 @@ PDF章节金标与数据库实值：
 | docx | What is the launch mass of Aurora Finch Observatory? | 6 | RAG Format Fidelity Observatory Manual / Identity and access | retrieval-only; LLM拒答正确性未评测 |
 | pdf | What is the launch mass of Aurora Finch Observatory? | 6 | RAG Format Fidelity Observatory Manual / Deliberate omissions | retrieval-only; LLM拒答正确性未评测 |
 
-## 八、上线前优化与复测门槛
+## 八、知识库级联删除、故障恢复与残留
+
+| 场景 | 文档 | 删除观测耗时/样本 | 故障现场 | 终态 | 外部残留 |
+|---|---:|---:|---|---|---|
+| 健康链路 `kb-delete-r3-975ee7a-minio` | 2 | 27355 ms / 23 | 无 | parent completed 2/2 | MySQL/Qdrant/MinIO全门禁通过 |
+| MinIO断链 `kb-delete-fault-r1-e6c6d54-minio` | 2 | 129529 ms / 107 | child retrying `deleting_source` attempt=2/3 `OBJECT_STORAGE_DELETE_FAILED`；parent waiting | parent completed 2/2，未调用retry API | MySQL/Qdrant/MinIO全门禁通过 |
+
+故障因果链：删除子Worker进入MinIO原件删除 → 本地MinIO SSH转发被测试故意断开 → MySQL现场记录`OBJECT_STORAGE_DELETE_FAILED`且checkpoint停在`deleting_source` → 父协调器进入WAITING并保留进度 → 恢复同一转发 → Dispatcher从数据库账本自动续跑 → 两个DELETE子任务完成 → 父任务验证文档/版本/chunk/binding后完成 → 独立采集器再次确认两版本Qdrant点数为0、MinIO source/parsed不存在。
+
+观测缺口：故障现场同一子任务attempt=2，终态数据库却为attempt=1，说明当前恢复路径会重置attempt；因此终态attempt不能代表累计故障次数。优化应保持累计attempt单调或新增不可变任务事件表，并把错误开始/恢复时间、退避原因和外部依赖写入审计。该轮验证的是自动恢复，不是FAILED/DEAD后的管理员手工恢复。
+
+证据：[健康删除manifest](../kb-delete-e2e-r3-975ee7a-minio/manifest.json)、[健康零残留](../kb-delete-e2e-r3-975ee7a-minio/residual-evidence-v2.json)、[故障瞬时快照](../kb-delete-fault-r1-e6c6d54-minio/fault-observation.json)、[故障终态零残留](../kb-delete-fault-r1-e6c6d54-minio/residual-evidence.json)。
+
+## 九、上线前优化与复测门槛
 
 1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。
 2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense 0.797944，同时报告MRR/延迟代价。
@@ -335,7 +480,7 @@ PDF章节金标与数据库实值：
 4. PDF页span已贯穿解析、chunk、Qdrant payload和citation并通过单份三页金标；下一门槛是至少30份多页/表格/扫描PDF以及引用回源黑盒。DOCX若刚需固定页码，需增加固定版式转换或替换解析器后用相同金标门禁。
 5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。
 
-## 九、明确未测与证据限制
+## 十、明确未测与证据限制
 
 - SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。
 - r6格式题只验证证据词项是否在返回上下文，不等同于最终LLM回答正确。
@@ -344,7 +489,7 @@ PDF章节金标与数据库实值：
 - 内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。
 - fusion threshold与TopK尚未分开留痕；PDF页码已闭环，但Markdown和当前Docling DOCX的页数仍是未知而非0页。
 
-## 十、证据索引与复算
+## 十一、证据索引与复算
 
 机器总账：[rag-final-evidence-ledger.json](rag-final-evidence-ledger.json)。关键原始证据均已从`/tmp`固化进项目`docs/rag/evaluation-results/`，总账记录每个输入的SHA-256与字节数。
 
