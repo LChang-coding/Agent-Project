@@ -2193,3 +2193,4 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 主报告生成器补充真实Agent/Workflow黑盒边界并修正“完全未测拒答”的过时表述：当前仅一个合成可回答事实和一个合成无答案问题，足以证明链路smoke，不足以报告通用Faithfulness、Answer Correctness、幻觉率或拒答率。
 - 收尾验证：第一次重建命令因包含`rm -rf /tmp/...`被安全策略拒绝，未删除文件；改用两个全新空目录后生成器均成功，第二次输出与项目主报告/机器总账逐字节`cmp`一致。Python两个harness `py_compile`通过；Java 17精确回归再次29/29通过，六模块BUILD SUCCESS、Maven 2.915秒。
 - 收尾SHA：主报告=`21daa066ffd26e1d4f75b991276cd6d91056ffcc8737700796cedca9e3a0c2a3`，机器总账=`98deaa041402cbba5a14e56a926756d57de1ec7565863c49c88281f683d16215`，Agent/Workflow补充报告=`70db5185a0f49fd075a3f3656860c7559bc7410526d345060aee9a091943a145`，取消服务日志摘录=`201d72ec327f14f9a6c684db7202435000a3a755cab7dd18647bf5caf7060510`。过时`rag`自动监控已删除，不再每10分钟检查已排除run。
+- 重大闭环已形成中文本地提交`0fdec4e`（`闭环RAG取消终止与最终报告收尾`），共22个相关文件、2611行新增/35行删除；提交未包含四个既有运行日志及`data-alloy/`、`data/object-storage/`、设计草稿、skills等无关未跟踪内容。本行作为提交后审计回填，单独文档提交保存。
