@@ -37,6 +37,9 @@ public interface IRagChunkDao {
     long countAllByTenantAndVersionId(@Param("tenantId") String tenantId,
                                       @Param("versionId") String versionId);
 
+    long countAllByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                             @Param("knowledgeBaseId") String knowledgeBaseId);
+
     /** 按租户和切片业务 ID 查询。 */
     RagChunkPO queryByTenantAndChunkId(@Param("tenantId") String tenantId,
                                       @Param("chunkId") String chunkId);

@@ -92,6 +92,17 @@
           AND status IN ('pending', 'running', 'retrying', 'cancel_requested') AND deleted = 0
     </select>
 
+    <select id="countDocumentsWithoutCompletedDelete" resultType="int">
+        SELECT COUNT(*) FROM rag_document d
+        WHERE d.tenant_id = #{tenantId} AND d.kb_id = #{knowledgeBaseId} AND d.deleted = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM rag_ingest_task t
+            WHERE t.tenant_id = d.tenant_id AND t.kb_id = d.kb_id
+              AND t.document_id = d.document_id AND t.operation = 'delete'
+              AND t.status = 'completed' AND t.deleted = 0
+          )
+    </select>
+
     <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO">
         SELECT tenant_id AS tenantId, task_id AS jobId
         FROM rag_ingest_task

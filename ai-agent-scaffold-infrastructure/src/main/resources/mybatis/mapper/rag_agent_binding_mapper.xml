@@ -70,4 +70,10 @@
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
           AND status = 'active' AND deleted = 0
     </update>
+
+    <select id="countActiveByTenantAndKnowledgeBaseId" resultType="int">
+        SELECT COUNT(*) FROM rag_agent_binding
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND status = 'active' AND deleted = 0
+    </select>
 </mapper>

@@ -14,6 +14,9 @@ public interface IRagKnowledgeBaseDeleteTaskDao {
     RagKnowledgeBaseDeleteTaskPO queryByTenantAndTaskId(@Param("tenantId") String tenantId,
                                                         @Param("taskId") String taskId);
 
+    RagKnowledgeBaseDeleteTaskPO queryByTenantAndTaskIdForUpdate(@Param("tenantId") String tenantId,
+                                                                 @Param("taskId") String taskId);
+
     RagKnowledgeBaseDeleteTaskPO queryByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                                  @Param("knowledgeBaseId") String knowledgeBaseId);
 

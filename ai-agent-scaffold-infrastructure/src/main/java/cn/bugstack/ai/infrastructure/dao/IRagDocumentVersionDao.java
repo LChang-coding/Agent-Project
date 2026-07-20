@@ -27,6 +27,9 @@ public interface IRagDocumentVersionDao {
     List<RagDocumentVersionPO> queryListByTenantAndDocumentIdForUpdate(@Param("tenantId") String tenantId,
                                                                        @Param("documentId") String documentId);
 
+    int countNotDeletedByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                                   @Param("knowledgeBaseId") String knowledgeBaseId);
+
     /** 按租户、版本业务 ID 和 row version 乐观更新状态。 */
     int updateByTenantAndRevision(@Param("tenantId") String tenantId,
                                   @Param("version") RagDocumentVersionPO version,

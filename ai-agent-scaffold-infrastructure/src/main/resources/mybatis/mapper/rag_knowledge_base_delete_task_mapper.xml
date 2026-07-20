@@ -8,6 +8,7 @@
         <result column="task_key" property="taskKey"/>
         <result column="tenant_id" property="tenantId"/>
         <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="requested_by_user_id" property="requestedByUserId"/>
         <result column="status" property="status"/>
         <result column="checkpoint" property="checkpoint"/>
         <result column="attempt_count" property="attemptCount"/>
@@ -28,7 +29,7 @@
     </resultMap>
 
     <sql id="Columns">
-        id, task_id, task_key, tenant_id, kb_id, status, checkpoint, attempt_count,
+        id, task_id, task_key, tenant_id, kb_id, requested_by_user_id, status, checkpoint, attempt_count,
         max_attempts, next_retry_at, lease_owner, lease_until, heartbeat_at, fencing_token,
         row_version, error_code, error_message, started_at, finished_at, create_time,
         update_time, deleted
@@ -37,11 +38,12 @@
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_knowledge_base_delete_task (
-            task_id, task_key, tenant_id, kb_id, status, checkpoint, attempt_count,
+            task_id, task_key, tenant_id, kb_id, requested_by_user_id, status, checkpoint, attempt_count,
             max_attempts, next_retry_at, lease_owner, lease_until, heartbeat_at, fencing_token,
             row_version, error_code, error_message, started_at, finished_at
         ) VALUES (
-            #{taskId}, #{taskKey}, #{tenantId}, #{knowledgeBaseId}, #{status}, #{checkpoint},
+            #{taskId}, #{taskKey}, #{tenantId}, #{knowledgeBaseId}, #{requestedByUserId},
+            #{status}, #{checkpoint},
             #{attemptCount}, #{maxAttempts}, #{nextRetryAt}, #{leaseOwner}, #{leaseUntil},
             #{heartbeatAt}, #{fencingToken}, #{rowVersion}, #{errorCode}, #{errorMessage},
             #{startedAt}, #{finishedAt}
@@ -51,6 +53,12 @@
     <select id="queryByTenantAndTaskId" resultMap="TaskMap">
         SELECT <include refid="Columns"/> FROM rag_knowledge_base_delete_task
         WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="queryByTenantAndTaskIdForUpdate" resultMap="TaskMap">
+        SELECT <include refid="Columns"/> FROM rag_knowledge_base_delete_task
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
+        LIMIT 1 FOR UPDATE
     </select>
 
     <select id="queryByTenantAndKnowledgeBaseId" resultMap="TaskMap">

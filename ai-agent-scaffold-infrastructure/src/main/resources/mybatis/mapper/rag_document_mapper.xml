@@ -94,6 +94,12 @@
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0
     </select>
 
+    <select id="countNotDeletedByTenantAndKnowledgeBaseId" resultType="int">
+        SELECT COUNT(*) FROM rag_document
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND status &lt;&gt; 'deleted' AND deleted = 0
+    </select>
+
     <select id="queryListByTenantId" resultMap="RagDocumentMap">
         SELECT <include refid="Columns"/> FROM rag_document
         WHERE tenant_id = #{tenantId} AND deleted = 0 ORDER BY id DESC

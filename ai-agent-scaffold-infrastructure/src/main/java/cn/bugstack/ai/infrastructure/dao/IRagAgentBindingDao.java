@@ -29,4 +29,7 @@ public interface IRagAgentBindingDao {
 
     int disableByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                           @Param("knowledgeBaseId") String knowledgeBaseId);
+
+    int countActiveByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                               @Param("knowledgeBaseId") String knowledgeBaseId);
 }

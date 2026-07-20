@@ -101,6 +101,6 @@ public class RagKnowledgeBaseDeleteTaskEntityTest {
 
     private RagKnowledgeBaseDeleteTaskEntity pending() {
         return RagKnowledgeBaseDeleteTaskEntity.pending(
-                "tenant-a", "kb-a", "task-a", "a".repeat(64), 2, 2);
+                "tenant-a", "kb-a", "owner-a", "task-a", "a".repeat(64), 2, 2);
     }
 }

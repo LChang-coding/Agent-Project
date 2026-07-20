@@ -53,6 +53,28 @@ public class RagDocumentDeletionService {
                 .filter(value -> knowledgeBaseId.equals(value.knowledgeBaseId()))
                 .orElseThrow(() -> new AppException("RAG_DOCUMENT_NOT_FOUND", "文档不存在或无权访问"));
 
+        return ensureDeletion(tenantId, knowledgeBaseId, document, expectedRevision);
+    }
+
+    /** 级联删除协调器内部入口；只允许已建立DELETING屏障的同租户知识库。 */
+    public RagIngestJobEntity ensureCascadeDeletion(String tenantId, String knowledgeBaseId,
+                                                      String documentId) {
+        RagKnowledgeBaseEntity knowledgeBase = repository.findKnowledgeBase(requireText(tenantId, "tenantId"),
+                        requireText(knowledgeBaseId, "knowledgeBaseId"))
+                .orElseThrow(() -> new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在"));
+        if (knowledgeBase.status() != cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus.DELETING) {
+            throw new AppException("RAG_KB_DELETE_STATE_MISMATCH", "知识库尚未建立级联删除屏障");
+        }
+        RagDocumentEntity document = repository.findDocument(tenantId, requireText(documentId, "documentId"))
+                .filter(value -> knowledgeBaseId.equals(value.knowledgeBaseId()))
+                .orElseThrow(() -> new AppException("RAG_DOCUMENT_NOT_FOUND", "知识库文档不存在"));
+        return ensureDeletion(tenantId, knowledgeBaseId, document, document.revision());
+    }
+
+    private RagIngestJobEntity ensureDeletion(String tenantId, String knowledgeBaseId,
+                                               RagDocumentEntity document, long expectedRevision) {
+
+        String documentId = document.documentId();
         String taskKey = deletionTaskKey(tenantId, documentId);
         RagIngestJobEntity existing = repository.findIngestJobByIdempotencyKey(tenantId, taskKey).orElse(null);
         if (existing != null) return resumeOrReturn(tenantId, document, existing);

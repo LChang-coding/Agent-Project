@@ -78,6 +78,12 @@
         FOR UPDATE
     </select>
 
+    <select id="countNotDeletedByTenantAndKnowledgeBaseId" resultType="int">
+        SELECT COUNT(*) FROM rag_document_version
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND status &lt;&gt; 'deleted' AND deleted = 0
+    </select>
+
     <update id="updateByTenantAndRevision">
         UPDATE rag_document_version
         SET parser_version = #{version.parserVersion}, chunker_version = #{version.chunkerVersion},

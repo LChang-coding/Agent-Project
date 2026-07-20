@@ -12,6 +12,8 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagLease;
 import cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
+import cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao;
+import cn.bugstack.ai.infrastructure.dao.IRagChunkDao;
 import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao;
@@ -38,6 +40,8 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     private final IRagKnowledgeBaseDeleteTaskDao taskDao;
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
+    private final IRagDocumentVersionDao documentVersionDao;
+    private final IRagChunkDao chunkDao;
     private final IRagIngestTaskDao ingestTaskDao;
     private final IRagAgentBindingDao bindingDao;
     private final RagPersistenceMapper mapper;
@@ -145,11 +149,65 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
                 requireText(leaseOwner), fencingToken, toLocal(now));
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void completeClaimed(String tenantId, String taskId, long expectedTaskRevision,
+                                String leaseOwner, long fencingToken, java.time.Instant now) {
+        String trustedTenant = requireText(tenantId);
+        RagKnowledgeBaseDeleteTaskPO taskSnapshot = taskDao.queryByTenantAndTaskId(
+                trustedTenant, requireText(taskId));
+        if (taskSnapshot == null) {
+            throw new AppException("RAG_KB_DELETE_TASK_NOT_FOUND", "知识库删除任务不存在");
+        }
+        // 快照读只用于获取kbId；真正加锁始终按 KB -> task 的全局顺序。
+        RagKnowledgeBaseEntity knowledgeBase = mapper.toKnowledgeBase(
+                knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
+                        trustedTenant, taskSnapshot.getKnowledgeBaseId()));
+        if (knowledgeBase == null || knowledgeBase.status() != RagKnowledgeBaseStatus.DELETING) {
+            throw new AppException("RAG_KB_DELETE_STATE_MISMATCH", "知识库与删除任务状态不一致");
+        }
+        RagKnowledgeBaseDeleteTaskPO lockedTask = taskDao.queryByTenantAndTaskIdForUpdate(
+                trustedTenant, taskId);
+        if (lockedTask == null || !knowledgeBase.knowledgeBaseId().equals(lockedTask.getKnowledgeBaseId())) {
+            throw new AppException("RAG_KB_DELETE_CONCURRENT_UPDATE", "知识库删除任务已变化");
+        }
+        RagKnowledgeBaseDeleteTaskEntity current = toEntity(lockedTask);
+        if (!knowledgeBase.knowledgeBaseId().equals(current.knowledgeBaseId())
+                || current.revision() != expectedTaskRevision) {
+            throw new AppException("RAG_KB_DELETE_CONCURRENT_UPDATE", "知识库删除任务已变化");
+        }
+        current.assertClaim(requireText(leaseOwner), fencingToken, now);
+        RagKnowledgeBaseDeleteTaskEntity completed = current.complete(leaseOwner, fencingToken, now);
+        String kbId = knowledgeBase.knowledgeBaseId();
+        int documents = documentDao.countByTenantAndKnowledgeBaseId(trustedTenant, kbId);
+        boolean clean = documents == current.checkpoint().totalDocuments()
+                && documentDao.countNotDeletedByTenantAndKnowledgeBaseId(trustedTenant, kbId) == 0
+                && documentVersionDao.countNotDeletedByTenantAndKnowledgeBaseId(trustedTenant, kbId) == 0
+                && chunkDao.countAllByTenantAndKnowledgeBaseId(trustedTenant, kbId) == 0L
+                && ingestTaskDao.countActiveByTenantAndKnowledgeBaseId(trustedTenant, kbId) == 0
+                && ingestTaskDao.countDocumentsWithoutCompletedDelete(trustedTenant, kbId) == 0
+                && bindingDao.countActiveByTenantAndKnowledgeBaseId(trustedTenant, kbId) == 0;
+        if (!clean) {
+            throw new AppException("RAG_KB_DELETE_RESIDUALS", "知识库删除仍存在未清理完成的子项");
+        }
+        if (knowledgeBaseDao.updateByTenantAndRevision(trustedTenant,
+                mapper.toKnowledgeBasePo(knowledgeBase.deleted()), knowledgeBase.revision()) != 1) {
+            throw new AppException("RAG_KB_DELETE_CONCURRENT_UPDATE", "知识库删除收口发生并发变化");
+        }
+        RagKnowledgeBaseDeleteTaskPO completedPo = toPo(completed);
+        completedPo.setHeartbeatAt(null);
+        if (taskDao.updateClaimedByTenantFenceAndRevision(trustedTenant, completedPo,
+                expectedTaskRevision, leaseOwner, fencingToken, toLocal(now)) != 1) {
+            throw new AppException("RAG_KB_DELETE_CONCURRENT_UPDATE", "知识库删除任务收口发生并发变化");
+        }
+    }
+
     private RagKnowledgeBaseDeleteTaskPO toPo(RagKnowledgeBaseDeleteTaskEntity task) {
         try {
             return RagKnowledgeBaseDeleteTaskPO.builder()
                     .taskId(task.taskId()).taskKey(task.taskKey()).tenantId(task.tenantId())
-                    .knowledgeBaseId(task.knowledgeBaseId()).status(task.status().name().toLowerCase())
+                    .knowledgeBaseId(task.knowledgeBaseId()).requestedByUserId(task.requestedByUserId())
+                    .status(task.status().name().toLowerCase())
                     .checkpoint(objectMapper.writeValueAsString(task.checkpoint()))
                     .attemptCount(task.attemptCount()).maxAttempts(task.maxAttempts())
                     .nextRetryAt(toLocal(task.nextRetryAt()))
@@ -175,6 +233,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
             RagLease lease = po.getLeaseOwner() == null || po.getLeaseUntil() == null ? null
                     : new RagLease(po.getLeaseOwner(), po.getLeaseUntil().toInstant(ZoneOffset.UTC));
             return new RagKnowledgeBaseDeleteTaskEntity(po.getTenantId(), po.getKnowledgeBaseId(),
+                    po.getRequestedByUserId(),
                     po.getTaskId(), po.getTaskKey(), RagKnowledgeBaseDeleteStatus.valueOf(
                     po.getStatus().toUpperCase()), checkpoint, po.getAttemptCount(), po.getMaxAttempts(),
                     toInstant(po.getNextRetryAt()), lease, po.getFencingToken(), po.getRowVersion(),

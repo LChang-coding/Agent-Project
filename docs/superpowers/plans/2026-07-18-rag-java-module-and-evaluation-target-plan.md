@@ -2052,3 +2052,13 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 删除任务PO转换原先对RUNNING实体直接调用系统时间生成heartbeat，导致同一业务时刻不可重现。已改为转换器不制造时间，只有`updateClaimed`使用调用者Clock传入的`now`。
 - Java 17首次新代码全reactor `-DskipTests package`通过，总耗7.291秒；租约/WAITING/MyBatis定向11/11通过。随后按文件名生成全RAG测试清单，251/251通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗3.948秒。
 - 本阶段仍是协调器的安全执行底座；逐文档编排、最终事务收口、requester审计、Controller/前端和真实中间件E2E仍未完成，未对外宣告可删除。
+
+#### 知识库删除协调、零残留收口与受理服务实现结果
+
+- 新增独立`RagKnowledgeBaseDeleteDispatcher/Coordinator`，使用有界单线程队列与tenant+task进程内去重，不占用现有摄取Worker线程。每轮从MySQL原子领取父任务，在每个子操作前重新核验lease/fence并续租，只登记或观察一个文档DELETE后即释放为WAITING，不同步等待子Worker。
+- `RagDocumentDeletionService`抽出级联内部入口，仅在同租户知识库已是DELETING时可用；它继续复用确定性delete task key、全版本墓碑、Outbox、FAILED/DEAD保留checkpoint恢复和文档状态一致性，没有让协调器直接调Qdrant/MinIO或伪造子任务COMPLETED。
+- 新增最终收口事务：先快照获取kbId，再按全局`KB -> 父任务`顺序`FOR UPDATE`；验证父任务处于RUNNING/VERIFYING且owner/fence/revision/租约有效。随后事务内重算文档总数，并要求非DELETED文档=0、非DELETED版本=0、物理分块=0、活动摄取任务=0、没有COMPLETED DELETE子任务的文档=0、活动绑定=0，才同时把知识库和父任务关闭。任一残留返回`RAG_KB_DELETE_RESIDUALS`并整个回滚。
+- Qdrant/MinIO外部零残留目前使用“每个文档必须有COMPLETED DELETE子任务”的传递证明：现有子Worker只在逐版本Qdrant count=0、分块=0、MinIO原件/解析件均不存在后才COMPLETED。父任务还未增加独立Qdrant kb filter复核/MinIO prefix list，真实E2E需要验证该传递证明和历史异常数据。
+- 新增管理员受理/查询/失败恢复服务，受理前完成tenant owner/admin权限和expectedRevision检查；任务账本新增必填`requested_by_user_id`审计字段。为最终绑定残留统计增加可重入创建的tenant+kb+status索引，迁移脚本重复执行不会重复添加索引。
+- 首次最终收口干净打包失败于testCompile：仓储构造器新增版本/分块DAO后，旧测试装配未同步；补齐mock后定向9/9通过。协调器、内部屏障、受理权限和审计定向测试后18/18通过。最终Java 17全RAG回归259/259通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗4.045秒。
+- 当前仍未开放Controller和前端危险区，也未对真实MySQL执行新迁移或运行多文档MinIO/Qdrant故障恢复E2E；上述259项只证明代码、状态机、SQL合同和Mock编排，不冒充真实外部副作用验证。

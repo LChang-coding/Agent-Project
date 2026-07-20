@@ -8,6 +8,8 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.infrastructure.adapter.repository.RagKnowledgeBaseDeletionRepositoryImpl;
 import cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
+import cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao;
+import cn.bugstack.ai.infrastructure.dao.IRagChunkDao;
 import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao;
@@ -34,6 +36,8 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
     private IRagKnowledgeBaseDeleteTaskDao taskDao;
     private IRagKnowledgeBaseDao knowledgeBaseDao;
     private IRagDocumentDao documentDao;
+    private IRagDocumentVersionDao documentVersionDao;
+    private IRagChunkDao chunkDao;
     private IRagIngestTaskDao ingestTaskDao;
     private IRagAgentBindingDao bindingDao;
     private RagKnowledgeBaseDeletionRepositoryImpl repository;
@@ -43,11 +47,13 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
         taskDao = Mockito.mock(IRagKnowledgeBaseDeleteTaskDao.class);
         knowledgeBaseDao = Mockito.mock(IRagKnowledgeBaseDao.class);
         documentDao = Mockito.mock(IRagDocumentDao.class);
+        documentVersionDao = Mockito.mock(IRagDocumentVersionDao.class);
+        chunkDao = Mockito.mock(IRagChunkDao.class);
         ingestTaskDao = Mockito.mock(IRagIngestTaskDao.class);
         bindingDao = Mockito.mock(IRagAgentBindingDao.class);
         ObjectMapper objectMapper = new ObjectMapper();
         repository = new RagKnowledgeBaseDeletionRepositoryImpl(taskDao, knowledgeBaseDao,
-                documentDao, ingestTaskDao, bindingDao,
+                documentDao, documentVersionDao, chunkDao, ingestTaskDao, bindingDao,
                 new RagPersistenceMapper(new RagPersistenceCodec(objectMapper)), objectMapper);
         Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-a"))
                 .thenReturn(knowledgeBasePo());
@@ -140,10 +146,64 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
         Mockito.verify(taskDao, Mockito.never()).queryByTenantAndTaskId(Mockito.anyString(), Mockito.anyString());
     }
 
+    @Test
+    public void shouldCompleteKnowledgeBaseAndTaskOnlyAfterZeroResidualVerification() {
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        var task = verifyingTaskPo(now.plusSeconds(30));
+        Mockito.when(taskDao.queryByTenantAndTaskId("tenant-a", "task-a")).thenReturn(task);
+        Mockito.when(taskDao.queryByTenantAndTaskIdForUpdate("tenant-a", "task-a")).thenReturn(task);
+        RagKnowledgeBasePO deleting = knowledgeBasePo();
+        deleting.setStatus("deleting");
+        deleting.setRevision(8L);
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-a"))
+                .thenReturn(deleting);
+        Mockito.when(documentDao.countByTenantAndKnowledgeBaseId("tenant-a", "kb-a")).thenReturn(2);
+        Mockito.when(knowledgeBaseDao.updateByTenantAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(8L))).thenReturn(1);
+        Mockito.when(taskDao.updateClaimedByTenantFenceAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(4L),
+                Mockito.eq("worker-a"), Mockito.eq(1L), Mockito.any())).thenReturn(1);
+
+        repository.completeClaimed("tenant-a", "task-a", 4L, "worker-a", 1L, now);
+
+        Mockito.verify(knowledgeBaseDao).updateByTenantAndRevision(Mockito.eq("tenant-a"),
+                Mockito.argThat(value -> "deleted".equals(value.getStatus())), Mockito.eq(8L));
+        Mockito.verify(taskDao).updateClaimedByTenantFenceAndRevision(Mockito.eq("tenant-a"),
+                Mockito.argThat(value -> "completed".equals(value.getStatus())), Mockito.eq(4L),
+                Mockito.eq("worker-a"), Mockito.eq(1L), Mockito.any());
+    }
+
+    @Test
+    public void shouldRejectFinalizationWhenAnyDocumentResidualExists() {
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        var task = verifyingTaskPo(now.plusSeconds(30));
+        Mockito.when(taskDao.queryByTenantAndTaskId("tenant-a", "task-a")).thenReturn(task);
+        Mockito.when(taskDao.queryByTenantAndTaskIdForUpdate("tenant-a", "task-a")).thenReturn(task);
+        RagKnowledgeBasePO deleting = knowledgeBasePo();
+        deleting.setStatus("deleting");
+        deleting.setRevision(8L);
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-a"))
+                .thenReturn(deleting);
+        Mockito.when(documentDao.countByTenantAndKnowledgeBaseId("tenant-a", "kb-a")).thenReturn(2);
+        Mockito.when(documentDao.countNotDeletedByTenantAndKnowledgeBaseId("tenant-a", "kb-a"))
+                .thenReturn(1);
+
+        AppException error = Assert.assertThrows(AppException.class,
+                () -> repository.completeClaimed(
+                        "tenant-a", "task-a", 4L, "worker-a", 1L, now));
+
+        Assert.assertEquals("RAG_KB_DELETE_RESIDUALS", error.getCode());
+        Mockito.verify(knowledgeBaseDao, Mockito.never()).updateByTenantAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong());
+        Mockito.verify(taskDao, Mockito.never()).updateClaimedByTenantFenceAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.any());
+    }
+
     private RagKnowledgeBaseDeleteRegistration registration(int documentCount) {
         RagKnowledgeBaseEntity deleting = knowledgeBase().requestDeletion();
         RagKnowledgeBaseDeleteTaskEntity task = RagKnowledgeBaseDeleteTaskEntity.pending(
-                "tenant-a", "kb-a", "task-a", "a".repeat(64), documentCount, 5);
+                "tenant-a", "kb-a", "owner-a", "task-a", "a".repeat(64), documentCount, 5);
         return new RagKnowledgeBaseDeleteRegistration(deleting, 7L, task);
     }
 
@@ -164,11 +224,20 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
             Instant leaseUntil) {
         return cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO.builder()
                 .tenantId("tenant-a").knowledgeBaseId("kb-a").taskId("task-a")
-                .taskKey("a".repeat(64)).status("running")
+                .requestedByUserId("owner-a").taskKey("a".repeat(64)).status("running")
                 .checkpoint("{\"stage\":\"received\",\"totalDocuments\":2,"
                         + "\"completedDocuments\":0,\"currentDocumentId\":null}")
                 .attemptCount(1).maxAttempts(5).leaseOwner("worker-a")
                 .leaseUntil(LocalDateTime.ofInstant(leaseUntil, ZoneOffset.UTC))
                 .fencingToken(1L).rowVersion(1L).build();
+    }
+
+    private cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO verifyingTaskPo(
+            Instant leaseUntil) {
+        var task = runningTaskPo(leaseUntil);
+        task.setCheckpoint("{\"stage\":\"verifying\",\"totalDocuments\":2,"
+                + "\"completedDocuments\":2,\"currentDocumentId\":null}");
+        task.setRowVersion(4L);
+        return task;
     }
 }

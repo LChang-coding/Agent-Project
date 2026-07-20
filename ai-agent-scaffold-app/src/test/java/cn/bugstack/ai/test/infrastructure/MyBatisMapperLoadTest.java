@@ -106,6 +106,12 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao.claimDue"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao.heartbeatClaimed"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao.updateClaimedByTenantFenceAndRevision"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao.queryByTenantAndTaskIdForUpdate"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentDao.countNotDeletedByTenantAndKnowledgeBaseId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.countNotDeletedByTenantAndKnowledgeBaseId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagChunkDao.countAllByTenantAndKnowledgeBaseId"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.countDocumentsWithoutCompletedDelete"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao.countActiveByTenantAndKnowledgeBaseId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.markReadyByTenantAndRevision"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.queryByTenantAndProfileId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao.updateByTenantAndRevision"));
@@ -254,6 +260,23 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(kbDeleteHeartbeatSql.contains("lease_owner = ?"));
         Assert.assertTrue(kbDeleteHeartbeatSql.contains("fencing_token = ?"));
         Assert.assertTrue(kbDeleteHeartbeatSql.contains("lease_until > ?"));
+
+        parameters.put("knowledgeBaseId", "kb_1");
+        String kbDeleteLockSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao.queryByTenantAndTaskIdForUpdate",
+                parameters);
+        Assert.assertTrue(kbDeleteLockSql.contains("tenant_id = ?"));
+        Assert.assertTrue(kbDeleteLockSql.contains("task_id = ?"));
+        Assert.assertTrue(kbDeleteLockSql.contains("FOR UPDATE"));
+
+        String incompleteChildSql = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao.countDocumentsWithoutCompletedDelete",
+                parameters);
+        Assert.assertTrue(incompleteChildSql.contains("d.tenant_id = ?"));
+        Assert.assertTrue(incompleteChildSql.contains("d.kb_id = ?"));
+        Assert.assertTrue(incompleteChildSql.contains("t.operation = 'delete'"));
+        Assert.assertTrue(incompleteChildSql.contains("t.status = 'completed'"));
+        Assert.assertTrue(incompleteChildSql.contains("NOT EXISTS"));
     }
 
     private void assertScheduleReconcileScopes(Configuration configuration) {

@@ -32,4 +32,8 @@ public interface RagKnowledgeBaseDeletionRepository {
 
     int updateClaimed(String tenantId, RagKnowledgeBaseDeleteTaskEntity task,
                       long expectedRevision, String leaseOwner, long fencingToken, Instant now);
+
+    /** 在零残留验证后同一事务关闭知识库和删除任务。 */
+    void completeClaimed(String tenantId, String taskId, long expectedTaskRevision,
+                         String leaseOwner, long fencingToken, Instant now);
 }

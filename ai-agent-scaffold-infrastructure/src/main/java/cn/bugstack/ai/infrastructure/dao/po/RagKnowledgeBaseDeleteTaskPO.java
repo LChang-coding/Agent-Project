@@ -19,6 +19,7 @@ public class RagKnowledgeBaseDeleteTaskPO extends BasePO {
     private String taskKey;
     private String tenantId;
     private String knowledgeBaseId;
+    private String requestedByUserId;
     private String status;
     private String checkpoint;
     private Integer attemptCount;

@@ -12,6 +12,7 @@ import java.time.Instant;
 /** 可租约接管、可从文档检查点恢复的知识库级联删除任务。 */
 public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                                                String knowledgeBaseId,
+                                               String requestedByUserId,
                                                String taskId,
                                                String taskKey,
                                                RagKnowledgeBaseDeleteStatus status,
@@ -28,6 +29,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
     public RagKnowledgeBaseDeleteTaskEntity {
         requireText(tenantId, "租户ID");
         requireText(knowledgeBaseId, "知识库ID");
+        requireText(requestedByUserId, "删除请求人ID");
         requireText(taskId, "任务ID");
         requireText(taskKey, "任务幂等键");
         if (status == null || checkpoint == null || attemptCount < 0 || maxAttempts < 1
@@ -50,9 +52,11 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
     }
 
     public static RagKnowledgeBaseDeleteTaskEntity pending(String tenantId, String knowledgeBaseId,
+                                                            String requestedByUserId,
                                                             String taskId, String taskKey,
                                                             int totalDocuments, int maxAttempts) {
-        return new RagKnowledgeBaseDeleteTaskEntity(tenantId, knowledgeBaseId, taskId, taskKey,
+        return new RagKnowledgeBaseDeleteTaskEntity(tenantId, knowledgeBaseId, requestedByUserId,
+                taskId, taskKey,
                 RagKnowledgeBaseDeleteStatus.PENDING,
                 RagKnowledgeBaseDeleteCheckpoint.initial(totalDocuments), 0, maxAttempts,
                 null, null, 0, 0, null, null);
@@ -156,7 +160,8 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                                                    int targetAttempts, Instant targetRetryAt,
                                                    RagLease targetLease, long targetFence,
                                                    String targetErrorCode, String targetErrorMessage) {
-        return new RagKnowledgeBaseDeleteTaskEntity(tenantId, knowledgeBaseId, taskId, taskKey,
+        return new RagKnowledgeBaseDeleteTaskEntity(tenantId, knowledgeBaseId, requestedByUserId,
+                taskId, taskKey,
                 targetStatus, targetCheckpoint, targetAttempts, maxAttempts, targetRetryAt,
                 targetLease, targetFence, revision + 1, targetErrorCode, targetErrorMessage);
     }

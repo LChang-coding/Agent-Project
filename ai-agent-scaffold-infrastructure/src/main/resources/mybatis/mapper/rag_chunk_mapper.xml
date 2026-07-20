@@ -144,4 +144,9 @@
         SELECT COUNT(*) FROM rag_chunk
         WHERE tenant_id = #{tenantId} AND version_id = #{versionId}
     </select>
+
+    <select id="countAllByTenantAndKnowledgeBaseId" resultType="long">
+        SELECT COUNT(*) FROM rag_chunk
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+    </select>
 </mapper>

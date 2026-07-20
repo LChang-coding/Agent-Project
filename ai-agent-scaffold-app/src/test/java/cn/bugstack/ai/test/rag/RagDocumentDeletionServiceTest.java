@@ -80,6 +80,17 @@ public class RagDocumentDeletionServiceTest {
         Assert.assertEquals("RAG_ADMIN_REQUIRED", forbidden.getCode());
     }
 
+    @Test
+    public void shouldRejectInternalCascadeEntryWithoutDeletingBarrier() {
+        Fixture fixture = fixture();
+
+        AppException error = Assert.assertThrows(AppException.class,
+                () -> fixture.service.ensureCascadeDeletion("tenant-a", "kb-a", "doc-a"));
+
+        Assert.assertEquals("RAG_KB_DELETE_STATE_MISMATCH", error.getCode());
+        verify(fixture.registrationPort, never()).register(any(), any());
+    }
+
     private Fixture fixture() {
         IRagRepository repository = mock(IRagRepository.class);
         RagDocumentDeletionRegistrationPort registrationPort = mock(RagDocumentDeletionRegistrationPort.class);
