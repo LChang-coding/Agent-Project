@@ -33,6 +33,9 @@ public interface IRagDocumentDao {
     List<RagDocumentPO> queryListByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                             @Param("knowledgeBaseId") String knowledgeBaseId);
 
+    int countByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                        @Param("knowledgeBaseId") String knowledgeBaseId);
+
     /** 查询租户全部文档。 */
     List<RagDocumentPO> queryListByTenantId(@Param("tenantId") String tenantId);
 

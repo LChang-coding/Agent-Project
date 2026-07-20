@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao">
+
+    <resultMap id="TaskMap" type="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO">
+        <id column="id" property="id"/>
+        <result column="task_id" property="taskId"/>
+        <result column="task_key" property="taskKey"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="kb_id" property="knowledgeBaseId"/>
+        <result column="status" property="status"/>
+        <result column="checkpoint" property="checkpoint"/>
+        <result column="attempt_count" property="attemptCount"/>
+        <result column="max_attempts" property="maxAttempts"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+        <result column="lease_owner" property="leaseOwner"/>
+        <result column="lease_until" property="leaseUntil"/>
+        <result column="heartbeat_at" property="heartbeatAt"/>
+        <result column="fencing_token" property="fencingToken"/>
+        <result column="row_version" property="rowVersion"/>
+        <result column="error_code" property="errorCode"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="finished_at" property="finishedAt"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Columns">
+        id, task_id, task_key, tenant_id, kb_id, status, checkpoint, attempt_count,
+        max_attempts, next_retry_at, lease_owner, lease_until, heartbeat_at, fencing_token,
+        row_version, error_code, error_message, started_at, finished_at, create_time,
+        update_time, deleted
+    </sql>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_knowledge_base_delete_task (
+            task_id, task_key, tenant_id, kb_id, status, checkpoint, attempt_count,
+            max_attempts, next_retry_at, lease_owner, lease_until, heartbeat_at, fencing_token,
+            row_version, error_code, error_message, started_at, finished_at
+        ) VALUES (
+            #{taskId}, #{taskKey}, #{tenantId}, #{knowledgeBaseId}, #{status}, #{checkpoint},
+            #{attemptCount}, #{maxAttempts}, #{nextRetryAt}, #{leaseOwner}, #{leaseUntil},
+            #{heartbeatAt}, #{fencingToken}, #{rowVersion}, #{errorCode}, #{errorMessage},
+            #{startedAt}, #{finishedAt}
+        )
+    </insert>
+
+    <select id="queryByTenantAndTaskId" resultMap="TaskMap">
+        SELECT <include refid="Columns"/> FROM rag_knowledge_base_delete_task
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <select id="queryByTenantAndKnowledgeBaseId" resultMap="TaskMap">
+        SELECT <include refid="Columns"/> FROM rag_knowledge_base_delete_task
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0 LIMIT 1
+    </select>
+
+    <update id="updateByTenantAndRevision">
+        UPDATE rag_knowledge_base_delete_task
+        SET status = #{task.status}, checkpoint = #{task.checkpoint},
+            attempt_count = #{task.attemptCount}, max_attempts = #{task.maxAttempts},
+            next_retry_at = #{task.nextRetryAt}, lease_owner = #{task.leaseOwner},
+            lease_until = #{task.leaseUntil}, heartbeat_at = #{task.heartbeatAt},
+            fencing_token = #{task.fencingToken}, error_code = #{task.errorCode},
+            error_message = #{task.errorMessage},
+            started_at = CASE WHEN #{task.status} = 'running' THEN COALESCE(started_at, CURRENT_TIMESTAMP(3)) ELSE started_at END,
+            finished_at = CASE WHEN #{task.status} = 'pending' THEN NULL
+                WHEN #{task.status} IN ('completed', 'failed', 'dead') THEN COALESCE(finished_at, CURRENT_TIMESTAMP(3))
+                ELSE finished_at END,
+            row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
+          AND row_version = #{expectedRevision} AND deleted = 0
+    </update>
+</mapper>

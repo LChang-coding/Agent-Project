@@ -5,9 +5,11 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentDeletionRegistration;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao;
 import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
+import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagOutboxDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO;
 import cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO;
+import cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBasePO;
 import cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
@@ -30,6 +32,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
     private static final String EVENT_TYPE = "rag.ingest.requested.v1";
 
     private final IRagIngestTaskDao ingestTaskDao;
+    private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
     private final IRagDocumentVersionDao documentVersionDao;
     private final IRagOutboxDao outboxDao;
@@ -41,6 +44,12 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
     @Transactional(rollbackFor = Exception.class)
     public boolean register(String tenantId, RagDocumentDeletionRegistration registration) {
         requireScope(tenantId, registration);
+        RagKnowledgeBasePO lockedKnowledgeBase = knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
+                tenantId, registration.document().knowledgeBaseId());
+        if (lockedKnowledgeBase == null || !"active".equalsIgnoreCase(lockedKnowledgeBase.getStatus())
+                && !"deleting".equalsIgnoreCase(lockedKnowledgeBase.getStatus())) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "知识库当前不能登记文档删除");
+        }
         RagDocumentPO locked = documentDao.queryByTenantKnowledgeBaseAndDocumentIdForUpdate(tenantId,
                 registration.document().knowledgeBaseId(), registration.document().documentId());
         if (locked == null || "deleting".equalsIgnoreCase(locked.getStatus())

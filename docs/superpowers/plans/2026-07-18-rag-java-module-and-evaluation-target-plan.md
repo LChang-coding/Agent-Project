@@ -2025,3 +2025,13 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 修复上传服务只校验管理员而未校验知识库生命周期的问题：在文件类型校验和MinIO写入前要求知识库`status.searchable()`；DELETING/DELETED/DISABLED/INDEXING统一返回`RAG_KNOWLEDGE_BASE_UNAVAILABLE`，因此知识库删除事务一旦建立DELETING屏障，就不会再产生新的源对象、文档、版本、任务或Outbox。
 - 新增删除中知识库测试，验证错误码稳定且ObjectStorage `putFile`、删除补偿和注册事务均无调用；Java 17定向`RagDocumentUploadServiceTest`为5/5通过，0 failure/error/skipped，六模块BUILD SUCCESS。
 - 该屏障只是级联删除的必要前置，不代表知识库删除已开放；独立任务账本、聚合受理事务、协调器、最终一致性验证和前端危险区仍未实现。
+
+#### 知识库删除任务账本与聚合屏障基础实现结果
+
+- 新增独立`rag_knowledge_base_delete_task`账本表、DAO/MyBatis、领域仓储端口及实现；任务显式记录status、stage/document进度、attempt/maxAttempts、nextRetryAt、lease、fencingToken、rowVersion和脱敏错误。没有把知识库删除伪装成必须绑定document/version的`rag_ingest_task`。
+- 新增聚合受理短事务：先以tenant+kb `FOR UPDATE`锁定知识库，核验revision与ACTIVE/DISABLED状态，拒绝活动摄取任务，复核文档计数，插入唯一删除任务，CAS建立DELETING屏障并批量停用绑定；重复受理返回已有任务语义，不再修改聚合。
+- 统一锁顺序为“知识库 -> 文档/任务”：上传登记、绑定插入、单文档删除登记都在同一写事务中重新锁定并检查知识库，关闭服务层预检到DAO插入之间的TOCTOU窗口；知识库DELETING时仍允许已有文档进入DELETE清理。
+- 首次Java 17打包在testCompile失败：`RagDocumentDeletionRegistrationRepositoryTest`仍使用旧构造参数，缺少新增的`IRagKnowledgeBaseDao`。补全mock与ACTIVE知识库锁返回后，定向2/2通过。
+- 新增领域状态机、聚合受理和MyBatis租户/CAS范围测试。首次10项中9项通过、1项失败：错误摘要中“空格+换行”清洗为双空格，会影响聚合去重。将连续空格/CR/LF/TAB折叠为单空格后，原命令复测10/10通过，0 failure/error/skipped，六模块BUILD SUCCESS。
+- 提交前按测试文件名动态生成全部RAG门禁清单，并补充“锁定ACTIVE知识库后才可插入绑定/DELETING时DAO零调用”两项竞态测试。Java 17最终实测248/248通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗4.306秒。此数据是Mock/协议/领域/MyBatis合同回归，不冒充真实MySQL/Qdrant/MinIO级联删除E2E。
+- 本阶段仍没有开放HTTP删除接口：DAO尚未实现due-scan/原子claim/心跳续租，协调器尚未逐文档复用DELETE并执行Qdrant/MinIO/MySQL零残留验证。因此这是可审计基础闭环，不是“删除功能完成”。

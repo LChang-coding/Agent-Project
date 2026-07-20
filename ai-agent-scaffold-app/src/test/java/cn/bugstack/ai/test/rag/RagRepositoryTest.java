@@ -1,10 +1,12 @@
 package cn.bugstack.ai.test.rag;
 
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
+import cn.bugstack.ai.domain.rag.model.entity.RagAgentBindingEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestCheckpoint;
@@ -48,6 +50,7 @@ public class RagRepositoryTest {
     private IRagIngestTaskDao ingestTaskDao;
     private IRagDocumentDao documentDao;
     private IRagDocumentVersionDao documentVersionDao;
+    private IRagAgentBindingDao agentBindingDao;
     private RagPersistenceMapper mapper;
     private RagRepository repository;
 
@@ -57,11 +60,12 @@ public class RagRepositoryTest {
         ingestTaskDao = Mockito.mock(IRagIngestTaskDao.class);
         documentDao = Mockito.mock(IRagDocumentDao.class);
         documentVersionDao = Mockito.mock(IRagDocumentVersionDao.class);
+        agentBindingDao = Mockito.mock(IRagAgentBindingDao.class);
         RagPersistenceCodec codec = new RagPersistenceCodec(new ObjectMapper());
         mapper = new RagPersistenceMapper(codec);
         repository = new RagRepository(knowledgeBaseDao, documentDao,
                 documentVersionDao, ingestTaskDao, Mockito.mock(IRagChunkDao.class),
-                Mockito.mock(IRagRetrievalProfileDao.class), Mockito.mock(IRagAgentBindingDao.class),
+                Mockito.mock(IRagRetrievalProfileDao.class), agentBindingDao,
                 mapper, codec);
     }
 
@@ -105,6 +109,34 @@ public class RagRepositoryTest {
             Assert.assertTrue(expected.getMessage().contains("租户"));
         }
         Mockito.verifyNoInteractions(knowledgeBaseDao);
+    }
+
+    @Test
+    public void shouldLockActiveKnowledgeBaseBeforeBindingInsert() {
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1"))
+                .thenReturn(knowledgeBasePo());
+        Mockito.when(agentBindingDao.insert(Mockito.any())).thenReturn(1);
+
+        Assert.assertEquals(1, repository.insertBinding("tenant-a", binding()));
+
+        Mockito.verify(knowledgeBaseDao).queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1");
+        Mockito.verify(agentBindingDao).insert(Mockito.argThat(value ->
+                "tenant-a".equals(value.getTenantId()) && "kb-1".equals(value.getKnowledgeBaseId())));
+    }
+
+    @Test
+    public void shouldRejectBindingWhenKnowledgeBaseBecameDeleting() {
+        RagKnowledgeBasePO deleting = knowledgeBasePo();
+        deleting.setStatus("deleting");
+        Mockito.when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-1"))
+                .thenReturn(deleting);
+
+        cn.bugstack.ai.types.exception.AppException error = Assert.assertThrows(
+                cn.bugstack.ai.types.exception.AppException.class,
+                () -> repository.insertBinding("tenant-a", binding()));
+
+        Assert.assertEquals("RAG_KNOWLEDGE_BASE_UNAVAILABLE", error.getCode());
+        Mockito.verifyNoInteractions(agentBindingDao);
     }
 
     @Test
@@ -459,6 +491,11 @@ public class RagRepositoryTest {
                 .visibility("tenant_public").knowledgeBaseId("kb-1").knowledgeBaseName("企业知识库")
                 .embeddingDimension(768).collectionAlias("rag-kb-1").currentGeneration(1L)
                 .retrievalProfileId("profile-1").revision(0L).status("active").build();
+    }
+
+    private RagAgentBindingEntity binding() {
+        return new RagAgentBindingEntity("tenant-a", "binding-1", RagBindingTargetType.AGENT,
+                "agent-1", "kb-1", "profile-1", false, 1024, 0, 0L);
     }
 
     private RagIngestTaskPO runningTask(Instant leaseUntil) {

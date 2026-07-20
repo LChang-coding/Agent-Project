@@ -33,6 +33,9 @@ public interface IRagIngestTaskDao {
     RagIngestTaskPO queryActiveByTenantAndDocumentId(@Param("tenantId") String tenantId,
                                                      @Param("documentId") String documentId);
 
+    int countActiveByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                              @Param("knowledgeBaseId") String knowledgeBaseId);
+
     /** 全局扫描到期任务，只投影 tenantId + jobId。 */
     List<RagIngestCandidatePO> queryDueCandidates(@Param("now") LocalDateTime now,
                                                   @Param("limit") int limit);

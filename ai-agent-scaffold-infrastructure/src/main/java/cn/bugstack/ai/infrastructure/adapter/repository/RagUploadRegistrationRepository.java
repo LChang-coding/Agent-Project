@@ -5,10 +5,12 @@ import cn.bugstack.ai.domain.rag.model.entity.RagUploadRegistration;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao;
 import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
+import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagOutboxDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO;
 import cn.bugstack.ai.infrastructure.dao.po.RagDocumentVersionPO;
 import cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO;
+import cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBasePO;
 import cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
@@ -29,6 +31,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
 
     private static final String EVENT_TYPE = "rag.ingest.requested.v1";
     private final IRagIngestTaskDao ingestTaskDao;
+    private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
     private final IRagDocumentVersionDao documentVersionDao;
     private final IRagOutboxDao outboxDao;
@@ -40,6 +43,12 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
     @Transactional(rollbackFor = Exception.class)
     public boolean register(String tenantId, RagUploadRegistration registration) {
         requireScope(tenantId, registration);
+        RagKnowledgeBasePO locked = knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
+                tenantId, registration.document().knowledgeBaseId());
+        if (locked == null || !"active".equalsIgnoreCase(locked.getStatus())) {
+            throw new cn.bugstack.ai.types.exception.AppException(
+                    "RAG_KNOWLEDGE_BASE_UNAVAILABLE", "知识库当前不能登记新文档");
+        }
         RagIngestTaskPO task = mapper.toIngestTaskPo(registration.job());
         task.setDocumentVersion(registration.version().versionNumber());
         try {

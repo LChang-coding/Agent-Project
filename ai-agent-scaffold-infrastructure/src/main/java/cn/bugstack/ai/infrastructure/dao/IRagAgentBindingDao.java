@@ -26,4 +26,7 @@ public interface IRagAgentBindingDao {
     int softDeleteByTenantAndRevision(@Param("tenantId") String tenantId,
                                       @Param("bindingId") String bindingId,
                                       @Param("expectedRevision") long expectedRevision);
+
+    int disableByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
+                                          @Param("knowledgeBaseId") String knowledgeBaseId);
 }

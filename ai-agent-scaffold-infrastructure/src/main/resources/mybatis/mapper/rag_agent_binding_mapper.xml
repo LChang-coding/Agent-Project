@@ -63,4 +63,11 @@
         WHERE tenant_id = #{tenantId} AND binding_id = #{bindingId}
           AND revision = #{expectedRevision} AND status = 'active' AND deleted = 0
     </update>
+
+    <update id="disableByTenantAndKnowledgeBaseId">
+        UPDATE rag_agent_binding
+        SET status = 'disabled', deleted = 1, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND status = 'active' AND deleted = 0
+    </update>
 </mapper>

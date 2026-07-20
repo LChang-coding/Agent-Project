@@ -12,9 +12,11 @@ import cn.bugstack.ai.infrastructure.adapter.repository.RagDocumentDeletionRegis
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentDao;
 import cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao;
 import cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao;
+import cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao;
 import cn.bugstack.ai.infrastructure.dao.IRagOutboxDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagDocumentPO;
 import cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO;
+import cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBasePO;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceCodec;
 import cn.bugstack.ai.infrastructure.rag.persistence.RagPersistenceMapper;
@@ -71,9 +73,13 @@ public class RagDocumentDeletionRegistrationRepositoryTest {
 
     private Fixture fixture(boolean activeTask) {
         IRagIngestTaskDao taskDao = mock(IRagIngestTaskDao.class);
+        IRagKnowledgeBaseDao knowledgeBaseDao = mock(IRagKnowledgeBaseDao.class);
         IRagDocumentDao documentDao = mock(IRagDocumentDao.class);
         IRagDocumentVersionDao versionDao = mock(IRagDocumentVersionDao.class);
         IRagOutboxDao outboxDao = mock(IRagOutboxDao.class);
+        when(knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate("tenant-a", "kb-a"))
+                .thenReturn(RagKnowledgeBasePO.builder().tenantId("tenant-a")
+                        .knowledgeBaseId("kb-a").status("active").revision(3L).build());
         when(documentDao.queryByTenantKnowledgeBaseAndDocumentIdForUpdate("tenant-a", "kb-a", "doc-a"))
                 .thenReturn(RagDocumentPO.builder().tenantId("tenant-a").knowledgeBaseId("kb-a")
                         .documentId("doc-a").revision(7L).status("ready").build());
@@ -85,8 +91,9 @@ public class RagDocumentDeletionRegistrationRepositoryTest {
         when(outboxDao.insert(any())).thenReturn(1);
         ObjectMapper objectMapper = new ObjectMapper();
         RagPersistenceMapper mapper = new RagPersistenceMapper(new RagPersistenceCodec(objectMapper));
-        return new Fixture(taskDao, documentDao, versionDao, outboxDao,
-                new RagDocumentDeletionRegistrationRepository(taskDao, documentDao, versionDao, outboxDao,
+        return new Fixture(taskDao, knowledgeBaseDao, documentDao, versionDao, outboxDao,
+                new RagDocumentDeletionRegistrationRepository(taskDao, knowledgeBaseDao,
+                        documentDao, versionDao, outboxDao,
                         mapper, new RagProperties(), objectMapper));
     }
 
@@ -108,6 +115,7 @@ public class RagDocumentDeletionRegistrationRepositoryTest {
     }
 
     private record Fixture(IRagIngestTaskDao ingestTaskDao,
+                           IRagKnowledgeBaseDao knowledgeBaseDao,
                            IRagDocumentDao documentDao,
                            IRagDocumentVersionDao versionDao,
                            IRagOutboxDao outboxDao,

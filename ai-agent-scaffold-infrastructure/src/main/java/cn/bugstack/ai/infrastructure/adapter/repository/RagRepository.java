@@ -529,8 +529,15 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int insertBinding(String tenantId, RagAgentBindingEntity binding) {
         requireTenant(tenantId, binding == null ? null : binding.tenantId());
+        RagKnowledgeBaseEntity lockedKnowledgeBase = mapper.toKnowledgeBase(
+                knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
+                        tenantId, binding.knowledgeBaseId()));
+        if (lockedKnowledgeBase == null || !lockedKnowledgeBase.status().searchable()) {
+            throw new AppException("RAG_KNOWLEDGE_BASE_UNAVAILABLE", "知识库当前不可绑定");
+        }
         try {
             return agentBindingDao.insert(mapper.toAgentBindingPo(binding));
         } catch (DuplicateKeyException exception) {

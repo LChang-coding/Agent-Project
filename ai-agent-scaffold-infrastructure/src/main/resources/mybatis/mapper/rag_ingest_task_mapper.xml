@@ -86,6 +86,12 @@
         ORDER BY id DESC LIMIT 1
     </select>
 
+    <select id="countActiveByTenantAndKnowledgeBaseId" resultType="int">
+        SELECT COUNT(*) FROM rag_ingest_task
+        WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
+          AND status IN ('pending', 'running', 'retrying', 'cancel_requested') AND deleted = 0
+    </select>
+
     <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO">
         SELECT tenant_id AS tenantId, task_id AS jobId
         FROM rag_ingest_task
