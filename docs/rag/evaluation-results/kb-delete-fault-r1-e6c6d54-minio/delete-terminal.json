@@ -1,0 +1,16 @@
+{
+  "attemptCount": 1,
+  "completedDocuments": 2,
+  "currentDocumentId": null,
+  "errorCode": null,
+  "errorMessage": null,
+  "knowledgeBaseId": "kb_7f515b2985e54c828dda3297218b8647",
+  "maxAttempts": 5,
+  "nextRetryAt": null,
+  "requestedByUserId": "user_ac1f853a-e59b-48f9-9216-bf87b0abb9d1",
+  "revision": 60,
+  "stage": "completed",
+  "status": "completed",
+  "taskId": "ragkbdel_c4404dcaa1114f1ebcb3e465733e70ef",
+  "totalDocuments": 2
+}

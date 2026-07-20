@@ -83,6 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--app-jar", type=Path, required=True)
     parser.add_argument("--files", type=Path, nargs=2, required=True)
     parser.add_argument("--timeout-seconds", type=int, default=900)
+    parser.add_argument("--pause-before-delete-file", type=Path)
     return parser.parse_args()
 
 
@@ -131,6 +132,7 @@ def main() -> None:
         "baseUrl": args.base_url,
         "codeRevision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
         "appJarSha256": sha256(args.app_jar),
+        "harnessSha256": sha256(Path(__file__).resolve()),
         "workerThreads": 1,
         "uploadThreads": 1,
         "pollThreads": 1,
@@ -209,6 +211,18 @@ def main() -> None:
             "profileId": profile["data"]["profileId"], "required": True, "maxTokens": 2048, "priority": 100,
         })
         dump(out / "binding.json", {"response": binding, "transport": transport})
+
+        if args.pause_before_delete_file:
+            signal = args.pause_before_delete_file.resolve()
+            continuation = Path(str(signal) + ".continue")
+            dump(signal, {"readyAt": now(), "knowledgeBaseId": kb_id,
+                          "documentIds": [item["response"]["data"]["documentId"] for item in uploads]})
+            wait_started = time.monotonic()
+            while not continuation.exists():
+                if time.monotonic() - wait_started >= args.timeout_seconds:
+                    raise RuntimeError("timed out waiting for before-delete continuation signal")
+                time.sleep(0.2)
+            manifest["beforeDeleteResumedAt"] = now()
 
         refreshed_bases, refreshed_transport = api.call("GET", "/v1/rag/knowledge-bases")
         refreshed_kb = next((item for item in refreshed_bases["data"]

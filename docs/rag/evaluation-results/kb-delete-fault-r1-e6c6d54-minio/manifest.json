@@ -1,0 +1,58 @@
+{
+  "appJarSha256": "1ee5c4c28df07e41efc293e7e79366ba41d22444d02a5ba688cf0481b6bf1d0f",
+  "baseUrl": "http://127.0.0.1:8092/api",
+  "beforeDeleteResumedAt": "2026-07-20T00:59:07.203589Z",
+  "bindingId": "binding_1811d0634c1a46cfaca47b22ba65f75b",
+  "cleanup": "keep synthetic tenant and tombstones for audit",
+  "codeRevision": "e6c6d54e7a9d10227c89c24cb982abe0e805c6cb",
+  "deleteTaskId": "ragkbdel_c4404dcaa1114f1ebcb3e465733e70ef",
+  "documentIds": [
+    "doc_eca9a996b4804bbb9abe3cd59b541ced",
+    "doc_a4c5644763954cf18fcefe0e189a5f49"
+  ],
+  "finishedAt": "2026-07-20T01:01:17.968557Z",
+  "harnessSha256": "48534d909ffc438640b73971be9600a4c9031def9442ed5403b7218f194429a8",
+  "inputFiles": [
+    {
+      "bytes": 1233,
+      "name": "format-fidelity.md",
+      "sha256": "3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898"
+    },
+    {
+      "bytes": 1434,
+      "name": "README.md",
+      "sha256": "b9fbf519145494f13e518c8c2df9f3fca22335ee62dd1084554efcbaeae34bd6"
+    }
+  ],
+  "knowledgeBaseId": "kb_7f515b2985e54c828dda3297218b8647",
+  "pollThreads": 1,
+  "runId": "kb-delete-fault-r1-e6c6d54-minio",
+  "schemaVersion": 1,
+  "startedAt": "2026-07-20T00:58:25.767834Z",
+  "status": "completed",
+  "syntheticUsername": "rag_kb_delete_1784509105-612f3c",
+  "terminalDeleteTask": {
+    "attemptCount": 1,
+    "completedDocuments": 2,
+    "currentDocumentId": null,
+    "errorCode": null,
+    "errorMessage": null,
+    "knowledgeBaseId": "kb_7f515b2985e54c828dda3297218b8647",
+    "maxAttempts": 5,
+    "nextRetryAt": null,
+    "requestedByUserId": "user_ac1f853a-e59b-48f9-9216-bf87b0abb9d1",
+    "revision": 60,
+    "stage": "completed",
+    "status": "completed",
+    "taskId": "ragkbdel_c4404dcaa1114f1ebcb3e465733e70ef",
+    "totalDocuments": 2
+  },
+  "timeoutSeconds": 600,
+  "uploadThreads": 1,
+  "versionIds": [
+    "ragver_0a53afa0efbc4278ac96fdbecbd6a059",
+    "ragver_7da10b7bc01e4b96bc6e9c11eade2fd8"
+  ],
+  "workerThreads": 1,
+  "workflowId": "wf_84912b07-dae7-4918-8902-51d31aa9b836"
+}

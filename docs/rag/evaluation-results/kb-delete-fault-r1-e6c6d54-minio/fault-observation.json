@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-20T00:59:53.630000Z",
+  "captureMethod": "read-only MySQL snapshot while the MinIO SSH tunnel was intentionally unavailable",
+  "knowledgeBaseId": "kb_7f515b2985e54c828dda3297218b8647",
+  "parentTask": {
+    "taskId": "ragkbdel_c4404dcaa1114f1ebcb3e465733e70ef",
+    "status": "waiting",
+    "stage": "DELETING_DOCUMENTS",
+    "attemptCount": 1,
+    "errorCode": null
+  },
+  "failedChild": {
+    "taskId": "ragtask_564fd596028f457ea7f5000196e73153",
+    "documentId": "doc_a4c5644763954cf18fcefe0e189a5f49",
+    "operation": "delete",
+    "status": "retrying",
+    "stage": "deleting_source",
+    "attemptCount": 2,
+    "maxAttempts": 3,
+    "errorCode": "OBJECT_STORAGE_DELETE_FAILED",
+    "errorMessage": "文档对象存储访问阶段失败",
+    "checkpointStage": "deleting_source"
+  },
+  "interpretation": "The object-storage failure remained at the source-deletion checkpoint. The parent moved to WAITING and did not consume another parent attempt. After the tunnel was restored, the existing coordinator resumed automatically and the run reached COMPLETED without a retry API call."
+}

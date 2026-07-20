@@ -2109,3 +2109,22 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 权威残留结果：知识库status=deleted；父任务completed/2/2；文档墓碑2且非deleted状态0；非deleted版本0；物理chunk 0；活动摄取任务0；完成DELETE子任务2；活动binding 0且disabled binding 1；两个version的Qdrant exact point count均0；两个version的MinIO source/parsed对象均不存在。该结论来自真实MySQL/Qdrant/MinIO只读复核，不是父任务状态推断。
 - 真实复核同时发现列表SQL只看`deleted=0`，会把`status=deleted`审计墓碑重新返回前端。已在两个知识库列表查询增加`status <> 'deleted'`，并新增Mapper合同测试；定向1/1、按全部源码路径RAG文件名生成的最终门禁275/275通过，0 failure/error/skipped，六模块BUILD SUCCESS、Maven总耗4.248秒。
 - 当前成功链路尚未覆盖外部服务中途不可达后FAILED/DEAD手工恢复；下一步单独故障注入，不覆盖r1/r2/r3证据。
+
+#### 知识库删除外部故障自动恢复结果
+
+- 故障run使用提交`e6c6d54e7a9d10227c89c24cb982abe0e805c6cb`重建JAR，SHA-256=`1ee5c4c28df07e41efc293e7e79366ba41d22444d02a5ba688cf0481b6bf1d0f`；测试脚本增加只用于E2E的删除前暂停闸门，并把脚本自身SHA-256写入manifest，避免未提交harness被误认为未知版本。
+- 新建tenant、知识库、真实published Workflow及binding，两份Markdown均通过HTTP上传并到READY。脚本在受理删除前写出暂停信号；测试方只中断本地`127.0.0.1:19000 -> CentOS-Server MinIO:9000` SSH转发，确认本地端口关闭后才释放闸门，没有停止远端MinIO、没有修改远端配置，也没有上传Java项目。
+- `2026-07-20T00:59:53.630000Z`只读MySQL快照真实捕获子DELETE `ragtask_564fd596028f457ea7f5000196e73153`为`retrying/deleting_source`、attempt=2/3、`OBJECT_STORAGE_DELETE_FAILED`，checkpoint仍为`deleting_source`；父任务为`waiting/DELETING_DOCUMENTS`、attempt=1且无父错误。该瞬时证据已固化为`fault-observation.json`，不是由终态倒推。
+- 恢复同一SSH转发后没有调用任何retry API，现有Dispatcher/协调器从数据库账本自动推进。父任务从删除受理后的首样本`2026-07-20T00:59:08.438057Z`到`2026-07-20T01:01:17.967309Z`约129.53秒，共107个轮询样本，最终completed/2/2、attempt=1、无错误；长耗时主要由故意断链窗口及自动退避组成，不代表健康链路延迟。
+- 终态残留采集`residual-evidence.json`在`2026-07-20T01:02:59.538520Z`执行，`passed=true`：非deleted文档/版本、物理chunk、活动摄取、活动binding均0；DELETE子任务2个completed；两版本Qdrant exact point count均0；MinIO source/parsed均不存在；知识库及父任务均完成。这里验证的是“自动退避恢复”，不是FAILED/DEAD后的管理员手工恢复，后者仍不得写成已测。
+- 终态数据库中故障子任务已为completed且attempt字段为1，而瞬时快照记录attempt=2；这说明当前恢复路径会重置attempt计数。该字段不能作为累计故障次数使用，最终报告需列为可观测性缺口，建议新增独立累计attempt/事件表或保持attempt单调。
+- 验证时`py_compile`和权威残留JSON断言通过。首次Maven命令在多模块reactor中因无测试模块未设置正确的Surefire参数而以“no tests matching pattern”退出，没有测试失败；纠正为动态生成58个RAG/MinIO测试类并设置`-Dsurefire.failIfNoSpecifiedTests=false`后，实际执行230项、0 failure、0 error、0 skipped。该切片只修改Python E2E harness与证据，Java回归未出现失败。
+
+#### 最终测评报告与失败因果链收口计划（执行前）
+
+1. 只读盘点现有质量、稳定性、格式、生命周期和故障注入run；逐个校验manifest、样本数、原始JSONL、输入与脚本hash。任何缺少原始记录、warmup混入或运行中断的数据单独标无效，不进入主指标。
+2. 审计报告生成器的指标口径：分别输出Dense、Sparse、Hybrid RRF、Hybrid RRF+Rerank的Recall@K、MRR@K、nDCG@K、命中率/空结果率/降级率及端到端和各stage延迟分位；只允许由原始记录重算，不手填结论。
+3. 以同问题配对差值呈现组件前后变化：Dense→Hybrid归因Sparse+RRF，Hybrid→Rerank归因rerank；同时列改善、持平、退化的问题数和置信边界/样本限制，禁止把相关性写成已证明的普遍因果。
+4. 对每个代表性召回失败显式给出问题、数据集gold证据或gold文档ID、项目内原文文件链接、实际Top文档及其分数/排序、首次失效阶段、后续阶段是否可恢复、反事实对照和失败原因。SciFact没有自然语言gold answer时明确写“数据集未提供”，不得生成答案。
+5. 将接口/摄取/解析/Embedding/Qdrant/稀疏检索/融合/重排/数据库回源/删除恢复的实测瓶颈分层；每项给证据、直接原因、影响范围、可执行优化、验证方法和优先级，区分环境瞬态故障、算法质量退化与代码缺口。
+6. 更新机器可读总账和人类报告后，在两个全新目录确定性重建并逐字节比较；执行报告测试、全部RAG回归、前端生产构建和全模块打包。首次失败与修复继续追加，完成一个重大闭环后中文本地提交。
