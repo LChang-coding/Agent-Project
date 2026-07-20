@@ -138,7 +138,8 @@ public class AgentServiceController implements IAgentService {
 
             RunStreamEntity<?> runStream;
             List<String> messages;
-            if (hasWorkflow(requestDTO)) {
+            boolean workflowRequest = hasWorkflow(requestDTO);
+            if (workflowRequest) {
                 RunStreamEntity<String> workflowRun = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
                         userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
@@ -154,7 +155,7 @@ public class AgentServiceController implements IAgentService {
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setSessionId(sessionId);
-            responseDTO.setContent(String.join("\n", messages));
+            responseDTO.setContent(workflowRequest ? String.join("\n", messages) : mergeAgentContents(messages));
             responseDTO.setRunId(runStream.getRun().getRunId());
             responseDTO.setRunStatus("completed");
             responseDTO.setContextRevision(runStream.getRun().getCurrentContextRevision());
@@ -392,6 +393,21 @@ public class AgentServiceController implements IAgentService {
         }
         lastContentRef.set(lastContent == null ? currentContent : lastContent + currentContent);
         return currentContent;
+    }
+
+    /**
+     * 合并 Agent 的累计流事件；参数是每个事件的完整内容；返回不重复的最终文本。
+     */
+    private String mergeAgentContents(List<String> contents) {
+        if (contents == null || contents.isEmpty()) {
+            return "";
+        }
+        AtomicReference<String> lastContentRef = new AtomicReference<>("");
+        StringBuilder merged = new StringBuilder();
+        for (String content : contents) {
+            merged.append(streamDelta(lastContentRef, content));
+        }
+        return merged.toString();
     }
 
     private String trustedUserId(String requestUserId) {

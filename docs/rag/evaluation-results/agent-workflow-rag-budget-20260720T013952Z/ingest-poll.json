@@ -1,0 +1,242 @@
+[
+  {
+    "observedAt": "2026-07-20T01:39:56.863993Z",
+    "task": {
+      "attemptCount": 0,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 0,
+      "stage": "received",
+      "status": "pending",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 0,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 194,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:39:58.070364Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 1,
+      "stage": "received",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 0,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 202,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:39:59.262179Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 2,
+      "stage": "parsing",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 0,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 185,
+      "httpStatus": 200,
+      "responseBytes": 431
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:00.584200Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 4,
+      "stage": "embedding",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 317,
+      "httpStatus": 200,
+      "responseBytes": 433
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:01.783329Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 197,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:03.026549Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 240,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:04.162029Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 129,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:05.355283Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 6,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 186,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:06.600920Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 7,
+      "stage": "verifying",
+      "status": "running",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 243,
+      "httpStatus": 200,
+      "responseBytes": 433
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:40:07.726861Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_40900b6fd8b244f59442c6d2eecc590f",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 8,
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "ragtask_4b1d4388ce3e45dc940095dee1978094",
+      "totalChunks": 3,
+      "versionId": "ragver_13e30b25029a428a841897cec2cbc13a"
+    },
+    "transport": {
+      "elapsedMs": 119,
+      "httpStatus": 200,
+      "responseBytes": 435
+    }
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "denied": true,
+  "response": {
+    "code": "SESSION_NOT_FOUND",
+    "data": null,
+    "info": "会话不存在"
+  },
+  "syntheticUsername": "rag_aw_1784512034-3198dbx",
+  "transport": {
+    "elapsedMs": 66,
+    "httpStatus": 200,
+    "responseBytes": 65
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "currentGeneration": 0,
+      "description": "real LLM Agent/Workflow citation fixture",
+      "embeddingDimension": 768,
+      "knowledgeBaseId": "kb_3489ffffbf014159bb2e4408e3fdb851",
+      "name": "rag_aw_1784511593-d41c74",
+      "revision": 0,
+      "status": "active",
+      "visibility": "tenant"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 390,
+    "httpStatus": 200,
+    "responseBytes": 287
+  }
+}

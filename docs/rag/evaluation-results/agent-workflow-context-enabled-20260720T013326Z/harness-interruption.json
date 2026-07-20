@@ -1,0 +1,6 @@
+{
+  "status": "interrupted",
+  "reason": "Cancellation API returned cancelled but the Workflow SSE remained open; interrupted after preserving Agent/Workflow results",
+  "interruptedBy": "operator_keyboard_interrupt",
+  "usableEvidence": "agent-workflow-results and cross-target setup are usable; excluded from final pass metrics"
+}

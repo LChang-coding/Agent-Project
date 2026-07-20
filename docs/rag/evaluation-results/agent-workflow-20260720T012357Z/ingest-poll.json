@@ -1,0 +1,266 @@
+[
+  {
+    "observedAt": "2026-07-20T01:24:02.660348Z",
+    "task": {
+      "attemptCount": 0,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 0,
+      "stage": "received",
+      "status": "pending",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 0,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 107,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:04.130358Z",
+    "task": {
+      "attemptCount": 0,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 0,
+      "stage": "received",
+      "status": "pending",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 0,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 459,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:05.402385Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 1,
+      "stage": "received",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 0,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 264,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:06.634620Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 2,
+      "stage": "parsing",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 0,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 228,
+      "httpStatus": 200,
+      "responseBytes": 431
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:07.930017Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 2,
+      "stage": "parsing",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 0,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 294,
+      "httpStatus": 200,
+      "responseBytes": 431
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:09.120633Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 4,
+      "stage": "embedding",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 180,
+      "httpStatus": 200,
+      "responseBytes": 433
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:10.318092Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 187,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:11.445862Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 118,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:12.680579Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 6,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 233,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:13.950158Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 7,
+      "stage": "verifying",
+      "status": "running",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 264,
+      "httpStatus": 200,
+      "responseBytes": 433
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:24:15.122166Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_be8eb535343c4d21b0a38bc0b615815b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_7d51f2cd7c4e488cbfb0282d0c1967e5",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 8,
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "ragtask_6ed262cf62ea47b5ac4b661e978434c6",
+      "totalChunks": 3,
+      "versionId": "ragver_4e5fb7c2fda94b22a587cc29a999c3bc"
+    },
+    "transport": {
+      "elapsedMs": 161,
+      "httpStatus": 200,
+      "responseBytes": 435
+    }
+  }
+]

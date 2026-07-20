@@ -1,0 +1,14 @@
+{
+  "agentId": "100003",
+  "appJarSha256": "bd6dcc33712fc2297f78b5559fc387edeba21673007b498e796afad715d0aa8f",
+  "baseUrl": "http://127.0.0.1:8093/api",
+  "codeRevision": "b7a15aff4ebf9fca2161a56f87cd2323504ede60",
+  "documentSha256": "f2c2325836058b5eb32df4a5edc8bcd5112f8ca45c7d977d0a55bba60dd5e80b",
+  "judge": "deterministic exact-term/citation-set/envelope checks; no LLM-as-judge",
+  "model": "deepseek-v4-flash",
+  "schemaVersion": 1,
+  "specSha256": "882d888a6b971748e531404b0a77614ce1e00731fc3d5dae33df8aaed630976b",
+  "startedAt": "2026-07-20T01:33:26.432460Z",
+  "status": "running",
+  "threads": 1
+}

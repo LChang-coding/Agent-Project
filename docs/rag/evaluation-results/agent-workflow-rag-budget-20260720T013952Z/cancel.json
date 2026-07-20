@@ -1,0 +1,63 @@
+{
+  "cancelResponse": {
+    "code": "0000",
+    "data": {
+      "contextRevision": 1,
+      "runId": "run_e2e_1663d414ed9bd6f43c4e7fd8",
+      "sessionId": "39ae998b-bba9-4051-83f1-c35426ff9b16",
+      "status": "cancelled",
+      "successorRunId": null
+    },
+    "info": "成功"
+  },
+  "cancelTransport": {
+    "elapsedMs": 2013,
+    "httpStatus": 200,
+    "responseBytes": 197
+  },
+  "checks": {
+    "cancelAccepted": true,
+    "cancelledStatus": true,
+    "noCitationTerminalEvent": true,
+    "noCompletedAssistantForCancelledRun": true,
+    "streamTerminatedWithin30Seconds": false
+  },
+  "events": [
+    {
+      "data": {
+        "type": "ConnectionError"
+      },
+      "event": "harness_transport_timeout",
+      "observedAt": "2026-07-20T01:43:58.279431Z"
+    }
+  ],
+  "history": {
+    "code": "0000",
+    "data": {
+      "hasMore": false,
+      "items": [],
+      "nextBeforeSequence": null,
+      "sessionId": "39ae998b-bba9-4051-83f1-c35426ff9b16"
+    },
+    "info": "成功"
+  },
+  "historyTransport": {
+    "elapsedMs": 199,
+    "httpStatus": 200,
+    "responseBytes": 144
+  },
+  "requestedRunId": "run_e2e_1663d414ed9bd6f43c4e7fd8",
+  "runEvent": {
+    "contextRevision": 0,
+    "runId": "run_e2e_1663d414ed9bd6f43c4e7fd8",
+    "status": "running"
+  },
+  "runEventObserved": true,
+  "sessionId": "39ae998b-bba9-4051-83f1-c35426ff9b16",
+  "streamDidNotTerminateAfterCancel": true,
+  "streamTransport": {
+    "elapsedMs": null,
+    "httpStatus": 200,
+    "transportError": "ConnectionError"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "status": "interrupted",
+  "reason": "Agent SSE did not terminate within the operator observation window; the original manifest remains unchanged as raw evidence",
+  "interruptedBy": "operator_keyboard_interrupt",
+  "usableEvidence": "setup and partial-results only; excluded from final pass metrics"
+}

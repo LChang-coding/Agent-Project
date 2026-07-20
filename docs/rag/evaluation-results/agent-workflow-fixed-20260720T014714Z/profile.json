@@ -1,0 +1,31 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicateEnabled": true,
+      "denseTopK": 20,
+      "denseWeight": 1,
+      "finalTopK": 5,
+      "fusionStrategy": "rrf",
+      "fusionTopK": 10,
+      "maxContextTokens": 2048,
+      "mode": "hybrid",
+      "name": "rag_aw_1784512034-3198db",
+      "neighborWindow": 0,
+      "profileId": "profile_2050c593586347918694394d43db9931",
+      "queryRewriteEnabled": false,
+      "rerankEnabled": false,
+      "rerankTopK": 10,
+      "revision": 0,
+      "scoreThreshold": null,
+      "sparseTopK": 20,
+      "sparseWeight": 1
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 296,
+    "httpStatus": 200,
+    "responseBytes": 432
+  }
+}

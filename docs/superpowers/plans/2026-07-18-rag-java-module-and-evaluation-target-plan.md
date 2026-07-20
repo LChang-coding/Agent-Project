@@ -2140,3 +2140,22 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 两个新的空输出目录分别运行生成器，项目最终目录与第二次输出`diff -qr`无差异，证明确定性重建。最终人类报告SHA-256=`6cdd6d4ac6953fdda6d3d90f69c9e110e636fa36eba83ed5e82c20247af260a0`，机器总账SHA-256=`e7627786d83de67c01e13a277d1cf0314e73f5234d9dff67daa47ff730c60216`；`py_compile`和总账关键断言通过。
 - Java 17按所有test源码中的`/rag/|Rag|Minio`生成63个测试类清单，真实执行275/275，0 failure/error/skipped。全八模块`mvn -DskipTests package`通过。前端`npm run build`通过，`vue-tsc --noEmit`无类型错误、Vite 1916 modules transformed、生产构建947ms。
 - 当前仍未测有自然语言gold answer的最终Agent回答正确率/Faithfulness/幻觉率、无答案黑盒拒答率、全300问题算子级轨迹、Reranker semaphore/HTTP排队/模型计算独立分段、fusion threshold与TopK独立消融以及任何优化实施后的新结果；报告全部列为未测，没有用检索指标替代答案指标。
+
+#### Agent/Workflow真实LLM引用与取消故障黑盒计划（执行前）
+
+1. 以当前提交`b7a15af`和当前工作树为唯一代码基线，只读核对Agent、Workflow、Session、Run、SSE、引用回源、取消API以及模型配置的真实HTTP契约；确认可用模型、目标ID和隔离启动参数，不复用8091用户进程，不向服务器上传Java项目。
+2. 新增或复用一个项目内E2E harness，使用全新tenant/owner、真实知识库/READY文档、published Agent与至少一个published Workflow；所有对象均通过正式HTTP创建，只有无法由公开API准备且已在计划中明示的基准数据才允许受控SQL，凭据只放临时环境且输出脱敏。
+3. 固定至少三类问题：可回答且要求引用、文档无答案应拒答、诱导伪造citation。对Agent和Workflow分别验证非流式与SSE：最终正文、唯一`citation_validation`终态、会话历史metadata、used/invalid IDs和引用回源必须一致；Gold事实来自项目固化文档，judge以确定性字符串/引用授权为主，不用主观LLM打分替代。
+4. 验证权限负向路径：另一用户、另一tenant、非used citation、已失效版本或私有库非owner必须在正文回源前拒绝；同时证明普通无关Workflow分支的citation不会进入terminal allowlist。每个拒绝保存HTTP状态、业务码且检查没有跨范围正文。
+5. 验证取消副作用屏障：在模型调用进行中发出取消，保存取消请求、SSE终态、run/message数据库状态和模型/工具调用计数；取消后不得持久化部分assistant消息为COMPLETED或暴露有效引用。如果现有LLM响应过快，使用项目支持的可控延迟测试模型/HTTP stub，但必须走真实Spring、MySQL和SSE，且明确不把stub延迟当生产性能。
+6. 在模型调用/引用验证或下游连接故障点执行一次可恢复失败，确认run终态、证据仓清理、会话历史不污染及重试/新run隔离；任何无法安全注入的远端故障写“未测”，不停止共享中间件。
+7. 证据输出到新的`docs/rag/evaluation-results/agent-workflow-*`目录，包含manifest、commit/JAR/input SHA、端点、线程/超时、脱敏请求响应、SSE事件、数据库只读快照和判定JSON。先跑定向Java测试，再跑RAG/Agent/Workflow/Run相关精确回归、前端构建和全reactor打包；执行结果、首次失败和遗留边界追加本节后中文本地提交。
+
+#### Agent/Workflow真实LLM引用与取消故障黑盒执行结果
+
+- 新增固定Markdown、题目规格和`run-rag-agent-workflow-e2e.py`，走真实注册、上传/摄取、Workflow创建发布、Agent/Workflow binding、非流式、SSE、历史、回源、跨租户和取消入口；产物不保存密码或JWT。
+- 首轮`agent-workflow-20260720T012357Z`全部`NO_RAG`：启动脚本命令行固定Context关闭，已改为环境变量可控。第二轮开启Context后仍`injectedTokens:0/NO_RAG`：`rag-tokens`默认0在检索前跳过contributor。配置128000窗口和8192 RAG Token后转为`VALID`；两轮失败基线均保留。
+- 最终`agent-workflow-fixed-20260720T014714Z`真实完成。Workflow可回答/无答案/伪引用/SSE分别10331/7401/8986/8245ms；Agent分别54555/23279/47440/50447ms。两入口均正确回答`INDIGO-FALCON-7319`且`VALID`，无答案精确`NOT_IN_DOCUMENT`，伪引用为`INVALID_CITATIONS`，SSE各只有一个引用终态；历史一致、回源正文命中、跨租户以`SESSION_NOT_FOUND`拒绝。
+- Agent非流式修复前会换行拼接所有累计Event快照，造成重复放大和精确拒答失败。Controller已改为只合并delta；Java 17定向3/3通过，重打JAR后Agent黑盒拒答精确通过。首次误用Java 25时既有Mockito测试因Byte Buddy只支持到Java 24而1 error，转Temurin 17后通过，未记为业务回归失败。
+- 取消只部分闭环：API为`cancelled`，历史无该run的assistant message，无citation终态；但SSE在30秒内未结束并出现`ConnectionError`，不声称完整取消闭环。
+- 详细报告为`docs/rag/evaluation-results/final-report/Agent与Workflow真实LLM黑盒补充报告.md`；原始结果SHA-256=`a0260224949b15a3fb4c370d4f157469fa9c39e26f6792718a3ecec535d1e882`，最终JAR=`aaaef787a632b5efd70497a06d5ecad1a21718b3958024f1a597bb12411b5982`。全reactor跳过重复测试打包BUILD SUCCESS。

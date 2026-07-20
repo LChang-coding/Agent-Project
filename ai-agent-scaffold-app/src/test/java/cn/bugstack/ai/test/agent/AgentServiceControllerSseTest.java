@@ -51,6 +51,16 @@ public class AgentServiceControllerSseTest {
         Mockito.verify(service).queryRunAnswer("tenant-1", "user-1", "session-1", "run-1");
     }
 
+    @Test
+    public void shouldMergeCumulativeAgentEventsWithoutRepeatingPrefixes() {
+        AgentServiceController controller = new AgentServiceController();
+
+        String content = ReflectionTestUtils.invokeMethod(controller, "mergeAgentContents",
+                List.of("N", "NOT", "NOT_IN", "NOT_IN_DOCUMENT", "NOT_IN_DOCUMENT"));
+
+        Assert.assertEquals("NOT_IN_DOCUMENT", content);
+    }
+
     private static class CapturingEmitter extends SseEmitter {
         private boolean sent;
         private boolean completed;

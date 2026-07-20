@@ -1,0 +1,72 @@
+{
+  "cancelResponse": {
+    "code": "0000",
+    "data": {
+      "contextRevision": 1,
+      "runId": "run_e2e_90b26afb574de19861fc11c8",
+      "sessionId": "8b506684-cf4a-4267-b741-068184ffe7ab",
+      "status": "cancelled",
+      "successorRunId": null
+    },
+    "info": "成功"
+  },
+  "cancelTransport": {
+    "elapsedMs": 2002,
+    "httpStatus": 200,
+    "responseBytes": 197
+  },
+  "checks": {
+    "cancelAccepted": true,
+    "cancelledStatus": true,
+    "noCitationTerminalEvent": true,
+    "noCompletedAssistantForCancelledRun": true
+  },
+  "events": [
+    {
+      "data": "8b506684-cf4a-4267-b741-068184ffe7ab",
+      "event": "session",
+      "observedAt": "2026-07-20T01:26:33.142001Z"
+    },
+    {
+      "data": {
+        "contextRevision": 0,
+        "runId": "run_e2e_90b26afb574de19861fc11c8",
+        "status": "running"
+      },
+      "event": "run",
+      "observedAt": "2026-07-20T01:26:33.142075Z"
+    },
+    {
+      "data": "è¿è¡å·²åæ¶ãè¢«æ¿ä»£æç»æ",
+      "event": "error",
+      "observedAt": "2026-07-20T01:26:35.144455Z"
+    }
+  ],
+  "history": {
+    "code": "0000",
+    "data": {
+      "hasMore": false,
+      "items": [],
+      "nextBeforeSequence": null,
+      "sessionId": "8b506684-cf4a-4267-b741-068184ffe7ab"
+    },
+    "info": "成功"
+  },
+  "historyTransport": {
+    "elapsedMs": 112,
+    "httpStatus": 200,
+    "responseBytes": 144
+  },
+  "requestedRunId": "run_e2e_90b26afb574de19861fc11c8",
+  "runEvent": {
+    "contextRevision": 0,
+    "runId": "run_e2e_90b26afb574de19861fc11c8",
+    "status": "running"
+  },
+  "runEventObserved": true,
+  "sessionId": "8b506684-cf4a-4267-b741-068184ffe7ab",
+  "streamTransport": {
+    "elapsedMs": 2521,
+    "httpStatus": 200
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "response": {
+    "code": "0000",
+    "data": {
+      "deduplicated": false,
+      "documentId": "doc_2a8258e887214d3c9e0fbffc70474fb3",
+      "fileName": "citation-fixture.md",
+      "sizeBytes": 507,
+      "status": "queued",
+      "taskId": "ragtask_4631d927ccad49b999345f33d1b3d5ca",
+      "versionId": "ragver_4bb9fd469d5b4127aadcd8bc290dc0cd"
+    },
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 795,
+    "httpStatus": 200,
+    "responseBytes": 286
+  }
+}

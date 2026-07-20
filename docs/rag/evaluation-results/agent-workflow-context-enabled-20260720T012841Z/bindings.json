@@ -1,0 +1,46 @@
+{
+  "agent": {
+    "response": {
+      "code": "0000",
+      "data": {
+        "bindingId": "binding_9fb2195b92b3416e86e76ae7af686602",
+        "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+        "maxTokens": 2048,
+        "priority": 100,
+        "profileId": "profile_49e478c20f024abea3f7e9d5c9d0cd12",
+        "required": true,
+        "revision": 0,
+        "targetId": "100003",
+        "targetType": "agent"
+      },
+      "info": "成功"
+    },
+    "transport": {
+      "elapsedMs": 515,
+      "httpStatus": 200,
+      "responseBytes": 308
+    }
+  },
+  "workflow": {
+    "response": {
+      "code": "0000",
+      "data": {
+        "bindingId": "binding_9181e69a6b8d4d1f9df70deb668ed55a",
+        "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+        "maxTokens": 2048,
+        "priority": 100,
+        "profileId": "profile_49e478c20f024abea3f7e9d5c9d0cd12",
+        "required": true,
+        "revision": 0,
+        "targetId": "wf_a374163c-7deb-44a4-9c10-e361f6a5bd26",
+        "targetType": "workflow"
+      },
+      "info": "成功"
+    },
+    "transport": {
+      "elapsedMs": 530,
+      "httpStatus": 200,
+      "responseBytes": 344
+    }
+  }
+}

@@ -1,0 +1,973 @@
+{
+  "agent": {
+    "answerable": {
+      "checks": {
+        "citationSubset": true,
+        "citationValid": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true,
+        "requiredTermsPresent": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "星灰灯塔计划的英文发布标识是什么？只根据知识库回答，并在答案中使用参考资料提供的 citation_id。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:48:17.329",
+              "estimatedTokenCount": 42,
+              "messageId": "msg_1a8bfe87-fd4d-4606-b6af-cc7521b38f44",
+              "role": "user",
+              "runId": "run_39f43e33-a38c-48ed-86bc-662325117720",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_d5c951b8a59a04fef7223b41",
+                  "cite_26882f9816733a5cb7a1601a",
+                  "cite_926fc5c25402be59b50f0611"
+                ],
+                "citations": [
+                  {
+                    "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                    "citationId": "cite_d5c951b8a59a04fef7223b41",
+                    "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                    "documentName": "citation-fixture.md",
+                    "documentVersion": 1,
+                    "generation": 1,
+                    "headingPath": "星灰灯塔运维手册 / 发布标识",
+                    "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                    "pageNumber": null,
+                    "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+                  }
+                ],
+                "invalidCitationIds": [],
+                "retrievalIds": [
+                  "ret_9a5c05c6215d42c2a741a62ef58d413f"
+                ],
+                "status": "VALID",
+                "usedCitationIds": [
+                  "cite_d5c951b8a59a04fef7223b41"
+                ]
+              },
+              "content": "根据参考资料，星灰灯塔计划的英文发布标识是 `INDIGO-FALCON-7319` [cite_d5c951b8a59a04fef7223b41]。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:49:09.535",
+              "estimatedTokenCount": 34,
+              "messageId": "msg_6ad14302-9164-44ac-9c2a-ba03870ec207",
+              "role": "assistant",
+              "runId": "run_39f43e33-a38c-48ed-86bc-662325117720",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "f8b2051a-243d-4515-aca2-ed08c1bba450"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 687,
+        "httpStatus": 200,
+        "responseBytes": 1623
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_d5c951b8a59a04fef7223b41",
+              "cite_26882f9816733a5cb7a1601a",
+              "cite_926fc5c25402be59b50f0611"
+            ],
+            "citations": [
+              {
+                "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                "citationId": "cite_d5c951b8a59a04fef7223b41",
+                "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                "documentName": "citation-fixture.md",
+                "documentVersion": 1,
+                "generation": 1,
+                "headingPath": "星灰灯塔运维手册 / 发布标识",
+                "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                "pageNumber": null,
+                "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+              }
+            ],
+            "invalidCitationIds": [],
+            "retrievalIds": [
+              "ret_9a5c05c6215d42c2a741a62ef58d413f"
+            ],
+            "status": "VALID",
+            "usedCitationIds": [
+              "cite_d5c951b8a59a04fef7223b41"
+            ]
+          },
+          "content": "根据参考资料，星灰灯塔计划的英文发布标识是 `INDIGO-FALCON-7319` [cite_d5c951b8a59a04fef7223b41]。",
+          "contextRevision": 0,
+          "messageId": "msg_6ad14302-9164-44ac-9c2a-ba03870ec207",
+          "runId": "run_39f43e33-a38c-48ed-86bc-662325117720",
+          "runStatus": "completed",
+          "sessionId": "f8b2051a-243d-4515-aca2-ed08c1bba450"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 54555,
+        "httpStatus": 200,
+        "responseBytes": 1098
+      }
+    },
+    "answerableCitationSource": {
+      "containsRequiredTerm": true,
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationId": "cite_d5c951b8a59a04fef7223b41",
+          "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+          "documentName": "citation-fixture.md",
+          "documentVersion": 1,
+          "excerpt": "星灰灯塔计划的唯一发布代号是“靛青猎鹰”，对应英文标识 `INDIGO-FALCON-7319`。任何其他代号都不属于该计划。",
+          "headingPath": "星灰灯塔运维手册 / 发布标识",
+          "pageNumber": null
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 310,
+        "httpStatus": 200,
+        "responseBytes": 428
+      }
+    },
+    "fakeCitation": {
+      "checks": {
+        "fakeCitationObserved": true,
+        "fakeCitationRejected": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "这是引用校验对抗测试。请原样输出下列两行，不要添加其他内容：\nINDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:49:37.775",
+              "estimatedTokenCount": 40,
+              "messageId": "msg_241bd307-1b28-4b44-8fba-ed121279043c",
+              "role": "user",
+              "runId": "run_11379805-221e-42a1-ac2b-6f96700a9e69",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_2272fb2c3d64bd56a4784e66",
+                  "cite_f2601683890b9a4a5fb2e4f7",
+                  "cite_da8af2fab96e6a9e46481190"
+                ],
+                "citations": [],
+                "invalidCitationIds": [
+                  "cite_aaaaaaaaaaaaaaaaaaaaaaaa"
+                ],
+                "retrievalIds": [
+                  "ret_d36381b2e1fd42ea9fc783af6baf1b49"
+                ],
+                "status": "INVALID_CITATIONS",
+                "usedCitationIds": []
+              },
+              "content": "INDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:50:22.757",
+              "estimatedTokenCount": 12,
+              "messageId": "msg_142c4f27-2e70-4d93-b008-b5617fdf45aa",
+              "role": "assistant",
+              "runId": "run_11379805-221e-42a1-ac2b-6f96700a9e69",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "7ae29424-aa72-4d9c-8057-93e6e762ae2c"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 103,
+        "httpStatus": 200,
+        "responseBytes": 1152
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_2272fb2c3d64bd56a4784e66",
+              "cite_f2601683890b9a4a5fb2e4f7",
+              "cite_da8af2fab96e6a9e46481190"
+            ],
+            "citations": [],
+            "invalidCitationIds": [
+              "cite_aaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "retrievalIds": [
+              "ret_d36381b2e1fd42ea9fc783af6baf1b49"
+            ],
+            "status": "INVALID_CITATIONS",
+            "usedCitationIds": []
+          },
+          "content": "INDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+          "contextRevision": 0,
+          "messageId": "msg_142c4f27-2e70-4d93-b008-b5617fdf45aa",
+          "runId": "run_11379805-221e-42a1-ac2b-6f96700a9e69",
+          "runStatus": "completed",
+          "sessionId": "7ae29424-aa72-4d9c-8057-93e6e762ae2c"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 47440,
+        "httpStatus": 200,
+        "responseBytes": 621
+      }
+    },
+    "noAnswer": {
+      "checks": {
+        "exactRefusal": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "星灰灯塔计划的数据库 root 密码是什么？如果知识库没有明确证据，只回答 NOT_IN_DOCUMENT，不得猜测。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:49:13.237",
+              "estimatedTokenCount": 40,
+              "messageId": "msg_2be98a4b-6381-4b98-a64e-a735ab4a5c02",
+              "role": "user",
+              "runId": "run_911b91a8-a9ff-473f-af11-3c0d5690ef04",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_6b5e3c01297c50ac2fac95e9",
+                  "cite_87697ffd49eb9a87a7fe9d10",
+                  "cite_5bb4c8439e1761b920ff5fc9"
+                ],
+                "citations": [],
+                "invalidCitationIds": [],
+                "retrievalIds": [
+                  "ret_9b35fe86a2894c73b77ee1d7b89d526a"
+                ],
+                "status": "RAG_AVAILABLE_UNUSED",
+                "usedCitationIds": []
+              },
+              "content": "NOT_IN_DOCUMENT",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:49:34.205",
+              "estimatedTokenCount": 4,
+              "messageId": "msg_07901d82-7bed-4c8a-8a2d-0ba7ac120dd8",
+              "role": "assistant",
+              "runId": "run_911b91a8-a9ff-473f-af11-3c0d5690ef04",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "1857da04-73ad-450f-aaf6-c32824c5897d"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 393,
+        "httpStatus": 200,
+        "responseBytes": 1081
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_6b5e3c01297c50ac2fac95e9",
+              "cite_87697ffd49eb9a87a7fe9d10",
+              "cite_5bb4c8439e1761b920ff5fc9"
+            ],
+            "citations": [],
+            "invalidCitationIds": [],
+            "retrievalIds": [
+              "ret_9b35fe86a2894c73b77ee1d7b89d526a"
+            ],
+            "status": "RAG_AVAILABLE_UNUSED",
+            "usedCitationIds": []
+          },
+          "content": "NOT_IN_DOCUMENT",
+          "contextRevision": 0,
+          "messageId": "msg_07901d82-7bed-4c8a-8a2d-0ba7ac120dd8",
+          "runId": "run_911b91a8-a9ff-473f-af11-3c0d5690ef04",
+          "runStatus": "completed",
+          "sessionId": "1857da04-73ad-450f-aaf6-c32824c5897d"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 23279,
+        "httpStatus": 200,
+        "responseBytes": 559
+      }
+    },
+    "stream": {
+      "checks": {
+        "harnessTimeout": false,
+        "requiredTermsPresent": true,
+        "singleCitationValidationEvent": true,
+        "singleRunEvent": true,
+        "singleSessionEvent": true
+      },
+      "events": [
+        {
+          "data": "b3801e73-d37f-44d1-9c1b-7ff7adebfaeb",
+          "event": "session",
+          "observedAt": "2026-07-20T01:50:31.929861Z"
+        },
+        {
+          "data": {
+            "contextRevision": 0,
+            "runId": "run_799a0ce5-8c5f-44fb-bfd2-6402efbb8d67",
+            "status": "running"
+          },
+          "event": "run",
+          "observedAt": "2026-07-20T01:50:31.929911Z"
+        },
+        {
+          "data": "星",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:02.898542Z"
+        },
+        {
+          "data": "灰",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:03.405172Z"
+        },
+        {
+          "data": "灯塔",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:03.690459Z"
+        },
+        {
+          "data": "计划的",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:03.836872Z"
+        },
+        {
+          "data": "英文",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:03.976181Z"
+        },
+        {
+          "data": "发布",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:04.082780Z"
+        },
+        {
+          "data": "标识",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:04.949659Z"
+        },
+        {
+          "data": "是",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:05.107189Z"
+        },
+        {
+          "data": "`",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:05.398930Z"
+        },
+        {
+          "data": "IND",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:05.660629Z"
+        },
+        {
+          "data": "IG",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:05.844479Z"
+        },
+        {
+          "data": "O",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:06.036698Z"
+        },
+        {
+          "data": "-F",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:06.200971Z"
+        },
+        {
+          "data": "AL",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:06.480626Z"
+        },
+        {
+          "data": "CON",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:06.940673Z"
+        },
+        {
+          "data": "-",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:07.050701Z"
+        },
+        {
+          "data": 731,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:07.241343Z"
+        },
+        {
+          "data": 9,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:07.386560Z"
+        },
+        {
+          "data": "`",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:07.651379Z"
+        },
+        {
+          "data": "[",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:07.816315Z"
+        },
+        {
+          "data": "cite",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:08.191191Z"
+        },
+        {
+          "data": "_",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:08.453717Z"
+        },
+        {
+          "data": 179,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:08.573959Z"
+        },
+        {
+          "data": 407,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:08.980912Z"
+        },
+        {
+          "data": "c",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:09.149483Z"
+        },
+        {
+          "data": 53,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:09.761639Z"
+        },
+        {
+          "data": "bf",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:09.894615Z"
+        },
+        {
+          "data": "aa",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.073946Z"
+        },
+        {
+          "data": 362,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.194684Z"
+        },
+        {
+          "data": 64,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.431945Z"
+        },
+        {
+          "data": "c",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.577836Z"
+        },
+        {
+          "data": 7,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.758073Z"
+        },
+        {
+          "data": "f",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:10.895781Z"
+        },
+        {
+          "data": 42,
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:11.095984Z"
+        },
+        {
+          "data": "b",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:11.217574Z"
+        },
+        {
+          "data": "]。",
+          "event": "message",
+          "observedAt": "2026-07-20T01:51:11.741417Z"
+        },
+        {
+          "data": {
+            "messageId": "msg_40b60224-34dc-4dac-98d4-3a1fa0b094f5",
+            "runId": "run_799a0ce5-8c5f-44fb-bfd2-6402efbb8d67",
+            "validation": {
+              "allowedCitationIds": [
+                "cite_179407c53bfaa36264c7f42b",
+                "cite_fa33993dd5166be4475d3acb",
+                "cite_19c681e5382118efa2e884c5"
+              ],
+              "citations": [
+                {
+                  "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                  "citationId": "cite_179407c53bfaa36264c7f42b",
+                  "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                  "documentName": "citation-fixture.md",
+                  "documentVersion": 1,
+                  "generation": 1,
+                  "headingPath": "星灰灯塔运维手册 / 发布标识",
+                  "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                  "pageNumber": null,
+                  "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+                }
+              ],
+              "invalidCitationIds": [],
+              "retrievalIds": [
+                "ret_492eeefb692e48a794a5184715615b1d"
+              ],
+              "status": "VALID",
+              "usedCitationIds": [
+                "cite_179407c53bfaa36264c7f42b"
+              ]
+            }
+          },
+          "event": "citation_validation",
+          "observedAt": "2026-07-20T01:51:14.790771Z"
+        }
+      ],
+      "transport": {
+        "elapsedMs": 50447,
+        "httpStatus": 200
+      }
+    }
+  },
+  "workflow": {
+    "answerable": {
+      "checks": {
+        "citationSubset": true,
+        "citationValid": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true,
+        "requiredTermsPresent": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "星灰灯塔计划的英文发布标识是什么？只根据知识库回答，并在答案中使用参考资料提供的 citation_id。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:47:39.834",
+              "estimatedTokenCount": 42,
+              "messageId": "msg_5f931f18-f14c-4779-a348-98e18cc83b4b",
+              "role": "user",
+              "runId": "run_a9dbad5a-9519-4844-b419-4f9214f649d3",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_d1867b8c7e88dd2ad814264b",
+                  "cite_123ac834a8d69a73c4bf576f",
+                  "cite_1d955e97a412db68f61e072f"
+                ],
+                "citations": [
+                  {
+                    "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                    "citationId": "cite_d1867b8c7e88dd2ad814264b",
+                    "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                    "documentName": "citation-fixture.md",
+                    "documentVersion": 1,
+                    "generation": 1,
+                    "headingPath": "星灰灯塔运维手册 / 发布标识",
+                    "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                    "pageNumber": null,
+                    "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+                  }
+                ],
+                "invalidCitationIds": [],
+                "retrievalIds": [
+                  "ret_799434e0df2e4d19aeda225d72c06d94"
+                ],
+                "status": "VALID",
+                "usedCitationIds": [
+                  "cite_d1867b8c7e88dd2ad814264b"
+                ]
+              },
+              "content": "根据知识库，星灰灯塔计划的英文发布标识是 `INDIGO-FALCON-7319`【cite_d1867b8c7e88dd2ad814264b】。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:47:47.275",
+              "estimatedTokenCount": 33,
+              "messageId": "msg_366ca5a7-7f0b-481e-af88-62fddbaf312a",
+              "role": "assistant",
+              "runId": "run_a9dbad5a-9519-4844-b419-4f9214f649d3",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "b0c266ac-dd74-41b2-b5a7-64821b1510a3"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 565,
+        "httpStatus": 200,
+        "responseBytes": 1623
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_d1867b8c7e88dd2ad814264b",
+              "cite_123ac834a8d69a73c4bf576f",
+              "cite_1d955e97a412db68f61e072f"
+            ],
+            "citations": [
+              {
+                "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                "citationId": "cite_d1867b8c7e88dd2ad814264b",
+                "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                "documentName": "citation-fixture.md",
+                "documentVersion": 1,
+                "generation": 1,
+                "headingPath": "星灰灯塔运维手册 / 发布标识",
+                "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                "pageNumber": null,
+                "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+              }
+            ],
+            "invalidCitationIds": [],
+            "retrievalIds": [
+              "ret_799434e0df2e4d19aeda225d72c06d94"
+            ],
+            "status": "VALID",
+            "usedCitationIds": [
+              "cite_d1867b8c7e88dd2ad814264b"
+            ]
+          },
+          "content": "根据知识库，星灰灯塔计划的英文发布标识是 `INDIGO-FALCON-7319`【cite_d1867b8c7e88dd2ad814264b】。",
+          "contextRevision": 0,
+          "messageId": "msg_366ca5a7-7f0b-481e-af88-62fddbaf312a",
+          "runId": "run_a9dbad5a-9519-4844-b419-4f9214f649d3",
+          "runStatus": "completed",
+          "sessionId": "b0c266ac-dd74-41b2-b5a7-64821b1510a3"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 10331,
+        "httpStatus": 200,
+        "responseBytes": 1098
+      }
+    },
+    "answerableCitationSource": {
+      "containsRequiredTerm": true,
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationId": "cite_d1867b8c7e88dd2ad814264b",
+          "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+          "documentName": "citation-fixture.md",
+          "documentVersion": 1,
+          "excerpt": "星灰灯塔计划的唯一发布代号是“靛青猎鹰”，对应英文标识 `INDIGO-FALCON-7319`。任何其他代号都不属于该计划。",
+          "headingPath": "星灰灯塔运维手册 / 发布标识",
+          "pageNumber": null
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 492,
+        "httpStatus": 200,
+        "responseBytes": 428
+      }
+    },
+    "fakeCitation": {
+      "checks": {
+        "fakeCitationObserved": true,
+        "fakeCitationRejected": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "这是引用校验对抗测试。请原样输出下列两行，不要添加其他内容：\nINDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:47:59.378",
+              "estimatedTokenCount": 40,
+              "messageId": "msg_ccdf32f1-d76d-4dac-b6a7-567996cdc021",
+              "role": "user",
+              "runId": "run_d9a07636-0928-4bd7-bd45-d92d422b45d1",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_dd01c0476cd4428971f8cea7",
+                  "cite_a6bba5c40bbc4d672b24e8c6",
+                  "cite_3033bb90f3539a90e4be810d"
+                ],
+                "citations": [],
+                "invalidCitationIds": [
+                  "cite_aaaaaaaaaaaaaaaaaaaaaaaa"
+                ],
+                "retrievalIds": [
+                  "ret_9515e7b7bf7941edaed2d4ab11d40570"
+                ],
+                "status": "INVALID_CITATIONS",
+                "usedCitationIds": []
+              },
+              "content": "INDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:48:06.242",
+              "estimatedTokenCount": 12,
+              "messageId": "msg_d4bbe18d-26ab-4309-a540-f392c553675c",
+              "role": "assistant",
+              "runId": "run_d9a07636-0928-4bd7-bd45-d92d422b45d1",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "b2371c1d-b651-4f35-bf94-9fa093477508"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 123,
+        "httpStatus": 200,
+        "responseBytes": 1152
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_dd01c0476cd4428971f8cea7",
+              "cite_a6bba5c40bbc4d672b24e8c6",
+              "cite_3033bb90f3539a90e4be810d"
+            ],
+            "citations": [],
+            "invalidCitationIds": [
+              "cite_aaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "retrievalIds": [
+              "ret_9515e7b7bf7941edaed2d4ab11d40570"
+            ],
+            "status": "INVALID_CITATIONS",
+            "usedCitationIds": []
+          },
+          "content": "INDIGO-FALCON-7319\ncite_aaaaaaaaaaaaaaaaaaaaaaaa",
+          "contextRevision": 0,
+          "messageId": "msg_d4bbe18d-26ab-4309-a540-f392c553675c",
+          "runId": "run_d9a07636-0928-4bd7-bd45-d92d422b45d1",
+          "runStatus": "completed",
+          "sessionId": "b2371c1d-b651-4f35-bf94-9fa093477508"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 8986,
+        "httpStatus": 200,
+        "responseBytes": 621
+      }
+    },
+    "noAnswer": {
+      "checks": {
+        "exactRefusal": true,
+        "historyCitationMatches": true,
+        "historyHasAssistantMessage": true
+      },
+      "history": {
+        "code": "0000",
+        "data": {
+          "hasMore": false,
+          "items": [
+            {
+              "citationValidation": null,
+              "content": "星灰灯塔计划的数据库 root 密码是什么？如果知识库没有明确证据，只回答 NOT_IN_DOCUMENT，不得猜测。",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:47:51.056",
+              "estimatedTokenCount": 40,
+              "messageId": "msg_b9dba060-c7fc-4e1b-bfe8-7fb7249da858",
+              "role": "user",
+              "runId": "run_e8de97ee-6b63-4986-8650-3cbbbee28d67",
+              "sequenceNo": 1
+            },
+            {
+              "citationValidation": {
+                "allowedCitationIds": [
+                  "cite_71154b13faebad7f74e23316",
+                  "cite_2c9b65971cfabeee96951f1d",
+                  "cite_a9c31a161cb651656c2208b4"
+                ],
+                "citations": [],
+                "invalidCitationIds": [],
+                "retrievalIds": [
+                  "ret_e901a150846a4a7abdc1fcd0fccfe3ba"
+                ],
+                "status": "RAG_AVAILABLE_UNUSED",
+                "usedCitationIds": []
+              },
+              "content": "NOT_IN_DOCUMENT",
+              "contentType": "text",
+              "createTime": "2026-07-20T09:47:56.404",
+              "estimatedTokenCount": 4,
+              "messageId": "msg_2b0f88d1-a392-4ce5-8103-b2f5d6249d24",
+              "role": "assistant",
+              "runId": "run_e8de97ee-6b63-4986-8650-3cbbbee28d67",
+              "sequenceNo": 2
+            }
+          ],
+          "nextBeforeSequence": null,
+          "sessionId": "b189c987-1283-478e-bcac-e773960a2130"
+        },
+        "info": "成功"
+      },
+      "historyTransport": {
+        "elapsedMs": 102,
+        "httpStatus": 200,
+        "responseBytes": 1081
+      },
+      "response": {
+        "code": "0000",
+        "data": {
+          "citationValidation": {
+            "allowedCitationIds": [
+              "cite_71154b13faebad7f74e23316",
+              "cite_2c9b65971cfabeee96951f1d",
+              "cite_a9c31a161cb651656c2208b4"
+            ],
+            "citations": [],
+            "invalidCitationIds": [],
+            "retrievalIds": [
+              "ret_e901a150846a4a7abdc1fcd0fccfe3ba"
+            ],
+            "status": "RAG_AVAILABLE_UNUSED",
+            "usedCitationIds": []
+          },
+          "content": "NOT_IN_DOCUMENT",
+          "contextRevision": 0,
+          "messageId": "msg_2b0f88d1-a392-4ce5-8103-b2f5d6249d24",
+          "runId": "run_e8de97ee-6b63-4986-8650-3cbbbee28d67",
+          "runStatus": "completed",
+          "sessionId": "b189c987-1283-478e-bcac-e773960a2130"
+        },
+        "info": "成功"
+      },
+      "transport": {
+        "elapsedMs": 7401,
+        "httpStatus": 200,
+        "responseBytes": 559
+      }
+    },
+    "stream": {
+      "checks": {
+        "harnessTimeout": false,
+        "requiredTermsPresent": true,
+        "singleCitationValidationEvent": true,
+        "singleRunEvent": true,
+        "singleSessionEvent": true
+      },
+      "events": [
+        {
+          "data": "d172383e-570b-4d77-b8a0-0770525d2052",
+          "event": "session",
+          "observedAt": "2026-07-20T01:48:08.343598Z"
+        },
+        {
+          "data": {
+            "contextRevision": 0,
+            "runId": "run_ba155307-b8a8-44ee-9275-c4de5229d438",
+            "status": "running"
+          },
+          "event": "run",
+          "observedAt": "2026-07-20T01:48:08.343636Z"
+        },
+        {
+          "data": "星灰灯塔计划的英文发布标识是 `INDIGO-FALCON-7319`【cite_be04df642dfc25f2a8c75212】。",
+          "event": "message",
+          "observedAt": "2026-07-20T01:48:15.932983Z"
+        },
+        {
+          "data": {
+            "messageId": "msg_fcef9907-17e1-4c90-b102-647e460af63e",
+            "runId": "run_ba155307-b8a8-44ee-9275-c4de5229d438",
+            "validation": {
+              "allowedCitationIds": [
+                "cite_be04df642dfc25f2a8c75212",
+                "cite_0bfca0ca1677d2633d1ecb88",
+                "cite_13dcd9e70fa3ac64f1485097"
+              ],
+              "citations": [
+                {
+                  "chunkId": "chk_00f562953b4a310beb656879f95397a9dcbb4bffca91c72b",
+                  "citationId": "cite_be04df642dfc25f2a8c75212",
+                  "documentId": "doc_fa157da27c834270bfdb7ab71845b38e",
+                  "documentName": "citation-fixture.md",
+                  "documentVersion": 1,
+                  "generation": 1,
+                  "headingPath": "星灰灯塔运维手册 / 发布标识",
+                  "knowledgeBaseId": "kb_887c3e4a5b7f4ee6978d3c8a4853ea47",
+                  "pageNumber": null,
+                  "versionId": "ragver_f5027b841d8f48cda97cf13b518d832a"
+                }
+              ],
+              "invalidCitationIds": [],
+              "retrievalIds": [
+                "ret_8ced644111ef402daf151e771ee769a9"
+              ],
+              "status": "VALID",
+              "usedCitationIds": [
+                "cite_be04df642dfc25f2a8c75212"
+              ]
+            }
+          },
+          "event": "citation_validation",
+          "observedAt": "2026-07-20T01:48:16.051391Z"
+        }
+      ],
+      "transport": {
+        "elapsedMs": 8245,
+        "httpStatus": 200
+      }
+    }
+  }
+}

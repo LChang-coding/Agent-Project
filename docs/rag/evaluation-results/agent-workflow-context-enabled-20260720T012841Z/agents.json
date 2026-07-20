@@ -1,0 +1,24 @@
+{
+  "response": {
+    "code": "0000",
+    "data": [
+      {
+        "agentDesc": "单一智能体",
+        "agentId": "100003",
+        "agentName": "单一智能体",
+        "disabledAt": null,
+        "enabled": null,
+        "manageable": null,
+        "revision": null,
+        "sourceType": null,
+        "status": null
+      }
+    ],
+    "info": "成功"
+  },
+  "transport": {
+    "elapsedMs": 78,
+    "httpStatus": 200,
+    "responseBytes": 220
+  }
+}

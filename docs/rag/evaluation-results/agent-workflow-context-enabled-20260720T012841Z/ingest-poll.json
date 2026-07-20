@@ -1,0 +1,218 @@
+[
+  {
+    "observedAt": "2026-07-20T01:28:45.591301Z",
+    "task": {
+      "attemptCount": 0,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 0,
+      "stage": "received",
+      "status": "pending",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 0,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 155,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:46.752911Z",
+    "task": {
+      "attemptCount": 0,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 0,
+      "stage": "received",
+      "status": "pending",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 0,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 157,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:47.985486Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 2,
+      "stage": "parsing",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 0,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 222,
+      "httpStatus": 200,
+      "responseBytes": 431
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:49.139226Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 3,
+      "stage": "chunking",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 0,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 144,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:50.345905Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 3,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 196,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:51.454432Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 0,
+      "revision": 5,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 3,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 102,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:52.714474Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 6,
+      "stage": "indexing",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 3,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 249,
+      "httpStatus": 200,
+      "responseBytes": 432
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:53.948295Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 7,
+      "stage": "verifying",
+      "status": "running",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 3,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 231,
+      "httpStatus": 200,
+      "responseBytes": 433
+    }
+  },
+  {
+    "observedAt": "2026-07-20T01:28:55.184374Z",
+    "task": {
+      "attemptCount": 1,
+      "cancelReason": null,
+      "documentId": "doc_c49703448f68484ab9d2a628b425e34b",
+      "errorCode": null,
+      "knowledgeBaseId": "kb_9acb1bffc5a64952ab24ff565b65ac2e",
+      "maxAttempts": 3,
+      "operation": "ingest",
+      "processedChunks": 3,
+      "revision": 8,
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "ragtask_510c1c3c685d4137849450069989e2d9",
+      "totalChunks": 3,
+      "versionId": "ragver_9f938df857b94aea8728b2891e5d9604"
+    },
+    "transport": {
+      "elapsedMs": 227,
+      "httpStatus": 200,
+      "responseBytes": 435
+    }
+  }
+]
