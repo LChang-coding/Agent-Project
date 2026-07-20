@@ -2,7 +2,10 @@ package cn.bugstack.ai.domain.rag.adapter.repository;
 
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseDeleteRegistration;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseDeleteTaskEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteCandidate;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /** 知识库级联删除任务账本和聚合事务端口。 */
@@ -17,4 +20,16 @@ public interface RagKnowledgeBaseDeletionRepository {
     boolean register(String tenantId, RagKnowledgeBaseDeleteRegistration registration);
 
     int update(String tenantId, RagKnowledgeBaseDeleteTaskEntity task, long expectedRevision);
+
+    List<RagKnowledgeBaseDeleteCandidate> listDueCandidates(Instant now, int limit);
+
+    Optional<RagKnowledgeBaseDeleteTaskEntity> claim(String tenantId, String taskId,
+                                                       String leaseOwner, Instant now,
+                                                       Instant leaseUntil);
+
+    int heartbeat(String tenantId, String taskId, String leaseOwner, long fencingToken,
+                  Instant now, Instant leaseUntil);
+
+    int updateClaimed(String tenantId, RagKnowledgeBaseDeleteTaskEntity task,
+                      long expectedRevision, String leaseOwner, long fencingToken, Instant now);
 }

@@ -58,6 +58,43 @@
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId} AND deleted = 0 LIMIT 1
     </select>
 
+    <select id="queryDueCandidates"
+            resultType="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteCandidatePO">
+        SELECT tenant_id AS tenantId, task_id AS taskId
+        FROM rag_knowledge_base_delete_task
+        WHERE deleted = 0 AND (
+            (attempt_count &lt; max_attempts AND (status = 'pending'
+                OR (status = 'retrying' AND next_retry_at &lt;= #{now})
+                OR (status = 'running' AND lease_until &lt;= #{now})))
+            OR (status = 'waiting' AND next_retry_at &lt;= #{now})
+        )
+        ORDER BY COALESCE(next_retry_at, lease_until, create_time) ASC, id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="claimDue">
+        UPDATE rag_knowledge_base_delete_task
+        SET attempt_count = attempt_count + CASE WHEN status = 'waiting' THEN 0 ELSE 1 END,
+            status = 'running',
+            next_retry_at = NULL, lease_owner = #{leaseOwner}, lease_until = #{leaseUntil},
+            heartbeat_at = #{now}, fencing_token = fencing_token + 1,
+            row_version = row_version + 1,
+            started_at = COALESCE(started_at, #{now}), finished_at = NULL
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
+          AND ((attempt_count &lt; max_attempts AND (status = 'pending'
+                OR (status = 'retrying' AND next_retry_at &lt;= #{now})
+                OR (status = 'running' AND lease_until &lt;= #{now})))
+            OR (status = 'waiting' AND next_retry_at &lt;= #{now}))
+    </update>
+
+    <update id="heartbeatClaimed">
+        UPDATE rag_knowledge_base_delete_task
+        SET lease_until = #{leaseUntil}, heartbeat_at = #{now}
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId}
+          AND status = 'running' AND lease_owner = #{leaseOwner}
+          AND fencing_token = #{fencingToken} AND lease_until &gt; #{now} AND deleted = 0
+    </update>
+
     <update id="updateByTenantAndRevision">
         UPDATE rag_knowledge_base_delete_task
         SET status = #{task.status}, checkpoint = #{task.checkpoint},
@@ -73,5 +110,22 @@
             row_version = row_version + 1
         WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
           AND row_version = #{expectedRevision} AND deleted = 0
+    </update>
+
+    <update id="updateClaimedByTenantFenceAndRevision">
+        UPDATE rag_knowledge_base_delete_task
+        SET status = #{task.status}, checkpoint = #{task.checkpoint},
+            attempt_count = #{task.attemptCount}, max_attempts = #{task.maxAttempts},
+            next_retry_at = #{task.nextRetryAt}, lease_owner = #{task.leaseOwner},
+            lease_until = #{task.leaseUntil}, heartbeat_at = #{task.heartbeatAt},
+            fencing_token = #{task.fencingToken}, error_code = #{task.errorCode},
+            error_message = #{task.errorMessage},
+            finished_at = CASE WHEN #{task.status} IN ('completed', 'failed', 'dead')
+                THEN COALESCE(finished_at, #{now}) ELSE finished_at END,
+            row_version = row_version + 1
+        WHERE tenant_id = #{tenantId} AND task_id = #{task.taskId}
+          AND row_version = #{expectedRevision} AND status = 'running'
+          AND lease_owner = #{leaseOwner} AND fencing_token = #{fencingToken}
+          AND lease_until &gt; #{now} AND deleted = 0
     </update>
 </mapper>

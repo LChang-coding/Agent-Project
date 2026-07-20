@@ -4,13 +4,14 @@ package cn.bugstack.ai.domain.rag.model.valobj;
 public enum RagKnowledgeBaseDeleteStatus {
     PENDING,
     RUNNING,
+    WAITING,
     RETRYING,
     COMPLETED,
     FAILED,
     DEAD;
 
     public boolean claimable() {
-        return this == PENDING || this == RETRYING || this == RUNNING;
+        return this == PENDING || this == WAITING || this == RETRYING || this == RUNNING;
     }
 
     public boolean terminal() {

@@ -2035,3 +2035,20 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增领域状态机、聚合受理和MyBatis租户/CAS范围测试。首次10项中9项通过、1项失败：错误摘要中“空格+换行”清洗为双空格，会影响聚合去重。将连续空格/CR/LF/TAB折叠为单空格后，原命令复测10/10通过，0 failure/error/skipped，六模块BUILD SUCCESS。
 - 提交前按测试文件名动态生成全部RAG门禁清单，并补充“锁定ACTIVE知识库后才可插入绑定/DELETING时DAO零调用”两项竞态测试。Java 17最终实测248/248通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗4.306秒。此数据是Mock/协议/领域/MyBatis合同回归，不冒充真实MySQL/Qdrant/MinIO级联删除E2E。
 - 本阶段仍没有开放HTTP删除接口：DAO尚未实现due-scan/原子claim/心跳续租，协调器尚未逐文档复用DELETE并执行Qdrant/MinIO/MySQL零残留验证。因此这是可审计基础闭环，不是“删除功能完成”。
+
+#### 知识库级联删除协调器与最终收口计划（执行前）
+
+1. 先复用现有RAG Dispatcher/Worker的轻量扫描、原子claim、lease/fencing、心跳和退避规范，为知识库删除账本增加只返回tenant/task的due candidate、CAS领取、旧工作者不可提交的fenced update和续租；扫描不加载checkpoint正文。
+2. 协调器每次只处理一个当前文档：READY/FAILED文档调用现有领域删除登记，DELETING则查询对应DELETE任务并等待真实COMPLETED，DELETED才推进completedDocuments；子任务FAILED/DEAD保留父checkpoint并返回可操作错误，不跳过。
+3. 为最终收口建立单一事务端口：锁定知识库与删除任务，确认知识库仍DELETING、任务lease/fence/revision有效、文档零残留、活动摄取零残留、活动绑定零残留，再同时把知识库和父任务置为COMPLETED/DELETED。Qdrant与MinIO的零残留以每个子DELETE真实完成为前置，不用父任务伪造删除结果。
+4. 服务层实现受理、查询和FAILED/DEAD手工恢复，记录requester审计字段；权限一律在DAO与外部副作用前完成。只有协调器和收口测试通过后才增加Controller及前端危险区。
+5. 测试覆盖空库、多文档、子任务等待/失败/死信、租约过期接管、旧fence提交、重复扫描、终态重入、文档/绑定/活动任务残留和事务CAS失败。先完成确定性单元/MyBatis合同测试，再以真实MySQL+MinIO+Qdrant做故障恢复E2E，并将首次失败和未测边界如实追加。
+
+#### 知识库删除协调器租约基础阶段结果
+
+- 新增只包含tenantId/taskId的due candidate投影，扫描PENDING、到期RETRYING、过期RUNNING及到期WAITING，不从扫描SQL读取checkpoint。扫描limit限制1~200，避免一次加载过多任务。
+- 新增单SQL原子claim、heartbeat和Worker fenced update：claim同时检查tenant/task/due/status/attempt，增加fencingToken和rowVersion；heartbeat只在RUNNING+owner+fence+旧租约未过期时续期且不改rowVersion；Worker写入额外检查expectedRevision和有效租约，旧协调器被接管后不能再提交。
+- Target只读审计发现，如果子DELETE正常等待复用RETRYING，每轮claim都会消耗attempt，大知识库可在5次轮询后被误标DEAD。因此新增WAITING状态和`waitForChild`：释放租约、保存下次轮询时间，WAITING重新claim仅推进fence/revision而不增加attempt。失败重试与正常等待已分开计数。
+- 删除任务PO转换原先对RUNNING实体直接调用系统时间生成heartbeat，导致同一业务时刻不可重现。已改为转换器不制造时间，只有`updateClaimed`使用调用者Clock传入的`now`。
+- Java 17首次新代码全reactor `-DskipTests package`通过，总耗7.291秒；租约/WAITING/MyBatis定向11/11通过。随后按文件名生成全RAG测试清单，251/251通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗3.948秒。
+- 本阶段仍是协调器的安全执行底座；逐文档编排、最终事务收口、requester审计、Controller/前端和真实中间件E2E仍未完成，未对外宣告可删除。

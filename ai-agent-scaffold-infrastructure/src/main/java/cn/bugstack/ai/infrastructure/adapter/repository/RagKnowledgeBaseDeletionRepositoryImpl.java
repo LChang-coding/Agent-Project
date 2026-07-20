@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseDeleteRegistration
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseDeleteTaskEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteCheckpoint;
+import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteCandidate;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseDeleteStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagKnowledgeBaseStatus;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.List;
 
 /** MySQL知识库删除任务账本及聚合受理事务。 */
 @Repository
@@ -100,6 +102,49 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         return taskDao.updateByTenantAndRevision(tenantId, toPo(task), expectedRevision);
     }
 
+    @Override
+    public List<RagKnowledgeBaseDeleteCandidate> listDueCandidates(java.time.Instant now, int limit) {
+        if (now == null || limit < 1 || limit > 200) {
+            throw new IllegalArgumentException("知识库删除扫描参数非法");
+        }
+        return taskDao.queryDueCandidates(toLocal(now), limit).stream()
+                .map(value -> new RagKnowledgeBaseDeleteCandidate(value.tenantId(), value.taskId()))
+                .toList();
+    }
+
+    @Override
+    public Optional<RagKnowledgeBaseDeleteTaskEntity> claim(String tenantId, String taskId,
+                                                              String leaseOwner, java.time.Instant now,
+                                                              java.time.Instant leaseUntil) {
+        requireLeaseWindow(now, leaseUntil);
+        if (taskDao.claimDue(requireText(tenantId), requireText(taskId), requireText(leaseOwner),
+                toLocal(now), toLocal(leaseUntil)) != 1) return Optional.empty();
+        return findByTaskId(tenantId, taskId);
+    }
+
+    @Override
+    public int heartbeat(String tenantId, String taskId, String leaseOwner, long fencingToken,
+                         java.time.Instant now, java.time.Instant leaseUntil) {
+        requireLeaseWindow(now, leaseUntil);
+        if (fencingToken < 1) throw new IllegalArgumentException("知识库删除栅栏非法");
+        return taskDao.heartbeatClaimed(requireText(tenantId), requireText(taskId),
+                requireText(leaseOwner), fencingToken, toLocal(now), toLocal(leaseUntil));
+    }
+
+    @Override
+    public int updateClaimed(String tenantId, RagKnowledgeBaseDeleteTaskEntity task,
+                             long expectedRevision, String leaseOwner, long fencingToken,
+                             java.time.Instant now) {
+        if (task == null || !requireText(tenantId).equals(task.tenantId())
+                || expectedRevision < 0 || fencingToken < 1 || now == null) {
+            throw new IllegalArgumentException("知识库删除任务围栏更新非法");
+        }
+        RagKnowledgeBaseDeleteTaskPO po = toPo(task);
+        po.setHeartbeatAt(task.lease() == null ? null : toLocal(now));
+        return taskDao.updateClaimedByTenantFenceAndRevision(tenantId, po, expectedRevision,
+                requireText(leaseOwner), fencingToken, toLocal(now));
+    }
+
     private RagKnowledgeBaseDeleteTaskPO toPo(RagKnowledgeBaseDeleteTaskEntity task) {
         try {
             return RagKnowledgeBaseDeleteTaskPO.builder()
@@ -110,7 +155,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
                     .nextRetryAt(toLocal(task.nextRetryAt()))
                     .leaseOwner(task.lease() == null ? null : task.lease().owner())
                     .leaseUntil(task.lease() == null ? null : toLocal(task.lease().expiresAt()))
-                    .heartbeatAt(task.lease() == null ? null : LocalDateTime.now(ZoneOffset.UTC))
+                    .heartbeatAt(null)
                     .fencingToken(task.fencingToken()).rowVersion(task.revision())
                     .errorCode(task.errorCode()).errorMessage(task.errorMessage()).build();
         } catch (Exception e) {
@@ -157,5 +202,11 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
 
     private java.time.Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.toInstant(ZoneOffset.UTC);
+    }
+
+    private void requireLeaseWindow(java.time.Instant now, java.time.Instant leaseUntil) {
+        if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {
+            throw new IllegalArgumentException("知识库删除租约时间非法");
+        }
     }
 }

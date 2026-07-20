@@ -38,8 +38,9 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 || status != RagKnowledgeBaseDeleteStatus.RUNNING && lease != null) {
             throw new IllegalArgumentException("知识库删除任务状态与租约不一致");
         }
-        if (status == RagKnowledgeBaseDeleteStatus.RETRYING && nextRetryAt == null
-                || status != RagKnowledgeBaseDeleteStatus.RETRYING && nextRetryAt != null) {
+        boolean scheduled = status == RagKnowledgeBaseDeleteStatus.RETRYING
+                || status == RagKnowledgeBaseDeleteStatus.WAITING;
+        if (scheduled && nextRetryAt == null || !scheduled && nextRetryAt != null) {
             throw new IllegalArgumentException("知识库删除任务状态与重试时间不一致");
         }
         if (status == RagKnowledgeBaseDeleteStatus.COMPLETED
@@ -68,10 +69,13 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
         if (status == RagKnowledgeBaseDeleteStatus.RUNNING && lease != null && !lease.expiredAt(now)) {
             throw error("RAG_KB_DELETE_LEASE_ACTIVE", "知识库删除任务租约仍有效");
         }
-        if (attemptCount >= maxAttempts || newFence <= fencingToken) {
+        if (status != RagKnowledgeBaseDeleteStatus.WAITING && attemptCount >= maxAttempts
+                || newFence <= fencingToken) {
             throw error("RAG_KB_DELETE_CLAIM_REJECTED", "知识库删除任务尝试次数或栅栏非法");
         }
-        return copy(RagKnowledgeBaseDeleteStatus.RUNNING, checkpoint, attemptCount + 1,
+        int claimedAttempts = status == RagKnowledgeBaseDeleteStatus.WAITING
+                ? attemptCount : attemptCount + 1;
+        return copy(RagKnowledgeBaseDeleteStatus.RUNNING, checkpoint, claimedAttempts,
                 null, new RagLease(requireText(owner, "租约持有者"), now.plus(leaseDuration)),
                 newFence, null, null);
     }
@@ -98,6 +102,21 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 new RagKnowledgeBaseDeleteCheckpoint(RagKnowledgeBaseDeleteStage.COMPLETED,
                         checkpoint.totalDocuments(), checkpoint.completedDocuments(), null),
                 attemptCount, null, null, fencingToken, null, null);
+    }
+
+    /** 子文档删除仍在进行时释放租约，不消耗失败尝试次数。 */
+    public RagKnowledgeBaseDeleteTaskEntity waitForChild(String owner, long expectedFence, Instant now,
+                                                          Instant nextPollAt,
+                                                          RagKnowledgeBaseDeleteCheckpoint target) {
+        assertClaim(owner, expectedFence, now);
+        if (nextPollAt == null || !nextPollAt.isAfter(now) || target == null
+                || target.stage() != RagKnowledgeBaseDeleteStage.DELETING_DOCUMENTS
+                || target.totalDocuments() != checkpoint.totalDocuments()
+                || target.completedDocuments() < checkpoint.completedDocuments()) {
+            throw new IllegalArgumentException("知识库删除等待检查点非法");
+        }
+        return copy(RagKnowledgeBaseDeleteStatus.WAITING, target, attemptCount,
+                nextPollAt, null, fencingToken, null, null);
     }
 
     public RagKnowledgeBaseDeleteTaskEntity fail(String owner, long expectedFence, Instant now,

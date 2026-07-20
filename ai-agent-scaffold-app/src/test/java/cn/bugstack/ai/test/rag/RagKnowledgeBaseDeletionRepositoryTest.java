@@ -21,6 +21,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 
 /** 知识库删除屏障、任务账本与绑定停用的短事务编排。 */
@@ -104,6 +109,37 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
                 Mockito.anyString(), any(), Mockito.anyLong());
     }
 
+    @Test
+    public void shouldScanLightweightCandidateAndReturnClaimedSnapshot() {
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        Mockito.when(taskDao.queryDueCandidates(LocalDateTime.ofInstant(now, ZoneOffset.UTC), 20))
+                .thenReturn(List.of(new cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteCandidatePO(
+                        "tenant-a", "task-a")));
+        Mockito.when(taskDao.claimDue(Mockito.eq("tenant-a"), Mockito.eq("task-a"),
+                Mockito.eq("worker-a"), Mockito.any(), Mockito.any())).thenReturn(1);
+        Mockito.when(taskDao.queryByTenantAndTaskId("tenant-a", "task-a"))
+                .thenReturn(runningTaskPo(now.plusSeconds(30)));
+
+        Assert.assertEquals("task-a", repository.listDueCandidates(now, 20).get(0).taskId());
+        var claimed = repository.claim("tenant-a", "task-a", "worker-a",
+                now, now.plusSeconds(30)).orElseThrow();
+
+        Assert.assertEquals("worker-a", claimed.lease().owner());
+        Assert.assertEquals(1L, claimed.fencingToken());
+    }
+
+    @Test
+    public void shouldNotReadSnapshotWhenClaimLosesRace() {
+        Instant now = Instant.parse("2026-07-20T00:00:00Z");
+        Mockito.when(taskDao.claimDue(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.any(), Mockito.any())).thenReturn(0);
+
+        Assert.assertTrue(repository.claim("tenant-a", "task-a", "worker-b",
+                now, now.plusSeconds(30)).isEmpty());
+
+        Mockito.verify(taskDao, Mockito.never()).queryByTenantAndTaskId(Mockito.anyString(), Mockito.anyString());
+    }
+
     private RagKnowledgeBaseDeleteRegistration registration(int documentCount) {
         RagKnowledgeBaseEntity deleting = knowledgeBase().requestDeletion();
         RagKnowledgeBaseDeleteTaskEntity task = RagKnowledgeBaseDeleteTaskEntity.pending(
@@ -122,5 +158,17 @@ public class RagKnowledgeBaseDeletionRepositoryTest {
                 .knowledgeBaseId("kb-a").knowledgeBaseName("企业库").visibility("tenant")
                 .status("active").retrievalProfileId("profile-a").embeddingDimension(768)
                 .collectionAlias("rag-kb-a").currentGeneration(1L).revision(7L).build();
+    }
+
+    private cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO runningTaskPo(
+            Instant leaseUntil) {
+        return cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO.builder()
+                .tenantId("tenant-a").knowledgeBaseId("kb-a").taskId("task-a")
+                .taskKey("a".repeat(64)).status("running")
+                .checkpoint("{\"stage\":\"received\",\"totalDocuments\":2,"
+                        + "\"completedDocuments\":0,\"currentDocumentId\":null}")
+                .attemptCount(1).maxAttempts(5).leaseOwner("worker-a")
+                .leaseUntil(LocalDateTime.ofInstant(leaseUntil, ZoneOffset.UTC))
+                .fencingToken(1L).rowVersion(1L).build();
     }
 }

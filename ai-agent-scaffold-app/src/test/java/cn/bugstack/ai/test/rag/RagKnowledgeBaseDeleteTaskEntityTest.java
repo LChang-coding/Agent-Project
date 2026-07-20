@@ -81,6 +81,24 @@ public class RagKnowledgeBaseDeleteTaskEntityTest {
         Assert.assertEquals(dead.checkpoint(), requeued.checkpoint());
     }
 
+    @Test
+    public void shouldWaitForChildWithoutConsumingAttemptBudget() {
+        RagKnowledgeBaseDeleteTaskEntity running = pending().claim(
+                "worker-a", 1L, NOW, Duration.ofSeconds(30));
+        RagKnowledgeBaseDeleteCheckpoint deleting = new RagKnowledgeBaseDeleteCheckpoint(
+                RagKnowledgeBaseDeleteStage.DELETING_DOCUMENTS, 2, 0, "doc-1");
+
+        RagKnowledgeBaseDeleteTaskEntity waiting = running.waitForChild(
+                "worker-a", 1L, NOW, NOW.plusSeconds(2), deleting);
+        RagKnowledgeBaseDeleteTaskEntity reclaimed = waiting.claim(
+                "worker-b", 2L, NOW.plusSeconds(2), Duration.ofSeconds(30));
+
+        Assert.assertEquals(RagKnowledgeBaseDeleteStatus.WAITING, waiting.status());
+        Assert.assertEquals(1, waiting.attemptCount());
+        Assert.assertEquals(1, reclaimed.attemptCount());
+        Assert.assertEquals(2L, reclaimed.fencingToken());
+    }
+
     private RagKnowledgeBaseDeleteTaskEntity pending() {
         return RagKnowledgeBaseDeleteTaskEntity.pending(
                 "tenant-a", "kb-a", "task-a", "a".repeat(64), 2, 2);

@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS `rag_knowledge_base_delete_task` (
   `task_key` CHAR(64) NOT NULL COMMENT 'tenant+kb删除幂等键SHA-256',
   `tenant_id` VARCHAR(64) NOT NULL COMMENT '租户业务ID',
   `kb_id` VARCHAR(64) NOT NULL COMMENT '知识库业务ID',
-  `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/retrying/completed/failed/dead',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/waiting/retrying/completed/failed/dead',
   `checkpoint` JSON NOT NULL COMMENT '阶段和文档计数，不含正文与凭据',
   `attempt_count` INT NOT NULL DEFAULT 0 COMMENT '已领取次数',
   `max_attempts` INT NOT NULL DEFAULT 5 COMMENT '最大领取次数',
