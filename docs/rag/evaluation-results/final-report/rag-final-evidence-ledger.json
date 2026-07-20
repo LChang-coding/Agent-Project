@@ -1700,9 +1700,9 @@
     }
   },
   "limitations": [
-    "SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。",
+    "SciFact只评测检索，不含标准答案，因此没有300题级Faithfulness、Answer Correctness和幻觉率；补充黑盒仅有一个合成事实样本。",
     "r6格式题只验证证据词项是否在返回上下文，不等同于最终LLM回答正确。",
-    "无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。",
+    "r6无答案探针仍会返回相关候选；补充黑盒只证明一个合成无答案问题在Agent/Workflow各一次精确拒答，不代表拒答率。",
     "r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。",
     "内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。",
     "fusion threshold与TopK尚未分开留痕；PDF页码已闭环，但Markdown和当前Docling DOCX的页数仍是未知而非0页。"

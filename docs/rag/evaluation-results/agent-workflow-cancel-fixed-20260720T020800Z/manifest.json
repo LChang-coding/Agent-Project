@@ -1,0 +1,20 @@
+{
+  "agentId": "100003",
+  "appJarSha256": "39f4a76815e1a870ce848110300700792a7b5e0587091ab0502eee9e1297f8cc",
+  "baseUrl": "http://127.0.0.1:8093/api",
+  "codeRevision": "58fdfe1c29c03f15f6995188566895a2b16a58fa",
+  "completedAt": "2026-07-20T02:11:05.733388Z",
+  "documentId": "doc_c373279724a448d9a3186d85166e2eba",
+  "documentSha256": "f2c2325836058b5eb32df4a5edc8bcd5112f8ca45c7d977d0a55bba60dd5e80b",
+  "judge": "deterministic exact-term/citation-set/envelope checks; no LLM-as-judge",
+  "knowledgeBaseId": "kb_01b11dfa19714ed6870707ed7f327e9c",
+  "model": "deepseek-v4-flash",
+  "schemaVersion": 1,
+  "specSha256": "882d888a6b971748e531404b0a77614ce1e00731fc3d5dae33df8aaed630976b",
+  "startedAt": "2026-07-20T02:07:39.005234Z",
+  "status": "completed",
+  "syntheticUsername": "rag_aw_1784513259-733d34",
+  "threads": 1,
+  "workflowId": "wf_1de6b8c5-7396-4843-aa94-eb8925cf084c",
+  "workflowVersion": 1
+}

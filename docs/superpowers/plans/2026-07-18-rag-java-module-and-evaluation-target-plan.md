@@ -2159,3 +2159,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Agent非流式修复前会换行拼接所有累计Event快照，造成重复放大和精确拒答失败。Controller已改为只合并delta；Java 17定向3/3通过，重打JAR后Agent黑盒拒答精确通过。首次误用Java 25时既有Mockito测试因Byte Buddy只支持到Java 24而1 error，转Temurin 17后通过，未记为业务回归失败。
 - 取消只部分闭环：API为`cancelled`，历史无该run的assistant message，无citation终态；但SSE在30秒内未结束并出现`ConnectionError`，不声称完整取消闭环。
 - 详细报告为`docs/rag/evaluation-results/final-report/Agent与Workflow真实LLM黑盒补充报告.md`；原始结果SHA-256=`a0260224949b15a3fb4c370d4f157469fa9c39e26f6792718a3ecec535d1e882`，最终JAR=`aaaef787a632b5efd70497a06d5ecad1a21718b3958024f1a597bb12411b5982`。全reactor跳过重复测试打包BUILD SUCCESS。
+
+#### 取消后SSE终止与上游副作用门禁计划（执行前）
+
+1. 冻结`58fdfe1`与真实`cancel.json`为失败基线；只读追踪RunControlService取消、ActiveRunRegistry回调、Rx Disposable、Workflow节点执行器和SseEmitter完成/异常回调，由一个目标Agent独立复核竞态。
+2. 区分“业务状态已取消”、“客户端SSE已结束”和“上游模型/工具已停止”三个独立门禁；修复不得仅提前`emitter.complete()`而留下后台请求继续消耗。
+3. 优先用现有ActiveRunRegistry的可逆取消句柄传播终止；处理“取消先于register后发生”和“流先结束后register后发生”竞态，取消回调必须幂等。
+4. 补定向测试：取消必须释放订阅、SSE只完成一次、取消与注册竞态不丢信号、取消后事件不再发送且不落assistant/citation；用Java 17执行精确回归。
+5. 重打JAR并用真实Workflow+DeepSeek重跑取消黑盒，记录cancel API到SSE结束延迟、历史/run终态、取消后日志是否还有模型/工具事件。只有这三项都通过才改写“取消已闭环”。
+6. 执行结果、首次失败、修复差异、测试数量、JAR/证据SHA和遗留边界追加本节；重大闭环后中文本地提交。
+
+#### RAG阶段收尾计划（执行前）
+
+1. 只读核验SciFact质量评测目录、进程终态、1200条组合唯一性、错误/降级/空结果门禁及manifest/targets/prepared哈希；若已被最终报告收录则停止过时监控，不重复运行或覆盖证据。
+2. 将取消修复的真实黑盒复测补入计划与Agent/Workflow补充报告，明确区分SSE终止、数据库取消、取消后持久化零污染，以及“已发往远端的在途模型请求是否可撤销”这一尚未证明的边界。
+3. 校验新增Python harness语法、Java 17定向回归、全模块打包、证据JSON结构和文档链接；保留首次失败记录，不把未执行的测试写成通过。
+4. 检查git差异，只暂存控制器、工作流取消监听、测试、harness、计划、报告和本轮新证据；明确排除四个既有日志及所有无关未跟踪目录。
+5. 形成中文本地提交，记录提交哈希、测试数量、JAR/原始结果/取消证据SHA和剩余风险；随后结束已经完成使命的质量评测监控。
+
+#### 取消后SSE终止与上游副作用门禁执行结果
+
+- 独立只读审计确认旧链路的两个确定性断点：`run`事件先于`ActiveRunRegistry.register`，客户端立即取消可命中空注册表；已注册时回调也只有Rx `dispose()`，不会触发`SseEmitter`的complete/error。因此旧黑盒表现为run已cancelled、历史与citation无污染，但连接30秒不结束。
+- Controller改为在`run`事件可见前安装本机中断器和SSE生命周期回调；中断动作以CAS幂等执行“标记取消、释放订阅、完成SSE”，并补偿取消发生在真实Disposable挂载前的竞态。timeout/error/completion均清理注册表。Workflow流新增250ms数据库取消watcher，覆盖取消请求落到其他实例和本机信号丢失；连接主动断开会反向取消run。
+- Java 17精确回归包含Controller SSE、Workflow执行器、授权、Run控制、Workflow编译/生命周期/运行时与RAG evidence lineage共29/29通过，0 failure/error/skipped。此前把既有`ChatServiceTest`加入组合命令时，该Spring外部配置集成类出现2个环境错误；纠正为不依赖外部配置的精确回归后全绿，未把首次失败隐藏或计为业务通过。Java 17全reactor跳过重复测试打包BUILD SUCCESS。
+- 真实黑盒`agent-workflow-cancel-fixed-20260720T020800Z`使用真实DeepSeek/MySQL/Embedding/Qdrant、全新tenant/知识库/Workflow、单线程运行206.728秒并completed。Workflow四用例10893/9259/9186/7114ms，Agent为43852/22468/29268/41570ms；可回答、精确拒答、伪引用拒绝、SSE唯一终态、历史回读、引用回源与跨租户拒绝全部再次通过。
+- 取消回归：cancel API HTTP 200/2883ms、业务状态cancelled；完整SSE墙钟4484ms，旧基线为30秒内不结束；事件仅session/run，历史0条、无assistant、无citation。服务日志从10:11:05.174取消到10:12:07隔离应用停机没有该run的模型/工具事件，证明本次在模型调用前取消后没有继续派发。该用例没有让请求进入远端模型在途状态，不能证明供应商侧请求撤销或计费停止；并行DAG已经运行的兄弟节点也仍需可控慢服务专测。
+- 证据SHA：JAR=`39f4a76815e1a870ce848110300700792a7b5e0587091ab0502eee9e1297f8cc`，完整结果=`469ce47861dd0fb3e96d9b8d5a779b09ff994e4977cca6412227264236423358`，取消=`1d75f264fc009cea8d991c300ed67035251ab9aacc8d713e7aa48b5fe8a7613d`，manifest=`409447a4ebfce1ee54dca2d5729e5098d06747a8a6a012d6d37935b516a08370`。本次run manifest中的代码号是构建前基线`58fdfe1`，实际JAR包含待提交修复，因此报告同时保留JAR哈希和最终提交，不混淆二者。
+
+#### RAG阶段收尾结果
+
+- 自动监控指向的`run-scifact-quality-eval-1e9ebbf`经再次只读核验仍是历史失败run：227条/227唯一组合/57个query，queryId=1278的`hybrid_rrf`为`RAG_QDRANT_UNAVAILABLE`、32368ms、空排名；1 error、0 degraded、1 empty，异常终止manifest保持running。进程已不存在，该目录早已在本计划第1120/1137行明确排除，不进入最终报告。
+- 有效300×4质量结果早已由最终报告生成器完成强哈希门禁、指标复算、失败文档抽取和确定性双目录重建；因此关闭过时的`rag`心跳监控，不重跑旧目录、不覆盖或拼接历史证据。
+- 主报告生成器补充真实Agent/Workflow黑盒边界并修正“完全未测拒答”的过时表述：当前仅一个合成可回答事实和一个合成无答案问题，足以证明链路smoke，不足以报告通用Faithfulness、Answer Correctness、幻觉率或拒答率。
+- 收尾验证：第一次重建命令因包含`rm -rf /tmp/...`被安全策略拒绝，未删除文件；改用两个全新空目录后生成器均成功，第二次输出与项目主报告/机器总账逐字节`cmp`一致。Python两个harness `py_compile`通过；Java 17精确回归再次29/29通过，六模块BUILD SUCCESS、Maven 2.915秒。
+- 收尾SHA：主报告=`21daa066ffd26e1d4f75b991276cd6d91056ffcc8737700796cedca9e3a0c2a3`，机器总账=`98deaa041402cbba5a14e56a926756d57de1ec7565863c49c88281f683d16215`，Agent/Workflow补充报告=`70db5185a0f49fd075a3f3656860c7559bc7410526d345060aee9a091943a145`，取消服务日志摘录=`201d72ec327f14f9a6c684db7202435000a3a755cab7dd18647bf5caf7060510`。过时`rag`自动监控已删除，不再每10分钟检查已排除run。

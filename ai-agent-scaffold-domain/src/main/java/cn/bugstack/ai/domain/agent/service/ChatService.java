@@ -301,11 +301,30 @@ public class ChatService implements IChatService {
         ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
                 "workflow", workflowId, requestedRunId);
         String effectiveMessage = steerResumeMessage(run, message);
+        Flowable<String> stream = observeWorkflowCancellation(
+                scheduleWorkflow(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
+                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)),
+                tenantId, userId, run)
+                .doFinally(() -> {
+                    if (runControlService.cancelled(tenantId, userId, run.getRunId())) clearEvidence(run);
+                });
         return RunStreamEntity.<String>builder()
                 .run(run)
-                .stream(scheduleWorkflow(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
-                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)))
+                .stream(stream)
                 .build();
+    }
+
+    /** 监听数据库取消状态；覆盖跨实例取消与本机注册竞态，并反向取消断开的流。 */
+    private <T> Flowable<T> observeWorkflowCancellation(Flowable<T> stream, String tenantId, String userId,
+                                                         ChatRunEntity run) {
+        return stream
+                .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
+                        .filter(tick -> runControlService.cancelled(tenantId, userId, run.getRunId())))
+                .doOnCancel(() -> {
+                    if (!runControlService.cancelled(tenantId, userId, run.getRunId())) {
+                        runControlService.cancel(tenantId, userId, run.getRunId(), "流式连接已中断");
+                    }
+                });
     }
 
     /**

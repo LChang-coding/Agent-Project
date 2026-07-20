@@ -23,6 +23,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -199,46 +200,81 @@ public class AgentServiceController implements IAgentService {
             emitter.send(SseEmitter.event().name("session").data(sessionId));
 
             AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+            AtomicBoolean interruptRequested = new AtomicBoolean(false);
             String runId = null;
-            Disposable disposable;
             if (hasWorkflow(requestDTO)) {
                 RunStreamEntity<String> runStream = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
                         userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
                         requestDTO.getAttachmentIds());
                 runId = runStream.getRun().getRunId();
+                registerActiveStream(runId, emitter, disposableRef, interruptRequested);
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
                         "contextRevision", runStream.getRun().getCurrentContextRevision())));
-                disposable = subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef,
-                        TenantContextHolder.getTenantId(), userId, sessionId, runId);
+                if (!interruptRequested.get()) {
+                    attachDisposable(disposableRef, interruptRequested,
+                            subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef,
+                                    TenantContextHolder.getTenantId(), userId, sessionId, runId));
+                }
             } else {
                 RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
                         sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(), requestDTO.getAttachmentIds());
                 runId = runStream.getRun().getRunId();
+                registerActiveStream(runId, emitter, disposableRef, interruptRequested);
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
                         "contextRevision", runStream.getRun().getCurrentContextRevision())));
-                disposable = subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef,
-                        TenantContextHolder.getTenantId(), userId, sessionId, runId);
+                if (!interruptRequested.get()) {
+                    attachDisposable(disposableRef, interruptRequested,
+                            subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef,
+                                    TenantContextHolder.getTenantId(), userId, sessionId, runId));
+                }
             }
-            disposableRef.set(disposable);
-            String activeRunId = runId;
-            if (activeRunId != null) {
-                activeRunRegistry.register(activeRunId, () -> dispose(disposableRef));
-            }
-            emitter.onCompletion(() -> {
-                dispose(disposableRef);
-                activeRunRegistry.remove(activeRunId);
-            });
-            emitter.onTimeout(() -> dispose(disposableRef));
         } catch (Exception e) {
             log.error("流式对话失败", e);
             completeSseWithError(emitter, e);
         }
         return emitter;
+    }
+
+    /** 在run事件发送前建立取消句柄，避免客户立即取消丢信号。 */
+    private void registerActiveStream(String runId, SseEmitter emitter,
+                                      AtomicReference<Disposable> disposableRef,
+                                      AtomicBoolean interruptRequested) {
+        if (runId == null) return;
+        activeRunRegistry.register(runId, () -> {
+            if (interruptRequested.compareAndSet(false, true)) {
+                dispose(disposableRef);
+                emitter.complete();
+            }
+        });
+        emitter.onCompletion(() -> {
+            dispose(disposableRef);
+            activeRunRegistry.remove(runId);
+        });
+        emitter.onTimeout(() -> {
+            if (!activeRunRegistry.interrupt(runId)) {
+                dispose(disposableRef);
+                emitter.complete();
+            }
+        });
+        emitter.onError(error -> {
+            dispose(disposableRef);
+            activeRunRegistry.remove(runId);
+        });
+    }
+
+    /** 发布订阅句柄并补偿注册与取消交错的竞态。 */
+    private void attachDisposable(AtomicReference<Disposable> disposableRef,
+                                  AtomicBoolean interruptRequested,
+                                  Disposable disposable) {
+        disposableRef.set(disposable);
+        if (interruptRequested.get()) {
+            dispose(disposableRef);
+        }
     }
 
     /**

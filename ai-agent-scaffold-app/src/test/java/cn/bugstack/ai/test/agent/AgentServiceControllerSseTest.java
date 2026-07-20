@@ -1,6 +1,7 @@
 package cn.bugstack.ai.test.agent;
 
 import cn.bugstack.ai.trigger.http.AgentServiceController;
+import cn.bugstack.ai.domain.run.service.ActiveRunRegistry;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.domain.rag.model.entity.RagAnswerCitationValidation;
 import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
@@ -9,9 +10,12 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import io.reactivex.rxjava3.disposables.Disposable;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 流式错误响应测试。
@@ -59,6 +63,26 @@ public class AgentServiceControllerSseTest {
                 List.of("N", "NOT", "NOT_IN", "NOT_IN_DOCUMENT", "NOT_IN_DOCUMENT"));
 
         Assert.assertEquals("NOT_IN_DOCUMENT", content);
+    }
+
+    @Test
+    public void shouldCompleteEmitterAndDisposeLateSubscriptionWhenRunIsCancelled() {
+        AgentServiceController controller = new AgentServiceController();
+        ActiveRunRegistry registry = new ActiveRunRegistry();
+        ReflectionTestUtils.setField(controller, "activeRunRegistry", registry);
+        CapturingEmitter emitter = new CapturingEmitter();
+        AtomicReference<Disposable> disposableRef = new AtomicReference<>();
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+
+        ReflectionTestUtils.invokeMethod(controller, "registerActiveStream", "run-race", emitter,
+                disposableRef, interrupted);
+        Assert.assertTrue(registry.interrupt("run-race"));
+        Disposable disposable = Disposable.empty();
+        ReflectionTestUtils.invokeMethod(controller, "attachDisposable", disposableRef, interrupted, disposable);
+
+        Assert.assertTrue(interrupted.get());
+        Assert.assertTrue(disposable.isDisposed());
+        Assert.assertTrue(emitter.completed);
     }
 
     private static class CapturingEmitter extends SseEmitter {

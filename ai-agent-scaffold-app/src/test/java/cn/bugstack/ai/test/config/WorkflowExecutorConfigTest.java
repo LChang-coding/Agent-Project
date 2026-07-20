@@ -3,6 +3,8 @@ package cn.bugstack.ai.test.config;
 import cn.bugstack.ai.config.ThreadPoolConfig;
 import cn.bugstack.ai.config.WorkflowExecutorConfig;
 import cn.bugstack.ai.config.WorkflowExecutorProperties;
+import cn.bugstack.ai.domain.run.model.ChatRunEntity;
+import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.agent.service.ChatService;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
@@ -11,6 +13,8 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 import java.lang.reflect.Field;
@@ -180,6 +184,49 @@ public class WorkflowExecutorConfigTest {
 
             Assert.assertTrue(interrupted.await(2, TimeUnit.SECONDS));
             Assert.assertFalse(completed.get());
+        } finally {
+            coordinator.shutdownNow();
+            Assert.assertTrue(coordinator.awaitTermination(2, TimeUnit.SECONDS));
+        }
+    }
+
+    /** 校验数据库取消兜底；验证跨实例取消能完成下游并中断 coordinator。 */
+    @Test
+    public void shouldInterruptWorkflowWhenDatabaseCancellationIsObserved() throws Exception {
+        ThreadPoolExecutor coordinator = coordinator(new WorkflowExecutorProperties());
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        try {
+            ChatService service = chatService(coordinator);
+            RunControlService runControlService = Mockito.mock(RunControlService.class);
+            Mockito.when(runControlService.cancelled("tenant-1", "user-1", "run-1"))
+                    .thenAnswer(invocation -> cancelled.get());
+            ReflectionTestUtils.setField(service, "runControlService", runControlService);
+            ChatRunEntity run = ChatRunEntity.builder().runId("run-1").build();
+            Flowable<String> scheduled = scheduleWorkflow(service, () -> {
+                started.countDown();
+                try {
+                    Thread.sleep(10_000L);
+                } catch (InterruptedException exception) {
+                    interrupted.countDown();
+                    Thread.currentThread().interrupt();
+                }
+                return "unexpected";
+            });
+
+            @SuppressWarnings("unchecked")
+            Flowable<String> guarded = ReflectionTestUtils.invokeMethod(service, "observeWorkflowCancellation",
+                    scheduled, "tenant-1", "user-1", run);
+            TestSubscriber<String> subscriber = guarded.test();
+            Assert.assertTrue(started.await(2, TimeUnit.SECONDS));
+
+            cancelled.set(true);
+
+            subscriber.awaitDone(2, TimeUnit.SECONDS).assertComplete().assertNoValues().assertNoErrors();
+            Assert.assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+            Mockito.verify(runControlService, Mockito.never())
+                    .cancel(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString());
         } finally {
             coordinator.shutdownNow();
             Assert.assertTrue(coordinator.awaitTermination(2, TimeUnit.SECONDS));

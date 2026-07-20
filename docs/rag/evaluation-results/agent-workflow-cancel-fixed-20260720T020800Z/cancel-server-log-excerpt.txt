@@ -1,0 +1,7 @@
+Evidence scope: cancel run only; timestamps are Asia/Shanghai (UTC+08:00).
+Source: isolated app log /tmp/ai-agent-rag-cancel-fixed/log/log_info.log.
+
+26-07-20.10:11:01.116 [http-nio-8093-exec-4] INFO AgentServiceController traceId=5114ae97-640c-4ed1-9a8d-1177c7a5791d tenantId=tenant_ad2c04b6-8899-40b1-9110-43f5dd780776 userId=user_9195dbc6-22c5-4cb0-af9d-be0e303b0eee stream request sessionId=8a6951a1-c7ca-41c3-8c86-01604c4c93b2 workflowId=wf_1de6b8c5-7396-4843-aa94-eb8925cf084c
+26-07-20.10:11:05.174 [http-nio-8093-exec-5] INFO RunControlService traceId=026d3f01-4de5-4617-911b-f5eccecb7d6a tenantId=tenant_ad2c04b6-8899-40b1-9110-43f5dd780776 userId=user_9195dbc6-22c5-4cb0-af9d-be0e303b0eee cancelled sessionId=8a6951a1-c7ca-41c3-8c86-01604c4c93b2 runId=run_e2e_cd28a5a451346ecf7dc8ca83 revision=1
+
+No LLM RESPONSE, tool event, assistant persistence, or citation event for this session/run was observed between the cancellation line and isolated-app shutdown at 10:12:07. This proves no post-cancel dispatch in this run; it does not prove revocation of an already-dispatched remote request.

@@ -472,24 +472,28 @@ PDF章节金标与数据库实值：
 
 证据：[健康删除manifest](../kb-delete-e2e-r3-975ee7a-minio/manifest.json)、[健康零残留](../kb-delete-e2e-r3-975ee7a-minio/residual-evidence-v2.json)、[故障瞬时快照](../kb-delete-fault-r1-e6c6d54-minio/fault-observation.json)、[故障终态零残留](../kb-delete-fault-r1-e6c6d54-minio/residual-evidence.json)。
 
-## 九、上线前优化与复测门槛
+## 九、Agent/Workflow真实LLM补充边界
+
+真实DeepSeek黑盒已补测一个合成可回答事实、一个合成无答案问题和一个伪造citation诱导，覆盖Agent/Workflow非流式与SSE、历史metadata、引用回源、跨租户拒绝和取消。两入口均命中固定事实并得到VALID引用，无答案均精确返回NOT_IN_DOCUMENT，伪造citation均被标记INVALID_CITATIONS；这证明入口链路可工作，但样本量不足以计算通用Answer Correctness、Faithfulness、幻觉率或拒答率。取消修复后的最新证据、前后差异和仍未证明的在途远端请求撤销边界见[Agent与Workflow真实LLM黑盒补充报告](Agent与Workflow真实LLM黑盒补充报告.md)。
+
+## 十、上线前优化与复测门槛
 
 1. Reranker把候选批次由3提升至服务允许且经过内存验证的批量，减少4次串行HTTP；加入query级不确定性门控与短TTL缓存。门槛：并发4至少两轮、每变体≥100 measured、0 fallback，且MRR下降不超过0.005。
 2. 融合阶段拆开threshold和TopK埋点，对Dense/Sparse权重、fusionTopK做网格消融。门槛：Recall@10不得低于当前Dense 0.797944，同时报告MRR/延迟代价。
 3. Docling按内容哈希缓存解析结果，并分离PDF重任务队列。门槛：真实多页/表格PDF至少30份，报告p50/p95、页面/表格保真和失败重试。
 4. PDF页span已贯穿解析、chunk、Qdrant payload和citation并通过单份三页金标；下一门槛是至少30份多页/表格/扫描PDF以及引用回源黑盒。DOCX若刚需固定页码，需增加固定版式转换或替换解析器后用相同金标门禁。
-5. 增加有gold answer的端到端Agent评测，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；否则不能把当前检索报告当答案质量报告。
+5. 扩展有gold answer的端到端Agent评测到足够样本，至少计算Answer Correctness、Faithfulness、引用精确率/召回率和无答案拒答率；当前单一合成事实只能算链路smoke，不能把检索报告当答案质量报告。
 
-## 十、明确未测与证据限制
+## 十一、明确未测与证据限制
 
-- SciFact只评测检索，不含标准答案，因此未测Faithfulness、Answer Correctness和幻觉率。
+- SciFact只评测检索，不含标准答案，因此没有300题级Faithfulness、Answer Correctness和幻觉率；补充黑盒仅有一个合成事实样本。
 - r6格式题只验证证据词项是否在返回上下文，不等同于最终LLM回答正确。
-- 无答案探针仍会返回相关候选；是否正确拒答必须在Agent最终回答黑盒中另测。
+- r6无答案探针仍会返回相关候选；补充黑盒只证明一个合成无答案问题在Agent/Workflow各一次精确拒答，不代表拒答率。
 - r6每格式仅一个小文件、单Worker、单上传/查询线程，不代表大文件、多租户或长时容量。
 - 内部诊断为20个确定性代表问题，不是300问题全量内部轨迹。
 - fusion threshold与TopK尚未分开留痕；PDF页码已闭环，但Markdown和当前Docling DOCX的页数仍是未知而非0页。
 
-## 十一、证据索引与复算
+## 十二、证据索引与复算
 
 机器总账：[rag-final-evidence-ledger.json](rag-final-evidence-ledger.json)。关键原始证据均已从`/tmp`固化进项目`docs/rag/evaluation-results/`，总账记录每个输入的SHA-256与字节数。
 

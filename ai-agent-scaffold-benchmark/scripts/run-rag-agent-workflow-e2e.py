@@ -313,7 +313,9 @@ def main() -> None:
         def cancel_on_run(data):
             cancel_record["runEvent"] = data
             run_seen.set()
+            cancel_record["cancelRequestedAt"] = now()
             response, transport = api.raw("POST", f"/v1/runs/{cancel_run_id}/cancel", json={"reason": "e2e cancellation"})
+            cancel_record["cancelReturnedAt"] = now()
             cancel_record["cancelResponse"], cancel_record["cancelTransport"] = response, transport
 
         long_prompt = spec["answerable"]["question"] + " 回答前先详细列出100条分析，然后再给出结论。"
@@ -327,6 +329,7 @@ def main() -> None:
             transport = {"httpStatus": 200, "elapsedMs": None, "transportError": type(error).__name__}
             cancel_record["streamDidNotTerminateAfterCancel"] = True
         cancel_record["events"], cancel_record["streamTransport"] = events, transport
+        cancel_record["streamReturnedAt"] = now()
         cancel_record["runEventObserved"] = run_seen.is_set()
         history, history_transport = api.call("GET", f"/v1/sessions/{cancel_session}/messages?limit=100")
         cancel_record["history"], cancel_record["historyTransport"] = history, history_transport
