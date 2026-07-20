@@ -75,6 +75,15 @@ public class RagKnowledgeBaseDeletionService {
         return task;
     }
 
+    /** 按知识库恢复删除进度，供页面刷新后重新挂载轮询。 */
+    public RagKnowledgeBaseDeleteTaskEntity requireTaskByKnowledgeBase(String tenantId, String userId,
+                                                                        String roleCode, String knowledgeBaseId) {
+        RagKnowledgeBaseEntity knowledgeBase = requireManageable(
+                tenantId, userId, roleCode, knowledgeBaseId);
+        return deletionRepository.findByKnowledgeBaseId(tenantId, knowledgeBase.knowledgeBaseId())
+                .orElseThrow(() -> new AppException("RAG_KB_DELETE_TASK_NOT_FOUND", "知识库删除任务不存在"));
+    }
+
     public RagKnowledgeBaseDeleteTaskEntity retry(String tenantId, String userId,
                                                     String roleCode, String taskId) {
         RagKnowledgeBaseDeleteTaskEntity current = requireTask(

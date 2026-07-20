@@ -74,7 +74,7 @@
           <span>Embedding</span>
           <strong>{{ selectedKnowledgeBase.embeddingDimension }} dimensions</strong>
           <small>ID · {{ shortId(selectedKnowledgeBase.knowledgeBaseId) }}</small>
-          <button v-if="isAdministrator" class="rag-button rag-button--soft rag-button--wide" type="button" @click="openKnowledgeBaseEditor(selectedKnowledgeBase)">
+          <button v-if="isAdministrator" class="rag-button rag-button--soft rag-button--wide" type="button" :disabled="selectedKnowledgeBaseUnavailable" @click="openKnowledgeBaseEditor(selectedKnowledgeBase)">
             编辑知识库信息
           </button>
         </footer>
@@ -92,7 +92,7 @@
             v-if="isAdministrator"
             class="rag-button rag-button--primary"
             type="button"
-            :disabled="!selectedKnowledgeBase || uploadBusy"
+            :disabled="!selectedKnowledgeBase || uploadBusy || selectedKnowledgeBaseUnavailable"
             @click="openFilePicker"
           >
             <LoaderCircle v-if="uploadBusy" class="spin" :size="17" />
@@ -106,6 +106,25 @@
           <span :style="{ width: `${uploadProgress}%` }" />
           <div><strong>{{ pendingFileName }}</strong><em>{{ uploadProgress }}%</em></div>
         </div>
+
+        <section v-if="knowledgeBaseDeleteTask" class="kb-delete-progress" :class="`kb-delete-progress--${statusTone(knowledgeBaseDeleteTask.status)}`" aria-live="polite">
+          <div class="kb-delete-progress__icon">
+            <LoaderCircle v-if="isKnowledgeBaseDeleteRunning" class="spin" :size="23" />
+            <CircleAlert v-else-if="['failed', 'dead'].includes(knowledgeBaseDeleteTask.status)" :size="23" />
+            <CircleCheck v-else :size="23" />
+          </div>
+          <div>
+            <span>不可取消的级联删除 · {{ knowledgeBaseDeleteStageText(knowledgeBaseDeleteTask.stage) }}</span>
+            <strong>{{ knowledgeBaseDeleteStatusText(knowledgeBaseDeleteTask) }}</strong>
+            <div class="task-progress"><span :style="{ width: `${knowledgeBaseDeletePercent}%` }" /></div>
+            <small>{{ knowledgeBaseDeleteTask.completedDocuments }}/{{ knowledgeBaseDeleteTask.totalDocuments }} 个文档 · 尝试 {{ knowledgeBaseDeleteTask.attemptCount }}/{{ knowledgeBaseDeleteTask.maxAttempts }}</small>
+            <small v-if="knowledgeBaseDeleteTask.errorCode" class="task-error">{{ knowledgeBaseDeleteTask.errorCode }} · {{ knowledgeBaseDeleteTask.errorMessage || '未提供错误详情' }}</small>
+          </div>
+          <button v-if="['failed', 'dead'].includes(knowledgeBaseDeleteTask.status)" class="rag-button rag-button--danger" type="button" :disabled="knowledgeBaseDeleteRetryBusy" @click="retryKnowledgeBaseDeletion">
+            <LoaderCircle v-if="knowledgeBaseDeleteRetryBusy" class="spin" :size="15" />
+            {{ knowledgeBaseDeleteRetryBusy ? '重新入队中' : '从检查点继续' }}
+          </button>
+        </section>
 
         <section v-if="selectedTasks.length" class="task-list" aria-label="摄取任务">
           <article v-for="task in selectedTasks" :key="task.taskId" class="task-card" :class="`task-card--${statusTone(task.status)}`">
@@ -123,7 +142,7 @@
               <small v-if="task.cancelReason" class="task-error">取消原因·{{ task.cancelReason }}</small>
             </div>
             <button
-              v-if="isAdministrator && task.operation !== 'delete' && isTaskRunning(task.status)"
+              v-if="isAdministrator && !selectedKnowledgeBaseUnavailable && task.operation !== 'delete' && isTaskRunning(task.status)"
               class="rag-button rag-button--danger"
               type="button"
               :disabled="cancelBusyTaskId === task.taskId"
@@ -133,7 +152,7 @@
               {{ cancelBusyTaskId === task.taskId ? '正在取消' : '取消任务' }}
             </button>
             <button
-              v-else-if="isAdministrator && task.operation !== 'rebuild' && ['failed', 'dead'].includes(task.status)"
+              v-else-if="isAdministrator && !selectedKnowledgeBaseUnavailable && task.operation !== 'rebuild' && ['failed', 'dead'].includes(task.status)"
               class="rag-button rag-button--danger"
               type="button"
               :disabled="retryBusyTaskId === task.taskId"
@@ -166,7 +185,7 @@
               v-if="isAdministrator && ['ready', 'failed'].includes(document.status)"
               class="document-delete"
               type="button"
-              :disabled="deletingDocumentId === document.documentId"
+              :disabled="deletingDocumentId === document.documentId || selectedKnowledgeBaseUnavailable"
               :aria-label="`删除文档 ${document.displayName}`"
               @click="removeDocument(document)"
             >
@@ -181,6 +200,13 @@
           <strong>{{ selectedKnowledgeBase ? '这个知识库还没有文档' : '选择知识库后查看文档' }}</strong>
           <p v-if="selectedKnowledgeBase && isAdministrator">上传 PDF、DOCX 或 Markdown，系统会显示解析、切块和向量化进度。</p>
         </div>
+
+        <section v-if="isAdministrator && selectedKnowledgeBase" class="danger-zone">
+          <div><span>DANGER ZONE</span><strong>永久删除整个知识库</strong><p>立即退出检索并停用绑定，后台依次清理全部文档版本、向量、分块和原文件。</p></div>
+          <button class="rag-button rag-button--danger" type="button" :disabled="selectedKnowledgeBaseUnavailable" @click="openKnowledgeBaseDeletion">
+            <Trash2 :size="16" /> {{ selectedKnowledgeBaseUnavailable ? '删除已受理' : '删除知识库' }}
+          </button>
+        </section>
       </section>
 
       <aside class="retrieval-lab">
@@ -217,7 +243,7 @@
             <textarea v-model="debugForm.query" class="lab-input lab-textarea" maxlength="2000" placeholder="例如：员工如何申请差旅报销？" />
             <label>Context Token 预算</label>
             <input v-model.number="debugForm.maxContextTokens" class="lab-input" type="number" min="1" max="32768" />
-            <button class="rag-button rag-button--ink rag-button--wide" type="button" :disabled="debugBusy || !debugForm.bindingId || !debugForm.query.trim()" @click="runDebug">
+            <button class="rag-button rag-button--ink rag-button--wide" type="button" :disabled="debugBusy || selectedDebugBindingUnavailable || !debugForm.bindingId || !debugForm.query.trim()" @click="runDebug">
               <LoaderCircle v-if="debugBusy" class="spin" :size="17" />
               <Search v-else :size="17" />
               {{ debugBusy ? '正在执行多路检索…' : '执行检索调试' }}
@@ -281,7 +307,7 @@
             <article v-for="binding in bindings" :key="binding.bindingId">
               <span>{{ binding.targetType }}</span><strong>{{ targetLabel(binding.targetType, binding.targetId) }}</strong>
               <small>{{ knowledgeBaseName(binding.knowledgeBaseId) }} · {{ profileName(binding.profileId) }}</small>
-              <button type="button" :disabled="deletingBindingId === binding.bindingId" aria-label="删除绑定" @click="removeBinding(binding)"><LoaderCircle v-if="deletingBindingId === binding.bindingId" class="spin" :size="15" /><Trash2 v-else :size="15" /></button>
+              <button type="button" :disabled="deletingBindingId === binding.bindingId || isKnowledgeBaseUnavailable(binding.knowledgeBaseId)" aria-label="删除绑定" @click="removeBinding(binding)"><LoaderCircle v-if="deletingBindingId === binding.bindingId" class="spin" :size="15" /><Trash2 v-else :size="15" /></button>
             </article>
           </div>
         </template>
@@ -295,6 +321,15 @@
         <label>用途说明<textarea v-model.trim="knowledgeBaseForm.description" class="lab-input lab-textarea" maxlength="500" placeholder="说明这里收纳哪些文档，以及将由哪些 Agent 使用。" /></label>
         <p><ShieldCheck :size="16" /> {{ editingKnowledgeBaseId ? '仅修改名称与说明；索引、绑定及 collection 保持不变，并通过 revision 防止覆盖他人更新。' : '归属当前租户，知识库 ID 和向量 collection 别名由服务端生成。' }}</p>
         <footer><button class="rag-button rag-button--quiet" type="button" :disabled="knowledgeBaseBusy" @click="closeKnowledgeBaseEditor">取消</button><button class="rag-button rag-button--primary" type="submit" :disabled="knowledgeBaseBusy || !knowledgeBaseForm.name"><LoaderCircle v-if="knowledgeBaseBusy" class="spin" :size="16" />{{ knowledgeBaseBusy ? '正在保存…' : editingKnowledgeBaseId ? '保存修改' : '创建知识库' }}</button></footer>
+      </form>
+    </div>
+
+    <div v-if="showKnowledgeBaseDeleteDialog && selectedKnowledgeBase" class="modal-backdrop" @click.self="closeKnowledgeBaseDeletion">
+      <form class="rag-modal rag-modal--danger" @submit.prevent="requestKnowledgeBaseDelete">
+        <header><div><span>IRREVERSIBLE DELETE</span><h2>删除整个知识库</h2></div><button type="button" aria-label="关闭" :disabled="knowledgeBaseDeleteBusy" @click="closeKnowledgeBaseDeletion"><X :size="19" /></button></header>
+        <div class="delete-warning"><TriangleAlert :size="20" /><p>受理后立即禁止上传、编辑、绑定和检索；删除不可取消。系统会保留审计墓碑，并在后台可恢复地清理 {{ documents.length }} 个可见文档。</p></div>
+        <label>输入知识库名称 <strong>{{ selectedKnowledgeBase.name }}</strong> 以确认<input v-model="knowledgeBaseDeleteConfirmName" class="lab-input" autocomplete="off" :placeholder="selectedKnowledgeBase.name" /></label>
+        <footer><button class="rag-button rag-button--quiet" type="button" :disabled="knowledgeBaseDeleteBusy" @click="closeKnowledgeBaseDeletion">返回</button><button class="rag-button rag-button--danger" type="submit" :disabled="knowledgeBaseDeleteBusy || knowledgeBaseDeleteConfirmName !== selectedKnowledgeBase.name"><LoaderCircle v-if="knowledgeBaseDeleteBusy" class="spin" :size="16" />{{ knowledgeBaseDeleteBusy ? '正在建立删除屏障…' : '确认永久删除' }}</button></footer>
       </form>
     </div>
 
@@ -336,9 +371,10 @@ import { queryAgentConfigManagement } from '@/api/agent';
 import {
   cancelRagIngestTask, createKnowledgeBase, createRagBinding, createRagRetrievalProfile,
   debugRagRetrieval, deleteRagBinding, deleteRagDocument, queryKnowledgeBases, queryRagBindings, queryRagDocuments,
-  queryRagIngestTask, queryRagIngestTasks, queryRagRetrievalProfiles, retryRagIngestTask, updateKnowledgeBase,
-  updateRagRetrievalProfile, uploadRagDocument,
-  type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase,
+  queryKnowledgeBaseDeleteTask, queryKnowledgeBaseDeleteTaskById, queryRagIngestTask, queryRagIngestTasks,
+  queryRagRetrievalProfiles, requestKnowledgeBaseDeletion, retryKnowledgeBaseDeleteTask, retryRagIngestTask,
+  updateKnowledgeBase, updateRagRetrievalProfile, uploadRagDocument,
+  type RagBinding, type RagDocument, type RagIngestTask, type RagKnowledgeBase, type RagKnowledgeBaseDeleteTask,
   type RagRetrievalDebugResult, type RagRetrievalProfile, type RagRetrievalProfilePayload,
   type RagTargetType,
 } from '@/api/rag';
@@ -371,6 +407,11 @@ const showKnowledgeBaseEditor = ref(false);
 const editingKnowledgeBaseId = ref('');
 const editingKnowledgeBaseRevision = ref<number | undefined>();
 const knowledgeBaseForm = reactive({ name: '', description: '' });
+const knowledgeBaseDeleteTask = ref<RagKnowledgeBaseDeleteTask | null>(null);
+const showKnowledgeBaseDeleteDialog = ref(false);
+const knowledgeBaseDeleteConfirmName = ref('');
+const knowledgeBaseDeleteBusy = ref(false);
+const knowledgeBaseDeleteRetryBusy = ref(false);
 const debugBusy = ref(false);
 const debugResult = ref<RagRetrievalDebugResult | null>(null);
 const debugForm = reactive({ bindingId: '', query: '', maxContextTokens: 4096 });
@@ -385,16 +426,31 @@ const editingProfileId = ref('');
 const editingProfileRevision = ref<number | undefined>();
 const profileForm = reactive(defaultProfile());
 let taskTimer: number | undefined;
+let knowledgeBaseDeleteTimer: number | undefined;
 
 const labTabs = [{ id: 'debug' as const, label: '调试' }, { id: 'profiles' as const, label: '策略' }, { id: 'bindings' as const, label: '绑定' }];
 const isAdministrator = computed(() => ['owner', 'admin'].includes(authStore.roleCode.toLowerCase()));
 const selectedKnowledgeBase = computed(() => knowledgeBases.value.find((item) => item.knowledgeBaseId === selectedKnowledgeBaseId.value));
+const selectedKnowledgeBaseUnavailable = computed(() => Boolean(selectedKnowledgeBase.value
+  && ['deleting', 'deleted'].includes(selectedKnowledgeBase.value.status)));
+const isKnowledgeBaseDeleteRunning = computed(() => Boolean(knowledgeBaseDeleteTask.value
+  && ['pending', 'running', 'retrying', 'waiting', 'verifying'].includes(knowledgeBaseDeleteTask.value.status)));
+const knowledgeBaseDeletePercent = computed(() => {
+  const task = knowledgeBaseDeleteTask.value;
+  if (!task) return 0;
+  if (task.status === 'completed') return 100;
+  if (!task.totalDocuments) return task.stage === 'verifying' ? 94 : 12;
+  return Math.min(94, Math.max(8, Math.round((task.completedDocuments / task.totalDocuments) * 88) + 6));
+});
 const selectedTasks = computed(() => Object.values(taskById.value)
   .filter((task) => task.knowledgeBaseId === selectedKnowledgeBaseId.value)
   .sort((left, right) => Number(isTaskRunning(right.status)) - Number(isTaskRunning(left.status))));
 const selectedBinding = computed(() => bindings.value.find((item) => item.bindingId === debugForm.bindingId));
 const targetOptions = computed(() => bindingForm.targetType === 'agent' ? agentTargets.value : workflowTargets.value);
-const canCreateBinding = computed(() => Boolean(bindingForm.targetId && bindingForm.knowledgeBaseId && bindingForm.profileId && bindingForm.maxTokens > 0));
+const canCreateBinding = computed(() => Boolean(bindingForm.targetId && bindingForm.knowledgeBaseId
+  && bindingForm.profileId && bindingForm.maxTokens > 0 && !isKnowledgeBaseUnavailable(bindingForm.knowledgeBaseId)));
+const selectedDebugBindingUnavailable = computed(() => Boolean(selectedBinding.value
+  && isKnowledgeBaseUnavailable(selectedBinding.value.knowledgeBaseId)));
 const debugMetrics = computed(() => debugResult.value ? [
   { label: 'Dense', value: `${debugResult.value.metrics.denseCandidateCount} / ${debugResult.value.metrics.denseMs}ms` },
   { label: 'Sparse', value: `${debugResult.value.metrics.sparseCandidateCount} / ${debugResult.value.metrics.sparseMs}ms` },
@@ -403,7 +459,10 @@ const debugMetrics = computed(() => debugResult.value ? [
 ] : []);
 
 onMounted(reloadAll);
-onBeforeUnmount(() => taskTimer && window.clearInterval(taskTimer));
+onBeforeUnmount(() => {
+  if (taskTimer) window.clearInterval(taskTimer);
+  stopKnowledgeBaseDeletePolling();
+});
 watch(() => bindingForm.targetType, () => { bindingForm.targetId = ''; });
 
 async function reloadAll() {
@@ -437,6 +496,8 @@ async function loadTargets() {
 
 async function selectKnowledgeBase(id: string) {
   if (selectedKnowledgeBaseId.value === id) return;
+  stopKnowledgeBaseDeletePolling();
+  knowledgeBaseDeleteTask.value = null;
   selectedKnowledgeBaseId.value = id;
   bindingForm.knowledgeBaseId = id;
   debugResult.value = null;
@@ -444,8 +505,23 @@ async function selectKnowledgeBase(id: string) {
 }
 
 async function loadKnowledgeBaseData() {
-  await Promise.all([loadDocuments(), loadTasks()]);
+  await Promise.all([loadDocuments(), loadTasks(), restoreKnowledgeBaseDeleteTask()]);
   startTaskPolling();
+}
+
+async function restoreKnowledgeBaseDeleteTask() {
+  const target = selectedKnowledgeBase.value;
+  if (!target || !isAdministrator.value || target.status !== 'deleting') {
+    knowledgeBaseDeleteTask.value = null;
+    stopKnowledgeBaseDeletePolling();
+    return;
+  }
+  try {
+    knowledgeBaseDeleteTask.value = await queryKnowledgeBaseDeleteTask(target.knowledgeBaseId);
+    startKnowledgeBaseDeletePolling();
+  } catch (error) {
+    showError(error, '知识库删除进度恢复失败');
+  }
 }
 
 async function loadDocuments() {
@@ -551,7 +627,95 @@ async function retryTask(task: RagIngestTask) {
   finally { retryBusyTaskId.value = ''; }
 }
 
+function openKnowledgeBaseDeletion() {
+  if (!selectedKnowledgeBase.value || selectedKnowledgeBaseUnavailable.value) return;
+  knowledgeBaseDeleteConfirmName.value = '';
+  showKnowledgeBaseDeleteDialog.value = true;
+}
+
+function closeKnowledgeBaseDeletion() {
+  if (knowledgeBaseDeleteBusy.value) return;
+  showKnowledgeBaseDeleteDialog.value = false;
+  knowledgeBaseDeleteConfirmName.value = '';
+}
+
+async function requestKnowledgeBaseDelete() {
+  const target = selectedKnowledgeBase.value;
+  if (!target || knowledgeBaseDeleteConfirmName.value !== target.name) return;
+  knowledgeBaseDeleteBusy.value = true;
+  try {
+    const task = await requestKnowledgeBaseDeletion(target.knowledgeBaseId, target.revision);
+    knowledgeBaseDeleteTask.value = task;
+    knowledgeBases.value = knowledgeBases.value.map((item) => item.knowledgeBaseId === target.knowledgeBaseId
+      ? { ...item, status: 'deleting' }
+      : item);
+    debugResult.value = null;
+    closeKnowledgeBaseDeletionAfterAcceptance();
+    startKnowledgeBaseDeletePolling();
+    notice.value = { kind: 'success', message: `知识库“${target.name}”已退出检索，正在级联清理；刷新页面不会丢失进度。` };
+  } catch (error) {
+    showError(error, '知识库删除受理失败');
+  } finally {
+    knowledgeBaseDeleteBusy.value = false;
+  }
+}
+
+function closeKnowledgeBaseDeletionAfterAcceptance() {
+  showKnowledgeBaseDeleteDialog.value = false;
+  knowledgeBaseDeleteConfirmName.value = '';
+}
+
+function startKnowledgeBaseDeletePolling() {
+  if (knowledgeBaseDeleteTimer || !isKnowledgeBaseDeleteRunning.value) return;
+  knowledgeBaseDeleteTimer = window.setInterval(syncKnowledgeBaseDeleteTask, 2000);
+}
+
+function stopKnowledgeBaseDeletePolling() {
+  if (!knowledgeBaseDeleteTimer) return;
+  window.clearInterval(knowledgeBaseDeleteTimer);
+  knowledgeBaseDeleteTimer = undefined;
+}
+
+async function syncKnowledgeBaseDeleteTask() {
+  const current = knowledgeBaseDeleteTask.value;
+  if (!current || current.knowledgeBaseId !== selectedKnowledgeBaseId.value) {
+    stopKnowledgeBaseDeletePolling();
+    return;
+  }
+  try {
+    const updated = await queryKnowledgeBaseDeleteTaskById(current.taskId);
+    knowledgeBaseDeleteTask.value = updated;
+    if (updated.status === 'completed') {
+      stopKnowledgeBaseDeletePolling();
+      notice.value = { kind: 'success', message: '知识库及其文档、向量、分块、原文件和绑定已完成一致性清理。' };
+      await reloadAll();
+    } else if (['failed', 'dead'].includes(updated.status)) {
+      stopKnowledgeBaseDeletePolling();
+      notice.value = { kind: 'error', message: `知识库删除停在${knowledgeBaseDeleteStageText(updated.stage)}，请检查错误后从检查点继续。` };
+    }
+  } catch (error) {
+    stopKnowledgeBaseDeletePolling();
+    showError(error, '知识库删除进度同步失败，请刷新页面恢复');
+  }
+}
+
+async function retryKnowledgeBaseDeletion() {
+  const current = knowledgeBaseDeleteTask.value;
+  if (!current) return;
+  knowledgeBaseDeleteRetryBusy.value = true;
+  try {
+    knowledgeBaseDeleteTask.value = await retryKnowledgeBaseDeleteTask(current.taskId);
+    startKnowledgeBaseDeletePolling();
+    notice.value = { kind: 'success', message: '知识库删除已从已验证的文档检查点继续。' };
+  } catch (error) {
+    showError(error, '知识库删除恢复失败');
+  } finally {
+    knowledgeBaseDeleteRetryBusy.value = false;
+  }
+}
+
 function openKnowledgeBaseEditor(knowledgeBase?: RagKnowledgeBase) {
+  if (knowledgeBase && ['deleting', 'deleted'].includes(knowledgeBase.status)) return;
   editingKnowledgeBaseId.value = knowledgeBase?.knowledgeBaseId || '';
   editingKnowledgeBaseRevision.value = knowledgeBase?.revision;
   knowledgeBaseForm.name = knowledgeBase?.name || '';
@@ -662,8 +826,11 @@ function knowledgeBaseName(id: string) { return knowledgeBases.value.find((item)
 function profileName(id: string) { return profiles.value.find((item) => item.profileId === id)?.name || shortId(id); }
 function targetLabel(type: RagTargetType, id: string) { const target = (type === 'agent' ? agentTargets.value : workflowTargets.value).find((item) => item.id === id); return target?.name || id; }
 function scoreText(value?: number) { return Number.isFinite(value) ? Number(value).toFixed(3) : '—'; }
-function statusTone(status: string) { if (['active', 'ready', 'completed'].includes(status)) return 'success'; if (['failed', 'dead', 'cancelled'].includes(status)) return 'danger'; if (['pending', 'running', 'retrying', 'cancel_requested', 'processing', 'deleting'].includes(status)) return 'working'; return 'neutral'; }
-function statusText(status: string) { return ({ active: '可用', ready: '已就绪', completed: '已完成', failed: '失败', dead: '已终止', cancelled: '已取消', pending: '等待中', running: '处理中', retrying: '等待重试', cancel_requested: '取消中', processing: '处理中', deleting: '删除中', deleted: '已删除' } as Record<string, string>)[status] || status; }
+function isKnowledgeBaseUnavailable(knowledgeBaseId: string) { return ['deleting', 'deleted'].includes(knowledgeBases.value.find((item) => item.knowledgeBaseId === knowledgeBaseId)?.status || ''); }
+function knowledgeBaseDeleteStageText(stage: string) { return ({ received: '已受理', deleting_documents: '逐文档清理', verifying: '一致性核验', completed: '清理完成' } as Record<string, string>)[stage] || stage; }
+function knowledgeBaseDeleteStatusText(task: RagKnowledgeBaseDeleteTask) { if (task.status === 'waiting') return '等待当前文档完成清理，不消耗失败次数'; if (task.status === 'retrying') return task.nextRetryAt ? `将在 ${new Date(task.nextRetryAt).toLocaleString()} 自动重试` : '等待自动重试'; if (task.status === 'completed') return '所有残留检查通过'; if (['failed', 'dead'].includes(task.status)) return '删除已安全暂停，可从检查点继续'; return task.currentDocumentId ? `正在处理文档 ${shortId(task.currentDocumentId)}` : '正在建立并验证清理范围'; }
+function statusTone(status: string) { if (['active', 'ready', 'completed'].includes(status)) return 'success'; if (['failed', 'dead', 'cancelled'].includes(status)) return 'danger'; if (['pending', 'running', 'waiting', 'verifying', 'retrying', 'cancel_requested', 'processing', 'deleting'].includes(status)) return 'working'; return 'neutral'; }
+function statusText(status: string) { return ({ active: '可用', ready: '已就绪', completed: '已完成', failed: '失败', dead: '已终止', cancelled: '已取消', pending: '等待中', running: '处理中', waiting: '等待子任务', verifying: '核验中', retrying: '等待重试', cancel_requested: '取消中', processing: '处理中', deleting: '删除中', deleted: '已删除' } as Record<string, string>)[status] || status; }
 function taskStageText(stage: string) { return ({ received: '已受理', queued: '排队', downloading: '下载原文档', parsing: '解析结构', chunking: '切分语义块', embedding: '生成向量', indexing: '写入索引', verifying: '验证完整性', deleting_vectors: '清理向量', deleting_chunks: '清理分块', deleting_source: '清理原文件', completed: '已完成' } as Record<string, string>)[stage] || stage; }
 function operationText(operation: string) { return ({ ingest: '摄取', rebuild: '重建', delete: '删除' } as Record<string, string>)[operation] || operation; }
 </script>
@@ -706,16 +873,19 @@ function operationText(operation: string) { return ({ ingest: '摄取', rebuild:
 .document-stage { background: rgba(255,255,252,.78); }.sr-file { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .upload-progress { position: relative; margin: -6px 0 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-muted); }.upload-progress > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--accent-soft), rgba(169,121,57,.22)); transition: width .2s; }.upload-progress div { position: relative; display: flex; justify-content: space-between; padding: 9px 11px; font-size: 11px; }.upload-progress em { font-style: normal; font-weight: 700; }
 .task-list { display: grid; max-height: 330px; margin-bottom: 14px; gap: 8px; overflow-y: auto; }.task-card { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; align-items: center; padding: 14px; gap: 12px; border: 1px solid rgba(169,121,57,.24); border-radius: 14px; background: linear-gradient(105deg, var(--gold-soft), #fffaf0); }.task-card--danger { border-color: rgba(155,62,62,.2); background: var(--danger-soft); }.task-orbit { display: grid; width: 42px; height: 42px; color: var(--gold); border-radius: 50%; background: rgba(255,255,255,.7); place-items: center; }.task-card--danger .task-orbit,.task-error { color: var(--danger) !important; }.task-main span,.task-main small { display: block; color: var(--muted); font-size: 10px; }.task-main strong { display: block; margin: 3px 0 7px; font-size: 12px; }.task-progress { height: 3px; margin-bottom: 6px; overflow: hidden; border-radius: 3px; background: rgba(23,33,43,.1); }.task-progress span { display: block; height: 100%; background: var(--gold); transition: width .35s; }.task-error { margin-top: 4px; overflow-wrap: anywhere; }
+.kb-delete-progress { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; align-items: center; margin-bottom: 14px; padding: 14px; gap: 12px; border: 1px solid rgba(169,121,57,.3); border-radius: 14px; background: linear-gradient(105deg, #fff7e8, #fffdf8); }.kb-delete-progress--danger { border-color: rgba(155,62,62,.25); background: var(--danger-soft); }.kb-delete-progress__icon { display: grid; width: 42px; height: 42px; color: var(--gold); border-radius: 50%; background: #fff; place-items: center; }.kb-delete-progress--danger .kb-delete-progress__icon { color: var(--danger); }.kb-delete-progress span,.kb-delete-progress small { display: block; color: var(--muted); font-size: 10px; }.kb-delete-progress strong { display: block; margin: 3px 0 8px; font-size: 12px; }
 .document-list { display: grid; gap: 9px; }.document-row { display: grid; grid-template-columns: 48px minmax(0,1fr) 76px auto auto; align-items: center; min-height: 76px; padding: 11px 13px; gap: 12px; border: 1px solid var(--line); border-radius: 13px; background: #fff; transition: transform var(--motion-fast), box-shadow var(--motion-fast); }.document-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }.file-mark { display: grid; width: 42px; height: 48px; color: var(--accent-deep); border-radius: 7px 13px 7px 7px; background: var(--accent-soft); font: 800 9px monospace; place-items: center; }.file-mark[data-type="PDF"] { color: var(--danger); background: var(--danger-soft); }.file-mark[data-type="DOCX"] { color: #315d91; background: #e3ebf5; }.document-copy { min-width: 0; }.document-copy strong,.document-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.document-copy strong { font-size: 13px; }.document-copy span { margin-top: 5px; color: var(--muted); font: 10px monospace; }.document-generation small,.document-generation strong { display: block; text-align: center; }.document-generation small { color: var(--muted); font: 8px monospace; letter-spacing: .08em; }.document-generation strong { margin-top: 4px; font: 700 14px monospace; }.status-pill { padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }.status-pill--success { color: var(--success); background: var(--success-soft); }.status-pill--working { color: var(--warning); background: var(--warning-soft); }.status-pill--danger { color: var(--danger); background: var(--danger-soft); }.status-pill--neutral { color: var(--muted); background: var(--surface-muted); }.document-delete { display: inline-flex; align-items: center; min-height: 34px; padding: 0 9px; gap: 6px; color: var(--danger); border: 1px solid rgba(155,62,62,.16); border-radius: 9px; cursor: pointer; background: var(--danger-soft); font-size: 11px; font-weight: 700; }.document-delete:disabled { cursor: wait; opacity: .55; }
+.danger-zone { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; padding: 14px; gap: 18px; border: 1px solid rgba(155,62,62,.2); border-radius: 13px; background: rgba(155,62,62,.045); }.danger-zone span,.danger-zone strong { display: block; }.danger-zone span { color: var(--danger); font: 800 8px monospace; letter-spacing: .13em; }.danger-zone strong { margin: 4px 0; font-size: 12px; }.danger-zone p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .document-empty { min-height: 430px; }.document-empty p { max-width: 360px; margin: 8px auto; font-size: 12px; line-height: 1.65; }.empty-illustration { position: relative; display: grid; width: 88px; height: 88px; margin-bottom: 17px; color: var(--accent); border: 1px solid var(--line); border-radius: 25px; background: var(--surface-muted); place-items: center; transform: rotate(-3deg); }.empty-illustration span { position: absolute; right: -8px; bottom: -8px; width: 32px; height: 32px; border-radius: 50%; background: var(--gold-soft); }
 .lab-heading svg { color: var(--gold); }.lab-tabs { display: grid; grid-template-columns: repeat(3,1fr); margin-bottom: 18px; padding: 3px; border-radius: 10px; background: var(--bg-strong); }.lab-tabs button { padding: 8px; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 700; background: transparent; }.lab-tabs button.active { color: var(--ink); background: #fff; box-shadow: 0 4px 12px rgba(23,33,43,.07); }
 .lab-locked { min-height: 420px; padding: 30px; }.lab-locked p { line-height: 1.7; }.lab-form { display: grid; gap: 9px; }.lab-form > label,.rag-modal > label,.profile-grid > label { color: var(--ink-soft); font-size: 11px; font-weight: 700; }.label-row { display: flex; justify-content: space-between; margin-top: 5px; color: var(--ink-soft); font-size: 11px; font-weight: 700; }.label-row span { color: var(--muted); font-family: monospace; }.lab-input { width: 100%; min-height: 39px; padding: 0 10px; color: var(--ink); border: 1px solid var(--line-strong); border-radius: 9px; outline: none; background: #fff; transition: border var(--motion-fast), box-shadow var(--motion-fast); }.lab-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(30,90,103,.1); }.lab-textarea { min-height: 92px; padding: 10px; resize: vertical; line-height: 1.55; }.compact-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.compact-fields label { color: var(--ink-soft); font-size: 10px; font-weight: 700; }.compact-fields input { margin-top: 5px; }.check-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }.check-row input { margin-top: 2px; accent-color: var(--accent); }.check-row span,.check-row strong,.check-row small { display: block; }.check-row small { margin-top: 3px; color: var(--muted); font-weight: 400; line-height: 1.45; }
 .debug-result { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line-strong); }.result-summary { display: grid; grid-template-columns: 1fr auto; align-items: center; }.result-summary > span { width: max-content; padding: 4px 7px; color: var(--success); border-radius: 6px; background: var(--success-soft); font-size: 9px; font-weight: 800; }.result-summary > span.degraded { color: var(--warning); background: var(--warning-soft); }.result-summary strong { grid-row: span 2; font: 700 28px/1 monospace; }.result-summary strong small { font-size: 10px; }.result-summary em { margin-top: 7px; color: var(--muted); font-size: 10px; font-style: normal; }.metric-strip { display: grid; grid-template-columns: repeat(2,1fr); margin: 13px 0; gap: 6px; }.metric-strip span { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }.metric-strip small,.metric-strip strong { display: block; }.metric-strip small { color: var(--muted); font: 8px monospace; text-transform: uppercase; }.metric-strip strong { margin-top: 4px; font: 700 10px monospace; }.degrade-note { display: flex; margin-bottom: 9px; padding: 8px; gap: 6px; color: var(--warning); border-radius: 8px; background: var(--warning-soft); font-size: 10px; line-height: 1.4; }.citation-card { margin-top: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }.citation-card header,.citation-card footer { display: flex; align-items: center; gap: 7px; }.citation-card header span { color: var(--gold); font: 700 10px monospace; }.citation-card header strong { min-width: 0; flex: 1; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.citation-card header em { color: var(--accent); font: 700 10px monospace; }.citation-card p { display: -webkit-box; overflow: hidden; margin: 9px 0; color: var(--ink-soft); font-size: 11px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }.citation-card footer { justify-content: space-between; color: var(--muted); font-size: 9px; }.no-hit { color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center; }
 .profile-list,.binding-list { display: grid; margin-top: 10px; gap: 7px; }.profile-card { display: grid; grid-template-columns: auto 1fr; padding: 11px; gap: 4px 8px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; text-align: left; background: #fff; }.mode-badge { grid-row: span 3; align-self: center; padding: 4px 5px; color: var(--accent); border-radius: 5px; background: var(--accent-soft); font: 700 8px monospace; text-transform: uppercase; }.profile-card strong { font-size: 11px; }.profile-card small { color: var(--muted); font: 9px monospace; }.profile-card > span:last-child { display: flex; align-items: center; color: var(--gold); font-size: 9px; }.binding-form { padding-bottom: 14px; border-bottom: 1px dashed var(--line-strong); }.binding-list article { position: relative; display: grid; padding: 10px 36px 10px 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }.binding-list article > span { color: var(--gold); font: 700 8px monospace; text-transform: uppercase; }.binding-list strong { margin: 3px 0; font-size: 11px; }.binding-list small { color: var(--muted); font-size: 9px; }.binding-list button { position: absolute; top: 50%; right: 8px; display: grid; width: 27px; height: 27px; color: var(--danger); border-radius: 7px; cursor: pointer; background: var(--danger-soft); place-items: center; transform: translateY(-50%); }
 .modal-backdrop { position: fixed; z-index: var(--z-modal); inset: 0; display: grid; overflow-y: auto; padding: 24px; background: rgba(18,26,32,.48); backdrop-filter: blur(8px); place-items: center; }.rag-modal { width: min(100%, 510px); padding: 24px; border: 1px solid rgba(255,255,255,.4); border-radius: 20px; background: var(--surface); box-shadow: 0 30px 90px rgba(10,20,24,.25); }.rag-modal--wide { width: min(100%, 720px); }.rag-modal header,.rag-modal footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.rag-modal header { margin-bottom: 20px; }.rag-modal header span { color: var(--gold); font: 700 9px monospace; letter-spacing: .13em; }.rag-modal h2 { margin: 4px 0 0; font: 28px/1.1 "Fraunces", "Songti SC", serif; }.rag-modal header button { display: grid; width: 34px; height: 34px; color: var(--ink-soft); border-radius: 9px; cursor: pointer; background: var(--surface-muted); place-items: center; }.rag-modal > label { display: grid; margin-top: 13px; gap: 6px; }.rag-modal > p { display: flex; align-items: flex-start; margin: 15px 0; padding: 10px; gap: 7px; color: var(--muted); border-radius: 9px; background: var(--surface-muted); font-size: 11px; line-height: 1.5; }.rag-modal footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--line); }.profile-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }.profile-grid > label:not(.check-row) { display: grid; gap: 5px; }.span-two { grid-column: span 2; }
+.rag-modal--danger { border-color: rgba(155,62,62,.22); }.rag-modal--danger header span { color: var(--danger); }.delete-warning { display: flex; align-items: flex-start; padding: 12px; gap: 9px; color: var(--danger); border-radius: 10px; background: var(--danger-soft); }.delete-warning svg { flex: none; }.delete-warning p { margin: 0; font-size: 11px; line-height: 1.6; }.rag-modal--danger label strong { color: var(--danger); }
 .skeleton-list,.document-skeleton { display: grid; gap: 9px; }.skeleton-list span,.document-skeleton span { border-radius: 12px; background: linear-gradient(90deg, var(--surface-muted) 25%, #fff 40%, var(--surface-muted) 60%); background-size: 300% 100%; animation: shimmer 1.4s infinite; }.skeleton-list span { height: 68px; }.document-skeleton span { height: 76px; }
 .spin { animation: spin .9s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }@keyframes shimmer { to { background-position: -150% 0; } }
 @media (max-width: 1260px) { .rag-workbench { grid-template-columns: 230px minmax(420px,1fr); }.retrieval-lab { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; }.lab-form,.debug-result,.profile-list,.binding-list { max-width: 760px; }.retrieval-lab .lab-tabs { max-width: 460px; } }
-@media (max-width: 800px) { .rag-page { overflow-x: clip; padding: 18px 14px; }.rag-hero { align-items: stretch; flex-direction: column; }.rag-hero > div { min-width: 0; max-width: 100%; }.rag-kicker { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.rag-hero h1 { font-size: clamp(32px, 11vw, 44px); }.hero-actions { flex-wrap: wrap; }.rag-workbench { display: block; width: 100%; border-radius: 16px; }.library-rail { border-right: 0; border-bottom: 1px solid var(--line); }.rail-footer { display: none; }.document-stage,.library-rail,.retrieval-lab { padding: 18px 14px; }.document-row { grid-template-columns: 42px minmax(0,1fr) auto; }.document-generation { display: none; }.document-delete { grid-column: 2 / -1; justify-content: center; }.stage-heading { align-items: flex-start; }.stage-heading .rag-button { flex: none; font-size: 0; }.stage-heading .rag-button svg { margin: 0; }.task-card { grid-template-columns: 38px minmax(0,1fr); }.task-card .rag-button { grid-column: 1 / -1; justify-content: center; }.profile-grid { grid-template-columns: 1fr; }.span-two { grid-column: auto; }.modal-backdrop { align-items: start; padding: 12px; }.rag-modal { margin: 20px 0; } }
+@media (max-width: 800px) { .rag-page { overflow-x: clip; padding: 18px 14px; }.rag-hero { align-items: stretch; flex-direction: column; }.rag-hero > div { min-width: 0; max-width: 100%; }.rag-kicker { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.rag-hero h1 { font-size: clamp(32px, 11vw, 44px); }.hero-actions { flex-wrap: wrap; }.rag-workbench { display: block; width: 100%; border-radius: 16px; }.library-rail { border-right: 0; border-bottom: 1px solid var(--line); }.rail-footer { display: none; }.document-stage,.library-rail,.retrieval-lab { padding: 18px 14px; }.document-row { grid-template-columns: 42px minmax(0,1fr) auto; }.document-generation { display: none; }.document-delete { grid-column: 2 / -1; justify-content: center; }.stage-heading { align-items: flex-start; }.stage-heading .rag-button { flex: none; font-size: 0; }.stage-heading .rag-button svg { margin: 0; }.task-card,.kb-delete-progress { grid-template-columns: 38px minmax(0,1fr); }.task-card .rag-button,.kb-delete-progress .rag-button { grid-column: 1 / -1; justify-content: center; }.danger-zone { align-items: stretch; flex-direction: column; }.profile-grid { grid-template-columns: 1fr; }.span-two { grid-column: auto; }.modal-backdrop { align-items: start; padding: 12px; }.rag-modal { margin: 20px 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 </style>

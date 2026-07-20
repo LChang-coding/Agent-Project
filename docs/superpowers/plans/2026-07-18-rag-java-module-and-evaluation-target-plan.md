@@ -2062,3 +2062,22 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 新增管理员受理/查询/失败恢复服务，受理前完成tenant owner/admin权限和expectedRevision检查；任务账本新增必填`requested_by_user_id`审计字段。为最终绑定残留统计增加可重入创建的tenant+kb+status索引，迁移脚本重复执行不会重复添加索引。
 - 首次最终收口干净打包失败于testCompile：仓储构造器新增版本/分块DAO后，旧测试装配未同步；补齐mock后定向9/9通过。协调器、内部屏障、受理权限和审计定向测试后18/18通过。最终Java 17全RAG回归259/259通过，0 failure/error/skipped，六模块BUILD SUCCESS，总耗4.045秒。
 - 当前仍未开放Controller和前端危险区，也未对真实MySQL执行新迁移或运行多文档MinIO/Qdrant故障恢复E2E；上述259项只证明代码、状态机、SQL合同和Mock编排，不冒充真实外部副作用验证。
+
+#### 知识库删除API、前端危险区与真实E2E计划（执行前）
+
+1. 增加删除受理、任务查询和FAILED/DEAD恢复API；Controller只从TenantContext取可信tenant/user/role，删除请求必须携带expectedRevision。响应只暴露task/status/stage/文档进度/attempt/错误摘要，不暴露lease owner、fencing token、对象密钥或内部堆栈。
+2. 前端在知识库管理页增加“危险操作”区；只对可管理用户显示，二次确认要求输入知识库名称并显示文档数。点击后立即显示“建立屏障/正在删除文档/验证残留/已完成/需要恢复”，按钮有loading且禁止重复提交。
+3. 删除受理后当前页立即禁用上传、绑定、编辑和调试，定时轮询父任务；COMPLETED才从列表移除，FAILED/DEAD保留知识库卡片、错误码和“继续删除”。组件卸载、切换知识库和请求失败时必须清理poll timer。
+4. 补Controller参数/身份/响应脱敏测试、前端API与生产构建、轮询终态和按钮防重测试。完成Java全RAG回归和前端构建后才在真实MySQL执行可重入迁移。
+5. 真实E2E使用全新tenant/kb与至少两份文档：上传并等待READY，受理KB删除，轮询至COMPLETED，复核MySQL六项残留、Qdrant每版本point=0、MinIO原件/解析件不存在和绑定停用。再以故意不可达的对象存储或Qdrant制造中途失败，恢复依赖后从checkpoint继续，保存任务转移、对象清单、向量计数和时间线证据。
+
+#### 知识库删除API与前端危险区实现结果
+
+- 新增受理、按taskId查询、FAILED/DEAD恢复三个管理员API，删除请求强制携带expectedRevision，身份只读`TenantContextHolder`；响应DTO仅含task/kb/requester、status/stage、文档进度、attempt、重试时间、错误摘要和revision，不含lease owner、fencing token、对象密钥或堆栈。
+- 实现时发现页面刷新会丢失首次响应中的taskId，因此补充“按知识库恢复删除任务”API与领域方法；它先执行知识库owner/admin授权再访问任务账本。Controller和领域测试分别验证可信tenant/user/role、响应脱敏及普通成员拒绝。
+- 前端新增独立危险区和输入完整知识库名称的二次确认；受理按钮显示“正在建立删除屏障”，页面随后展示逐文档数量、stage、attempt、错误码、自动重试时间及FAILED/DEAD从检查点继续操作。刷新页面会按DELETING知识库恢复任务，切换知识库、组件卸载、终态或查询失败均清理独立timer。
+- 删除屏障建立后，当前知识库上传、编辑、文档删除/取消/重试、相关绑定新增/删除和检索调试立即禁用；COMPLETED后才重新拉取知识库列表，FAILED/DEAD保留卡片和恢复入口。检索策略是租户级独立对象，未因单个知识库删除而错误禁用。
+- 前端`npm run build`真实通过：`vue-tsc --noEmit`和Vite生产构建成功，1916 modules transformed，Vite耗时886ms。项目当前没有该页面的组件测试基础设施，因此计划中的轮询终态/按钮防重自动化组件测试尚未完成，不能用类型构建冒充浏览器行为E2E。
+- Java定向Controller首次扩展后3/3通过；随后补充领域刷新恢复测试。第一次“全部RAG”命令只扫描`cn/bugstack/ai/test/rag`目录，实际仅执行158项，虽全部通过但被判定为选择范围不完整，未作为最终门禁。纠正为从全部test源码路径按RAG文件名生成47个测试类后，实测274/274通过，0 failure/error/skipped，六模块BUILD SUCCESS，Maven总耗4.187秒；其中包含12项MinIO对象存储测试，故不把274表述为纯RAG领域测试数。
+- Java 17全八模块`mvn -DskipTests package`通过，包含App可执行JAR与benchmark依赖打包，BUILD SUCCESS、Maven总耗5.868秒；测试已在上一条独立运行，本条不重复计数。
+- 本阶段尚未对真实MySQL应用迁移，也未完成至少两文档的MySQL/Qdrant/MinIO级联删除和故障恢复E2E；API/前端已闭合代码路径，但上线结论仍由下一阶段真实证据决定。

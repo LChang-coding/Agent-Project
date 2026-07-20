@@ -75,6 +75,20 @@ public class RagKnowledgeBaseDeletionServiceTest {
         Mockito.verify(deletionRepository, Mockito.never()).register(Mockito.anyString(), Mockito.any());
     }
 
+    @Test
+    public void shouldRestoreTaskByKnowledgeBaseOnlyAfterAuthorization() {
+        RagKnowledgeBaseDeleteTaskEntity existing = RagKnowledgeBaseDeleteTaskEntity.pending(
+                "tenant-a", "kb-a", "owner-a", "task-existing", "a".repeat(64), 0, 5);
+        Mockito.when(deletionRepository.findByKnowledgeBaseId("tenant-a", "kb-a"))
+                .thenReturn(Optional.of(existing));
+
+        Assert.assertSame(existing, service.requireTaskByKnowledgeBase(
+                "tenant-a", "owner-a", "owner", "kb-a"));
+        AppException forbidden = Assert.assertThrows(AppException.class, () ->
+                service.requireTaskByKnowledgeBase("tenant-a", "member-a", "member", "kb-a"));
+        Assert.assertEquals("RAG_ADMIN_REQUIRED", forbidden.getCode());
+    }
+
     private RagKnowledgeBaseEntity knowledgeBase() {
         return new RagKnowledgeBaseEntity("tenant-a", "owner-a", "kb-a", "企业库", null,
                 RagVisibility.TENANT, RagKnowledgeBaseStatus.ACTIVE, "profile-a", 768,

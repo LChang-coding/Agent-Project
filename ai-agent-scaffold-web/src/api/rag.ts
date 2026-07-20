@@ -36,6 +36,23 @@ export interface RagDocumentUploadResult {
   deduplicated: boolean;
 }
 
+export interface RagKnowledgeBaseDeleteTask {
+  taskId: string;
+  knowledgeBaseId: string;
+  requestedByUserId: string;
+  status: string;
+  stage: string;
+  totalDocuments: number;
+  completedDocuments: number;
+  currentDocumentId?: string;
+  attemptCount: number;
+  maxAttempts: number;
+  nextRetryAt?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  revision: number;
+}
+
 export interface RagIngestTask {
   taskId: string;
   knowledgeBaseId: string;
@@ -154,6 +171,35 @@ export function updateKnowledgeBase(knowledgeBaseId: string, payload: {
     url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}`,
     method: 'PUT',
     data: payload,
+  });
+}
+
+export function requestKnowledgeBaseDeletion(knowledgeBaseId: string, expectedRevision: number) {
+  return request<RagKnowledgeBaseDeleteTask>({
+    url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/delete-tasks`,
+    method: 'POST',
+    data: { expectedRevision },
+  });
+}
+
+export function queryKnowledgeBaseDeleteTask(knowledgeBaseId: string) {
+  return request<RagKnowledgeBaseDeleteTask>({
+    url: `/v1/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/delete-task`,
+    method: 'GET',
+  });
+}
+
+export function queryKnowledgeBaseDeleteTaskById(taskId: string) {
+  return request<RagKnowledgeBaseDeleteTask>({
+    url: `/v1/rag/knowledge-base-delete-tasks/${encodeURIComponent(taskId)}`,
+    method: 'GET',
+  });
+}
+
+export function retryKnowledgeBaseDeleteTask(taskId: string) {
+  return request<RagKnowledgeBaseDeleteTask>({
+    url: `/v1/rag/knowledge-base-delete-tasks/${encodeURIComponent(taskId)}/retry`,
+    method: 'POST',
   });
 }
 
