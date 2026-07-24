@@ -2229,3 +2229,21 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 从当前本机以目标`103.205.240.84:3306`、应用账号、`--ssl-mode=REQUIRED`连续执行3次只读查询均成功，连接ID 43510/43511/43512，MySQL 8.0.46，TLS cipher均为`TLS_AES_128_GCM_SHA256`；容器保持healthy、restart=0、OOM=false。
 - 额外核验发现`@@require_secure_transport=0`，应用账号`SHOW GRANTS`没有`REQUIRE SSL`，且显式`--ssl-mode=DISABLED`仍可连接。此前`codex.md`“服务端要求TLS”的表述不准确，已修正为“客户端必须显式使用TLS”，并记录生产化前应单独开启服务端强制TLS；本轮没有擅自修改数据库认证策略。
 - 重大闭环已形成中文本地提交`3ec8263`（`恢复RAG数据库公网直连并固化白名单`），提交仅含两份可审计运维文件和本计划；`codex.md`按项目约定为本机忽略文件，内容已在本地更新但未强制提交，避免把其中运维凭据纳入Git。
+
+#### 2026-07-24 RAG摄取任务长期等待诊断计划（执行前）
+
+1. 以页面显示的知识库前缀`suffix c191`、任务后缀`98f9`、文档`rag-demo-employee-handbook.md`为只读定位键，在MySQL中反查完整知识库、文档、版本、摄取任务、Outbox记录；不凭前缀猜ID。
+2. 记录任务status/stage/attempt/revision、lease owner/fence/heartbeat/leaseUntil、checkpoint/error、created/updated/nextAttempt时间，判断任务是未发布、未领取、租约失活、重试等待还是外部阶段阻塞。
+3. 检查当前本机Java进程、RAG Worker/Dispatcher配置与最近日志；同时核对Kafka主题/Consumer Group是否存在摄取消费者，区分“页面应用未启用Worker”和“消息已发但Worker异常”。
+4. 若任务已有外部调用，关联Docling、Embedding、Qdrant健康与日志；若任务尚未被领取，不做无意义的模型探针。
+5. 输出最小因果链和恢复建议。本轮只诊断，不修改任务、不补发Outbox、不启动Worker、不取消或删除知识库；结果追加本节。
+
+#### 2026-07-24 RAG摄取任务长期等待诊断结果
+
+- 当前IDE启动的8091进程为PID `35548`，进程TCP连接证明其实际连接旧环境`69.165.65.123:3306`，并非新RAG服务器`103.205.240.84:3306`。因此先查新服务器数据库得不到页面记录不是数据丢失，而是运行时数据源仍指向旧环境。
+- 在实际数据库中定位到完整对象：知识库`kb_bb8b74326cf94eae8d18de5c8b55c191`、文档`doc_f255743919714978a8af6cea2ba421b2`、版本`ragver_09c8961170b94e92b198110b5f393232`、任务`ragtask_e5b6ef3031ee475dacf53480dc9598f9`及Outbox事件`ragevt_42c6944226c84dc593e5bd42ec41099f`。
+- 上传链路本身成功：对象存储日志记录`rag-demo-employee-handbook.md`写入成功，字节数6478；知识库、文档、版本、任务和Outbox也都成功落库。阻塞发生在“Outbox发布”之前，不在文档下载、Docling解析、切块、Embedding、Qdrant写入或重排阶段。
+- 任务长期保持`stage=received`、`attempt_count=0/3`、无`lease_owner/lease_until/heartbeat/started_at`，checkpoint所有处理计数为0；Outbox保持`status=pending`、`attempt_count=0/10`、无租约、无发布时间和错误。这证明没有发布器领取Outbox，也没有Worker领取任务，而不是消费者处理失败或远端模型超时。
+- 根因是运行配置未开启摄取执行链：`application.yml`中`AI_RAG_OUTBOX_ENABLED`、`AI_RAG_WORKER_ENABLED`、`AI_RAG_KAFKA_LISTENER_ENABLED`默认均为`false`，PID 35548的命令行和进程环境没有对应覆盖值；两个执行Bean又分别受`@ConditionalOnProperty(... havingValue="true")`约束，因此当前应用根本没有创建`RagOutboxPublisher`和`RagIngestWorker`。
+- 用户随后发出的取消已真实落库：任务与版本均为`cancelled`，`cancel_requested_at=2026-07-24 10:26:46.641`，任务完成时间`10:26:47.896`；文档聚合状态为`failed`，但Outbox仍为`pending`。页面继续显示“处理中”与数据库终态不一致，属于前端轮询终止/任务与文档状态映射问题，不能据此判断后台仍在运行。
+- 本轮严格只读，没有重发Outbox、启动Worker、修改任务或数据库。最小恢复路径是在下一次启动8091前显式开启Outbox和一种消费方式：同进程轮询Worker可启用`AI_RAG_OUTBOX_ENABLED=true`与`AI_RAG_WORKER_ENABLED=true`；若选择Kafka监听消费，则启用Outbox和Kafka Listener，并确保只保留一种任务领取入口。由于当前任务已取消，不应复活旧任务；配置修正后应重新上传生成新版本/新任务验证端到端。
