@@ -1,6 +1,9 @@
 package cn.bugstack.ai.domain.run.service;
 
 import cn.bugstack.ai.domain.asset.service.AssetService;
+import cn.bugstack.ai.domain.rag.model.entity.SessionRagRunSnapshotEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
 import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
@@ -40,6 +43,7 @@ public class RunControlService {
     private final ModelUsageService modelUsageService;
     private final AssetService assetService;
     private final RunStateSnapshotCache runStateSnapshots;
+    private final SessionRagSettingService sessionRagSettingService;
 
     /**
      * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
@@ -47,15 +51,32 @@ public class RunControlService {
     @Autowired
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
+                             ModelUsageService modelUsageService, AssetService assetService,
+                             SessionRagSettingService sessionRagSettingService) {
+        this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
+                assetService, new RunStateSnapshotCache(), sessionRagSettingService);
+    }
+
+    /** 保留领域单测和旧装配入口；生产Spring装配使用带RAG策略服务的构造器。 */
+    public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
+                             ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                              ModelUsageService modelUsageService, AssetService assetService) {
         this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
-                assetService, new RunStateSnapshotCache());
+                assetService, new RunStateSnapshotCache(), null);
     }
 
     RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                       ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                       ModelUsageService modelUsageService, AssetService assetService,
                       RunStateSnapshotCache runStateSnapshots) {
+        this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
+                assetService, runStateSnapshots, null);
+    }
+
+    RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
+                      ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
+                      ModelUsageService modelUsageService, AssetService assetService,
+                      RunStateSnapshotCache runStateSnapshots, SessionRagSettingService sessionRagSettingService) {
         this.runRepository = runRepository;
         this.sessionDomain = sessionDomain;
         this.activeRunRegistry = activeRunRegistry;
@@ -63,6 +84,7 @@ public class RunControlService {
         this.modelUsageService = modelUsageService;
         this.assetService = assetService;
         this.runStateSnapshots = runStateSnapshots;
+        this.sessionRagSettingService = sessionRagSettingService;
     }
 
     /**
@@ -72,6 +94,7 @@ public class RunControlService {
     public ChatRunEntity start(String tenantId, String userId, String sessionId, String sourceType,
                                String sourceId, String requestedRunId, String predecessorRunId) {
         ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, sourceId);
+        SessionRagRunSnapshotEntity ragSnapshot = resolveRagSnapshot(session);
         long revision = session.getContextRevision() == null ? 0L : session.getContextRevision();
         LocalDateTime now = LocalDateTime.now();
         ChatRunEntity run = ChatRunEntity.builder()
@@ -82,7 +105,8 @@ public class RunControlService {
                 .sessionId(session.getSessionId())
                 .sourceType(sourceType)
                 .sourceId(sourceId)
-                .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .ragEnabled(ragSnapshot.enabled()).ragMode(ragSnapshot.mode().name())
+                .ragPolicyRevision(ragSnapshot.revision()).ragBindingIds(ragSnapshot.bindingIds())
                 .traceId(TraceContext.ensureTraceId())
                 .status(RunStatus.RUNNING)
                 .version(0)
@@ -185,7 +209,9 @@ public class RunControlService {
                 .turnId("turn_" + UUID.randomUUID())
                 .tenantId(run.getTenantId()).userId(run.getUserId()).sessionId(run.getSessionId())
                 .sourceType(run.getSourceType()).sourceId(run.getSourceId())
-                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).traceId(run.getTraceId())
+                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIds(run.getRagBindingIds())
+                .traceId(run.getTraceId())
                 .status(RunStatus.CREATED).version(0)
                 .baseContextRevision(revision).currentContextRevision(revision)
                 .predecessorRunId(runId).steerInstruction(normalizedInstruction)
@@ -207,6 +233,20 @@ public class RunControlService {
                 "用户引导替代");
         interruptAfterCommit(runId);
         return successor;
+    }
+
+    private SessionRagRunSnapshotEntity resolveRagSnapshot(ChatSessionEntity session) {
+        if (sessionRagSettingService != null) {
+            return sessionRagSettingService.resolveRunSnapshot(session);
+        }
+        SessionRagMode mode = SessionRagMode.resolve(session.getRagMode(), session.getRagEnabled());
+        if (mode == SessionRagMode.OFF) {
+            return new SessionRagRunSnapshotEntity(mode,
+                    session.getRagRevision() == null ? 0L : session.getRagRevision(), List.of());
+        }
+        // 仅供不装配RAG仓储的旧领域单测；生产路径绝不会生成空绑定快照。
+        return new SessionRagRunSnapshotEntity(mode,
+                session.getRagRevision() == null ? 0L : session.getRagRevision(), List.of());
     }
 
     /**

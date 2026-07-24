@@ -170,6 +170,8 @@ public class RagIngestWorker {
         job = indexBatches(job, children, leaseOwner, heartbeat);
 
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        long verifyStarted = System.nanoTime();
+        stageStarted(job, "index_verify", "开始核对向量索引与数据库分块数量", children.size());
         long vectorCount = vectorStore.countVersion(job.tenantId(), job.versionId());
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
         long databaseCount = repository.listChunks(job.tenantId(), job.versionId()).stream()
@@ -177,6 +179,8 @@ public class RagIngestWorker {
         if (vectorCount != children.size() || databaseCount != children.size()) {
             throw new AppException("RAG_INGEST_INDEX_COUNT_MISMATCH", "向量索引与分块快照数量不一致");
         }
+        stageCompleted(job, "index_verify", "向量索引与数据库分块数量核对完成",
+                elapsedNanos(verifyStarted), children.size(), (int) databaseCount);
         job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.VERIFYING,
                 children.size(), children.size(), job.checkpoint().embeddingBatchIndex(), children.size()));
         activate(job, leaseOwner, heartbeat);
@@ -190,6 +194,8 @@ public class RagIngestWorker {
             job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_VECTORS);
         }
         if (job.checkpoint().stage() == RagIngestStage.DELETING_VECTORS) {
+            long vectorsStarted = System.nanoTime();
+            stageStarted(job, "delete_vectors", "开始删除文档全部版本的向量索引", scope.versions().size());
             for (RagDocumentVersionEntity version : scope.versions()) {
                 job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
                 vectorStore.deleteVersion(job.tenantId(), version.versionId());
@@ -199,9 +205,13 @@ public class RagIngestWorker {
                 }
                 job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
             }
+            stageCompleted(job, "delete_vectors", "文档全部版本的向量索引已删除并核验",
+                    elapsedNanos(vectorsStarted), scope.versions().size(), scope.versions().size());
             job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_CHUNKS);
         }
         if (job.checkpoint().stage() == RagIngestStage.DELETING_CHUNKS) {
+            long chunksStarted = System.nanoTime();
+            stageStarted(job, "delete_chunks", "开始删除文档全部版本的数据库分块", scope.versions().size());
             for (RagDocumentVersionEntity version : scope.versions()) {
                 job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
                 repository.purgeChunks(job.tenantId(), version.versionId());
@@ -210,12 +220,16 @@ public class RagIngestWorker {
                     throw new AppException("RAG_DELETE_CHUNK_REMAINS", "文档版本仍存在业务分块");
                 }
             }
+            stageCompleted(job, "delete_chunks", "文档全部版本的数据库分块已删除并核验",
+                    elapsedNanos(chunksStarted), scope.versions().size(), scope.versions().size());
             job = advanceDeletion(job, leaseOwner, RagIngestStage.DELETING_SOURCE);
         }
         if (job.checkpoint().stage() != RagIngestStage.DELETING_SOURCE) {
             throw new AppException("RAG_DELETE_STAGE_INVALID", "删除任务不在可恢复的原件清理阶段");
         }
         for (RagDocumentVersionEntity version : scope.versions()) {
+            long sourceStarted = System.nanoTime();
+            stageStarted(job, "delete_objects", "开始删除当前版本原件与解析产物", 1);
             validateDeleteObjectLocation(job, version, version.objectBucket(), version.objectKey(), "source");
             job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
                     version.objectBucket(), version.objectKey());
@@ -225,6 +239,8 @@ public class RagIngestWorker {
                 job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
                         version.parsedObjectBucket(), version.parsedObjectKey());
             }
+            stageCompleted(job, "delete_objects", "当前版本原件与解析产物删除完成",
+                    elapsedNanos(sourceStarted), 1, 1);
         }
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
         completeDeletion(job, leaseOwner);
@@ -329,6 +345,8 @@ public class RagIngestWorker {
 
         try (RagIngestWorkspace workspace = RagIngestWorkspace.create()) {
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+            long downloadStarted = System.nanoTime();
+            stageStarted(job, "source_download", "开始从对象存储下载不可变文档版本", 1);
             ObjectStorageDownloadResultEntity download = objectStorageService.downloadToFile(
                     ObjectStorageDownloadCommandEntity.builder()
                             .bucket(scope.version().objectBucket())
@@ -338,13 +356,23 @@ public class RagIngestWorker {
                             .maxBytes(Math.min(MAX_DOCUMENT_BYTES, scope.version().sizeBytes()))
                             .build());
             verifyDownload(scope.version(), download);
+            stageCompleted(job, "source_download", "文档下载及摘要完整性校验完成",
+                    elapsedNanos(downloadStarted), 1, 1);
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+            long parseStarted = System.nanoTime();
+            stageStarted(job, "document_parse", "开始解析文档结构与标准化文本", 1);
             RagDocumentParserPort.ParsedDocument parsed = parser.parse(new RagDocumentParserPort.ParseCommand(
                     job.tenantId(), job.jobId(), job.versionId(), scope.version().fileName(),
                     scope.version().mimeType(), download.getTargetPath(), download.getSizeBytes(), false));
+            stageCompleted(job, "document_parse", "文档结构与标准化文本解析完成",
+                    elapsedNanos(parseStarted), 1, parsed.pageCount());
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
             if (job.checkpoint().stage() == RagIngestStage.PARSING) {
+                long artifactStarted = System.nanoTime();
+                stageStarted(job, "parsed_artifact_persist", "开始保存解析产物", 1);
                 ObjectStorageResultEntity parsedObject = persistParsedArtifact(job, parsed, workspace);
+                stageCompleted(job, "parsed_artifact_persist", "解析产物保存完成",
+                        elapsedNanos(artifactStarted), 1, 1);
                 job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
                 int characterCount = parsed.normalizedMarkdown().codePointCount(
                         0, parsed.normalizedMarkdown().length());
@@ -353,6 +381,8 @@ public class RagIngestWorker {
                         parsedObject.getBucket(), parsedObject.getObjectKey(), parsedObject.getSha256(),
                         parsedObject.getSizeBytes()));
             }
+            long chunkStarted = System.nanoTime();
+            stageStarted(job, "structured_chunking", "开始按标题、页面和父子结构切分文档", 1);
             StructuredRagChunker.ChunkingResult result = chunker.chunk(job.versionId(), parsed, chunkConfig());
             List<RagChunkEntity> records = toChunkEntities(scope, result.chunks());
             List<RagChunkEntity> children = records.stream().filter(this::isChild)
@@ -360,7 +390,13 @@ public class RagIngestWorker {
             if (children.isEmpty()) {
                 throw new AppException("RAG_INGEST_NO_CHILD_CHUNKS", "文档未产生可检索分块");
             }
+            stageCompleted(job, "structured_chunking", "文档结构化切分完成",
+                    elapsedNanos(chunkStarted), 1, records.size());
+            long persistStarted = System.nanoTime();
+            stageStarted(job, "chunk_persist", "开始写入父子分块快照", records.size());
             repository.upsertChunks(job.tenantId(), job.versionId(), records);
+            stageCompleted(job, "chunk_persist", "父子分块快照写入完成",
+                    elapsedNanos(persistStarted), records.size(), records.size());
             return advanceToEmbedding(job, children, leaseOwner);
         }
     }
@@ -391,13 +427,21 @@ public class RagIngestWorker {
             int to = Math.min(children.size(), from + batchSize);
             List<RagChunkEntity> batch = children.subList(from, to);
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+            long denseStarted = System.nanoTime();
+            stageStarted(job, "dense_embedding", "开始生成Dense向量", batch.size());
             EmbeddingPort.EmbeddingResult dense = embedding.embed(new EmbeddingPort.EmbeddingCommand(
                     job.tenantId(), job.jobId(), EmbeddingPort.EmbeddingInputType.PASSAGE,
                     batch.stream().map(RagChunkEntity::content).toList()));
+            stageCompleted(job, "dense_embedding", "Dense向量生成完成",
+                    elapsedNanos(denseStarted), batch.size(), dense.vectors().size());
+            long sparseStarted = System.nanoTime();
+            stageStarted(job, "sparse_encoding", "开始生成Sparse向量", batch.size());
             SparseEncoderPort.SparseEncodingResult sparse = sparseEncoder.encode(
                     new SparseEncoderPort.SparseEncodingCommand(job.tenantId(), job.jobId(),
                             batch.stream().map(RagChunkEntity::content).toList(),
                             DeterministicSparseEncoder.VOCABULARY_REVISION));
+            stageCompleted(job, "sparse_encoding", "Sparse向量生成完成",
+                    elapsedNanos(sparseStarted), batch.size(), sparse.vectors().size());
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
             List<VectorStorePort.VectorPoint> points = new ArrayList<>(batch.size());
             for (int i = 0; i < batch.size(); i++) {
@@ -409,7 +453,11 @@ public class RagIngestWorker {
                         "page_number", chunk.pageNumber() == null ? "" : chunk.pageNumber().toString(),
                         "content_hash", chunk.contentHash())));
             }
+            long upsertStarted = System.nanoTime();
+            stageStarted(job, "vector_upsert", "开始将当前批次写入向量索引", points.size());
             vectorStore.upsert(job.tenantId(), job.versionId(), points);
+            stageCompleted(job, "vector_upsert", "当前批次向量索引写入完成",
+                    elapsedNanos(upsertStarted), points.size(), points.size());
             job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
             job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.INDEXING, to, children.size(),
                     ++batchIndex, to));
@@ -419,6 +467,8 @@ public class RagIngestWorker {
 
     private void activate(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        long activationStarted = System.nanoTime();
+        stageStarted(job, "generation_activate", "开始原子激活文档版本与知识库Generation", 1);
         Scope current = loadScope(job);
         long expectedTaskRevision = job.revision();
         RagIngestJobEntity completed = job.complete(leaseOwner, job.fencingToken(), clock.instant());
@@ -430,6 +480,8 @@ public class RagIngestWorker {
                         job.checkpoint().totalChunks(), job.checkpoint().parsedObjectBucket(),
                         job.checkpoint().parsedObjectKey(), job.checkpoint().parsedContentHash(),
                         job.checkpoint().parsedSizeBytes()), clock.instant());
+        stageCompleted(job, "generation_activate", "文档版本与知识库Generation已原子激活",
+                elapsedNanos(activationStarted), 1, 1);
         AiLog.info(AiLog.rag().ingestCompleted(job.tenantId(), job.jobId(), job.documentId(),
                 job.versionId(), job.checkpoint().totalChunks(), elapsedFromLease(job)));
     }
@@ -437,6 +489,8 @@ public class RagIngestWorker {
     private void cleanupCancelled(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity current = cancellationBarrier(job.tenantId(), job.jobId(), leaseOwner,
                 job.fencingToken(), heartbeat);
+        long cleanupStarted = System.nanoTime();
+        stageStarted(current, "cancel_cleanup", "开始清理已取消任务的向量、分块和解析产物", 1);
         vectorStore.deleteVersion(current.tenantId(), current.versionId());
         current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
                 current.fencingToken(), heartbeat);
@@ -451,12 +505,17 @@ public class RagIngestWorker {
             repository.failClaimedIngestJob(current.tenantId(), failed, expectedTaskRevision,
                     scope.version().revision(), scope.document().revision(), leaseOwner,
                     current.fencingToken(), clock.instant());
+            AiLog.warn(AiLog.rag().ingestFailed(current.tenantId(), current.jobId(), current.documentId(),
+                    current.versionId(), "cancel_cleanup", "RAG_INGEST_FAILURE_CLEANUP_COMPLETED",
+                    elapsedNanos(cleanupStarted), null));
             return;
         }
         RagIngestJobEntity cancelled = current.markCancelled(leaseOwner, current.fencingToken(), clock.instant());
         repository.cancelClaimedIngestJob(current.tenantId(), cancelled, expectedTaskRevision,
                 scope.version().revision(), scope.document().revision(), leaseOwner,
                 current.fencingToken(), clock.instant());
+        stageCompleted(current, "cancel_cleanup", "已取消任务的派生数据清理完成",
+                elapsedNanos(cleanupStarted), 1, 1);
     }
 
     private void handleFailure(String tenantId, String jobId, String leaseOwner, long fence, Exception error) {
@@ -588,6 +647,21 @@ public class RagIngestWorker {
         if (job == null || job.lease() == null) return 0L;
         return Math.max(0L, Duration.between(job.lease().expiresAt().minus(leaseDuration()),
                 clock.instant()).toMillis());
+    }
+
+    private void stageStarted(RagIngestJobEntity job, String stage, String message, Integer inputCount) {
+        AiLog.info(AiLog.rag().ingestStageStarted(job.tenantId(), job.jobId(), job.documentId(),
+                job.versionId(), stage, message, inputCount));
+    }
+
+    private void stageCompleted(RagIngestJobEntity job, String stage, String message, Long costMs,
+                                Integer inputCount, Integer outputCount) {
+        AiLog.info(AiLog.rag().ingestStageCompleted(job.tenantId(), job.jobId(), job.documentId(),
+                job.versionId(), stage, message, costMs, inputCount, outputCount));
+    }
+
+    private long elapsedNanos(long startedAtNanos) {
+        return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos));
     }
 
     private RagIngestJobEntity advanceDeletion(RagIngestJobEntity job, String leaseOwner,

@@ -66,12 +66,13 @@ public class RagContextContributorTest {
         Assert.assertEquals("agent-a", captor.getValue().targetId());
         Assert.assertEquals("用户真实问题", captor.getValue().query());
         Assert.assertEquals(512, captor.getValue().maxContextTokens());
+        Assert.assertEquals(List.of("binding-a"), captor.getValue().bindingIds());
     }
 
     private ContextAssembleRequest request() {
         return ContextAssembleRequest.builder().tenantId("tenant-a").userId("user-a")
                 .sessionId("session-a").runId("run-a").traceId("trace-a")
                 .ragTargetType(RagBindingTargetType.AGENT).ragTargetId("agent-a")
-                .ragQuery("用户真实问题").build();
+                .ragBindingIds(List.of("binding-a")).ragQuery("用户真实问题").build();
     }
 }

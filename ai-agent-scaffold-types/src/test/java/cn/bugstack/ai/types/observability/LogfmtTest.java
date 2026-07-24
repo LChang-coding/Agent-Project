@@ -33,7 +33,8 @@ public class LogfmtTest {
                 .field("promptTokens", null)
                 .nullableField("thoughtsTokens", null);
 
-        assertTraceIdAndLogBody("event=token_usage domain=model totalTokens=100 thoughtsTokens=null", record.toLogfmt());
+        assertTraceIdAndLogBody("event=token_usage domain=model eventName=\"模型Token用量已记录\" "
+                + "message=\"模型Token用量已记录\" totalTokens=100 thoughtsTokens=null", record.toLogfmt());
     }
 
     private void assertTraceIdAndLogBody(String expectedBody, String actual) {

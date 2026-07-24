@@ -69,6 +69,7 @@ public class ContextInjectionPlugin extends BasePlugin {
                     .traceId(traceId)
                     .ragTargetType(enumValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
                     .ragTargetId(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_ID)))
+                    .ragBindingIds(stringList(state.get(ToolRuntimeContextKeys.RAG_BINDING_IDS)))
                     .ragQuery(stringValue(state.get(ToolRuntimeContextKeys.RAG_QUERY)))
                     .runId(runId)
                     .build());
@@ -138,6 +139,14 @@ public class ContextInjectionPlugin extends BasePlugin {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream().filter(item -> item != null)
+                .map(String::valueOf).filter(item -> !item.isBlank()).toList();
     }
 
     private String defaultString(String value, String defaultValue) {

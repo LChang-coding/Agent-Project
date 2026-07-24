@@ -1,5 +1,6 @@
 package cn.bugstack.ai.domain.rag.model.entity;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +50,17 @@ public record RagRetrievalResult(String retrievalId,
                         value.rerankCandidateCount(), value.embeddingMs(), value.denseMs(), value.sparseMs(),
                         value.fusionMs(), value.rerankMs(), value.totalMs(), value.configurationMs(),
                         value.hydrationMs(), value.assemblyMs(), auditMs, serviceMs), diagnostics);
+    }
+
+    /** 标记一次不会丢弃主检索结果的降级；相同原因保持幂等。 */
+    public RagRetrievalResult withDegradation(String reason) {
+        requireText(reason, "降级原因");
+        List<String> reasons = new ArrayList<>(degradationReasons);
+        if (!reasons.contains(reason)) {
+            reasons.add(reason);
+        }
+        return new RagRetrievalResult(retrievalId, citations, estimatedTokenCount, true, reasons,
+                metrics, diagnostics);
     }
 
     /** 最终引用；context 可包含同版本父块和相邻块，chunkId 始终指向主命中。 */

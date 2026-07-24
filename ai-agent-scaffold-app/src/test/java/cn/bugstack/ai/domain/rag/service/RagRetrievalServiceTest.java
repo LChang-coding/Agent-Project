@@ -86,6 +86,25 @@ public class RagRetrievalServiceTest {
     }
 
     @Test
+    public void shouldFailBeforeEmbeddingWhenFrozenBindingBecameStale() {
+        when(repository.listBindings("tenant-a", RagBindingTargetType.AGENT, "agent-a"))
+                .thenReturn(List.of(binding(false)));
+        RagRetrievalRequest frozen = new RagRetrievalRequest("tenant-a", "user-a", "session-a", "run-a",
+                RagBindingTargetType.AGENT, "agent-a", "问题", "trace-a", 1000,
+                false, List.of("binding-removed"));
+
+        try {
+            service.retrieve(frozen);
+            Assert.fail("Run绑定快照失效时不能改用其他绑定");
+        } catch (AppException exception) {
+            Assert.assertEquals("RAG_RUN_BINDING_SNAPSHOT_STALE", exception.getCode());
+        }
+        verify(embedding, never()).embed(any());
+        verify(sparse, never()).encode(any());
+        verify(vectorStore, never()).search(anyString(), any());
+    }
+
+    @Test
     public void shouldNotRetrieveAnotherUsersPrivateKnowledgeBase() {
         when(repository.listBindings("tenant-a", RagBindingTargetType.AGENT, "agent-a"))
                 .thenReturn(List.of(binding(false)));
@@ -410,6 +429,8 @@ public class RagRetrievalServiceTest {
         RagRetrievalResult result = service.retrieve(request(1000));
 
         Assert.assertTrue(result.citations().isEmpty());
+        Assert.assertTrue(result.degraded());
+        Assert.assertEquals(List.of("audit_write_failed"), result.degradationReasons());
     }
 
     private void fixtures(RagRetrievalProfileEntity profile, boolean required) {

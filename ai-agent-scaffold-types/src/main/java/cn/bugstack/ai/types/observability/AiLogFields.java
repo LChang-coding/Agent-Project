@@ -16,6 +16,11 @@ public final class AiLogFields {
     public static final String RETRIEVAL_ID = "retrievalId";
     public static final String TASK_ID = "taskId";
     public static final String STAGE = "stage";
+    public static final String OPERATION = "operation";
+    public static final String OUTCOME = "outcome";
+    public static final String INPUT_COUNT = "inputCount";
+    public static final String OUTPUT_COUNT = "outputCount";
+    public static final String SKIP_REASON = "skipReason";
     public static final String MESSAGE_ID = "messageId";
     public static final String AGENT_ID = "agentId";
     public static final String AGENT_NAME = "agentName";

@@ -152,11 +152,12 @@ public class SessionController {
     public Response<SessionRagSettingResponseDTO> updateRagSetting(@PathVariable String sessionId,
                                                                     @RequestBody SessionRagSettingRequestDTO request) {
         try {
-            if (request == null || request.getEnabled() == null) {
-                throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG开关值不能为空");
+            if (request == null) {
+                throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG设置不能为空");
             }
             return success(toRagSetting(ragSettingService.update(TenantContextHolder.getTenantId(),
-                    requireUserId(), sessionId, request.getEnabled())));
+                    requireUserId(), sessionId, request.getMode(), request.getEnabled(),
+                    request.getSelectedBindingIds(), request.getExpectedRevision())));
         } catch (AppException exception) {
             return fail(exception);
         } catch (Exception exception) {
@@ -196,15 +197,27 @@ public class SessionController {
 
     private SessionRagSettingResponseDTO toRagSetting(SessionRagSettingEntity setting) {
         String message;
-        if (!setting.enabled()) {
+        if ("OFF".equals(setting.mode().name())) {
             message = "RAG已关闭，本会话不会检索企业知识库";
+        } else if ("MANUAL".equals(setting.mode().name()) && !setting.bindingConfigured()) {
+            message = "RAG处于手动模式，但已选择的绑定当前不可用";
         } else if (!setting.bindingConfigured()) {
             message = "RAG已开启，但当前运行目标尚未绑定知识库";
+        } else if ("MANUAL".equals(setting.mode().name())) {
+            message = "RAG已开启，后续新运行将使用本会话手动选择的知识库绑定";
         } else {
             message = "RAG已开启，后续新运行将检索当前目标绑定的知识库";
         }
-        return new SessionRagSettingResponseDTO(setting.sessionId(), setting.enabled(),
-                setting.bindingConfigured(), setting.targetType().name(), setting.targetId(), message);
+        List<SessionRagSettingResponseDTO.EligibleBindingDTO> eligibleBindings = setting.eligibleBindings().stream()
+                .map(binding -> new SessionRagSettingResponseDTO.EligibleBindingDTO(
+                        binding.bindingId(), binding.knowledgeBaseId(), binding.knowledgeBaseName(),
+                        binding.retrievalProfileId(), binding.retrievalProfileName(), binding.status(),
+                        binding.required(), binding.maxTokens(), binding.priority(), binding.revision(),
+                        binding.selected()))
+                .toList();
+        return new SessionRagSettingResponseDTO(setting.sessionId(), setting.enabled(), setting.mode().name(),
+                setting.revision(), setting.bindingConfigured(), setting.targetType().name(), setting.targetId(),
+                setting.selectedBindingIds(), eligibleBindings, message);
     }
 
     private SessionMessageResponseDTO toMessage(ChatMessageEntity message) {

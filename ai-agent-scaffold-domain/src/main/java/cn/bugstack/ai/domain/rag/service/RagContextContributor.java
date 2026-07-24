@@ -33,7 +33,8 @@ public class RagContextContributor implements ContextContributor {
         }
         RagRetrievalResult result = retrievalService.retrieve(new RagRetrievalRequest(request.getTenantId(),
                 request.getUserId(), request.getSessionId(), request.getRunId(), request.getRagTargetType(),
-                request.getRagTargetId(), request.getRagQuery(), request.getTraceId(), properties.getRagTokens()));
+                request.getRagTargetId(), request.getRagQuery(), request.getTraceId(), properties.getRagTokens(),
+                false, request.getRagBindingIds()));
         if (result.citations().isEmpty()) return List.of();
         String content = render(result);
         return List.of(ContextContribution.builder().type(ContextFragmentType.RAG).content(content)

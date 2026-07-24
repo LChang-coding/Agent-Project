@@ -95,31 +95,53 @@ public class RagRetrievalService {
     public RagRetrievalResult retrieve(RagRetrievalRequest request) {
         long started = System.nanoTime();
         String retrievalId = "ret_" + UUID.randomUUID().toString().replace("-", "");
-        String query = normalizeQuery(request.query());
+        String query = null;
         AuditState audit = new AuditState();
         AiLog.info(AiLog.rag().retrieveStarted(request.tenantId(), request.userId(), request.sessionId(),
-                request.runId(), retrievalId, request.targetType().name(), request.targetId(), query.length())
+                request.runId(), retrievalId, request.targetType().name(), request.targetId(),
+                request.query() == null ? 0 : request.query().length())
                 .field(AiLogFields.TRACE_ID, request.traceId()));
         try {
+            long normalizeStarted = System.nanoTime();
+            query = normalizeQuery(request.query());
+            logStage(request, retrievalId, "query_normalize", "检索问题规范化完成",
+                    "completed", elapsedMs(normalizeStarted), request.query().length(), query.length());
             RagRetrievalResult result = retrieveInternal(request, retrievalId, query, started, audit);
             long auditStarted = System.nanoTime();
-            recordAudit(request, query, result, result.citations().isEmpty() ? "empty" : "success", null, audit);
-            RagRetrievalResult completed = result.withCompletionTimings(elapsedMs(auditStarted), elapsedMs(started));
+            boolean auditSaved = recordAudit(request, query, result,
+                    result.citations().isEmpty() ? "empty" : "success", null, audit);
+            long auditMs = elapsedMs(auditStarted);
+            logStage(request, retrievalId, "audit_persist",
+                    auditSaved ? "检索审计记录已保存" : "检索审计写入失败，主检索结果继续返回",
+                    auditSaved ? "completed" : "degraded", auditMs, 1, auditSaved ? 1 : 0);
+            RagRetrievalResult completed = (auditSaved ? result : result.withDegradation("audit_write_failed"))
+                    .withCompletionTimings(auditMs, elapsedMs(started));
             AiLog.info(AiLog.rag().retrieveCompleted(request.tenantId(), request.userId(), request.sessionId(),
-                    request.runId(), retrievalId, request.targetType().name(), request.targetId(), null,
-                    completed.metrics().fusionCandidateCount(), completed.citations().size(),
-                    completed.estimatedTokenCount(), completed.degraded(), completed.metrics().totalMs())
-                    .field(AiLogFields.TRACE_ID, request.traceId()));
+                    request.runId(), retrievalId, request.targetType().name(), request.targetId(),
+                    audit.executedBindingCount(), audit.mergedCandidateCount(), completed.citations().size(),
+                    completed.estimatedTokenCount(), completed.degraded(), completed.metrics().serviceMs())
+                    .field(AiLogFields.TRACE_ID, request.traceId())
+                    .field("candidateBindings", audit.candidateBindingCount())
+                    .field("resolvedBindings", audit.resolvedBindingCount())
+                    .field("pipelineMs", result.metrics().totalMs())
+                    .field("auditMs", auditMs)
+                    .field("serviceMs", completed.metrics().totalMs()));
             if (completed.degraded()) {
                 AiLog.warn(AiLog.rag().retrieveDegraded(request.tenantId(), request.userId(),
                         request.sessionId(), request.runId(), retrievalId, request.targetType().name(),
                         request.targetId(), String.join(",", completed.degradationReasons()),
-                        completed.metrics().totalMs(), null).field(AiLogFields.TRACE_ID, request.traceId()));
+                        completed.metrics().serviceMs(), null).field(AiLogFields.TRACE_ID, request.traceId()));
             }
             return completed;
         } catch (RuntimeException exception) {
             RagRetrievalResult failed = RagRetrievalResult.empty(retrievalId, elapsedMs(started));
-            recordAudit(request, query, failed, "failed", exception, audit);
+            if (query != null) {
+                long auditStarted = System.nanoTime();
+                boolean auditSaved = recordAudit(request, query, failed, "failed", exception, audit);
+                logStage(request, retrievalId, "audit_persist",
+                        auditSaved ? "失败检索审计记录已保存" : "失败检索审计写入失败",
+                        auditSaved ? "completed" : "degraded", elapsedMs(auditStarted), 1, auditSaved ? 1 : 0);
+            }
             String errorCode = exception instanceof AppException appException
                     ? appException.getCode() : "RAG_RETRIEVAL_FAILED";
             AiLog.error(AiLog.rag().retrieveFailed(request.tenantId(), request.userId(), request.sessionId(),
@@ -133,10 +155,17 @@ public class RagRetrievalService {
                                                 long started, AuditState audit) {
         Aggregate aggregate = new Aggregate(request.diagnosticsEnabled());
         long configurationStarted = System.nanoTime();
-        List<RagAgentBindingEntity> bindings = repository.listBindings(request.tenantId(), request.targetType(),
+        List<RagAgentBindingEntity> targetBindings = repository.listBindings(request.tenantId(), request.targetType(),
                 request.targetId());
+        audit.candidateBindingCount = targetBindings.size();
+        List<RagAgentBindingEntity> bindings = selectRunBindings(request, targetBindings);
+        logStage(request, retrievalId, "binding_lookup", "运行目标绑定查询完成", "completed",
+                elapsedMs(configurationStarted), request.bindingIds().isEmpty()
+                        ? targetBindings.size() : request.bindingIds().size(), bindings.size());
         if (bindings.isEmpty()) {
             aggregate.configurationMs = elapsedMs(configurationStarted);
+            logStage(request, retrievalId, "binding_resolve", "没有可执行的知识库绑定，检索返回空结果",
+                    "skipped", aggregate.configurationMs, 0, 0);
             return emptyResult(retrievalId, started, aggregate);
         }
         if (bindings.size() > MAX_BINDINGS) {
@@ -146,36 +175,63 @@ public class RagRetrievalService {
         List<ResolvedBinding> resolved = resolveBindings(request, bindings);
         aggregate.configurationMs = elapsedMs(configurationStarted);
         audit.capture(resolved);
+        logStage(request, retrievalId, "binding_resolve", "知识库、检索策略与访问权限解析完成",
+                resolved.isEmpty() ? "skipped" : "completed", aggregate.configurationMs,
+                bindings.size(), resolved.size());
         if (resolved.isEmpty()) {
             return emptyResult(retrievalId, started, aggregate);
         }
 
+        long rewriteStarted = System.nanoTime();
+        long rewriteRequested = resolved.stream().filter(value -> value.profile().queryRewriteEnabled()).count();
         resolved.stream().filter(value -> value.profile().queryRewriteEnabled())
                 .map(value -> "query_rewrite_unavailable:" + value.profile().profileId()).distinct()
                 .forEach(aggregate.degradationReasons::add);
+        logStage(request, retrievalId, "query_rewrite", rewriteRequested == 0
+                        ? "检索问题改写未启用，使用规范化后的原问题"
+                        : "检索问题改写配置已开启但当前无改写器，按原问题降级执行",
+                rewriteRequested == 0 ? "skipped" : "degraded", elapsedMs(rewriteStarted),
+                resolved.size(), 0);
         List<ResolvedBinding> active = new ArrayList<>(resolved);
         Timed<List<Float>> dense = Timed.empty(List.of());
         if (active.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.SPARSE)) {
+            long denseStarted = System.nanoTime();
             try {
                 dense = timed(() -> embeddingPort.embed(new EmbeddingPort.EmbeddingCommand(request.tenantId(),
                         request.traceId(), EmbeddingPort.EmbeddingInputType.QUERY, List.of(query))).vectors().get(0));
+                logStage(request, retrievalId, "dense_embedding", "Dense查询向量生成完成",
+                        "completed", dense.elapsedMs(), 1, dense.value().size());
             } catch (RuntimeException exception) {
                 failIfRequired(active, RagRetrievalMode.SPARSE, exception);
                 aggregate.degradationReasons.add("dense_unavailable");
                 active.removeIf(value -> value.profile().mode() != RagRetrievalMode.SPARSE);
+                logStageWarn(request, retrievalId, "dense_embedding", "Dense查询向量生成失败，已移除依赖Dense的可选绑定",
+                        elapsedMs(denseStarted), 1, 0, errorCode(exception), exception);
             }
+        } else {
+            logStage(request, retrievalId, "dense_embedding", "当前检索策略不需要Dense向量",
+                    "skipped", 0L, 0, 0);
         }
         Timed<SparseEncoderPort.SparseVector> sparse = Timed.empty(null);
         if (active.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.DENSE)) {
+            long sparseStarted = System.nanoTime();
             try {
                 sparse = timed(() -> sparseEncoderPort.encode(new SparseEncoderPort.SparseEncodingCommand(
                         request.tenantId(), request.traceId(), List.of(query),
                         DeterministicSparseEncoder.VOCABULARY_REVISION)).vectors().get(0));
+                logStage(request, retrievalId, "sparse_encode", "Sparse查询特征生成完成",
+                        "completed", sparse.elapsedMs(), 1,
+                        sparse.value() == null ? 0 : sparse.value().weights().size());
             } catch (RuntimeException exception) {
                 failIfRequired(active, RagRetrievalMode.DENSE, exception);
                 aggregate.degradationReasons.add("sparse_unavailable");
                 active.removeIf(value -> value.profile().mode() != RagRetrievalMode.DENSE);
+                logStageWarn(request, retrievalId, "sparse_encode", "Sparse查询特征生成失败，已移除依赖Sparse的可选绑定",
+                        elapsedMs(sparseStarted), 1, 0, errorCode(exception), exception);
             }
+        } else {
+            logStage(request, retrievalId, "sparse_encode", "当前检索策略不需要Sparse特征",
+                    "skipped", 0L, 0, 0);
         }
         if (active.isEmpty()) {
             return new RagRetrievalResult(retrievalId, List.of(), 0, true, aggregate.degradationReasons,
@@ -185,21 +241,30 @@ public class RagRetrievalService {
         }
 
         List<RankedChunk> ranked = new ArrayList<>();
+        audit.executedBindingCount = active.size();
         for (ResolvedBinding value : active) {
             try {
-                ranked.addAll(retrieveBinding(request, query, value, dense.value(), sparse.value(), aggregate));
+                ranked.addAll(retrieveBinding(request, retrievalId, query, value,
+                        dense.value(), sparse.value(), aggregate));
             } catch (RuntimeException exception) {
                 if (value.binding().required() || isScopeViolation(exception)) {
                     throw exception;
                 }
                 aggregate.degradationReasons.add("optional_binding_failed:" + value.binding().bindingId());
+                logBindingStageWarn(request, retrievalId, value, "binding_retrieval",
+                        "可选知识库绑定检索失败，继续执行其他绑定", null, 1, 0,
+                        errorCode(exception), exception);
             }
         }
 
+        long mergeStarted = System.nanoTime();
         List<RankedChunk> merged = ranked.stream()
                 .collect(Collectors.toMap(value -> value.chunk().chunkId(), value -> value,
                         this::better, LinkedHashMap::new)).values().stream()
                 .sorted(RANKING).toList();
+        audit.mergedCandidateCount = merged.size();
+        logStage(request, retrievalId, "cross_binding_merge", "跨知识库候选去重与合并完成",
+                "completed", elapsedMs(mergeStarted), ranked.size(), merged.size());
         long assemblyStarted = System.nanoTime();
         long hydrationBeforeAssembly = aggregate.hydrationMs;
         List<RagRetrievalResult.Citation> citations = assembleCitations(
@@ -207,6 +272,13 @@ public class RagRetrievalService {
         aggregate.assemblyMs += Math.max(0L, elapsedMs(assemblyStarted)
                 - (aggregate.hydrationMs - hydrationBeforeAssembly));
         int tokens = citations.stream().mapToInt(value -> tokenCounter.estimate(value.context())).sum();
+        AiLog.info(stageRecord(request, retrievalId, "citation_assembly", "引用封装与上下文Token预算完成",
+                citations.isEmpty() ? "empty" : "completed", elapsedMs(assemblyStarted),
+                merged.size(), citations.size()).field("tokens", tokens)
+                .field("globalTokenBudget", request.maxContextTokens())
+                .field("expandedChunkCount", aggregate.expandedChunkCount)
+                .field("finalTopKRejected", aggregate.finalTopKRejected)
+                .field("tokenBudgetRejected", aggregate.tokenBudgetRejected));
         long totalMs = elapsedMs(started);
         RagRetrievalResult.Metrics metrics = new RagRetrievalResult.Metrics(aggregate.denseCandidates,
                 aggregate.sparseCandidates, aggregate.fusionCandidates, aggregate.rerankCandidates,
@@ -217,8 +289,8 @@ public class RagRetrievalService {
                 aggregate.degradationReasons, metrics, aggregate.diagnostics.result());
     }
 
-    private void recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
-                             String status, RuntimeException exception, AuditState state) {
+    private boolean recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
+                                String status, RuntimeException exception, AuditState state) {
         try {
             String errorCode = exception instanceof AppException appException
                     ? appException.getCode() : (exception == null ? null : "RAG_RETRIEVAL_FAILED");
@@ -227,11 +299,13 @@ public class RagRetrievalService {
                     state.profileRevision, query, state.denseEnabled, state.sparseEnabled, state.rerankEnabled,
                     result, status, errorCode, exception == null ? null : exception.getClass().getSimpleName(),
                     request.traceId(), state.snapshot(request)));
+            return true;
         } catch (RuntimeException auditException) {
             AiLog.error(AiLog.rag().retrieveFailed(request.tenantId(), request.userId(), request.sessionId(),
                     request.runId(), result.retrievalId(), request.targetType().name(), request.targetId(),
                     "RAG_AUDIT_WRITE_FAILED", null, auditException)
                     .field(AiLogFields.TRACE_ID, request.traceId()).field(AiLogFields.STAGE, "audit"));
+            return false;
         }
     }
 
@@ -272,7 +346,25 @@ public class RagRetrievalService {
         return List.copyOf(result);
     }
 
+    /** 按Run创建时固化的Binding集合收窄目标绑定；快照失效时明确失败。 */
+    private List<RagAgentBindingEntity> selectRunBindings(RagRetrievalRequest request,
+                                                           List<RagAgentBindingEntity> targetBindings) {
+        if (request.bindingIds().isEmpty()) {
+            return targetBindings;
+        }
+        Set<String> selected = new LinkedHashSet<>(request.bindingIds());
+        List<RagAgentBindingEntity> result = targetBindings.stream()
+                .filter(binding -> selected.contains(binding.bindingId()))
+                .toList();
+        if (result.size() != selected.size()) {
+            throw new AppException("RAG_RUN_BINDING_SNAPSHOT_STALE",
+                    "本轮固化的知识库绑定已失效，不能静默改用其他绑定");
+        }
+        return result;
+    }
+
     private List<RankedChunk> retrieveBinding(RagRetrievalRequest request,
+                                              String retrievalId,
                                               String query,
                                               ResolvedBinding resolved,
                                               List<Float> denseVector,
@@ -290,6 +382,11 @@ public class RagRetrievalService {
             aggregate.denseMs += call.elapsedMs();
             aggregate.denseCandidates += denseHits.size();
             aggregate.diagnostics.captureRaw(resolved, "dense_raw", denseHits, true);
+            logBindingStage(request, retrievalId, resolved, "dense_recall",
+                    "Dense向量召回完成", "completed", call.elapsedMs(), profile.denseTopK(), denseHits.size());
+        } else {
+            logBindingStage(request, retrievalId, resolved, "dense_recall",
+                    "当前Binding为Sparse模式，跳过Dense召回", "skipped", 0L, 0, 0);
         }
         if (profile.mode() != RagRetrievalMode.DENSE) {
             Timed<List<VectorStorePort.VectorSearchHit>> call = timed(() -> vectorStorePort.search(request.tenantId(),
@@ -298,21 +395,40 @@ public class RagRetrievalService {
             aggregate.sparseMs += call.elapsedMs();
             aggregate.sparseCandidates += sparseHits.size();
             aggregate.diagnostics.captureRaw(resolved, "sparse_raw", sparseHits, false);
+            logBindingStage(request, retrievalId, resolved, "sparse_recall",
+                    "Sparse关键词召回完成", "completed", call.elapsedMs(), profile.sparseTopK(), sparseHits.size());
+        } else {
+            logBindingStage(request, retrievalId, resolved, "sparse_recall",
+                    "当前Binding为Dense模式，跳过Sparse召回", "skipped", 0L, 0, 0);
         }
         long fusionStarted = System.nanoTime();
         List<ScoredHit> fused = fuse(profile, denseHits, sparseHits);
-        aggregate.fusionMs += elapsedMs(fusionStarted);
+        long fusionMs = elapsedMs(fusionStarted);
+        aggregate.fusionMs += fusionMs;
         aggregate.fusionCandidates += fused.size();
         aggregate.diagnostics.captureFused(resolved, "fusion", fused);
+        AiLog.info(bindingStageRecord(request, retrievalId, resolved, "fusion",
+                "Dense与Sparse候选融合、阈值过滤和TopK裁剪完成",
+                fused.isEmpty() ? "empty" : "completed", fusionMs,
+                denseHits.size() + sparseHits.size(), fused.size())
+                .field("fusionStrategy", profile.fusionStrategy().name())
+                .field("fusionTopK", profile.fusionTopK()));
         if (fused.isEmpty()) return List.of();
 
+        long hydrationStarted = System.nanoTime();
         Map<String, RagChunkEntity> chunks = loadChunks(request.tenantId(),
                         fused.stream().map(value -> value.hit().chunkId()).toList(), aggregate).stream()
                 .collect(Collectors.toMap(RagChunkEntity::chunkId, value -> value));
+        logBindingStage(request, retrievalId, resolved, "chunk_hydration",
+                "候选分块从业务数据库加载完成", "completed", elapsedMs(hydrationStarted),
+                fused.size(), chunks.size());
         Map<String, Optional<RagDocumentEntity>> missingChunkDocuments = new LinkedHashMap<>();
         List<RankedChunk> candidates = new ArrayList<>();
         Set<String> contentHashes = new LinkedHashSet<>();
         int filteredRank = 0;
+        int tombstoneCount = 0;
+        int duplicateCount = 0;
+        long filterStarted = System.nanoTime();
         for (int fusedIndex = 0; fusedIndex < fused.size(); fusedIndex++) {
             ScoredHit value = fused.get(fusedIndex);
             RagChunkEntity chunk = chunks.get(value.hit().chunkId());
@@ -320,12 +436,14 @@ public class RagRetrievalService {
                     missingChunkDocuments)) {
                 aggregate.diagnostics.capture(resolved, "candidate_filter", fusedIndex + 1, value,
                         null, "discarded_tombstone");
+                tombstoneCount++;
                 continue;
             }
             validateChunkScope(resolved, value.hit(), chunk);
             if (profile.deduplicateEnabled() && !contentHashes.add(chunk.contentHash())) {
                 aggregate.diagnostics.capture(resolved, "candidate_filter", fusedIndex + 1, value,
                         null, "discarded_duplicate_content_hash");
+                duplicateCount++;
                 continue;
             }
             RankedChunk candidate = new RankedChunk(resolved, chunk, value.denseScore(), value.sparseScore(),
@@ -333,9 +451,18 @@ public class RagRetrievalService {
             candidates.add(candidate);
             aggregate.diagnostics.capture(candidate, "candidate_filter", ++filteredRank, "kept");
         }
+        AiLog.info(bindingStageRecord(request, retrievalId, resolved, "candidate_filter",
+                "候选租户范围、活动版本、删除态和内容去重过滤完成",
+                candidates.isEmpty() ? "empty" : "completed", elapsedMs(filterStarted),
+                fused.size(), candidates.size())
+                .field("tombstoneRejected", tombstoneCount)
+                .field("duplicateRejected", duplicateCount));
         if (!profile.rerankEnabled() || candidates.isEmpty()) {
             List<RankedChunk> output = candidates.stream().limit(profile.finalTopK()).toList();
             aggregate.diagnostics.captureRanked("pre_assembly", output, "kept_without_rerank");
+            logBindingStage(request, retrievalId, resolved, "rerank",
+                    candidates.isEmpty() ? "没有候选，跳过Rerank" : "当前检索策略未启用Rerank",
+                    "skipped", 0L, candidates.size(), output.size());
             return output;
         }
         int rerankInputSize = Math.min(profile.rerankTopK(), candidates.size());
@@ -361,11 +488,17 @@ public class RagRetrievalService {
             }
             List<RankedChunk> rerankOutput = output.stream().sorted(RANKING).limit(profile.finalTopK()).toList();
             aggregate.diagnostics.captureRanked("rerank_output", rerankOutput, "kept_after_rerank");
+            logBindingStage(request, retrievalId, resolved, "rerank",
+                    "候选重排和最终TopK裁剪完成", "completed", reranked.elapsedMs(),
+                    rerankInputSize, rerankOutput.size());
             return rerankOutput;
         } catch (RuntimeException exception) {
             aggregate.degradationReasons.add("rerank_fallback:" + profile.profileId());
             List<RankedChunk> fallback = candidates.stream().limit(profile.finalTopK()).toList();
             aggregate.diagnostics.captureRanked("rerank_output", fallback, "fallback_without_rerank_score");
+            logBindingStageWarn(request, retrievalId, resolved, "rerank",
+                    "Rerank失败，已按融合排序降级返回", null, rerankInputSize, fallback.size(),
+                    errorCode(exception), exception);
             return fallback;
         }
     }
@@ -402,14 +535,18 @@ public class RagRetrievalService {
                 value -> value.binding().bindingId(), value -> Math.min(value.binding().maxTokens(),
                         value.profile().maxContextTokens())));
         Map<String, Integer> bindingUsed = new LinkedHashMap<>();
+        Map<String, Integer> bindingCitationCount = new LinkedHashMap<>();
         Map<String, RagDocumentEntity> documents = loadDocuments(request.tenantId(), ranked, aggregate);
         Set<String> emittedChunks = new LinkedHashSet<>();
         List<RagRetrievalResult.Citation> citations = new ArrayList<>();
         int used = 0;
         for (int rankedIndex = 0; rankedIndex < ranked.size(); rankedIndex++) {
             RankedChunk value = ranked.get(rankedIndex);
-            if (citations.size() >= value.resolved().profile().finalTopK()) {
+            String bindingId = value.resolved().binding().bindingId();
+            if (bindingCitationCount.getOrDefault(bindingId, 0)
+                    >= value.resolved().profile().finalTopK()) {
                 aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_final_topk");
+                aggregate.finalTopKRejected++;
                 continue;
             }
             RagDocumentEntity document = Optional.ofNullable(documents.get(value.chunk().documentId()))
@@ -422,10 +559,10 @@ public class RagRetrievalService {
             }
             validateDocumentScope(value, document);
             List<RagChunkEntity> contextChunks = expandContext(request.tenantId(), value, aggregate);
+            aggregate.expandedChunkCount += Math.max(0, contextChunks.size() - 1);
             contextChunks = contextChunks.stream().filter(chunk -> !emittedChunks.contains(chunk.chunkId())).toList();
             String context = contextChunks.stream().map(RagChunkEntity::content).collect(Collectors.joining("\n\n"));
             int tokens = tokenCounter.estimate(context);
-            String bindingId = value.resolved().binding().bindingId();
             int localUsed = bindingUsed.getOrDefault(bindingId, 0);
             if (tokens < 1) {
                 aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_empty_context");
@@ -433,10 +570,12 @@ public class RagRetrievalService {
             }
             if (used + tokens > globalBudget) {
                 aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_global_token_budget");
+                aggregate.tokenBudgetRejected++;
                 continue;
             }
             if (localUsed + tokens > bindingBudget.get(bindingId)) {
                 aggregate.diagnostics.capture(value, "context_budget", rankedIndex + 1, "discarded_binding_token_budget");
+                aggregate.tokenBudgetRejected++;
                 continue;
             }
             used += tokens;
@@ -451,6 +590,7 @@ public class RagRetrievalService {
                     value.rerankScore(), Map.of("binding_id", bindingId,
                             "profile_id", value.resolved().profile().profileId(),
                             "profile_revision", Long.toString(value.resolved().profile().revision()))));
+            bindingCitationCount.merge(bindingId, 1, Integer::sum);
             aggregate.diagnostics.capture(value, "context_budget", rank, "accepted_citation");
         }
         return List.copyOf(citations);
@@ -628,6 +768,72 @@ public class RagRetrievalService {
                 && appException.getCode().contains("SCOPE");
     }
 
+    /** 生成一个不含问题正文和候选正文的检索阶段日志。 */
+    private cn.bugstack.ai.types.observability.AiLogRecord stageRecord(
+            RagRetrievalRequest request, String retrievalId, String stage, String message,
+            String outcome, Long costMs, Integer inputCount, Integer outputCount) {
+        return AiLog.rag().retrievalStage(request.tenantId(), request.userId(), request.sessionId(),
+                        request.runId(), retrievalId, request.targetType().name(), request.targetId(),
+                        stage, message, outcome, costMs, inputCount, outputCount)
+                .field(AiLogFields.TRACE_ID, request.traceId());
+    }
+
+    /** 记录一个检索阶段完成、跳过或空结果事件。 */
+    private void logStage(RagRetrievalRequest request, String retrievalId, String stage, String message,
+                          String outcome, Long costMs, Integer inputCount, Integer outputCount) {
+        AiLog.info(stageRecord(request, retrievalId, stage, message, outcome, costMs, inputCount, outputCount));
+    }
+
+    /** 生成带Binding、知识库和Profile范围的阶段日志。 */
+    private cn.bugstack.ai.types.observability.AiLogRecord bindingStageRecord(
+            RagRetrievalRequest request, String retrievalId, ResolvedBinding resolved,
+            String stage, String message, String outcome, Long costMs,
+            Integer inputCount, Integer outputCount) {
+        return stageRecord(request, retrievalId, stage, message, outcome, costMs, inputCount, outputCount)
+                .field("bindingId", resolved.binding().bindingId())
+                .field("knowledgeBaseId", resolved.knowledgeBase().knowledgeBaseId())
+                .field("generation", resolved.knowledgeBase().currentGeneration())
+                .field("profileId", resolved.profile().profileId())
+                .field("profileRevision", resolved.profile().revision())
+                .field("required", resolved.binding().required());
+    }
+
+    /** 记录一个Binding范围的阶段事件。 */
+    private void logBindingStage(RagRetrievalRequest request, String retrievalId, ResolvedBinding resolved,
+                                 String stage, String message, String outcome, Long costMs,
+                                 Integer inputCount, Integer outputCount) {
+        AiLog.info(bindingStageRecord(request, retrievalId, resolved, stage, message,
+                outcome, costMs, inputCount, outputCount));
+    }
+
+    /** 记录阶段降级；只保存稳定错误码和异常类型，不保存外部异常正文。 */
+    private void logStageWarn(RagRetrievalRequest request, String retrievalId, String stage, String message,
+                              Long costMs, Integer inputCount, Integer outputCount,
+                              String errorCode, RuntimeException exception) {
+        AiLog.warn(stageRecord(request, retrievalId, stage, message, "degraded",
+                costMs, inputCount, outputCount)
+                .field(AiLogFields.ERROR_CODE, errorCode)
+                .field(AiLogFields.ERROR_TYPE, exception.getClass().getSimpleName())
+                .field("degraded", true));
+    }
+
+    /** 记录Binding阶段降级；只保存稳定错误码和异常类型。 */
+    private void logBindingStageWarn(RagRetrievalRequest request, String retrievalId, ResolvedBinding resolved,
+                                     String stage, String message, Long costMs,
+                                     Integer inputCount, Integer outputCount,
+                                     String errorCode, RuntimeException exception) {
+        AiLog.warn(bindingStageRecord(request, retrievalId, resolved, stage, message, "degraded",
+                costMs, inputCount, outputCount)
+                .field(AiLogFields.ERROR_CODE, errorCode)
+                .field(AiLogFields.ERROR_TYPE, exception.getClass().getSimpleName())
+                .field("degraded", true));
+    }
+
+    private String errorCode(RuntimeException exception) {
+        return exception instanceof AppException appException && appException.getCode() != null
+                ? appException.getCode() : "RAG_STAGE_FAILED";
+    }
+
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -680,6 +886,9 @@ public class RagRetrievalService {
         private long configurationMs;
         private long hydrationMs;
         private long assemblyMs;
+        private int expandedChunkCount;
+        private int finalTopKRejected;
+        private int tokenBudgetRejected;
         private final List<String> degradationReasons = new ArrayList<>();
         private final DiagnosticsCollector diagnostics;
 
@@ -769,14 +978,24 @@ public class RagRetrievalService {
         private boolean denseEnabled;
         private boolean sparseEnabled;
         private boolean rerankEnabled;
+        private int candidateBindingCount;
+        private int resolvedBindingCount;
+        private int executedBindingCount;
+        private int mergedCandidateCount;
 
         private void capture(List<ResolvedBinding> bindings) {
+            resolvedBindingCount = bindings.size();
             profileIds = bindings.stream().map(value -> value.profile().profileId()).distinct().sorted().toList();
             profileRevision = bindings.stream().mapToLong(value -> value.profile().revision()).max().orElse(0L);
             denseEnabled = bindings.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.SPARSE);
             sparseEnabled = bindings.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.DENSE);
             rerankEnabled = bindings.stream().anyMatch(value -> value.profile().rerankEnabled());
         }
+
+        private int candidateBindingCount() { return candidateBindingCount; }
+        private int resolvedBindingCount() { return resolvedBindingCount; }
+        private int executedBindingCount() { return executedBindingCount; }
+        private int mergedCandidateCount() { return mergedCandidateCount; }
 
         private String profileId() {
             if (profileIds.isEmpty()) return "none";

@@ -5,6 +5,9 @@ import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 import cn.bugstack.ai.infrastructure.dao.IChatRunDao;
 import cn.bugstack.ai.infrastructure.dao.po.ChatRunPO;
+import cn.bugstack.ai.types.exception.AppException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -19,12 +22,14 @@ import java.util.stream.Collectors;
 public class ChatRunRepository implements IChatRunRepository {
 
     private final IChatRunDao dao;
+    private final ObjectMapper objectMapper;
 
     /**
      * 创建仓储；参数是运行 DAO；返回仓储实例。
      */
-    public ChatRunRepository(IChatRunDao dao) {
+    public ChatRunRepository(IChatRunDao dao, ObjectMapper objectMapper) {
         this.dao = dao;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -81,7 +86,9 @@ public class ChatRunRepository implements IChatRunRepository {
         return ChatRunPO.builder()
                 .runId(run.getRunId()).turnId(run.getTurnId()).tenantId(blankToNull(run.getTenantId()))
                 .userId(run.getUserId()).sessionId(run.getSessionId()).sourceType(run.getSourceType()).sourceId(run.getSourceId())
-                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).traceId(run.getTraceId())
+                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIdsJson(writeBindingIds(run.getRagBindingIds()))
+                .traceId(run.getTraceId())
                 .status(value(run.getStatus())).version(run.getVersion()).baseContextRevision(run.getBaseContextRevision())
                 .currentContextRevision(run.getCurrentContextRevision()).predecessorRunId(run.getPredecessorRunId())
                 .successorRunId(run.getSuccessorRunId()).userMessageId(run.getUserMessageId())
@@ -97,13 +104,35 @@ public class ChatRunRepository implements IChatRunRepository {
         return ChatRunEntity.builder()
                 .runId(run.getRunId()).turnId(run.getTurnId()).tenantId(run.getTenantId()).userId(run.getUserId())
                 .sessionId(run.getSessionId()).sourceType(run.getSourceType()).sourceId(run.getSourceId())
-                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).traceId(run.getTraceId())
+                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIds(readBindingIds(run.getRagBindingIdsJson()))
+                .traceId(run.getTraceId())
                 .status(RunStatus.valueOf(run.getStatus().toUpperCase(Locale.ROOT))).version(run.getVersion())
                 .baseContextRevision(run.getBaseContextRevision()).currentContextRevision(run.getCurrentContextRevision())
                 .predecessorRunId(run.getPredecessorRunId()).successorRunId(run.getSuccessorRunId())
                 .userMessageId(run.getUserMessageId()).steerInstruction(run.getSteerInstruction())
                 .terminalReason(run.getTerminalReason()).cancelRequestedAt(run.getCancelRequestedAt())
                 .startedAt(run.getStartedAt()).finishedAt(run.getFinishedAt()).build();
+    }
+
+    private String writeBindingIds(List<String> bindingIds) {
+        try {
+            return objectMapper.writeValueAsString(bindingIds == null ? List.of() : bindingIds);
+        } catch (Exception exception) {
+            throw new AppException("CHAT_RUN_RAG_SNAPSHOT_SERIALIZE_FAILED", "RAG运行快照序列化失败");
+        }
+    }
+
+    private List<String> readBindingIds(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<String> values = objectMapper.readValue(json, new TypeReference<>() { });
+            return values == null ? List.of() : List.copyOf(values);
+        } catch (Exception exception) {
+            throw new AppException("CHAT_RUN_RAG_SNAPSHOT_DESERIALIZE_FAILED", "RAG运行快照反序列化失败");
+        }
     }
 
     private String value(RunStatus status) {

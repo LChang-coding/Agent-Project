@@ -140,6 +140,8 @@ export interface LocalChatSession {
   updatedAt: string;
   contextRevision?: number;
   ragEnabled?: boolean;
+  ragMode?: SessionRagMode;
+  ragRevision?: number;
 }
 
 export interface SessionListPage {
@@ -156,6 +158,8 @@ export interface SessionListPage {
     lastMessageTime: string;
     contextRevision: number;
     ragEnabled: boolean;
+    ragMode?: SessionRagMode;
+    ragRevision?: number;
   }>;
   nextCursor?: string;
   hasMore: boolean;
@@ -182,6 +186,21 @@ export interface SessionDeleteResponse {
   contextRevision: number;
 }
 
+export type SessionRagMode = 'OFF' | 'AUTO' | 'MANUAL';
+
+export interface SessionRagEligibleBinding {
+  bindingId: string;
+  knowledgeBaseId: string;
+  knowledgeBaseName?: string;
+  profileId: string;
+  profileName?: string;
+  required: boolean;
+  maxTokens: number;
+  priority: number;
+  revision: number;
+  status?: string;
+}
+
 export interface SessionRagSetting {
   sessionId: string;
   enabled: boolean;
@@ -189,6 +208,16 @@ export interface SessionRagSetting {
   targetType: 'AGENT' | 'WORKFLOW';
   targetId: string;
   message: string;
+  mode?: SessionRagMode;
+  selectedBindingIds?: string[];
+  eligibleBindings?: SessionRagEligibleBinding[];
+  revision?: number;
+}
+
+export interface SessionRagSettingUpdate {
+  mode: SessionRagMode;
+  selectedBindingIds: string[];
+  expectedRevision?: number;
 }
 
 export interface StreamHandlers {

@@ -17,6 +17,8 @@ public final class ToolRuntimeContextKeys {
     public static final String CONTEXT_UPSTREAM_OUTPUT = "contextUpstreamOutput";
     public static final String RAG_TARGET_TYPE = "ragTargetType";
     public static final String RAG_TARGET_ID = "ragTargetId";
+    public static final String RAG_MODE = "ragMode";
+    public static final String RAG_BINDING_IDS = "ragBindingIds";
     public static final String RAG_QUERY = "ragQuery";
     public static final String RAG_EVIDENCE_INVOCATION_ID = "ragEvidenceInvocationId";
 

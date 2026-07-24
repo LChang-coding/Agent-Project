@@ -70,27 +70,38 @@
                 </option>
               </select>
             </label>
-            <label
-              :class="['rag-switch', {
-                'rag-switch--enabled': chatStore.ragEnabled,
-                'rag-switch--warning': chatStore.ragEnabled && !chatStore.ragBindingConfigured,
-              }]"
-              :title="chatStore.ragMessage"
-            >
-              <input
-                :checked="chatStore.ragEnabled"
-                type="checkbox"
-                role="switch"
-                :aria-checked="chatStore.ragEnabled"
-                :disabled="!chatStore.sessionId || chatStore.sending || chatStore.ragSaving"
-                @change="onRagToggle"
-              />
-              <span class="rag-switch__track"><i /></span>
-              <span class="rag-switch__copy">
-                <strong>{{ chatStore.ragSaving ? '保存中' : 'RAG' }}</strong>
-                <small>{{ ragSwitchLabel }}</small>
+            <div class="rag-policy" :class="{ 'rag-policy--warning': chatStore.ragEnabled && !chatStore.ragBindingConfigured }">
+              <span id="rag-policy-label" class="rag-policy__label">{{ chatStore.ragSaving ? 'RAG 保存中' : 'RAG 策略' }}</span>
+              <div
+                ref="ragPolicyGroupRef"
+                class="rag-policy__choices"
+                role="radiogroup"
+                aria-labelledby="rag-policy-label"
+                :aria-describedby="chatStore.sessionId ? 'rag-policy-help' : 'rag-policy-disabled-help'"
+                @keydown.left.prevent="moveRagMode(-1)"
+                @keydown.up.prevent="moveRagMode(-1)"
+                @keydown.right.prevent="moveRagMode(1)"
+                @keydown.down.prevent="moveRagMode(1)"
+              >
+                <button
+                  v-for="option in ragModeOptions"
+                  :key="option.value"
+                  :ref="option.value === 'MANUAL' ? setManualTriggerRef : undefined"
+                  class="rag-policy__choice"
+                  :class="{ 'rag-policy__choice--active': chatStore.ragMode === option.value }"
+                  type="button"
+                  role="radio"
+                  :aria-checked="chatStore.ragMode === option.value"
+                  :disabled="ragControlsDisabled"
+                  @click="selectRagMode(option.value)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <span :id="chatStore.sessionId ? 'rag-policy-help' : 'rag-policy-disabled-help'" class="sr-only">
+                {{ chatStore.sessionId ? chatStore.ragMessage : '创建或选择会话后才能设置RAG策略' }}
               </span>
-            </label>
+            </div>
             <button class="icon-button" type="button" title="刷新运行目标" :disabled="chatStore.sending" @click="reloadTargets">刷新</button>
             <button class="icon-button" type="button" title="分享当前会话" :disabled="!chatStore.sessionId || chatStore.sending || sharing" @click="shareSession">
               {{ sharing ? '生成中' : '分享' }}
@@ -112,7 +123,7 @@
             <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
           </div>
           <div :class="['rag-state', `rag-state--${ragStateTone}`]" :title="chatStore.ragMessage">
-            <span aria-hidden="true">{{ chatStore.ragEnabled ? 'R' : '—' }}</span>
+            <span aria-hidden="true">{{ chatStore.ragMode === 'AUTO' ? 'A' : chatStore.ragMode === 'MANUAL' ? 'M' : '—' }}</span>
             <strong>{{ chatStore.ragMessage }}</strong>
           </div>
         </div>
@@ -318,6 +329,76 @@
             </div>
           </div>
         </form>
+
+        <div v-if="manualPanelOpen" class="rag-dialog-backdrop" @click.self="closeManualPanel()">
+          <section
+            ref="manualDialogRef"
+            class="rag-binding-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rag-binding-dialog-title"
+            aria-describedby="rag-binding-dialog-help"
+            tabindex="-1"
+            @keydown.esc.prevent="closeManualPanel()"
+            @keydown.tab="trapManualDialogFocus"
+          >
+            <header>
+              <div>
+                <span>MANUAL RETRIEVAL</span>
+                <h2 id="rag-binding-dialog-title">指定本会话使用的绑定</h2>
+              </div>
+              <button type="button" aria-label="关闭指定绑定面板" @click="closeManualPanel()">×</button>
+            </header>
+            <p id="rag-binding-dialog-help">
+              只影响后续新运行。当前正在执行的运行会继续使用创建时的配置快照。
+            </p>
+            <div v-if="chatStore.ragEligibleBindings.length" class="rag-binding-options" role="group" aria-label="可选RAG绑定">
+              <label
+                v-for="(binding, index) in chatStore.ragEligibleBindings"
+                :key="binding.bindingId"
+                :class="['rag-binding-option', {
+                  'rag-binding-option--selected': manualBindingIds.includes(binding.bindingId),
+                  'rag-binding-option--unavailable': !bindingAvailable(binding.status),
+                }]"
+              >
+                <input
+                  :ref="index === 0 ? setFirstBindingRef : undefined"
+                  v-model="manualBindingIds"
+                  type="checkbox"
+                  :value="binding.bindingId"
+                  :disabled="!bindingAvailable(binding.status) && !manualBindingIds.includes(binding.bindingId)"
+                />
+                <span class="rag-binding-option__copy">
+                  <strong>{{ binding.knowledgeBaseName || binding.knowledgeBaseId }}</strong>
+                  <small>{{ binding.profileName || binding.profileId }} · {{ binding.maxTokens }} Tokens</small>
+                </span>
+                <span :class="['rag-binding-option__status', { 'rag-binding-option__status--warning': !bindingAvailable(binding.status) }]">
+                  {{ bindingStatusLabel(binding.status) }}
+                </span>
+                <span v-if="binding.required" class="rag-binding-option__required">强制依赖</span>
+              </label>
+            </div>
+            <div v-else class="rag-binding-empty" role="status">
+              当前 Agent / Workflow 没有可选绑定，请先由租户管理员建立知识库绑定。
+            </div>
+            <footer>
+              <span aria-live="polite">
+                已选择 {{ manualBindingIds.length }} 项{{ manualSelectionValid ? '' : '，请移除不可用绑定' }}
+              </span>
+              <div>
+                <button class="button button--soft" type="button" :disabled="chatStore.ragSaving" @click="closeManualPanel()">取消</button>
+                <button
+                  class="button button--primary"
+                  type="button"
+                  :disabled="chatStore.ragSaving || chatStore.sending || manualBindingIds.length === 0 || !manualSelectionValid"
+                  @click="applyManualBindings"
+                >
+                  {{ chatStore.ragSaving ? '应用中…' : '应用绑定' }}
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
       </main>
     </section>
   </div>
@@ -325,13 +406,14 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 
 import { createSessionShare } from '@/api/share';
 import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
 import { useToolStore } from '@/stores/tools';
-import type { ArtifactAsset, ChatMessage } from '@/types/api';
+import type { ArtifactAsset, ChatMessage, SessionRagMode } from '@/types/api';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 interface MessageScrollAnchor {
@@ -354,10 +436,26 @@ const shareLink = ref('');
 const followingLatest = ref(true);
 const messageWindowStart = ref(0);
 const windowFeedback = ref('');
+const manualPanelOpen = ref(false);
+const manualBindingIds = ref<string[]>([]);
+const manualDialogRef = ref<HTMLElement | null>(null);
+const manualTriggerRef = ref<HTMLButtonElement | null>(null);
+const firstBindingRef = ref<HTMLInputElement | null>(null);
+const ragPolicyGroupRef = ref<HTMLElement | null>(null);
 let scrollFrame: number | null = null;
 const MESSAGE_WINDOW_SIZE = 100;
 const MESSAGE_WINDOW_STEP = 50;
+const ragModeOptions: Array<{ value: SessionRagMode; label: string }> = [
+  { value: 'OFF', label: '关闭' },
+  { value: 'AUTO', label: '自动' },
+  { value: 'MANUAL', label: '指定' },
+];
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
+const ragControlsDisabled = computed(() => !chatStore.sessionId || chatStore.sending || chatStore.ragSaving);
+const manualSelectionValid = computed(() => manualBindingIds.value.every((bindingId) => {
+  const binding = chatStore.ragEligibleBindings.find((item) => item.bindingId === bindingId);
+  return Boolean(binding && bindingAvailable(binding.status));
+}));
 const attachmentScope = computed(() => {
   if (chatStore.sessionId) {
     return `session:${chatStore.sessionId}`;
@@ -446,7 +544,7 @@ const historyFeedback = computed(() => {
 });
 const operationStatus = computed(() => {
   const error = chatStore.errorMessage || assetStore.errorMessage;
-  if (chatStore.ragSaving) return { tone: 'working', label: '正在保存RAG设置', detail: '保存完成后，新的运行会使用最新开关。' };
+  if (chatStore.ragSaving) return { tone: 'working', label: '正在保存RAG设置', detail: '保存完成后，新的运行会使用最新策略。' };
   if (chatStore.cancelling) return { tone: 'warning', label: '正在取消', detail: '等待服务端中止运行并收口上下文。' };
   if (chatStore.steering) return { tone: 'working', label: '正在引导', detail: '新指令已提交，正在切换到后继运行。' };
   if (chatStore.sending) return {
@@ -467,12 +565,6 @@ const operationStatus = computed(() => {
     return { tone: 'success', label: '运行已完成', detail: '消息、上下文和调用记录已收口。' };
   }
   return { tone: 'idle', label: '工作台就绪', detail: '选择运行目标并输入指令。' };
-});
-const ragSwitchLabel = computed(() => {
-  if (!chatStore.sessionId) return '需先创建会话';
-  if (chatStore.ragSaving) return '同步数据库';
-  if (!chatStore.ragEnabled) return '已关闭';
-  return chatStore.ragBindingConfigured ? '知识库已绑定' : '缺少绑定';
 });
 const ragStateTone = computed(() => {
   if (chatStore.ragSaving) return 'working';
@@ -497,6 +589,7 @@ watch(
   () => chatStore.sessionId,
   (sessionId, previousSessionId) => {
     if (sessionId !== previousSessionId) {
+      closeManualPanel(false);
       messageWindowStart.value = 0;
       windowFeedback.value = '';
       followingLatest.value = true;
@@ -532,6 +625,13 @@ watch(lastMessageRenderKey, () => {
   if (followingLatest.value) ensureLatestWindow();
   scheduleLatestScroll();
 }, { flush: 'post' });
+
+watch(
+  () => chatStore.sending,
+  (sending) => {
+    if (sending && manualPanelOpen.value) closeManualPanel();
+  },
+);
 
 /** 会话切换的唯一附属资源刷新入口。 */
 async function refreshSessionResources(sessionId: string) {
@@ -615,14 +715,102 @@ async function onWorkflowChanged() {
   await chatStore.selectWorkflow(chatStore.activeWorkflowId);
 }
 
-/** 持久化会话RAG开关；失败时Store会回滚视觉状态。 */
-async function onRagToggle(event: Event) {
-  const enabled = (event.target as HTMLInputElement).checked;
+/** 选择会话RAG策略；指定模式先打开绑定草稿，其他模式立即持久化。 */
+async function selectRagMode(mode: SessionRagMode) {
+  if (ragControlsDisabled.value) return;
+  if (mode === 'MANUAL') {
+    manualBindingIds.value = [...chatStore.ragSelectedBindingIds];
+    manualPanelOpen.value = true;
+    await nextTick();
+    (firstBindingRef.value || manualDialogRef.value)?.focus();
+    return;
+  }
   try {
-    await chatStore.setRagEnabled(enabled);
+    await chatStore.setRagSetting(mode);
   } catch {
     // Store 已回滚并保留可展示的错误。
   }
+}
+
+/** 以原生单选组习惯用方向键移动并选择RAG策略。 */
+function moveRagMode(offset: number) {
+  if (ragControlsDisabled.value) return;
+  const currentIndex = ragModeOptions.findIndex((option) => option.value === chatStore.ragMode);
+  const nextIndex = (currentIndex + offset + ragModeOptions.length) % ragModeOptions.length;
+  const nextMode = ragModeOptions[nextIndex].value;
+  const button = ragPolicyGroupRef.value?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextIndex];
+  button?.focus();
+  void selectRagMode(nextMode);
+}
+
+/** 应用指定绑定草稿；保存失败时保留面板，Store完整回滚。 */
+async function applyManualBindings() {
+  if (!manualBindingIds.value.length || ragControlsDisabled.value) return;
+  try {
+    await chatStore.setRagSetting('MANUAL', manualBindingIds.value);
+    closeManualPanel();
+  } catch {
+    // 保留选择草稿，便于用户根据服务端反馈修正或重试。
+  }
+}
+
+/** 关闭指定绑定面板并把焦点还给触发按钮。 */
+function closeManualPanel(restoreFocus = true) {
+  if (!manualPanelOpen.value) return;
+  manualPanelOpen.value = false;
+  manualBindingIds.value = [...chatStore.ragSelectedBindingIds];
+  if (restoreFocus) {
+    void nextTick(() => manualTriggerRef.value?.focus());
+  }
+}
+
+/** 接收v-for中的指定模式按钮DOM引用。 */
+function setManualTriggerRef(element: Element | ComponentPublicInstance | null) {
+  manualTriggerRef.value = element instanceof HTMLButtonElement ? element : null;
+}
+
+/** 接收第一个绑定复选框DOM引用，用于打开面板后的焦点定位。 */
+function setFirstBindingRef(element: Element | ComponentPublicInstance | null) {
+  firstBindingRef.value = element instanceof HTMLInputElement ? element : null;
+}
+
+/** 将Tab焦点约束在打开的模态面板内。 */
+function trapManualDialogFocus(event: KeyboardEvent) {
+  const dialog = manualDialogRef.value;
+  if (!dialog) return;
+  const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+    'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+  ));
+  if (!focusable.length) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable.at(-1)!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+/** 判断服务端绑定状态是否可被新运行选择。 */
+function bindingAvailable(status?: string) {
+  return !status || !['deleting', 'deleted', 'disabled', 'failed', 'unavailable'].includes(status.toLowerCase());
+}
+
+/** 将绑定状态转换为稳定的中文短标签。 */
+function bindingStatusLabel(status?: string) {
+  if (!status) return '可用';
+  const normalized = status.toLowerCase();
+  if (['ready', 'active', 'enabled', 'searchable'].includes(normalized)) return '可用';
+  if (normalized === 'deleting') return '删除中';
+  if (normalized === 'disabled') return '已停用';
+  if (normalized === 'failed') return '异常';
+  return status;
 }
 
 /**
@@ -1299,78 +1487,199 @@ function formatOptionalTokens(value?: number) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
 }
 
-.rag-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 4px 8px;
+.rag-policy {
+  display: grid;
+  min-width: 164px;
+  padding: 3px;
+  gap: 2px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--surface);
-  cursor: pointer;
   transition: border-color var(--motion-fast), background var(--motion-fast);
 }
 
-.rag-switch input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
+.rag-policy--warning {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--line));
+  background: color-mix(in srgb, var(--warning) 5%, var(--surface));
 }
 
-.rag-switch__track {
-  position: relative;
-  width: 30px;
-  height: 17px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--line-strong);
-  transition: background var(--motion-fast);
-}
-
-.rag-switch__track i {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(28, 39, 42, 0.22);
-  transition: transform var(--motion-fast);
-}
-
-.rag-switch__copy {
-  display: grid;
-  gap: 1px;
-}
-
-.rag-switch__copy strong {
-  color: var(--ink-soft);
-  font-size: 11px;
-}
-
-.rag-switch__copy small {
+.rag-policy__label {
+  padding: 0 4px;
   color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.rag-policy__choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--surface-muted);
+}
+
+.rag-policy__choice {
+  min-height: 24px;
+  padding: 0 6px;
+  color: var(--muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  transition: color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.rag-policy__choice:hover:not(:disabled) {
+  color: var(--accent-deep);
+}
+
+.rag-policy__choice--active {
+  color: var(--accent-deep);
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(23, 33, 43, 0.1);
+}
+
+.rag-policy__choice:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rag-policy__choice:disabled { cursor: not-allowed; opacity: 0.48; }
+
+.rag-dialog-backdrop {
+  position: fixed;
+  z-index: var(--z-modal);
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgba(18, 26, 32, 0.48);
+  backdrop-filter: blur(8px);
+  place-items: center;
+}
+
+.rag-binding-dialog {
+  width: min(100%, 620px);
+  max-height: min(760px, calc(100dvh - 40px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px;
+  outline: none;
+  background: var(--surface);
+  box-shadow: 0 30px 90px rgba(10, 20, 24, 0.25);
+}
+
+.rag-binding-dialog header,
+.rag-binding-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.rag-binding-dialog header > div > span {
+  color: var(--gold);
+  font: 700 9px monospace;
+  letter-spacing: 0.13em;
+}
+
+.rag-binding-dialog h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.rag-binding-dialog header > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  border: 0;
+  border-radius: 9px;
+  background: var(--surface-muted);
+  cursor: pointer;
+  font-size: 20px;
+  place-items: center;
+}
+
+.rag-binding-dialog > p {
+  margin: 14px 0;
+  padding: 10px 12px;
+  color: var(--muted);
+  border-radius: 9px;
+  background: var(--surface-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.rag-binding-options {
+  display: grid;
+  max-height: min(430px, 52dvh);
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.rag-binding-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 11px 12px;
+  gap: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.rag-binding-option--selected {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent) 5%, #fff);
+}
+
+.rag-binding-option--unavailable { cursor: not-allowed; opacity: 0.58; }
+.rag-binding-option input { grid-row: span 2; accent-color: var(--accent); }
+.rag-binding-option__copy { min-width: 0; }
+.rag-binding-option__copy strong,
+.rag-binding-option__copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rag-binding-option__copy strong { color: var(--ink); font-size: 12px; }
+.rag-binding-option__copy small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.rag-binding-option__status { color: var(--success); font-size: 10px; font-weight: 800; }
+.rag-binding-option__status--warning { color: var(--warning); }
+.rag-binding-option__required {
+  grid-column: 2 / -1;
+  color: var(--warning);
   font-size: 9px;
-  white-space: nowrap;
+  font-weight: 800;
 }
 
-.rag-switch--enabled {
-  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
-  background: color-mix(in srgb, var(--success) 6%, var(--surface));
+.rag-binding-empty {
+  padding: 38px 24px;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
-.rag-switch--enabled .rag-switch__track { background: var(--success); }
-.rag-switch--enabled .rag-switch__track i { transform: translateX(13px); }
-.rag-switch--warning { border-color: color-mix(in srgb, var(--warning) 38%, var(--line)); }
-.rag-switch--warning .rag-switch__track { background: var(--warning); }
-.rag-switch:has(input:disabled) { cursor: not-allowed; opacity: 0.56; }
+.rag-binding-dialog footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.rag-binding-dialog footer > span { color: var(--muted); font-size: 11px; }
+.rag-binding-dialog footer > div { display: flex; gap: 8px; }
 
 .compact-field {
   display: grid;
@@ -1927,6 +2236,12 @@ function formatOptionalTokens(value?: number) {
   }
 }
 
+@media (min-width: 841px) and (max-width: 1200px) {
+  .chat-commandbar { align-items: flex-start; flex-wrap: wrap; }
+  .runtime-controls { flex: 1 1 100%; justify-content: flex-start; }
+  .compact-field--wide { min-width: min(260px, 34vw); }
+}
+
 @media (max-width: 840px) {
   .chat-page {
     height: auto;
@@ -1951,7 +2266,7 @@ function formatOptionalTokens(value?: number) {
 
   .runtime-controls {
     width: 100%;
-    overflow-x: auto;
+    overflow-x: visible;
   }
 
   .compact-field,
@@ -1965,6 +2280,7 @@ function formatOptionalTokens(value?: number) {
   }
 
   .share-result { justify-content: flex-start; }
+  .rag-policy { width: 100%; }
 }
 
 @media (max-width: 700px) {
@@ -1994,6 +2310,11 @@ function formatOptionalTokens(value?: number) {
 
   .chat-statusbar { align-items: flex-start; }
   .share-result { min-width: 0; flex-basis: 100%; flex-wrap: wrap; }
+  .rag-dialog-backdrop { align-items: start; padding: 10px; }
+  .rag-binding-dialog { max-height: calc(100dvh - 20px); padding: 18px 14px; border-radius: 15px; }
+  .rag-binding-dialog h2 { font-size: 19px; }
+  .rag-binding-dialog footer { align-items: stretch; flex-direction: column; }
+  .rag-binding-dialog footer > div { display: grid; grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-height: 700px) and (min-width: 841px) {

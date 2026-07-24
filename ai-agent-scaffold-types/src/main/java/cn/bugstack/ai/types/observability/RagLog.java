@@ -68,7 +68,8 @@ public final class RagLog {
         return production(AiLogEvent.RAG_RETRIEVE_DEGRADED, tenantId, userId, sessionId, runId,
                 retrievalId, targetType, targetId)
                 .field(AiLogFields.ERROR_CODE, errorCode).field(AiLogFields.COST_MS, costMs)
-                .field(AiLogFields.STAGE, "degraded").field(AiLogFields.SUCCESS, false).error(throwable);
+                .field(AiLogFields.STAGE, "degraded").field(AiLogFields.SUCCESS, false)
+                .field(AiLogFields.ERROR_TYPE, throwable == null ? null : throwable.getClass().getSimpleName());
     }
 
     /** 记录生产检索失败。 */
@@ -78,7 +79,26 @@ public final class RagLog {
         return production(AiLogEvent.RAG_ERROR, tenantId, userId, sessionId, runId,
                 retrievalId, targetType, targetId)
                 .field(AiLogFields.ERROR_CODE, errorCode).field(AiLogFields.COST_MS, costMs)
-                .field(AiLogFields.STAGE, "retrieval").field(AiLogFields.SUCCESS, false).error(throwable);
+                .field(AiLogFields.STAGE, "retrieval").field(AiLogFields.SUCCESS, false)
+                .field(AiLogFields.ERROR_TYPE, throwable == null ? null : throwable.getClass().getSimpleName());
+    }
+
+    /**
+     * 记录在线检索的一个聚合阶段；不接受问题正文、文档正文、向量或外部响应体。
+     */
+    public AiLogRecord retrievalStage(String tenantId, String userId, String sessionId, String runId,
+                                      String retrievalId, String targetType, String targetId,
+                                      String stage, String message, String outcome, Long costMs,
+                                      Integer inputCount, Integer outputCount) {
+        return production(AiLogEvent.RAG_STAGE, tenantId, userId, sessionId, runId,
+                retrievalId, targetType, targetId)
+                .field(AiLogFields.MESSAGE, message)
+                .field(AiLogFields.STAGE, stage)
+                .field(AiLogFields.OUTCOME, outcome)
+                .field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.INPUT_COUNT, inputCount)
+                .field(AiLogFields.OUTPUT_COUNT, outputCount)
+                .field(AiLogFields.SUCCESS, !"failed".equals(outcome));
     }
 
     private AiLogRecord production(AiLogEvent event, String tenantId, String userId, String sessionId,
@@ -107,6 +127,27 @@ public final class RagLog {
                 .field("totalChunks", totalChunks).field(AiLogFields.SUCCESS, true);
     }
 
+    /** 记录一个可能阻塞的摄取子阶段开始，便于判断任务当前停在哪一步。 */
+    public AiLogRecord ingestStageStarted(String tenantId, String taskId, String documentId,
+                                          String versionId, String stage, String message,
+                                          Integer inputCount) {
+        return ingest(AiLogEvent.RAG_INGEST_STAGE_STARTED, tenantId, taskId, documentId, versionId)
+                .field(AiLogFields.MESSAGE, message).field(AiLogFields.STAGE, stage)
+                .field(AiLogFields.OUTCOME, "started").field(AiLogFields.INPUT_COUNT, inputCount)
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录摄取子阶段结果、耗时和数据量。 */
+    public AiLogRecord ingestStageCompleted(String tenantId, String taskId, String documentId,
+                                            String versionId, String stage, String message,
+                                            Long costMs, Integer inputCount, Integer outputCount) {
+        return ingest(AiLogEvent.RAG_INGEST_STAGE_COMPLETED, tenantId, taskId, documentId, versionId)
+                .field(AiLogFields.MESSAGE, message).field(AiLogFields.STAGE, stage)
+                .field(AiLogFields.OUTCOME, "completed").field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.INPUT_COUNT, inputCount).field(AiLogFields.OUTPUT_COUNT, outputCount)
+                .field(AiLogFields.SUCCESS, true);
+    }
+
     /** 记录摄取任务完成。 */
     public AiLogRecord ingestCompleted(String tenantId, String taskId, String documentId,
                                        String versionId, Integer totalChunks, Long costMs) {
@@ -121,7 +162,8 @@ public final class RagLog {
                                     Long costMs, Throwable throwable) {
         return ingest(AiLogEvent.RAG_INGEST_FAILED, tenantId, taskId, documentId, versionId)
                 .field(AiLogFields.STAGE, stage).field(AiLogFields.ERROR_CODE, errorCode)
-                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.SUCCESS, false).error(throwable);
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.SUCCESS, false)
+                .field(AiLogFields.ERROR_TYPE, throwable == null ? null : throwable.getClass().getSimpleName());
     }
 
     private AiLogRecord ingest(AiLogEvent event, String tenantId, String taskId,

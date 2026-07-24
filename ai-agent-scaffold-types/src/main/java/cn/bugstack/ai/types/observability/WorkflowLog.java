@@ -56,6 +56,46 @@ public final class WorkflowLog {
                 .field(AiLogFields.SUCCESS, true);
     }
 
+    public AiLogRecord nodeStarted(String tenantId, String userId, String sessionId, String runId,
+                                   String workflowId, String nodeId, Integer iteration,
+                                   Integer totalIterations, Integer upstreamCount) {
+        return node(AiLogEvent.WORKFLOW_NODE_STARTED, tenantId, userId, sessionId, runId,
+                workflowId, nodeId, iteration, totalIterations)
+                .field("upstreamCount", upstreamCount).field(AiLogFields.STAGE, "node_execute")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    public AiLogRecord nodeCompleted(String tenantId, String userId, String sessionId, String runId,
+                                     String workflowId, String nodeId, Integer iteration,
+                                     Integer totalIterations, Integer outputLength,
+                                     Integer evidenceCount, Long costMs) {
+        return node(AiLogEvent.WORKFLOW_NODE_COMPLETED, tenantId, userId, sessionId, runId,
+                workflowId, nodeId, iteration, totalIterations)
+                .field("outputLength", outputLength).field("evidenceCount", evidenceCount)
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.STAGE, "node_execute")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    public AiLogRecord nodeFailed(String tenantId, String userId, String sessionId, String runId,
+                                  String workflowId, String nodeId, Integer iteration,
+                                  Integer totalIterations, Long costMs, Throwable throwable) {
+        return node(AiLogEvent.WORKFLOW_NODE_FAILED, tenantId, userId, sessionId, runId,
+                workflowId, nodeId, iteration, totalIterations)
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.STAGE, "node_execute")
+                .field(AiLogFields.ERROR_TYPE, throwable == null ? null : throwable.getClass().getSimpleName())
+                .field(AiLogFields.SUCCESS, false);
+    }
+
+    private AiLogRecord node(AiLogEvent event, String tenantId, String userId, String sessionId,
+                             String runId, String workflowId, String nodeId,
+                             Integer iteration, Integer totalIterations) {
+        return AiLogRecord.event(event).field(AiLogFields.TENANT_ID, tenantId)
+                .field(AiLogFields.USER_ID, userId).field(AiLogFields.SESSION_ID, sessionId)
+                .field(AiLogFields.RUN_ID, runId).field("workflowId", workflowId)
+                .field("nodeId", nodeId).field("iteration", iteration)
+                .field("totalIterations", totalIterations);
+    }
+
     /**
      * 记录 DAG 执行完成；参数是身份、工作流、版本、图规模、终点节点和输出长度；返回日志记录。
      */

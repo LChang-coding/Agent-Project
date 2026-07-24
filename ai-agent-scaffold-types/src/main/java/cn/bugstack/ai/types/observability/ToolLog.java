@@ -74,6 +74,16 @@ public final class ToolLog {
                 toolType, toolId, toolName, traceId, costMs, false).error(throwable);
     }
 
+    /** 记录工具调用授权、幂等领取和路由等内部阶段。 */
+    public AiLogRecord stage(String tenantId, String userId, String sessionId, String runId,
+                             String toolType, String toolId, String toolName, String traceId,
+                             String stage, String message, String outcome, Long costMs) {
+        return call(AiLogEvent.TOOL_STAGE, tenantId, userId, sessionId, runId,
+                toolType, toolId, toolName, traceId, costMs, !"failed".equals(outcome))
+                .field(AiLogFields.STAGE, stage).field(AiLogFields.MESSAGE, message)
+                .field(AiLogFields.OUTCOME, outcome);
+    }
+
     /**
      * 构造工具调用日志；参数是事件、上下文、工具和耗时；返回日志记录。
      */

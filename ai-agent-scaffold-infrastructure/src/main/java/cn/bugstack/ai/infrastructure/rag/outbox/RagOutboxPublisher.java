@@ -79,15 +79,31 @@ public class RagOutboxPublisher {
 
     private void publishCandidate(RagOutboxCandidatePO candidate, RagProperties.Outbox config) {
         LocalDateTime claimTime = now();
+        long claimStarted = System.nanoTime();
+        AiLog.info(AiLog.rag().ingestStageStarted(candidate.getTenantId(), null,
+                null, null, "outbox_claim", "开始领取待发布的摄取Outbox事件", 1)
+                .field("eventId", candidate.getEventId()));
         Optional<RagOutboxPO> claimed = claimService.claim(candidate, leaseOwner, claimTime,
                 claimTime.plusNanos(TimeUnit.MILLISECONDS.toNanos(config.getLeaseDurationMs())));
         if (claimed.isEmpty()) {
             outboxDao.markExhaustedDead(candidate.getTenantId(), candidate.getEventId(),
                     "OUTBOX_MAX_ATTEMPTS_EXHAUSTED");
+            AiLog.warn(AiLog.rag().ingestFailed(candidate.getTenantId(), null,
+                    null, null, "outbox_claim", "RAG_OUTBOX_MAX_ATTEMPTS_EXHAUSTED",
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - claimStarted), null)
+                    .field("eventId", candidate.getEventId()));
             return;
         }
         RagOutboxPO event = claimed.get();
+        AiLog.info(AiLog.rag().ingestStageCompleted(event.getTenantId(), event.getTaskId(),
+                        null, null, "outbox_claim", "摄取Outbox事件领取完成",
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - claimStarted), 1, 1)
+                .field("eventId", event.getEventId()).field(AiLogFields.TRACE_ID, event.getTraceId()));
         try {
+            long publishStarted = System.nanoTime();
+            AiLog.info(AiLog.rag().ingestStageStarted(event.getTenantId(), event.getTaskId(),
+                            null, null, "kafka_publish", "开始发布摄取Kafka唤醒事件", 1)
+                    .field("eventId", event.getEventId()).field(AiLogFields.TRACE_ID, event.getTraceId()));
             kafkaTemplate.send(event.getTopicName(), event.getPartitionKey(), event.getPayload())
                     .get(config.getAckTimeoutMs(), TimeUnit.MILLISECONDS);
             int changed = outboxDao.markPublished(event.getTenantId(), event.getEventId(), leaseOwner,
@@ -96,7 +112,8 @@ public class RagOutboxPublisher {
                 log.warn("RAG Outbox ACK后栅栏已失效 eventId:{}", event.getEventId());
             } else {
                 AiLog.info(AiLog.rag().ingestStageCompleted(event.getTenantId(), event.getTaskId(),
-                        null, null, "outbox_published", null, null)
+                        null, null, "kafka_publish", "Kafka已确认摄取唤醒事件",
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - publishStarted), 1, 1)
                         .field("eventId", event.getEventId())
                         .field(AiLogFields.TRACE_ID, event.getTraceId()));
             }

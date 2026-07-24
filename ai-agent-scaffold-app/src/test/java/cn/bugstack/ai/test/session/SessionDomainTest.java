@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
+import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
@@ -33,6 +34,8 @@ public class SessionDomainTest {
 
         Assert.assertEquals("session_1", session.getSessionId());
         Assert.assertEquals("agent", session.getSourceType());
+        Assert.assertEquals(SessionRagMode.OFF.name(), session.getRagMode());
+        Assert.assertEquals(Long.valueOf(0L), session.getRagRevision());
         Assert.assertEquals(Integer.valueOf(1), userMessage.getSequenceNo());
         Assert.assertEquals(Integer.valueOf(2), assistantMessage.getSequenceNo());
         Assert.assertEquals("trace_1", userMessage.getTraceId());
@@ -66,7 +69,24 @@ public class SessionDomainTest {
         ChatSessionEntity updated = sessionDomain.updateRagEnabled("tenant_1", "user_1", "session_1", true);
 
         Assert.assertTrue(updated.getRagEnabled());
+        Assert.assertEquals(SessionRagMode.AUTO.name(), updated.getRagMode());
+        Assert.assertEquals(Long.valueOf(1L), updated.getRagRevision());
         Assert.assertTrue(repository.querySession("tenant_1", "user_1", "session_1").getRagEnabled());
+    }
+
+    @Test
+    public void shouldRejectStaleRagRevision() {
+        FakeSessionRepository repository = new FakeSessionRepository();
+        SessionDomain sessionDomain = new SessionDomain(repository);
+        sessionDomain.createSession(createSessionCommand());
+        sessionDomain.updateRagPolicy("tenant_1", "user_1", "session_1", SessionRagMode.MANUAL, 0L);
+
+        try {
+            sessionDomain.updateRagPolicy("tenant_1", "user_1", "session_1", SessionRagMode.OFF, 0L);
+            Assert.fail("过期版本不应覆盖最新策略");
+        } catch (AppException exception) {
+            Assert.assertEquals("SESSION_RAG_UPDATE_CONFLICT", exception.getCode());
+        }
     }
 
     /**
@@ -151,10 +171,13 @@ public class SessionDomainTest {
         }
 
         @Override
-        public int updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
+        public int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
+                                   boolean enabled, long expectedRevision) {
             ChatSessionEntity session = querySession(tenantId, userId, sessionId);
-            if (session == null) return 0;
+            if (session == null || !Long.valueOf(expectedRevision).equals(session.getRagRevision())) return 0;
             session.setRagEnabled(enabled);
+            session.setRagMode(ragMode);
+            session.setRagRevision(expectedRevision + 1);
             return 1;
         }
 

@@ -21,6 +21,7 @@ DROP TABLE IF EXISTS `rag_knowledge_base`;
 DROP TABLE IF EXISTS `artifact_asset`;
 DROP TABLE IF EXISTS `model_usage`;
 DROP TABLE IF EXISTS `chat_message`;
+DROP TABLE IF EXISTS `chat_session_rag_binding_selection`;
 DROP TABLE IF EXISTS `chat_session`;
 DROP TABLE IF EXISTS `user_secret`;
 DROP TABLE IF EXISTS `tenant_user`;
@@ -117,6 +118,8 @@ CREATE TABLE `chat_session` (
   `title` VARCHAR(255) NULL COMMENT '会话标题',
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '会话状态：active/archived/deleted',
   `rag_enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用会话RAG',
+  `rag_mode` VARCHAR(16) NOT NULL DEFAULT 'OFF' COMMENT '会话RAG模式：OFF/AUTO/MANUAL',
+  `rag_revision` BIGINT NOT NULL DEFAULT 0 COMMENT '会话RAG策略乐观锁版本',
   `last_message_time` DATETIME(3) NULL COMMENT '最后消息时间',
   `metadata` JSON NULL COMMENT '扩展信息',
   `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
@@ -128,6 +131,23 @@ CREATE TABLE `chat_session` (
   KEY `idx_chat_session_tenant` (`tenant_id`, `last_message_time`),
   KEY `idx_chat_session_agent` (`agent_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='chat_session';
+
+CREATE TABLE `chat_session_rag_binding_selection` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `tenant_id` VARCHAR(64) NULL COMMENT '租户业务ID，个体户可为空',
+  `user_id` VARCHAR(64) NOT NULL COMMENT '会话归属用户ID',
+  `session_id` VARCHAR(64) NOT NULL COMMENT '会话业务ID',
+  `target_type` VARCHAR(32) NOT NULL COMMENT '绑定目标类型：agent/workflow',
+  `target_id` VARCHAR(64) NOT NULL COMMENT 'Agent或工作流业务ID',
+  `binding_id` VARCHAR(64) NOT NULL COMMENT 'RAG绑定业务ID',
+  `selection_order` INT NOT NULL DEFAULT 0 COMMENT '会话内选择顺序',
+  `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_session_rag_selection` (`session_id`, `binding_id`),
+  KEY `idx_session_rag_scope` (`tenant_id`, `user_id`, `session_id`, `selection_order`),
+  KEY `idx_session_rag_binding` (`tenant_id`, `binding_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会话RAG手动绑定选择';
 
 CREATE TABLE `chat_message` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',

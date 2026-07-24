@@ -73,6 +73,12 @@ public class ChatSessionPO extends BasePO {
     /** 是否启用会话RAG。 */
     private Boolean ragEnabled;
 
+    /** 会话RAG选择模式。 */
+    private String ragMode;
+
+    /** 会话RAG策略乐观锁版本。 */
+    private Long ragRevision;
+
     /**
      * 最后消息时间
      */

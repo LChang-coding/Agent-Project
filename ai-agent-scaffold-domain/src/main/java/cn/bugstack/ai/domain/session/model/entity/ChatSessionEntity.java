@@ -37,6 +37,12 @@ public class ChatSessionEntity {
     /** 是否在后续会话运行中启用RAG检索，旧会话默认关闭。 */
     private Boolean ragEnabled;
 
+    /** 会话RAG选择模式：OFF/AUTO/MANUAL。 */
+    private String ragMode;
+
+    /** 会话RAG策略乐观锁版本。 */
+    private Long ragRevision;
+
     private LocalDateTime lastMessageTime;
 
     /**

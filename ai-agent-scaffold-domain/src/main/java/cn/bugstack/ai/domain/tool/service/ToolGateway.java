@@ -60,15 +60,44 @@ public class ToolGateway {
         checkInvoke(tool, context);
         long begin = System.currentTimeMillis();
         String inputJson = toJson(input);
-        ToolDispatchClaimEntity claim = dispatchAuthorizationService.claim(tool, context, inputJson);
+        long claimStarted = System.currentTimeMillis();
+        AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
+                context.getTraceId(), "dispatch_authorize", "开始校验运行状态并领取幂等调用权",
+                "started", 0L));
+        ToolDispatchClaimEntity claim;
+        try {
+            claim = dispatchAuthorizationService.claim(tool, context, inputJson);
+        } catch (RuntimeException exception) {
+            AiLog.warn(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                    context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
+                    context.getTraceId(), "dispatch_authorize",
+                    "运行状态校验或幂等调用权领取失败，未调用外部工具", "failed",
+                    System.currentTimeMillis() - claimStarted)
+                    .field("errorType", exception.getClass().getSimpleName()));
+            throw exception;
+        }
         if (!claim.isClaimed()) {
+            AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                    context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
+                    context.getTraceId(), "dispatch_authorize", "命中既有工具调用，不重复产生外部消耗",
+                    "replayed", System.currentTimeMillis() - claimStarted));
             return duplicateResult(claim.getCallLog());
         }
+        AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
+                context.getTraceId(), "dispatch_authorize", "运行状态校验和幂等调用权领取完成",
+                "completed", System.currentTimeMillis() - claimStarted));
         ToolCallLogEntity callLog = claim.getCallLog();
         AiLog.info(AiLog.tool().callStarted(context.getTenantId(), context.getUserId(), context.getSessionId(),
                 context.getRunId(),
                 tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId()));
         try {
+            AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                    context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
+                    context.getTraceId(), "runtime_route",
+                    ToolType.SKILL.equals(tool.getToolType()) ? "路由到Skill运行时" : "路由到MCP运行时",
+                    "completed", 0L));
             String output = dispatch(tool, input);
             long costMs = System.currentTimeMillis() - begin;
             dispatchAuthorizationService.finish(callLog, toJson(Map.of("result", output)),

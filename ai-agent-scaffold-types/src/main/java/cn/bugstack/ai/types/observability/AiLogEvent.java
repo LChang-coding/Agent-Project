@@ -18,6 +18,7 @@ public enum AiLogEvent {
     CONTEXT_ASSEMBLY_COMPLETED(AiLogDomain.CHAT, "context_assembly_completed"),
     CONTEXT_ASSEMBLY_FAILED(AiLogDomain.CHAT, "context_assembly_failed"),
 
+    MODEL_CALL_STARTED(AiLogDomain.MODEL, "model_call_started"),
     MODEL_CALL(AiLogDomain.MODEL, "model_call"),
     TOKEN_USAGE(AiLogDomain.MODEL, "token_usage"),
     MODEL_ERROR(AiLogDomain.MODEL, "model_error"),
@@ -40,6 +41,9 @@ public enum AiLogEvent {
     WORKFLOW_DRAFT_SAVED(AiLogDomain.WORKFLOW, "workflow_draft_saved"),
     WORKFLOW_PUBLISHED(AiLogDomain.WORKFLOW, "workflow_published"),
     WORKFLOW_RUNTIME_LOADED(AiLogDomain.WORKFLOW, "workflow_runtime_loaded"),
+    WORKFLOW_NODE_STARTED(AiLogDomain.WORKFLOW, "workflow_node_started"),
+    WORKFLOW_NODE_COMPLETED(AiLogDomain.WORKFLOW, "workflow_node_completed"),
+    WORKFLOW_NODE_FAILED(AiLogDomain.WORKFLOW, "workflow_node_failed"),
     WORKFLOW_DAG_COMPLETED(AiLogDomain.WORKFLOW, "workflow_dag_completed"),
     WORKFLOW_RUN_FAILED(AiLogDomain.WORKFLOW, "workflow_run_failed"),
     MODEL_ROUTED(AiLogDomain.WORKFLOW, "model_routed"),
@@ -49,8 +53,10 @@ public enum AiLogEvent {
 
     RAG_RETRIEVE(AiLogDomain.RAG, "rag_retrieve"),
     RAG_RETRIEVE_STARTED(AiLogDomain.RAG, "rag_retrieve_started"),
+    RAG_STAGE(AiLogDomain.RAG, "rag_stage"),
     RAG_RETRIEVE_DEGRADED(AiLogDomain.RAG, "rag_retrieve_degraded"),
     RAG_INGEST_STARTED(AiLogDomain.RAG, "rag_ingest_started"),
+    RAG_INGEST_STAGE_STARTED(AiLogDomain.RAG, "rag_ingest_stage_started"),
     RAG_INGEST_STAGE_COMPLETED(AiLogDomain.RAG, "rag_ingest_stage_completed"),
     RAG_INGEST_COMPLETED(AiLogDomain.RAG, "rag_ingest_completed"),
     RAG_INGEST_FAILED(AiLogDomain.RAG, "rag_ingest_failed"),
@@ -62,6 +68,7 @@ public enum AiLogEvent {
 
     TOOL_SKILL_PUBLISHED(AiLogDomain.TOOL, "tool_skill_published"),
     TOOL_MCP_PUBLISHED(AiLogDomain.TOOL, "tool_mcp_published"),
+    TOOL_STAGE(AiLogDomain.TOOL, "tool_stage"),
     TOOL_CALL_STARTED(AiLogDomain.TOOL, "tool_call_started"),
     TOOL_CALL_SUCCESS(AiLogDomain.TOOL, "tool_call_success"),
     TOOL_CALL_FAILED(AiLogDomain.TOOL, "tool_call_failed"),
@@ -112,6 +119,7 @@ public enum AiLogEvent {
             case CONTEXT_ASSEMBLY_STARTED -> "上下文组装已开始";
             case CONTEXT_ASSEMBLY_COMPLETED -> "上下文组装已完成";
             case CONTEXT_ASSEMBLY_FAILED -> "上下文组装失败";
+            case MODEL_CALL_STARTED -> "模型调用已开始";
             case MODEL_CALL -> "模型调用完成";
             case TOKEN_USAGE -> "模型Token用量已记录";
             case MODEL_ERROR -> "模型调用失败";
@@ -131,6 +139,9 @@ public enum AiLogEvent {
             case WORKFLOW_DRAFT_SAVED -> "工作流草稿已保存";
             case WORKFLOW_PUBLISHED -> "工作流发布完成";
             case WORKFLOW_RUNTIME_LOADED -> "工作流运行时已加载";
+            case WORKFLOW_NODE_STARTED -> "工作流节点已开始";
+            case WORKFLOW_NODE_COMPLETED -> "工作流节点已完成";
+            case WORKFLOW_NODE_FAILED -> "工作流节点执行失败";
             case WORKFLOW_DAG_COMPLETED -> "工作流执行完成";
             case WORKFLOW_RUN_FAILED -> "工作流执行失败";
             case MODEL_ROUTED -> "模型路由完成";
@@ -138,8 +149,10 @@ public enum AiLogEvent {
             case REDIS_ERROR -> "Redis操作失败";
             case RAG_RETRIEVE -> "RAG检索完成";
             case RAG_RETRIEVE_STARTED -> "RAG检索已开始";
+            case RAG_STAGE -> "RAG检索阶段";
             case RAG_RETRIEVE_DEGRADED -> "RAG检索发生降级";
             case RAG_INGEST_STARTED -> "RAG文档摄取已开始";
+            case RAG_INGEST_STAGE_STARTED -> "RAG摄取阶段已开始";
             case RAG_INGEST_STAGE_COMPLETED -> "RAG摄取阶段已完成";
             case RAG_INGEST_COMPLETED -> "RAG文档摄取已完成";
             case RAG_INGEST_FAILED -> "RAG文档摄取失败";
@@ -149,6 +162,7 @@ public enum AiLogEvent {
             case OSS_ERROR -> "对象存储操作失败";
             case TOOL_SKILL_PUBLISHED -> "Skill发布完成";
             case TOOL_MCP_PUBLISHED -> "MCP发布完成";
+            case TOOL_STAGE -> "工具调用阶段";
             case TOOL_CALL_STARTED -> "工具调用已开始";
             case TOOL_CALL_SUCCESS -> "工具调用成功";
             case TOOL_CALL_FAILED -> "工具调用失败";

@@ -552,6 +552,23 @@ CREATE TABLE IF NOT EXISTS `rag_agent_binding` (
   KEY `idx_rag_target_active` (`tenant_id`, `target_type`, `target_id`, `status`, `priority`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Agent与知识库检索策略绑定';
 
+CREATE TABLE IF NOT EXISTS `chat_session_rag_binding_selection` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `tenant_id` VARCHAR(64) NULL COMMENT '租户业务ID，个体户可为空',
+  `user_id` VARCHAR(64) NOT NULL COMMENT '会话归属用户ID',
+  `session_id` VARCHAR(64) NOT NULL COMMENT '会话业务ID',
+  `target_type` VARCHAR(32) NOT NULL COMMENT '绑定目标类型：agent/workflow',
+  `target_id` VARCHAR(64) NOT NULL COMMENT 'Agent或工作流业务ID',
+  `binding_id` VARCHAR(64) NOT NULL COMMENT 'RAG绑定业务ID',
+  `selection_order` INT NOT NULL DEFAULT 0 COMMENT '会话内选择顺序',
+  `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_session_rag_selection` (`session_id`, `binding_id`),
+  KEY `idx_session_rag_scope` (`tenant_id`, `user_id`, `session_id`, `selection_order`),
+  KEY `idx_session_rag_binding` (`tenant_id`, `binding_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会话RAG手动绑定选择';
+
 CREATE TABLE IF NOT EXISTS `rag_retrieval_record` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `retrieval_id` VARCHAR(64) NOT NULL COMMENT '检索调用业务ID',

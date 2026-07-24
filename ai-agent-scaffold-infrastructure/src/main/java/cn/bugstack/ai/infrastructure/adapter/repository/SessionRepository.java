@@ -67,8 +67,9 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
-    public int updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
-        return chatSessionDao.updateRagEnabled(tenantId, userId, sessionId, enabled);
+    public int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
+                               boolean enabled, long expectedRevision) {
+        return chatSessionDao.updateRagPolicy(tenantId, userId, sessionId, ragMode, enabled, expectedRevision);
     }
 
     /**
@@ -155,6 +156,8 @@ public class SessionRepository implements ISessionRepository {
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .ragMode(session.getRagMode())
+                .ragRevision(session.getRagRevision() == null ? 0L : session.getRagRevision())
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();
@@ -180,6 +183,8 @@ public class SessionRepository implements ISessionRepository {
                 .title(session.getTitle())
                 .status(session.getStatus())
                 .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .ragMode(session.getRagMode())
+                .ragRevision(session.getRagRevision() == null ? 0L : session.getRagRevision())
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();

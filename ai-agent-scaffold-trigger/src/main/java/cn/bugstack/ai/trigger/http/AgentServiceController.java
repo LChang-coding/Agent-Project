@@ -175,7 +175,7 @@ public class AgentServiceController implements IAgentService {
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
-            log.error("智能体对话败 agentId:{} userId:{}", requestDTO.getAgentId(), trustedUserId(requestDTO.getUserId()), e);
+            log.error("智能体对话失败 agentId:{} userId:{}", requestDTO.getAgentId(), trustedUserId(requestDTO.getUserId()), e);
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(ResponseCode.UN_ERROR.getInfo())
@@ -189,8 +189,10 @@ public class AgentServiceController implements IAgentService {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
             String userId = trustedUserId(requestDTO.getUserId());
-            log.info("流式对话 agentId:{} workflowId:{} modelCode:{} userId:{} sessionId:{} message:{}",
-                    requestDTO.getAgentId(), requestDTO.getWorkflowId(), requestDTO.getModelCode(), userId, requestDTO.getSessionId(), requestDTO.getMessage());
+            log.info("流式对话已受理 agentId:{} workflowId:{} modelCode:{} userId:{} sessionId:{} messageLength:{} attachmentCount:{}",
+                    requestDTO.getAgentId(), requestDTO.getWorkflowId(), requestDTO.getModelCode(), userId,
+                    requestDTO.getSessionId(), requestDTO.getMessage() == null ? 0 : requestDTO.getMessage().length(),
+                    requestDTO.getAttachmentIds() == null ? 0 : requestDTO.getAttachmentIds().size());
             String sessionId = requestDTO.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
                 sessionId = hasWorkflow(requestDTO)

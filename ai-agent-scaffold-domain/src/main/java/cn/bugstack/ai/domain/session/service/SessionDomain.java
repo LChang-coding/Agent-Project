@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.session.model.entity.AppendMessageCommandEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
+import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
@@ -55,6 +56,8 @@ public class SessionDomain {
                 .title(blankToDefault(command.getTitle(), command.getAgentName()))
                 .status(STATUS_ACTIVE)
                 .ragEnabled(false)
+                .ragMode(SessionRagMode.OFF.name())
+                .ragRevision(0L)
                 .lastMessageTime(now)
                 .contextRevision(0L)
                 .build();
@@ -279,9 +282,33 @@ public class SessionDomain {
     /** 更新会话RAG设置；参数是可信身份、会话和开关；返回更新后的会话。 */
     @Transactional(rollbackFor = Exception.class)
     public ChatSessionEntity updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
+        return updateRagPolicy(tenantId, userId, sessionId,
+                enabled ? SessionRagMode.AUTO : SessionRagMode.OFF, null);
+    }
+
+    /**
+     * 以乐观锁更新会话RAG策略。
+     *
+     * @param tenantId 租户ID
+     * @param userId 用户ID
+     * @param sessionId 会话ID
+     * @param mode RAG选择模式
+     * @param expectedRevision 客户端期望版本，旧客户端可为空
+     * @return 更新后的会话
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatSessionEntity updateRagPolicy(String tenantId, String userId, String sessionId,
+                                             SessionRagMode mode, Long expectedRevision) {
+        if (mode == null || (expectedRevision != null && expectedRevision < 0)) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG模式或版本不合法");
+        }
         ChatSessionEntity session = lockSessionAccess(tenantId, userId, sessionId, null);
-        if (sessionRepository.updateRagEnabled(session.getTenantId(), session.getUserId(),
-                session.getSessionId(), enabled) != 1) {
+        long currentRevision = session.getRagRevision() == null ? 0L : session.getRagRevision();
+        if (expectedRevision != null && expectedRevision != currentRevision) {
+            throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置已更新，请刷新后重试");
+        }
+        if (sessionRepository.updateRagPolicy(session.getTenantId(), session.getUserId(),
+                session.getSessionId(), mode.name(), mode.enabled(), currentRevision) != 1) {
             throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置更新失败，请刷新后重试");
         }
         return sessionRepository.querySession(session.getTenantId(), session.getUserId(), session.getSessionId());

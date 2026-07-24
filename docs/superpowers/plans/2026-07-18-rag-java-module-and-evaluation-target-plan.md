@@ -2339,3 +2339,52 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 关闭RAG用例先暴露助手消息日志在异步线程生成新TraceId；按上面的执行前诊断计划修复后，最终TraceId `e2e-rag-chat-final-fixed-20260725`对应Run `run_094ae3f7-fa7a-4497-bbbd-6d3ef4cad774`，HTTP 200、9073毫秒完成。单个TraceId精确得到9个中文结构化节点：运行开始、用户消息、上下文开始/完成、Token、模型完成、助手消息、运行完成、HTTP完成；其中用户和助手消息各1、`rag_*`为0、非零Token为1、模型完成为1、运行完成为1、原始`LoggingPlugin/MyTestPlugin`内容为0。
 - Alloy推送后通过本机Loki隧道查询最终TraceId返回`status=success`、2个日志流、11行（包含结构化链路与同Trace的常规应用日志），证明Grafana使用同一键可以检索真实落地数据。最终JAR仍在本机8091运行，RAG Kafka消费者已订阅三分区；测试凭据和`/tmp/session-rag-toggle-e2e-20260725.ZdVSov`证据未进入Git。
 - 遗留边界：本轮开启路径使用的是“无绑定”会话，因此没有重复执行已有文档绑定后的完整引用问答；此前RAG模块的正式Workflow绑定、18/18向量写入和10条引用端到端证据仍有效。审计文档列出的Query路由、真实Tokenizer、引用蕴含校验、OCR/复杂表格和并发Rerank容量属于后续优化项，不在本轮伪装为已完成。
+
+#### 2026-07-25 会话RAG策略、真实检索修复与全阶段日志计划（执行前）
+
+##### 已冻结的真实故障证据
+
+- 用户租户中会话`edffac80-0061-4989-a0a5-9294a0cee3df`与`a947cf5f-0f1d-4a5b-aaf7-401e6d15712d`均已持久化`rag_enabled=1`，对应Workflow `wf_151fe3a9-35ab-4ab7-a457-ad909ad5ec98`存在有效绑定`binding_984e901da2bc4393954e0c7d29a072ce`，知识库为`kb_473b93b2f94e4d92a5a545abbe0342ed`。
+- 真实Run `run_7c9bb2ad-cb5b-46c1-9492-74d7ef243c99`的快照确实为`ragEnabled=true`，TraceId `8ae351e4-3b95-4ac6-a6fc-4bf8d53710c1`中上下文开始/完成均显示RAG开启，但`ragEvidenceCount=0`且完全没有`rag_retrieve_started`。根因是开发配置默认`AI_CONTEXT_ENABLED=false`，`ConversationMemoryService.assembleInternal`在调用`RagContextContributor`前直接返回空上下文，导致RAG开关被静默吞掉。
+- 用户展示的TraceId `ef70fc0a-022d-4064-a7f4-c7a166480ab9`来自独立的`/api/v1/rag/retrieval-debug`，只能证明调试台可检索，不能证明聊天链路已注入RAG。
+- 当前生产结构化日志只有检索总开始/总完成/降级/失败；Binding解析、Embedding、Sparse、Qdrant Dense/Sparse、融合、候选加载/过滤、Rerank、引用组装、Context预算及审计写入都没有逐阶段日志。完成事件还存在`bindings=null`、`hits`误用融合累计候选、总耗时不含审计等口径错误；非法Query发生在try之前，没有失败事件。
+
+##### 数据模型与兼容策略
+
+1. 将会话布尔开关升级为`OFF/AUTO/MANUAL`三态策略，同时保留`rag_enabled`作为旧客户端兼容投影：`OFF=false`，`AUTO/MANUAL=true`。会话新增`rag_mode`与策略版本；新建会话默认`OFF`。
+2. 新建`chat_session_rag_binding`关联表，保存`tenant_id/user_id/session_id/binding_id/priority`，不在会话中保存裸知识库ID，避免绕过既有Agent/Workflow Binding、权限、Profile和状态约束。
+3. `GET/PATCH /api/v1/sessions/{sessionId}/rag-setting`兼容旧`enabled`字段，并新增`mode`、`selectedBindingIds`、可选绑定列表及每项知识库/Profile/required/可用状态。MANUAL必须至少选一个当前目标的可访问有效Binding；AUTO使用当前目标全部有效Binding并按priority稳定排序；服务端不信任前端Binding ID。
+4. Run创建时把`rag_mode`、最终解析的Binding ID集合、策略版本和TraceId固化到`chat_run`，运行中改变会话策略不影响本轮；引导后继继承原Run快照。检索请求只使用Run解析后的Binding集合，不能重新读取浏览器临时状态。
+5. 开启RAG但Context Manager关闭时禁止静默跳过：开发环境默认启用Context Manager；任何非OFF Run若运行时仍关闭Context则返回明确`RAG_REQUIRED_CONTEXT_DISABLED`，阻止模型在用户以为已检索的情况下无证据回答。
+
+##### 生产日志阶段与字段
+
+6. 新增稳定`rag_stage`事件，所有阶段使用中文`eventName/message`，统一字段包含`traceId/runId/retrievalId/sessionId/targetType/targetId/stage/status/costMs/inputCount/outputCount/bindingId/knowledgeBaseId/profileId/errorCode/degraded/skipReason`；不记录原问题、正文、向量、模型Key、JWT或密码。
+7. 在线检索逐阶段记录：请求规范化、Run策略读取、Binding查询、手动选择过滤、Binding/知识库/Profile/权限解析、Query Rewrite执行或明确跳过、Dense Embedding、Sparse编码、每Binding Dense Qdrant召回、Sparse召回、RRF/加权融合、阈值与TopK、Chunk加载、租户/版本/去重过滤、Rerank请求与回退、跨Binding合并、父子/邻居扩展、Context Token预算、引用封装、审计落库和总完成。候选详情只进入受控diagnostics，生产日志只记录数量变化与稳定资源ID。
+8. 修正完成日志口径：bindings为实际候选/解析/执行数量，hits为跨Binding去重后的候选数，citations为最终引用数；分别记录pipelineMs、auditMs、serviceMs。非法Query、可选Binding失败和Rerank回退必须记录对应阶段与分类后错误码。
+9. 摄取链补齐Outbox扫描/领取/发布/ACK/重试、Kafka接收/去重/提交、Worker租约、下载、解析、结构化清理、父子切块、Embedding分批、Qdrant写入、激活、删除、取消清理与终态；修正“刚进入阶段却记录阶段完成”的语义，阶段日志携带本阶段耗时、批次数量、处理进度和安全错误码。
+10. 同步审计会话、Context、模型、工具和工作流主链：至少补齐策略解析、Context Contributor选择与预算、模型调用开始/首Token/完成、工具权限检查/路由/调用结果、Workflow节点开始/完成，使一个TraceId能回答执行到哪里、为什么跳过、候选在哪一步减少和哪个节点最慢。
+
+##### 前端、Grafana与验收
+
+11. 聊天工作台在现有视觉体系内把单开关升级为策略控件：关闭、自动选择、指定知识库；指定模式展示当前运行目标下可用Binding/知识库多选，保存中、无绑定、绑定失效、检索中、降级、引用就绪和失败状态可见，防重复提交并在失败时整体回滚。
+12. Grafana保留TraceId为logfmt字段而非高基数标签；新增阶段时间线、阶段耗时和候选漏斗查询，解决“no unique labels”仅影响展示标签但不影响唯一链路检索的问题。按`traceId`升序应直接读出中文阶段、状态、输入/输出数量和耗时。
+13. 先补领域/控制器/仓储/Mapper/日志单元测试，再执行Java 17相关测试、六模块构建、Vue类型与生产构建、SQL幂等迁移。真实端到端必须覆盖Workflow和Agent、AUTO和MANUAL、开/关、无绑定/失效绑定、流式/非流式；至少用现有测试知识库问题验证`Run快照→绑定解析→检索→证据注入→带引用回答`。
+14. Loki门禁要求同一TraceId出现策略解析及全部实际执行阶段；关闭时不得有Embedding/Qdrant/Rerank，开启时不得只有`ragEnabled=true`而无检索事件。验收保存API响应、数据库快照、阶段计数、耗时、引用和Loki查询结果，禁止编造。
+15. 每形成策略后端、日志链路、前端交互和端到端重大闭环，先把实际改动与证据追加本节，再仅暂存本轮相关文件并使用中文本地提交；运行日志、对象存储、Alloy数据和无关未跟踪文件继续排除，不上传Java/Vue项目到服务器。
+
+##### 2026-07-25 会话RAG策略、真实检索修复与全阶段日志执行结果
+
+- 会话策略已从布尔值升级为`OFF/AUTO/MANUAL`。`chat_session`保存模式和乐观锁版本，`chat_session_rag_binding`保存MANUAL选择；接口同时保留旧`enabled`投影。服务端只返回当前会话运行目标下、租户与私有库权限校验通过的Binding摘要，包含知识库、Profile、required、maxTokens、priority、状态和版本；MANUAL空选、重复、超过32项、越权或失效选择均在外部模型/向量调用前拒绝。
+- Run创建时由领域服务解析最终策略：AUTO展开当时全部有效Binding，MANUAL重新校验手动选择，随后把`rag_mode/rag_policy_revision/rag_binding_ids_json`冻结到`chat_run`。引导后继继承原Run快照；Context Contributor和检索服务只使用该快照。快照Binding在执行前失效时返回`RAG_RUN_BINDING_SNAPSHOT_STALE`，测试证明Embedding、Sparse和Qdrant均未调用。非OFF Run遇到Context Manager关闭或RAG预算小于1时返回`RAG_REQUIRED_CONTEXT_DISABLED`，不再静默无证据回答。
+- MySQL兼容迁移`2026-07-25-chat-session-rag-policy.sql`已实际应用。现场字段包括`chat_session.rag_mode/rag_revision`和`chat_run.rag_mode/rag_policy_revision/rag_binding_ids_json`，选择表存在、非法JSON为0；旧会话回填为`OFF 84`、`AUTO 2`。Nacos开发配置已把Context Manager保持开启、模型窗口设为128000、RAG预算从0修正为4096；应用重启后真实聊天检索证明配置生效。没有迁移MySQL，也没有把本地Java/Vue项目上传服务器。
+- 在线检索新增15个`rag_stage`阶段：`query_normalize/binding_lookup/binding_resolve/query_rewrite/dense_embedding/sparse_encode/dense_recall/sparse_recall/fusion/chunk_hydration/candidate_filter/rerank/cross_binding_merge/citation_assembly/audit_persist`。每阶段记录中文说明、outcome、输入/输出数量、耗时及安全资源ID；总完成修正为实际Binding/候选/引用数量，并拆分`pipelineMs/auditMs/serviceMs`。审计写入失败时返回结果现在会同步标记`degraded=true/reason=audit_write_failed`，不再出现阶段日志已降级但接口结果仍显示正常的口径分裂。摄取链同步补齐Outbox领取与Kafka ACK、Worker下载、解析、解析产物、切块、Embedding、Sparse、向量写入/核验、激活、删除和取消清理阶段。模型、工具权限/幂等/路由和Workflow节点也补齐开始、完成与失败事件。
+- 真实日志检查发现旧SSE入口会把用户消息原文写入常规日志，最终改为只记录`messageLength/attachmentCount`；结构化阶段日志不保存问题、文档正文、向量、JWT、密码或模型Key。TraceId仍是logfmt字段，不是Loki高基数标签；runId/retrievalId/taskId可作为辅助过滤键。
+- 聊天工作台已实现关闭/自动/指定三态控件。指定模式弹出可访问Binding多选面板；支持键盘切换、焦点回归、移动端布局、保存中防重、请求过期保护和失败整体回滚。刷新后从数据库恢复模式、版本、选择及Binding状态；无可选Binding时明确引导管理员先绑定知识库。前端不直连Qdrant或模型服务。
+- 真实HTTP E2E脚本升级为每个新会话先GET、带revision PATCH、再GET核对策略，随后才创建聊天Run。第二次可观测验收目录为`/tmp/rag-session-policy-loki-e2e-20260724T180305Z`，单线程、真实DeepSeek、真实MySQL/MinIO/Kafka/Embedding/Qdrant，manifest状态completed，耗时117.976秒。Agent可回答/伪引用/无答案/SSE为9922/9213/7483/7033ms；Workflow为10568/7847/8432/7645ms。两入口AUTO均持久化且Binding可用；答案包含固定事实、有效引用、历史metadata和引用回源一致，无答案精确拒绝，伪引用被拒，SSE的session/run/citation终态均唯一，跨租户以`SESSION_NOT_FOUND`拒绝。
+- 同一E2E新增Workflow MANUAL真实问答：选择1个Binding，回读模式与选择一致，Run `run_217d9b9e-d594-4290-9ba5-089ed9860680`在7042ms完成，引用状态VALID且必需事实命中。数据库只读快照显示该隔离租户共9个completed Run和1个cancelled Run：AUTO/MANUAL策略版本均为1，每个Run的冻结Binding JSON长度均为1。取消Run在2142ms内结束，API状态cancelled、无assistant消息、无citation终态。
+- Loki用MANUAL Run和TraceId `5389fb0b-e76f-4e3f-aab1-c53043565b3a`返回1个流、24行：Run开始、Workflow节点、模型、Context、RAG开始、上述15个内部阶段、RAG/Context/Workflow/Run完成均可按时间还原。真实阶段耗时中`audit_persist=523ms`、`citation_assembly=308ms`、`dense_embedding=286ms`、`binding_resolve=185ms`、`dense_recall=132ms`、`chunk_hydration=82ms`、`binding_lookup=58ms`、`sparse_recall=51ms`，其余本样本为0ms；这些仅是单请求观测，不外推为性能基准。
+- Grafana新增RAG阶段时间线、p50/p95耗时、候选输入/输出漏斗和阶段结果统计。运行验收发现日志实际字段是`outcome`而非草案中的`status`，已在提交前修正查询。只把看板JSON同步到`CentOS-Server`既有provisioning目录，本地/远端SHA-256均为`2f539aec20e3b10061c26fd52059385abe0d7a0c65bcc74bddcb61a6c5dffb69`；Grafana数据库只读快照确认UID `ai-agent-scaffold-logs`、9个面板、版本3和`sum by(stage,outcome)`查询已加载。记录在`codex.md`的Grafana管理密码当前返回401，本轮没有擅自重置账号。
+- Java 17作用域回归最终84/84通过，覆盖三态策略、选择仓储与Mapper、Run冻结/引导继承、Context快照透传、失效Binding外部调用屏障、检索阶段、摄取Worker、Outbox、SSE和logfmt中文契约；修正审计降级口径后又单独复跑`RagRetrievalServiceTest` 21/21并再次复跑整组84/84。前端`npm run build`通过类型检查，Vite转换1916个模块。Java 17全reactor跳过重复测试打包成功，最终JAR SHA-256=`ec22b711d4a4f489194374d367f615ee15c7d0ccc9ad35d6d504c56c1b3c976b`并在本机8091成功启动；监听PID、MySQL连接池、RAG Kafka三分区和Context Kafka主/重试/DLT分区均正常。
+- 全reactor不筛选执行了425个测试，411个通过、14个错误、0个断言失败。错误由8个仓库既有“无任何@Test方法”的演示类，以及依赖未加载100001/100002 Agent或未设置可信租户的旧手工集成测试构成；与本次RAG调用栈无关。未通过修改生产代码、添加Ignore或伪造外部配置掩盖这些历史测试问题，作用域84项和真实E2E作为本轮闭环证据。第一次全量测试还发现`LogfmtTest`仍断言旧无中文字段格式，已更新为显式验证中文`eventName/message`后通过。
+- E2E证据SHA-256：manifest=`8d5da480b5d43eaebc39e9cfa81a01fa38f089331cffda29c803b3c86f34129e`，Agent/Workflow结果=`9611bd22c7cefce6b46ac0f3e3158cb25c764f011668baa6cf36c23b327418a4`，MANUAL结果=`46b11f5aee5d9490c7ae786feef6f1339b6572bcefe871b27b1779f79fd2bc1a`，取消结果=`215e7e11293001989b449032072c07e0ac88f8bd72a966a8138683459e67e1fb`。证据目录位于`/tmp`且不进入Git；四个运行日志、Alloy/Object Storage数据及无关未跟踪目录继续排除。

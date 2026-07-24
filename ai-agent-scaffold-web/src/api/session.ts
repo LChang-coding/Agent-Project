@@ -1,5 +1,11 @@
 import { request } from '@/api/http';
-import type { SessionDeleteResponse, SessionListPage, SessionMessagePage, SessionRagSetting } from '@/types/api';
+import type {
+  SessionDeleteResponse,
+  SessionListPage,
+  SessionMessagePage,
+  SessionRagSetting,
+  SessionRagSettingUpdate,
+} from '@/types/api';
 
 /**
  * 查询数据库会话列表；参数是可选游标和数量；返回当前用户会话页。
@@ -41,11 +47,15 @@ export async function querySessionRagSetting(sessionId: string) {
   });
 }
 
-/** 持久化会话RAG开关；运行中的轮次不受影响。 */
-export async function updateSessionRagSetting(sessionId: string, enabled: boolean) {
+/** 持久化会话RAG策略；运行中的轮次不受影响。 */
+export async function updateSessionRagSetting(sessionId: string, setting: SessionRagSettingUpdate) {
   return request<SessionRagSetting>({
     url: `/v1/sessions/${encodeURIComponent(sessionId)}/rag-setting`,
     method: 'PATCH',
-    data: { enabled },
+    data: {
+      ...setting,
+      // 兼容尚未移除布尔字段的服务端和链路观察者。
+      enabled: setting.mode !== 'OFF',
+    },
   });
 }

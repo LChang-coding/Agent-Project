@@ -133,9 +133,9 @@ ai:
     worker:
       enabled: ${AI_RAG_WORKER_ENABLED:true}
   context:
-    enabled: ${AI_CONTEXT_ENABLED:false}
+    enabled: ${AI_CONTEXT_ENABLED:true}
     policy-version: v1
-    model-window-tokens: ${AI_CONTEXT_MODEL_WINDOW_TOKENS:0}
+    model-window-tokens: ${AI_CONTEXT_MODEL_WINDOW_TOKENS:128000}
     reserve-output-tokens: ${AI_CONTEXT_RESERVE_OUTPUT_TOKENS:8192}
     safety-margin-tokens: ${AI_CONTEXT_SAFETY_MARGIN_TOKENS:2048}
     long-term-memory-tokens: ${AI_CONTEXT_LONG_TERM_MEMORY_TOKENS:2048}
@@ -144,7 +144,7 @@ ai:
     upstream-tokens: ${AI_CONTEXT_UPSTREAM_TOKENS:4096}
     attachment-candidate-limit: ${AI_CONTEXT_ATTACHMENT_CANDIDATE_LIMIT:32}
     attachment-max-content-chars: ${AI_CONTEXT_ATTACHMENT_MAX_CONTENT_CHARS:131072}
-    rag-tokens: ${AI_CONTEXT_RAG_TOKENS:0}
+    rag-tokens: ${AI_CONTEXT_RAG_TOKENS:4096}
     compaction-min-uncovered-tokens: ${AI_CONTEXT_COMPACTION_MIN_UNCOVERED_TOKENS:12000}
     compaction-retain-recent-tokens: ${AI_CONTEXT_COMPACTION_RETAIN_RECENT_TOKENS:4096}
     compaction-max-attempts: ${AI_CONTEXT_COMPACTION_MAX_ATTEMPTS:3}

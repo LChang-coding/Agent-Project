@@ -24,6 +24,7 @@ import cn.bugstack.ai.domain.context.model.ConversationMemorySnapshotEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
+import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -127,6 +128,10 @@ public class ConversationMemoryService {
     }
 
     private ContextAssemblyResult assembleInternal(ContextAssembleRequest request, boolean readOnly) {
+        if (ragRequested(request) && (!properties.isEnabled() || properties.getRagTokens() < 1)) {
+            throw new AppException("RAG_REQUIRED_CONTEXT_DISABLED",
+                    "会话已开启RAG，但Context Manager或RAG上下文预算未启用");
+        }
         if (!properties.isEnabled() || request == null || isBlank(request.getUserId()) || isBlank(request.getSessionId())) {
             return emptyResult();
         }
@@ -166,7 +171,8 @@ public class ConversationMemoryService {
                 .attachmentVisibleThroughSequence(request.getAttachmentVisibleThroughSequence())
                 .coveredToSequence(coveredToSequence).upstreamOutput(request.getUpstreamOutput())
                 .traceId(request.getTraceId()).ragTargetType(request.getRagTargetType())
-                .ragTargetId(request.getRagTargetId()).ragQuery(request.getRagQuery())
+                .ragTargetId(request.getRagTargetId()).ragBindingIds(request.getRagBindingIds())
+                .ragQuery(request.getRagQuery())
                 .runId(request.getRunId()).build();
         for (ContextContributor contributor : contributors) {
             List<ContextContribution> contributions = contributor.contribute(contributorRequest, properties);
@@ -213,6 +219,12 @@ public class ConversationMemoryService {
                         : recentMessages.get(recentMessages.size() - 1).getSequenceNo())
                 .ragEvidence(selected.stream().map(ContextFragment::getRagEvidence).filter(Objects::nonNull).toList())
                 .build();
+    }
+
+    /** 判断本次上下文组装是否要求执行RAG；参数是组装请求；返回是否存在可信RAG目标。 */
+    private boolean ragRequested(ContextAssembleRequest request) {
+        return request != null && request.getRagTargetType() != null
+                && !isBlank(request.getRagTargetId()) && !isBlank(request.getRagQuery());
     }
 
     private int selectedTokens(List<ContextFragment> fragments, ContextFragmentType type) {

@@ -149,6 +149,41 @@ def create_session(api: Api, target_type: str, target_id: str, version: int | No
     return response["data"]["sessionId"]
 
 
+def configure_session_rag(api: Api, session_id: str, mode: str,
+                          selected_binding_ids: list[str] | None = None) -> dict:
+    """Persist and re-read a session RAG policy before any chat run is created."""
+    current, current_transport = api.call("GET", f"/v1/sessions/{session_id}/rag-setting")
+    expected_revision = int(current["data"]["revision"])
+    payload = {
+        "mode": mode,
+        "selectedBindingIds": selected_binding_ids or [],
+        "expectedRevision": expected_revision,
+    }
+    updated, update_transport = api.call(
+        "PATCH", f"/v1/sessions/{session_id}/rag-setting", json=payload)
+    reread, reread_transport = api.call("GET", f"/v1/sessions/{session_id}/rag-setting")
+    expected_selected = sorted(selected_binding_ids or []) if mode == "MANUAL" else []
+    data = reread["data"]
+    checks = {
+        "modePersisted": data.get("mode") == mode,
+        "revisionAdvancedOnce": int(data.get("revision", -1)) == expected_revision + 1,
+        "selectedBindingsPersisted": sorted(data.get("selectedBindingIds") or []) == expected_selected,
+        "bindingConfigured": bool(data.get("bindingConfigured")) if mode != "OFF" else True,
+        "updateAndReadAgree": updated.get("data") == reread.get("data"),
+    }
+    if not all(checks.values()):
+        raise RuntimeError(f"session RAG policy verification failed: {checks}")
+    return {
+        "before": current,
+        "beforeTransport": current_transport,
+        "update": updated,
+        "updateTransport": update_transport,
+        "reread": reread,
+        "rereadTransport": reread_transport,
+        "checks": checks,
+    }
+
+
 def chat_payload(target_type: str, target_id: str, version: int | None, model: str,
                  session_id: str, message: str, run_id: str | None = None) -> dict:
     payload = {"userId": "ignored", "sessionId": session_id, "message": message, "attachmentIds": []}
@@ -244,6 +279,8 @@ def main() -> None:
             target_out: dict[str, object] = {}
             for case_name in ("answerable", "noAnswer", "fakeCitation"):
                 session_id = create_session(api, target_type, target_id, version, args.model)
+                target_out[f"{case_name}RagSetting"] = configure_session_rag(
+                    api, session_id, "AUTO")
                 response, transport = api.call("POST", "/v1/chat", json=chat_payload(
                     target_type, target_id, version, args.model, session_id, spec[case_name]["question"]))
                 history, history_transport = api.call("GET", f"/v1/sessions/{session_id}/messages?limit=100")
@@ -279,6 +316,7 @@ def main() -> None:
                 dump(out / "partial-results.json", results)
 
             stream_session = create_session(api, target_type, target_id, version, args.model)
+            target_out["streamRagSetting"] = configure_session_rag(api, stream_session, "AUTO")
             events, stream_transport = api.sse("/v1/chat_stream", chat_payload(
                 target_type, target_id, version, args.model, stream_session, spec["answerable"]["question"]),
                 max_wall_seconds=90 if target_type == "agent" else 180)
@@ -293,6 +331,33 @@ def main() -> None:
             }}
             results[target_type] = target_out
             dump(out / "partial-results.json", results)
+
+        manual_session = create_session(
+            api, "workflow", workflow_id, workflow_version, args.model)
+        workflow_binding_id = bindings["workflow"]["response"]["data"]["bindingId"]
+        manual_setting = configure_session_rag(
+            api, manual_session, "MANUAL", [workflow_binding_id])
+        manual_response, manual_transport = api.call(
+            "POST", "/v1/chat", json=chat_payload(
+                "workflow", workflow_id, workflow_version, args.model, manual_session,
+                spec["answerable"]["question"]))
+        manual_validation = manual_response["data"].get("citationValidation") or {}
+        manual_check = {
+            "requiredTermsPresent": all(
+                term in str(manual_response["data"].get("content") or "")
+                for term in spec["answerable"]["requiredTerms"]),
+            "citationValid": manual_validation.get("status") == "VALID"
+                             and bool(manual_validation.get("usedCitationIds")),
+        }
+        if not all(manual_check.values()):
+            raise RuntimeError(f"manual RAG chat verification failed: {manual_check}")
+        dump(out / "manual-rag-chat.json", {
+            "sessionId": manual_session,
+            "setting": manual_setting,
+            "response": manual_response,
+            "transport": manual_transport,
+            "checks": manual_check,
+        })
         dump(out / "agent-workflow-results.json", results)
 
         foreign_api, foreign_username = register(args.base_url, suffix + "x", args.timeout_seconds)
@@ -306,8 +371,13 @@ def main() -> None:
                                                        "denied": foreign.get("code") != SUCCESS})
 
         cancel_session = create_session(api, "workflow", workflow_id, workflow_version, args.model)
+        cancel_rag_setting = configure_session_rag(api, cancel_session, "AUTO")
         cancel_run_id = "run_e2e_" + secrets.token_hex(12)
-        cancel_record: dict[str, object] = {"requestedRunId": cancel_run_id, "sessionId": cancel_session}
+        cancel_record: dict[str, object] = {
+            "requestedRunId": cancel_run_id,
+            "sessionId": cancel_session,
+            "ragSetting": cancel_rag_setting,
+        }
         run_seen = threading.Event()
 
         def cancel_on_run(data):

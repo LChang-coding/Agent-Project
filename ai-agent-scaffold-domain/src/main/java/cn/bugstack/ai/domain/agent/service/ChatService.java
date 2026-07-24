@@ -410,7 +410,8 @@ public class ChatService implements IChatService {
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT),
-                        ragQuery(activeRun, describeContent(chatCommandEntity))));
+                        ragQuery(activeRun, describeContent(chatCommandEntity)),
+                        activeRun.getRagMode(), activeRun.getRagBindingIds()));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -456,7 +457,8 @@ public class ChatService implements IChatService {
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
-                        ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message)));
+                        ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
+                        activeRun.getRagMode(), activeRun.getRagBindingIds()));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -507,7 +509,8 @@ public class ChatService implements IChatService {
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision(),
-                                ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message)))
+                                ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
+                                activeRun.getRagMode(), activeRun.getRagBindingIds()))
                 .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
                         .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
                 .doOnNext(event -> {
@@ -656,10 +659,23 @@ public class ChatService implements IChatService {
         for (int index = 1; index <= runTimes; index++) {
             runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
             String prompt = buildDagNodePrompt(userMessage, upstreamOutputs, previousOutput, index, runTimes);
-            NodeExecutionResult execution = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt,
-                    traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run);
-            previousOutput = execution.output();
-            accumulatedEvidence.addAll(execution.evidence());
+            long nodeStarted = System.nanoTime();
+            AiLog.info(AiLog.workflow().nodeStarted(tenantId, userId, sessionId, run.getRunId(),
+                    workflowId, node.getNodeId(), index, runTimes, upstreamNodeIds.size()));
+            try {
+                NodeExecutionResult execution = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt,
+                        traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run);
+                previousOutput = execution.output();
+                accumulatedEvidence.addAll(execution.evidence());
+                AiLog.info(AiLog.workflow().nodeCompleted(tenantId, userId, sessionId, run.getRunId(),
+                        workflowId, node.getNodeId(), index, runTimes, previousOutput.length(),
+                        execution.evidence().size(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted)));
+            } catch (RuntimeException exception) {
+                AiLog.error(AiLog.workflow().nodeFailed(tenantId, userId, sessionId, run.getRunId(),
+                        workflowId, node.getNodeId(), index, runTimes,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted), exception));
+                throw exception;
+            }
         }
         return new NodeRunResult(node.getNodeId(), previousOutput, List.copyOf(accumulatedEvidence));
     }
@@ -681,7 +697,8 @@ public class ChatService implements IChatService {
         String evidenceInvocationId = "wf_" + node.getNodeId() + "_" + UUID.randomUUID();
         Map<String, Object> state = runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
                 historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision(),
-                ragTargetType(run, RagBindingTargetType.WORKFLOW), ragQuery(run, prompt));
+                ragTargetType(run, RagBindingTargetType.WORKFLOW), ragQuery(run, prompt),
+                run.getRagMode(), run.getRagBindingIds());
         state.put(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID, evidenceInvocationId);
         runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
                         state)
@@ -855,7 +872,7 @@ public class ChatService implements IChatService {
     private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput) {
         return runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
-                visibleThroughSequence, upstreamOutput, null, null, null, null);
+                visibleThroughSequence, upstreamOutput, null, null, null, null, null, List.of());
     }
 
     /**
@@ -864,7 +881,8 @@ public class ChatService implements IChatService {
     private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput,
                                                   String runId, Long contextRevision,
-                                                  RagBindingTargetType ragTargetType, String ragQuery) {
+                                                  RagBindingTargetType ragTargetType, String ragQuery,
+                                                  String ragMode, List<String> ragBindingIds) {
         Map<String, Object> state = new HashMap<>();
         putStateIfPresent(state, TraceContext.TRACE_ID_STATE_KEY, traceId);
         putStateIfPresent(state, ToolRuntimeContextKeys.TRACE_ID, traceId);
@@ -881,6 +899,9 @@ public class ChatService implements IChatService {
         if (ragTargetType != null) {
             state.put(ToolRuntimeContextKeys.RAG_TARGET_TYPE, ragTargetType.name());
             putStateIfPresent(state, ToolRuntimeContextKeys.RAG_TARGET_ID, workflowId);
+            putStateIfPresent(state, ToolRuntimeContextKeys.RAG_MODE, ragMode);
+            state.put(ToolRuntimeContextKeys.RAG_BINDING_IDS,
+                    ragBindingIds == null ? List.of() : List.copyOf(ragBindingIds));
             putStateIfPresent(state, ToolRuntimeContextKeys.RAG_QUERY, ragQuery);
         }
         if (visibleThroughSequence != null) {

@@ -4,6 +4,8 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 上下文组装请求。
  * <p>描述一次模型调用前需要读取的业务会话切面。</p>
@@ -24,6 +26,8 @@ public class ContextAssembleRequest {
     /** 当前模型调用对应的可信 RAG 绑定目标。 */
     private RagBindingTargetType ragTargetType;
     private String ragTargetId;
+    /** 本轮Run已冻结的有效RAG绑定ID。 */
+    private List<String> ragBindingIds;
     /** 本轮真实用户问题；RAG 不使用历史摘要或浏览器自报字段代替。 */
     private String ragQuery;
     private String runId;

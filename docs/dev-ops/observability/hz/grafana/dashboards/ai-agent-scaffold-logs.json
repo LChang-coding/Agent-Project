@@ -26,6 +26,301 @@
         "type": "loki",
         "uid": "loki"
       },
+      "description": "按时间正序展示event=rag_stage阶段事件。stage、outcome、inputCount、outputCount、costMs与traceId均在查询管道中由logfmt解析；traceId只用于过滤，不作为Loki标签。",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 6,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Ascending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "RAG阶段时间线（按Trace正序）",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "按stage统计RAG阶段耗时p50/p95。stage由logfmt查询时解析并分组；不会把traceId、tenantId、retrievalId或taskId提升为Loki标签。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 10000
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.50, {job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\" | unwrap costMs | __error__=\"\" [$__interval]) by (stage)",
+          "legendFormat": "p50 {{stage}}",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "quantile_over_time(0.95, {job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\" | unwrap costMs | __error__=\"\" [$__interval]) by (stage)",
+          "legendFormat": "p95 {{stage}}",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "RAG阶段耗时 p50 / p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "汇总选定时间范围内各stage的inputCount与outputCount，用于识别Embedding、召回、融合、重排和Context预算阶段的候选收缩。计数缺失或无法解析的事件会被排除。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "id": 8,
+      "options": {
+        "displayMode": "gradient",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage) (sum_over_time({job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\" | unwrap inputCount | __error__=\"\" [$__range]))",
+          "legendFormat": "输入 {{stage}}",
+          "queryType": "instant",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage) (sum_over_time({job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\" | unwrap outputCount | __error__=\"\" [$__range]))",
+          "legendFormat": "输出 {{stage}}",
+          "queryType": "instant",
+          "refId": "B"
+        }
+      ],
+      "title": "RAG候选漏斗（阶段输入 / 输出）",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "统计选定时间范围内stage×status事件数，快速识别completed、degraded、failed等状态分布。仅stage和status参与低基数分组。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 9,
+      "options": {
+        "displayMode": "lcd",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage, outcome) (count_over_time({job=\"ai-agent-scaffold\", filename=~\"$filename\"} |= \"event=rag_stage\" | logfmt | traceId=~\"$traceId\" [$__range]))",
+          "legendFormat": "{{stage}} / {{status}}",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "RAG阶段状态统计",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "description": "输入一次请求响应头X-Trace-Id或页面调用记录中的traceId，可按时间正序还原HTTP、会话、上下文、RAG、模型和工具节点。traceId只在查询时解析，不作为Loki高基数标签。",
       "gridPos": {
         "h": 12,
@@ -77,7 +372,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 37
       },
       "id": 1,
       "options": {
@@ -117,7 +412,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 44
       },
       "id": 2,
       "options": {
@@ -154,7 +449,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 56
       },
       "id": 3,
       "options": {
@@ -191,7 +486,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 56
       },
       "id": 4,
       "options": {
@@ -226,7 +521,8 @@
   "tags": [
     "ai-agent-scaffold",
     "logs",
-    "loki"
+    "loki",
+    "rag"
   ],
   "templating": {
     "list": [
@@ -294,6 +590,6 @@
   "timezone": "",
   "title": "AI Agent Scaffold 应用日志",
   "uid": "ai-agent-scaffold-logs",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

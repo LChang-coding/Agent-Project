@@ -4,6 +4,7 @@ import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
@@ -147,7 +148,10 @@ final class RunStateSnapshotCache {
     private ChatRunEntity copy(ChatRunEntity run) {
         return ChatRunEntity.builder().runId(run.getRunId()).turnId(run.getTurnId()).tenantId(run.getTenantId())
                 .userId(run.getUserId()).sessionId(run.getSessionId()).sourceType(run.getSourceType())
-                .sourceId(run.getSourceId()).ragEnabled(run.getRagEnabled()).traceId(run.getTraceId())
+                .sourceId(run.getSourceId()).ragEnabled(run.getRagEnabled()).ragMode(run.getRagMode())
+                .ragPolicyRevision(run.getRagPolicyRevision())
+                .ragBindingIds(run.getRagBindingIds() == null ? List.of() : List.copyOf(run.getRagBindingIds()))
+                .traceId(run.getTraceId())
                 .status(run.getStatus()).version(run.getVersion())
                 .baseContextRevision(run.getBaseContextRevision())
                 .currentContextRevision(run.getCurrentContextRevision()).predecessorRunId(run.getPredecessorRunId())

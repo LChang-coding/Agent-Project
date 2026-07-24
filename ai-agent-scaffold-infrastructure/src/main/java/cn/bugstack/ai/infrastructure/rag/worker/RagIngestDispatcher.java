@@ -4,6 +4,8 @@ import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobCandidate;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -63,7 +65,12 @@ public class RagIngestDispatcher {
             if (root.path("schemaVersion").asInt(-1) != 1) {
                 throw new AppException("RAG_INGEST_EVENT_VERSION_UNSUPPORTED", "RAG 摄取事件版本不支持");
             }
-            submit(required(root, "tenantId"), required(root, "taskId"));
+            String tenantId = required(root, "tenantId");
+            String taskId = required(root, "taskId");
+            AiLog.info(AiLog.rag().ingestStageCompleted(tenantId, taskId, null, null,
+                            "kafka_wakeup_received", "Kafka摄取唤醒事件校验完成", 0L, 1, 1)
+                    .field(AiLogFields.TRACE_ID, root.path("traceId").asText(null)));
+            submit(tenantId, taskId);
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
@@ -84,11 +91,21 @@ public class RagIngestDispatcher {
     public boolean submit(String tenantId, String jobId) {
         if (closed.get()) return false;
         String key = tenantId + ":" + jobId;
-        if (!inFlight.add(key)) return false;
+        if (!inFlight.add(key)) {
+            AiLog.info(AiLog.rag().ingestStageCompleted(tenantId, jobId, null, null,
+                    "worker_deduplicate", "任务已在本实例执行，忽略重复唤醒", 0L, 1, 0));
+            return false;
+        }
         try {
             executor.execute(() -> {
+                long startedAt = System.nanoTime();
+                AiLog.info(AiLog.rag().ingestStageStarted(tenantId, jobId, null, null,
+                        "worker_dispatch", "单Worker开始执行摄取任务", 1));
                 try {
                     worker.execute(tenantId, jobId, instanceId + ":" + UUID.randomUUID());
+                    AiLog.info(AiLog.rag().ingestStageCompleted(tenantId, jobId, null, null,
+                            "worker_dispatch", "单Worker本次任务执行返回",
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt), 1, 1));
                 } catch (Exception e) {
                     log.warn("RAG Worker未捕获异常 tenantId:{} jobId:{} type:{}",
                             tenantId, jobId, e.getClass().getSimpleName());
@@ -99,6 +116,8 @@ public class RagIngestDispatcher {
             return true;
         } catch (RejectedExecutionException e) {
             inFlight.remove(key);
+            AiLog.warn(AiLog.rag().ingestFailed(tenantId, jobId, null, null,
+                    "worker_queue", "RAG_WORKER_QUEUE_FULL", null, e));
             log.warn("RAG Worker单线程队列已满，等待下次数据库扫描 tenantId:{} jobId:{}", tenantId, jobId);
             return false;
         }

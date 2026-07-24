@@ -41,7 +41,13 @@ public class MyLogPlugin extends LoggingPlugin {
         activeCallIds.computeIfAbsent(callScope(callbackContext), key -> new ConcurrentLinkedDeque<>())
                 .addLast("call_" + UUID.randomUUID());
         modelCallStartedNanos.put(callScope(callbackContext), System.nanoTime());
-        recordUsage(callbackContext, null, requestBuilder.build().model().orElse("unknown"), null,
+        String requestedModel = requestBuilder.build().model().orElse("unknown");
+        withCallbackTrace(callbackContext, () -> AiLog.info(AiLog.model().callStarted(
+                callbackContext.userId(), callbackContext.sessionId(), callbackContext.agentName(),
+                callbackContext.invocationContext().appName(), callbackContext.invocationId(), requestedModel)
+                .field("tenantId", value(callbackContext.state().get(ToolRuntimeContextKeys.TENANT_ID)))
+                .field("runId", value(callbackContext.state().get(ToolRuntimeContextKeys.RUN_ID)))));
+        recordUsage(callbackContext, null, requestedModel, null,
                 "running", null);
         return super.beforeModelCallback(callbackContext, requestBuilder)
                 .doOnError(error -> {

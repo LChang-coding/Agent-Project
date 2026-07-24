@@ -5,6 +5,18 @@ public final class ModelLog {
     ModelLog() {
     }
 
+    public AiLogRecord callStarted(String userId,
+                                   String sessionId,
+                                   String agentName,
+                                   String appName,
+                                   String invocationId,
+                                   String modelVersion) {
+        return base(AiLogEvent.MODEL_CALL_STARTED, userId, sessionId, agentName, appName, invocationId)
+                .field("modelVersion", modelVersion)
+                .field(AiLogFields.STAGE, "provider_request")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
     public AiLogRecord call(String userId,
                             String sessionId,
                             String agentName,
