@@ -2212,3 +2212,19 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 用户报告公网MySQL报`Lost connection ... reading initial communication packet`后已从同一本机复现。服务器MySQL容器healthy、restart=0、3306监听`0.0.0.0`，服务器本机与公网自回环均能读取MySQL 8.0.46握手头；故障不在MySQL进程。
 - 根因是入口来源变化：当前本机公网出口为`113.84.136.229`，而服务器`DOCKER-USER`只允许`223.104.79.0/24 -> tcp/3306`，随后对其他3306来源执行DROP；DROP计数已增长到395包。普通`nc`能完成TCP探测，但MySQL协议握手返回流量被转发门禁阻断，因此客户端在initial communication packet阶段超时/断开。
 - 本轮严格只读，没有修改UFW/iptables、MySQL、Docker或任何容器，也没有上传本地项目。恢复公网数据库访问需要用户明确授权后，将3306白名单从旧网段更新为当前稳定出口IP/网段；若出口经常变化，优先继续使用既有`127.0.0.1:13306` SSH隧道，避免将3306对全公网开放。
+
+#### 2026-07-24 MySQL公网直连白名单更新计划（执行前）
+
+1. 用户明确要求使用目标地址`103.205.240.84:3306`公网直连；只新增当前已核验来源`113.84.136.229/32`，保留旧白名单和末尾DROP，不开放`0.0.0.0/0`。
+2. 先只读定位`DOCKER-USER`规则的持久化来源和现有保存机制；采用与现有部署一致的方式更新，避免只改运行时导致重启失效。
+3. 更新前后保存脱敏规则顺序与计数；新ALLOW必须位于3306 DROP之前，不改SSH、模型网关、Qdrant或其他端口。
+4. 从本机直接以`103.205.240.84:3306`、应用账号和TLS REQUIRED执行只读查询，确认MySQL握手、TLS cipher、数据库身份和查询均成功；随后复核容器healthy、restart=0。
+5. 把实际命令效果、持久化位置、验证结果和风险追加本节，并仅提交计划文档；不记录数据库密码或模型密钥。
+
+#### 2026-07-24 MySQL公网直连白名单更新结果
+
+- 在不删除旧规则的前提下，将`113.84.136.229/32 -> tcp/3306 ACCEPT`插入旧`223.104.79.0/24`允许项与全来源3306 DROP之间。运行时最终顺序为旧网段ALLOW、当前单IP ALLOW、其余3306 DROP；没有开放`0.0.0.0/0`。
+- 服务器原先没有启用`iptables-persistent`，也没有找到保存该规则的现有systemd/网络钩子。新增项目内可审计脚本`docs/dev-ops/rag-runtime/ai-agent-rag-mysql-firewall`及对应oneshot unit，只负责幂等补齐两个ALLOW和末尾DROP；服务器安装到`/usr/local/sbin`与`/etc/systemd/system`，服务已enabled且active(exited)。
+- 手工再次restart该oneshot验证幂等：旧ALLOW=1、当前ALLOW=1、DROP=1，没有重复规则。服务器文件与项目文件SHA一致：脚本`3571c9601618abbd69c641a11a2753ee6a384a5dce84c848b079245643120c80`，unit=`dbe6900ff122bdf31b5fa6087624d4a2ca7c3b5c8f611377ebb797c9e5cbf3b3`。
+- 从当前本机以目标`103.205.240.84:3306`、应用账号、`--ssl-mode=REQUIRED`连续执行3次只读查询均成功，连接ID 43510/43511/43512，MySQL 8.0.46，TLS cipher均为`TLS_AES_128_GCM_SHA256`；容器保持healthy、restart=0、OOM=false。
+- 额外核验发现`@@require_secure_transport=0`，应用账号`SHOW GRANTS`没有`REQUIRE SSL`，且显式`--ssl-mode=DISABLED`仍可连接。此前`codex.md`“服务端要求TLS”的表述不准确，已修正为“客户端必须显式使用TLS”，并记录生产化前应单独开启服务端强制TLS；本轮没有擅自修改数据库认证策略。

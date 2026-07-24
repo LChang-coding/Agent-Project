@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly CHAIN="DOCKER-USER"
+readonly MYSQL_PORT="3306"
+readonly -a ALLOWED_SOURCES=(
+  "223.104.79.0/24"
+  "113.84.136.229/32"
+)
+
+for _ in $(seq 1 30); do
+  if iptables -nL "${CHAIN}" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+iptables -nL "${CHAIN}" >/dev/null
+
+for source in "${ALLOWED_SOURCES[@]}"; do
+  if iptables -C "${CHAIN}" -s "${source}" -p tcp --dport "${MYSQL_PORT}" -j ACCEPT 2>/dev/null; then
+    continue
+  fi
+
+  drop_line="$(
+    iptables -L "${CHAIN}" --line-numbers -n |
+      awk '$2 == "DROP" && $3 == "tcp" && $NF == "dpt:3306" { print $1; exit }'
+  )"
+  if [[ -n "${drop_line}" ]]; then
+    iptables -I "${CHAIN}" "${drop_line}" -s "${source}" -p tcp --dport "${MYSQL_PORT}" -j ACCEPT
+  else
+    iptables -A "${CHAIN}" -s "${source}" -p tcp --dport "${MYSQL_PORT}" -j ACCEPT
+  fi
+done
+
+if ! iptables -C "${CHAIN}" -p tcp --dport "${MYSQL_PORT}" -j DROP 2>/dev/null; then
+  iptables -A "${CHAIN}" -p tcp --dport "${MYSQL_PORT}" -j DROP
+fi

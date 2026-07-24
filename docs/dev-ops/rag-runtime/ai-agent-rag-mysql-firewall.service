@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore RAG MySQL source allowlist in Docker forwarding chain
+Requires=docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ai-agent-rag-mysql-firewall
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
