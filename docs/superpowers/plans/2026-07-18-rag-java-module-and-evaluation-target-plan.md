@@ -2228,3 +2228,4 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 手工再次restart该oneshot验证幂等：旧ALLOW=1、当前ALLOW=1、DROP=1，没有重复规则。服务器文件与项目文件SHA一致：脚本`3571c9601618abbd69c641a11a2753ee6a384a5dce84c848b079245643120c80`，unit=`dbe6900ff122bdf31b5fa6087624d4a2ca7c3b5c8f611377ebb797c9e5cbf3b3`。
 - 从当前本机以目标`103.205.240.84:3306`、应用账号、`--ssl-mode=REQUIRED`连续执行3次只读查询均成功，连接ID 43510/43511/43512，MySQL 8.0.46，TLS cipher均为`TLS_AES_128_GCM_SHA256`；容器保持healthy、restart=0、OOM=false。
 - 额外核验发现`@@require_secure_transport=0`，应用账号`SHOW GRANTS`没有`REQUIRE SSL`，且显式`--ssl-mode=DISABLED`仍可连接。此前`codex.md`“服务端要求TLS”的表述不准确，已修正为“客户端必须显式使用TLS”，并记录生产化前应单独开启服务端强制TLS；本轮没有擅自修改数据库认证策略。
+- 重大闭环已形成中文本地提交`3ec8263`（`恢复RAG数据库公网直连并固化白名单`），提交仅含两份可审计运维文件和本计划；`codex.md`按项目约定为本机忽略文件，内容已在本地更新但未强制提交，避免把其中运维凭据纳入Git。
