@@ -2194,3 +2194,21 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 收尾验证：第一次重建命令因包含`rm -rf /tmp/...`被安全策略拒绝，未删除文件；改用两个全新空目录后生成器均成功，第二次输出与项目主报告/机器总账逐字节`cmp`一致。Python两个harness `py_compile`通过；Java 17精确回归再次29/29通过，六模块BUILD SUCCESS、Maven 2.915秒。
 - 收尾SHA：主报告=`21daa066ffd26e1d4f75b991276cd6d91056ffcc8737700796cedca9e3a0c2a3`，机器总账=`98deaa041402cbba5a14e56a926756d57de1ec7565863c49c88281f683d16215`，Agent/Workflow补充报告=`70db5185a0f49fd075a3f3656860c7559bc7410526d345060aee9a091943a145`，取消服务日志摘录=`201d72ec327f14f9a6c684db7202435000a3a755cab7dd18647bf5caf7060510`。过时`rag`自动监控已删除，不再每10分钟检查已排除run。
 - 重大闭环已形成中文本地提交`0fdec4e`（`闭环RAG取消终止与最终报告收尾`），共22个相关文件、2611行新增/35行删除；提交未包含四个既有运行日志及`data-alloy/`、`data/object-storage/`、设计草稿、skills等无关未跟踪内容。本行作为提交后审计回填，单独文档提交保存。
+
+#### 2026-07-24 RAG服务器只读健康巡检计划（执行前）
+
+1. 以`codex.md`记录的`RAG-Server`和`/opt/ai-agent-rag/runtime`为唯一巡检范围，通过既有SSH配置连接；不上传项目、不修改配置、不重启容器。
+2. 核对宿主机运行时间、负载、CPU、内存、Swap、根盘/inode、OOM与失败systemd单元，识别资源耗尽或重启迹象。
+3. 核对Docker daemon、Compose项目、所有容器状态/健康/重启次数、资源占用和关键端口监听；期望组件为MySQL、Qdrant、Embedding、Reranker、Docling、网关、Prometheus、Node Exporter。
+4. 从服务器本机执行无副作用健康探针：Qdrant、三个模型后端、Prometheus及其targets、MySQL容器健康；鉴权网关只验证预期HTTP边界，不在输出中暴露密钥。
+5. 查看各组件最近日志中的OOM、panic、fatal、unhealthy和持续5xx/连接失败；把真实结果、异常、证据时间和建议追加本节。本轮仅巡检，不因发现问题自动修复或提交无关文件。
+
+#### 2026-07-24 RAG服务器只读健康巡检结果
+
+- 证据时间为服务器UTC `2026-07-24T14:11`～`14:12`（北京时间22:11～22:12）。宿主机已运行6天，load average `0.55/0.58/0.64`；15GiB内存中available 9.2GiB，2GiB Swap使用0；39GiB根盘使用16GiB/41%，inode使用5%；systemd失败单元0，最近24小时无内核OOM、磁盘I/O或EXT4错误。
+- Docker 29.6.2服务active。MySQL、Prometheus、网关、Embedding、Docling、Reranker、Qdrant、Node Exporter共8个容器全部running，所有已配置healthcheck的7个容器均healthy；8个容器restart count均0、OOMKilled均false。Node Exporter未配置容器healthcheck，但容器运行且Prometheus抓取为up。
+- 即时资源：MySQL 419.6MiB/768MiB，Embedding 1.929GiB/3GiB，Reranker 2.033GiB/3GiB，Docling 1.49GiB/4GiB，Qdrant 219.9MiB/6GiB，Prometheus 127.6MiB/768MiB；宿主机仍有9.2GiB available，无内存压力。`/opt/ai-agent-rag`数据约980MiB、模型约2.2GiB，Docker镜像约7.144GiB，根盘余23GiB。
+- Qdrant `/healthz`与`/collections`均HTTP 200；Prometheus ready且prometheus、qdrant、node-exporter、rag-embedding、rag-reranker、rag-docling六个target全部up、lastError为空。三个公网模型网关在无凭据请求下均返回401，证明鉴权边界仍生效。最近24小时网关状态统计为400×47、401×111、404×19、5xx×0；Prometheus无WARN/ERROR，其他容器筛查无panic/fatal/OOM/traceback。
+- 用户报告公网MySQL报`Lost connection ... reading initial communication packet`后已从同一本机复现。服务器MySQL容器healthy、restart=0、3306监听`0.0.0.0`，服务器本机与公网自回环均能读取MySQL 8.0.46握手头；故障不在MySQL进程。
+- 根因是入口来源变化：当前本机公网出口为`113.84.136.229`，而服务器`DOCKER-USER`只允许`223.104.79.0/24 -> tcp/3306`，随后对其他3306来源执行DROP；DROP计数已增长到395包。普通`nc`能完成TCP探测，但MySQL协议握手返回流量被转发门禁阻断，因此客户端在initial communication packet阶段超时/断开。
+- 本轮严格只读，没有修改UFW/iptables、MySQL、Docker或任何容器，也没有上传本地项目。恢复公网数据库访问需要用户明确授权后，将3306白名单从旧网段更新为当前稳定出口IP/网段；若出口经常变化，优先继续使用既有`127.0.0.1:13306` SSH隧道，避免将3306对全公网开放。
