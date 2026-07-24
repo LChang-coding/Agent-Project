@@ -19,6 +19,9 @@ public interface VectorStorePort {
     /** 精确统计租户指定文档版本的向量点数。 */
     long countVersion(String tenantId, String versionId);
 
+    /** 分页读取版本内的可信点标识与内容摘要，用于激活前精确核验而非只比数量。 */
+    List<VectorPointSnapshot> listVersionPointSnapshots(String tenantId, String versionId);
+
     /** 使用可信知识库范围检索候选。 */
     List<VectorSearchHit> search(String tenantId, VectorSearchCommand command);
 
@@ -72,6 +75,16 @@ public interface VectorStorePort {
                 throw new IllegalArgumentException("向量检索结果参数非法");
             }
             payload = payload == null ? Map.of() : Map.copyOf(payload);
+        }
+    }
+
+    /** 激活门禁所需的最小向量点快照。 */
+    record VectorPointSnapshot(String pointId, String chunkId, String contentHash) {
+        public VectorPointSnapshot {
+            if (pointId == null || pointId.isBlank() || chunkId == null || chunkId.isBlank()
+                    || contentHash == null || !contentHash.matches("[0-9a-f]{64}")) {
+                throw new IllegalArgumentException("向量点核验快照参数非法");
+            }
         }
     }
 }

@@ -58,6 +58,9 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Semaphore concurrency;
+    private final MarkdownAstDocumentParser markdownParser;
+    private final DocxDocumentParser docxParser;
+    private final DoclingJsonDocumentIrMapper doclingIrMapper;
 
     /**
      * 创建 Docling 文档解析适配器。
@@ -76,6 +79,9 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
         this.concurrency = new Semaphore(properties.getDocling().getMaxConcurrency(), true);
+        this.markdownParser = new MarkdownAstDocumentParser(objectMapper);
+        this.docxParser = new DocxDocumentParser(objectMapper);
+        this.doclingIrMapper = new DoclingJsonDocumentIrMapper(objectMapper);
     }
 
     /**
@@ -97,6 +103,21 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         if (!PDF_MIME.equals(mimeType) && !DOCX_MIME.equals(mimeType)) {
             throw new AppException("RAG_DOCUMENT_FORMAT_UNSUPPORTED", "仅支持 Markdown、PDF 和 DOCX 文档解析");
         }
+        if (DOCX_MIME.equals(mimeType)) {
+            try {
+                return docxParser.parse(command);
+            } catch (AppException localFailure) {
+                log.warn("event=rag_docx_parser_fallback outcome=docling errorCode={}",
+                        localFailure.getCode());
+                ParsedDocument fallback = parseWithDocling(command, path, mimeType);
+                List<String> warnings = new ArrayList<>(fallback.warnings());
+                warnings.add("DOCX_PRIMARY_PARSER_FAILED_DOCLING_FALLBACK");
+                return new ParsedDocument(fallback.normalizedMarkdown(), fallback.sections(),
+                        fallback.pageCount(), fallback.parserVersion(), fallback.metadata(),
+                        fallback.documentIr(), fallback.parserOutputJson(), warnings,
+                        fallback.ocrApplied());
+            }
+        }
         return parseWithDocling(command, path, mimeType);
     }
 
@@ -106,8 +127,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
             throw new AppException("RAG_DOCUMENT_TEXT_TOO_LARGE", "Markdown 文档超过本地解析上限");
         }
         String markdown = readUtf8Bounded(path, config.getMaxResponseBytes());
-        return parsedDocument(markdown, LOCAL_MARKDOWN_PARSER, command,
-                Map.of("parser", "local", "mimeType", MARKDOWN_MIME), PageMetadata.empty());
+        return markdownParser.parse(command, markdown);
     }
 
     private ParsedDocument parseWithDocling(ParseCommand command, Path path, String mimeType) {
@@ -127,8 +147,10 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
             }
             ConvertDocumentResponse payload = readResponse(body);
             if (!"success".equalsIgnoreCase(payload.status()) || payload.document() == null
-                    || payload.document().markdown() == null || payload.document().markdown().isBlank()) {
-                throw new AppException("RAG_DOCLING_RESPONSE_INVALID", "Docling 未返回可用的 Markdown 文档");
+                    || (payload.document().markdown() == null || payload.document().markdown().isBlank())
+                    && (payload.document().jsonContent() == null
+                    || payload.document().jsonContent().isNull())) {
+                throw new AppException("RAG_DOCLING_RESPONSE_INVALID", "Docling 未返回可用的结构化文档");
             }
             Map<String, String> metadata = new LinkedHashMap<>();
             metadata.put("parser", "docling");
@@ -145,8 +167,14 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 metadata.put("processingTimeSeconds", Double.toString(payload.processingTime()));
             }
             PageMetadata pageMetadata = pageMetadata(payload.document().jsonContent(), config.getMaxPages());
-            return parsedDocument(payload.document().markdown(), config.getParserRevision(), command, metadata,
-                    pageMetadata);
+            DoclingJsonDocumentIrMapper.MappedDocument mapped = doclingIrMapper.map(command,
+                    payload.document().jsonContent(), payload.document().markdown(), config.getParserRevision());
+            metadata.put("pageCount", Integer.toString(pageMetadata.pageCount()));
+            // ParsedSection继续作为兼容读模型由Markdown展示产物派生；Document IR才是结构化主事实源。
+            return new ParsedDocument(mapped.normalizedMarkdown(),
+                    sections(mapped.normalizedMarkdown(), pageMetadata.headingPages()),
+                    pageMetadata.pageCount(), config.getParserRevision(), metadata,
+                    mapped.ir(), mapped.parserOutputJson(), mapped.warnings(), mapped.ocrApplied());
         } catch (AppException e) {
             throw e;
         } catch (InterruptedException e) {
@@ -168,7 +196,8 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 textPart(boundary, "to_formats", "md"),
                 textPart(boundary, "to_formats", "json"),
                 textPart(boundary, "do_ocr", Boolean.toString(command.ocrEnabled())),
-                textPart(boundary, "force_ocr", "false"),
+                textPart(boundary, "force_ocr",
+                        Boolean.toString(command.ocrMode() == RagDocumentParserPort.OcrMode.FORCED)),
                 textPart(boundary, "include_images", "false"),
                 textPart(boundary, "include_page_images", "false"),
                 textPart(boundary, "page_range", "1"),
@@ -257,15 +286,29 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
     private Path validateControlledFile(ParseCommand command) {
         Path path = command.contentPath().toAbsolutePath().normalize();
-        if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                || !Files.isReadable(path)) {
-            throw new AppException("RAG_DOCUMENT_PATH_INVALID", "待解析文档路径不可读");
-        }
-        if (command.contentLength() > MAX_DOCUMENT_BYTES) {
-            throw new AppException("RAG_DOCUMENT_TOO_LARGE", "单个解析文档不能超过 50 MiB");
-        }
         try {
-            if (Files.size(path) != command.contentLength()) {
+            Path workspace = command.workspaceRoot().toAbsolutePath().normalize();
+            if (Files.isSymbolicLink(workspace)
+                    || !Files.isDirectory(workspace, LinkOption.NOFOLLOW_LINKS)) {
+                throw new AppException("RAG_DOCUMENT_WORKSPACE_INVALID", "文档工作目录不受信任");
+            }
+            Path realWorkspace = workspace.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            Path realPath = path.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!realPath.startsWith(realWorkspace) || Files.isSymbolicLink(path)
+                    || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(path)) {
+                throw new AppException("RAG_DOCUMENT_PATH_INVALID", "待解析文档不在受控目录或不可读");
+            }
+            Path cursor = workspace;
+            for (Path component : workspace.relativize(path)) {
+                cursor = cursor.resolve(component);
+                if (Files.isSymbolicLink(cursor)) {
+                    throw new AppException("RAG_DOCUMENT_PATH_INVALID", "待解析文档路径包含符号链接");
+                }
+            }
+            if (command.contentLength() > MAX_DOCUMENT_BYTES) {
+                throw new AppException("RAG_DOCUMENT_TOO_LARGE", "单个解析文档不能超过 50 MiB");
+            }
+            if (Files.size(realPath) != command.contentLength()) {
                 throw new AppException("RAG_DOCUMENT_SIZE_MISMATCH", "待解析文档长度与声明值不一致");
             }
         } catch (IOException e) {
@@ -305,7 +348,8 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         } catch (IOException e) {
             throw new AppException("RAG_DOCUMENT_TEXT_INVALID", "Markdown 必须是可读的 UTF-8 文本", e);
         }
-        String markdown = stripBom(content.toString()).strip();
+        String markdown = stripBom(content.toString())
+                .replace("\r\n", "\n").replace('\r', '\n').strip();
         if (markdown.isBlank()) {
             throw new AppException("RAG_DOCUMENT_TEXT_INVALID", "Markdown 解析结果不能为空");
         }

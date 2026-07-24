@@ -10,9 +10,11 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
+import cn.bugstack.ai.domain.rag.model.document.DocumentIr;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
+import cn.bugstack.ai.domain.rag.model.valobj.RagIngestCheckpoint;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
@@ -74,16 +76,53 @@ public class RagIngestWorkerTest {
         Assert.assertEquals(RagDocumentStatus.READY, fixture.document.get().status());
         Assert.assertEquals(Fixture.VERSION_ID, fixture.document.get().activeVersionId());
         Assert.assertEquals(1, fixture.vectorPoints.size());
+        Assert.assertEquals(1, fixture.embeddedInputs.size());
+        Assert.assertTrue(fixture.embeddedInputs.get(0).contains("正文:"));
+        Assert.assertNotEquals(new String(Fixture.MARKDOWN, StandardCharsets.UTF_8),
+                fixture.embeddedInputs.get(0));
         verify(fixture.repository, times(1)).completeClaimedIngestJob(
                 anyString(), any(), anyLong(), anyString(), anyLong(),
                 org.mockito.ArgumentMatchers.argThat((RagIndexActivation activation) -> activation.chunkCount() == 1
                         && activation.characterCount() == new String(Fixture.MARKDOWN, StandardCharsets.UTF_8)
                         .codePointCount(0, new String(Fixture.MARKDOWN, StandardCharsets.UTF_8).length())
-                        && activation.parsedObjectKey().endsWith("/parsed/normalized.md")), any());
-        verify(fixture.objectStorageService).putFile(any());
+                        && activation.parsedObjectKey().endsWith("/ir/document-ir-v1.json")), any());
+        verify(fixture.objectStorageService, times(5)).putFile(any());
         verify(fixture.vectorStore, never()).deleteVersion(anyString(), anyString());
         Assert.assertNotNull(fixture.downloadedTarget.get());
         Assert.assertFalse(Files.exists(fixture.downloadedTarget.get()));
+    }
+
+    @Test
+    public void shouldPersistReviewArtifactsBeforeStoppingEmbeddingSideEffects() {
+        Fixture fixture = new Fixture();
+        DocumentIr.Block lowConfidenceOcr = new DocumentIr.Block(
+                "ocr-low", DocumentIr.BlockType.PARAGRAPH, "低置信度OCR正文", "低置信度OCR正文",
+                new DocumentIr.SourceSpan(0, 8, "fixture"), null, null,
+                0, "region", 0, List.of(), "zh", 0.40,
+                Set.of(DocumentIr.Flag.OCR_TEXT), false, true, "", List.of());
+        DocumentIr ir = new DocumentIr("1.0", Fixture.VERSION_ID, "document.md",
+                "text/markdown", "zh", "fixture-parser", "r1",
+                List.of(new DocumentIr.Page(1, 0, 0, List.of(lowConfidenceOcr))),
+                Map.of(), List.of(), Set.of(DocumentIr.Flag.OCR_TEXT));
+        when(fixture.parser.parse(any())).thenReturn(new RagDocumentParserPort.ParsedDocument(
+                "低置信度OCR正文", List.of(), 1, "r1", Map.of(), ir,
+                "{\"fixture\":true}", List.of(), true));
+
+        Assert.assertTrue(fixture.worker.execute(Fixture.TENANT, Fixture.JOB_ID, Fixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.FAILED, fixture.job.get().status());
+        Assert.assertEquals(RagDocumentVersionStatus.FAILED, fixture.version.get().status());
+        Assert.assertTrue(fixture.storedObjects.keySet().containsAll(List.of(
+                RagObjectStorageScope.parserOutputObjectKey(Fixture.TENANT, Fixture.KB_ID,
+                        Fixture.DOCUMENT_ID, Fixture.VERSION_ID),
+                RagObjectStorageScope.documentIrObjectKey(Fixture.TENANT, Fixture.KB_ID,
+                        Fixture.DOCUMENT_ID, Fixture.VERSION_ID),
+                RagObjectStorageScope.normalizedMarkdownObjectKey(Fixture.TENANT, Fixture.KB_ID,
+                        Fixture.DOCUMENT_ID, Fixture.VERSION_ID),
+                RagObjectStorageScope.qualityReportObjectKey(Fixture.TENANT, Fixture.KB_ID,
+                        Fixture.DOCUMENT_ID, Fixture.VERSION_ID))));
+        verify(fixture.embedding, never()).embed(any());
+        verify(fixture.vectorStore, never()).upsert(anyString(), anyString(), any());
     }
 
     @Test
@@ -125,6 +164,42 @@ public class RagIngestWorkerTest {
     }
 
     @Test
+    public void shouldNotActivateWhenQdrantPointSnapshotHashMismatches() {
+        Fixture fixture = new Fixture();
+        when(fixture.vectorStore.listVersionPointSnapshots(Fixture.TENANT, Fixture.VERSION_ID))
+                .thenAnswer(invocation -> fixture.vectorPoints.stream()
+                        .map(point -> new VectorStorePort.VectorPointSnapshot(
+                                point.pointId(), point.chunkId(), "f".repeat(64)))
+                        .toList());
+
+        Assert.assertTrue(fixture.worker.execute(Fixture.TENANT, Fixture.JOB_ID, Fixture.OWNER));
+
+        verify(fixture.repository, never()).completeClaimedIngestJob(
+                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any());
+        verify(fixture.vectorStore, times(1)).deleteVersion(Fixture.TENANT, Fixture.VERSION_ID);
+        Assert.assertEquals(RagIngestJobStatus.FAILED, fixture.job.get().status());
+        Assert.assertEquals("RAG_INGEST_INDEX_SNAPSHOT_MISMATCH", fixture.job.get().errorCode());
+        Assert.assertTrue(fixture.chunks.isEmpty());
+        Assert.assertTrue(fixture.vectorPoints.isEmpty());
+    }
+
+    @Test
+    public void shouldResumeFromVerifyingWithoutRepeatingParserEmbeddingOrUpsert() {
+        Fixture fixture = new Fixture();
+        fixture.prepareVerifyingSnapshot();
+
+        Assert.assertTrue(fixture.worker.execute(Fixture.TENANT, Fixture.JOB_ID, Fixture.OWNER));
+
+        Assert.assertEquals(RagIngestJobStatus.COMPLETED, fixture.job.get().status());
+        verify(fixture.parser, never()).parse(any());
+        verify(fixture.embedding, never()).embed(any());
+        verify(fixture.sparseEncoder, never()).encode(any());
+        verify(fixture.vectorStore, never()).upsert(anyString(), anyString(), any());
+        verify(fixture.repository).completeClaimedIngestJob(
+                anyString(), any(), anyLong(), anyString(), anyLong(), any(), any());
+    }
+
+    @Test
     public void shouldStopAllSideEffectsWhenHeartbeatRevealsNewFence() {
         Fixture fixture = new Fixture();
         fixture.takeOverAtHeartbeat = 1;
@@ -153,10 +228,15 @@ public class RagIngestWorkerTest {
         Assert.assertTrue(fixture.versions.get().stream()
                 .allMatch(version -> version.status() == RagDocumentVersionStatus.DELETED));
         Assert.assertEquals(Set.of("version-1", "version-2"), fixture.deletedVectors);
-        Assert.assertEquals(Set.of(
+        Set<String> expectedObjects = new java.util.LinkedHashSet<>(Set.of(
                 DeleteFixture.key("version-1", "source-v1.md"),
                 DeleteFixture.key("version-1", "parsed-v1.json"),
-                DeleteFixture.key("version-2", "source-v2.md")), fixture.deletedObjects);
+                DeleteFixture.key("version-2", "source-v2.md")));
+        expectedObjects.addAll(RagObjectStorageScope.preprocessingArtifactObjectKeys(
+                DeleteFixture.TENANT, DeleteFixture.KB_ID, DeleteFixture.DOCUMENT_ID, "version-1"));
+        expectedObjects.addAll(RagObjectStorageScope.preprocessingArtifactObjectKeys(
+                DeleteFixture.TENANT, DeleteFixture.KB_ID, DeleteFixture.DOCUMENT_ID, "version-2"));
+        Assert.assertEquals(expectedObjects, fixture.deletedObjects);
         verify(fixture.repository, times(2)).purgeChunks(eq(DeleteFixture.TENANT), anyString());
         verify(fixture.repository, times(2)).countAllChunks(eq(DeleteFixture.TENANT), anyString());
         verify(fixture.repository).completeClaimedDeleteJob(anyString(), any(), anyLong(), anyString(),
@@ -324,6 +404,8 @@ public class RagIngestWorkerTest {
         private final AtomicReference<RagKnowledgeBaseEntity> knowledgeBase = new AtomicReference<>(knowledgeBase());
         private final List<RagChunkEntity> chunks = new ArrayList<>();
         private final List<VectorStorePort.VectorPoint> vectorPoints = new ArrayList<>();
+        private final List<String> embeddedInputs = new ArrayList<>();
+        private final Map<String, byte[]> storedObjects = new java.util.LinkedHashMap<>();
         private final AtomicReference<Path> downloadedTarget = new AtomicReference<>();
         private final AtomicInteger heartbeatCalls = new AtomicInteger();
         private int cancelAtHeartbeat = -1;
@@ -460,15 +542,19 @@ public class RagIngestWorkerTest {
                 var command = (cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity)
                         invocation.getArgument(0);
                 byte[] bytes = Files.readAllBytes(command.getSourcePath());
+                storedObjects.put(command.getObjectKey(), bytes);
                 return ObjectStorageResultEntity.builder().bucket(command.getBucket())
                         .objectKey(command.getObjectKey()).sizeBytes((long) bytes.length)
                         .sha256(sha256(bytes)).build();
             });
+            when(objectStorageService.getObject(anyString(), anyString(), anyLong()))
+                    .thenAnswer(invocation -> storedObjects.get(invocation.getArgument(1)));
             when(parser.parse(any())).thenReturn(new RagDocumentParserPort.ParsedDocument(
                     new String(MARKDOWN, StandardCharsets.UTF_8), List.of(), 0,
                     "docling-test-revision", Map.of()));
             when(embedding.embed(any())).thenAnswer(invocation -> {
                 EmbeddingPort.EmbeddingCommand command = invocation.getArgument(0);
+                embeddedInputs.addAll(command.inputs());
                 List<List<Float>> vectors = command.inputs().stream().map(value -> denseVector()).toList();
                 return new EmbeddingPort.EmbeddingResult(vectors, 768, "embedding-test-revision");
             });
@@ -484,10 +570,50 @@ public class RagIngestWorkerTest {
             }).when(vectorStore).upsert(anyString(), anyString(), any());
             when(vectorStore.countVersion(TENANT, VERSION_ID))
                     .thenAnswer(invocation -> vectorPoints.size() + vectorCountOffset);
+            when(vectorStore.listVersionPointSnapshots(TENANT, VERSION_ID)).thenAnswer(invocation ->
+                    vectorPoints.stream().map(point -> new VectorStorePort.VectorPointSnapshot(
+                            point.pointId(), point.chunkId(), point.payload().get("content_hash")))
+                            .toList());
             doAnswer(invocation -> {
                 vectorPoints.clear();
                 return null;
             }).when(vectorStore).deleteVersion(TENANT, VERSION_ID);
+        }
+
+        private void prepareVerifyingSnapshot() {
+            RagChunkEntity child = new RagChunkEntity(TENANT, "owner-a", RagVisibility.TENANT,
+                    KB_ID, DOCUMENT_ID, VERSION_ID, 1, 1L, "chunk-child", 0,
+                    "chunk-parent", null, null, "已经完成索引的正文", 8, 1,
+                    "标题", sha256("已经完成索引的正文".getBytes(StandardCharsets.UTF_8)),
+                    "chunk-child", Map.of("chunk_level", "child"));
+            chunks.add(child);
+            vectorPoints.add(new VectorStorePort.VectorPoint("chunk-child", KB_ID, DOCUMENT_ID,
+                    VERSION_ID, 1L, "chunk-child", denseVector(),
+                    new SparseEncoderPort.SparseVector(Map.of(1, 1F)),
+                    Map.of("content_hash", child.contentHash())));
+            byte[] irBytes;
+            try {
+                DocumentIr ir = new RagDocumentParserPort.ParsedDocument(
+                        "已经完成索引的正文", List.of(), 1, "parser-v1", Map.of()).documentIr();
+                irBytes = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                        .writeValueAsBytes(ir);
+            } catch (Exception error) {
+                throw new IllegalStateException(error);
+            }
+            String irKey = RagObjectStorageScope.documentIrObjectKey(
+                    TENANT, KB_ID, DOCUMENT_ID, VERSION_ID);
+            storedObjects.put(irKey, irBytes);
+            RagIngestCheckpoint checkpoint = new RagIngestCheckpoint(RagIngestStage.VERIFYING,
+                    1, 1, 1, 1, 1, 10L, "rag-bucket", irKey,
+                    sha256(irBytes), irBytes.length);
+            RagIngestJobEntity source = job.get();
+            job.set(new RagIngestJobEntity(source.tenantId(), source.knowledgeBaseId(),
+                    source.documentId(), source.versionId(), source.jobId(), source.idempotencyKey(),
+                    source.operation(), source.generation(), source.status(), checkpoint,
+                    source.attemptCount(), source.maxAttempts(), source.nextRetryAt(), source.lease(),
+                    source.fencingToken(), source.revision(), source.cancelReason(), source.errorCode(),
+                    source.errorMessage(), source.traceId()));
+            version.set(queuedVersion().processing("parser-v1", "chunker-v1", "embedding-v1"));
         }
 
         private static RagIngestJobEntity pendingJob() {

@@ -48,9 +48,34 @@ public final class RagIngestWorkspace implements AutoCloseable {
         return Path.of("source.bin");
     }
 
-    /** 规范化解析产物的受控暂存路径。 */
+    /** 旧版规范化解析产物的受控暂存路径。 */
     public Path parsedMarkdownPath() {
         return root.resolve("normalized.md").normalize();
+    }
+
+    /** 格式解析器原始结构响应的受控暂存路径。 */
+    public Path parserOutputPath() {
+        return root.resolve("parser-output.json").normalize();
+    }
+
+    /** Canonical Document IR的受控暂存路径。 */
+    public Path documentIrPath() {
+        return root.resolve("document-ir-v1.json").normalize();
+    }
+
+    /** 规范化Markdown展示产物的受控暂存路径。 */
+    public Path normalizedMarkdownPath() {
+        return root.resolve("normalized-display.md").normalize();
+    }
+
+    /** 解析质量报告的受控暂存路径。 */
+    public Path qualityReportPath() {
+        return root.resolve("quality-report.json").normalize();
+    }
+
+    /** 分块清单的受控暂存路径。 */
+    public Path chunkManifestPath() {
+        return root.resolve("chunk-manifest.json").normalize();
     }
 
     @Override

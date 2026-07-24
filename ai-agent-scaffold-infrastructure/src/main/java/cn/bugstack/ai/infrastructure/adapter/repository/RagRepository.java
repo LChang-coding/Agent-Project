@@ -303,6 +303,7 @@ public class RagRepository implements IRagRepository {
                 activation.generation(), activation.expectedVersionRevision(), activation.pageCount(),
                 activation.characterCount(), activation.chunkCount(), activation.parsedObjectBucket(),
                 activation.parsedObjectKey(), activation.parsedContentHash(), activation.parsedSizeBytes(),
+                codec.writeMetadata(activationMetadata(activation)),
                 indexedAt));
         requireChanged(documentDao.activateVersionByTenantAndRevision(tenantId,
                 activation.knowledgeBaseId(), activation.documentId(), activation.versionId(),
@@ -314,6 +315,29 @@ public class RagRepository implements IRagRepository {
         requireChanged(ingestTaskDao.updateClaimedByTenantFenceAndRevision(tenantId,
                 mapper.toIngestTaskPo(completedJob), expectedTaskRevision, leaseOwner,
                 expectedFencingToken, indexedAt));
+    }
+
+    private Map<String, String> activationMetadata(RagIndexActivation activation) {
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("parsedContentHash", activation.parsedContentHash());
+        result.put("parsedSizeBytes", Long.toString(activation.parsedSizeBytes()));
+        if (activation.parserName() != null) result.put("parserName", activation.parserName());
+        if (activation.parserRevision() != null) result.put("parserRevision", activation.parserRevision());
+        if (activation.irSchemaVersion() != null) result.put("irSchemaVersion", activation.irSchemaVersion());
+        if (activation.qualityDisposition() != null) {
+            result.put("qualityDisposition", activation.qualityDisposition());
+            result.put("qualityScore", Double.toString(activation.qualityScore()));
+        }
+        if (activation.qualityReportObjectKey() != null) {
+            result.put("qualityReportObjectKey", activation.qualityReportObjectKey());
+        }
+        if (activation.chunkManifestObjectKey() != null) {
+            result.put("chunkManifestObjectKey", activation.chunkManifestObjectKey());
+        }
+        if (activation.tokenizerVersion() != null) {
+            result.put("tokenizerVersion", activation.tokenizerVersion());
+        }
+        return result;
     }
 
     @Override

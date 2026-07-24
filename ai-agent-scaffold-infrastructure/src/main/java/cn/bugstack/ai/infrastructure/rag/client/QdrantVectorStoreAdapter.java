@@ -122,6 +122,47 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    public List<VectorPointSnapshot> listVersionPointSnapshots(String tenantId, String versionId) {
+        requireText(tenantId, "tenantId");
+        requireText(versionId, "versionId");
+        ensureCollection();
+        List<VectorPointSnapshot> result = new ArrayList<>();
+        Set<String> pointIds = new java.util.HashSet<>();
+        Set<String> visitedOffsets = new java.util.HashSet<>();
+        JsonNode offset = null;
+        do {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.set("filter", tenantVersionFilter(tenantId, versionId));
+            body.put("limit", Math.max(1, properties.getQdrant().getBatchSize()));
+            body.put("with_payload", true);
+            body.put("with_vector", false);
+            if (offset != null && !offset.isNull()) body.set("offset", offset);
+            JsonResponse response = exchange("POST", pointsPath() + "/scroll", null, body, false);
+            requireOk(response, "RAG_QDRANT_SCROLL_FAILED");
+            JsonNode rows = response.body().path("result").path("points");
+            if (!rows.isArray()) throw responseInvalid("版本点快照列表缺失");
+            for (JsonNode row : rows) {
+                JsonNode payload = row.path("payload");
+                if (!tenantId.equals(requiredText(payload, "tenant_id"))
+                        || !versionId.equals(requiredText(payload, "version_id"))) {
+                    throw new AppException("RAG_QDRANT_SCOPE_VIOLATION",
+                            "Qdrant版本点快照超出可信租户或版本范围");
+                }
+                String pointId = requiredText(payload, "point_id");
+                if (!pointIds.add(pointId)) throw responseInvalid("版本点快照包含重复point_id");
+                result.add(new VectorPointSnapshot(pointId, requiredText(payload, "chunk_id"),
+                        requiredText(payload, "content_hash")));
+                if (result.size() > 1_000_000) throw responseInvalid("单版本向量点数量超过核验上限");
+            }
+            offset = response.body().path("result").get("next_page_offset");
+            if (offset != null && !offset.isNull() && !visitedOffsets.add(offset.toString())) {
+                throw responseInvalid("版本点快照分页游标重复");
+            }
+        } while (offset != null && !offset.isNull());
+        return List.copyOf(result);
+    }
+
+    @Override
     public List<VectorSearchHit> search(String tenantId, VectorSearchCommand command) {
         requireText(tenantId, "tenantId");
         if (command == null || command.topK() > properties.getQdrant().getMaxSearchTopK()) {

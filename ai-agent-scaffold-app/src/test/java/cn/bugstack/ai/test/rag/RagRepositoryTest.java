@@ -246,7 +246,7 @@ public class RagRepositoryTest {
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
                 Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyLong(), Mockito.anyInt(),
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyLong(),
-                Mockito.any())).thenReturn(1);
+                Mockito.anyString(), Mockito.any())).thenReturn(1);
         Mockito.when(documentDao.activateVersionByTenantAndRevision(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
                 Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyInt(),
@@ -265,6 +265,7 @@ public class RagRepositoryTest {
         Mockito.verify(documentVersionDao).markReadyByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, 3L,
                 3, 2048L, 7, "rag-bucket", parsedKey(), "a".repeat(64), 4096L,
+                "{\"parsedContentHash\":\"" + "a".repeat(64) + "\",\"parsedSizeBytes\":\"4096\"}",
                 LocalDateTime.ofInstant(now, ZoneOffset.UTC));
         Mockito.verify(documentDao).activateVersionByTenantAndRevision(
                 "tenant-a", "kb-1", "doc-1", "version-1", 2L, 4L,
@@ -368,7 +369,7 @@ public class RagRepositoryTest {
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
                 Mockito.anyLong(), Mockito.anyLong(), Mockito.anyInt(), Mockito.anyLong(), Mockito.anyInt(),
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyLong(),
-                Mockito.any())).thenReturn(0);
+                Mockito.anyString(), Mockito.any())).thenReturn(0);
 
         try {
             repository.completeClaimedIngestJob("tenant-a", completed, 7L, "worker-a", 11L,

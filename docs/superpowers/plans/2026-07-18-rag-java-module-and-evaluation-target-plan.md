@@ -2388,3 +2388,48 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - Java 17作用域回归最终84/84通过，覆盖三态策略、选择仓储与Mapper、Run冻结/引导继承、Context快照透传、失效Binding外部调用屏障、检索阶段、摄取Worker、Outbox、SSE和logfmt中文契约；修正审计降级口径后又单独复跑`RagRetrievalServiceTest` 21/21并再次复跑整组84/84。前端`npm run build`通过类型检查，Vite转换1916个模块。Java 17全reactor跳过重复测试打包成功，最终JAR SHA-256=`ec22b711d4a4f489194374d367f615ee15c7d0ccc9ad35d6d504c56c1b3c976b`并在本机8091成功启动；监听PID、MySQL连接池、RAG Kafka三分区和Context Kafka主/重试/DLT分区均正常。
 - 全reactor不筛选执行了425个测试，411个通过、14个错误、0个断言失败。错误由8个仓库既有“无任何@Test方法”的演示类，以及依赖未加载100001/100002 Agent或未设置可信租户的旧手工集成测试构成；与本次RAG调用栈无关。未通过修改生产代码、添加Ignore或伪造外部配置掩盖这些历史测试问题，作用域84项和真实E2E作为本轮闭环证据。第一次全量测试还发现`LogfmtTest`仍断言旧无中文字段格式，已更新为显式验证中文`eventName/message`后通过。
 - E2E证据SHA-256：manifest=`8d5da480b5d43eaebc39e9cfa81a01fa38f089331cffda29c803b3c86f34129e`，Agent/Workflow结果=`9611bd22c7cefce6b46ac0f3e3158cb25c764f011668baa6cf36c23b327418a4`，MANUAL结果=`46b11f5aee5d9490c7ae786feef6f1339b6572bcefe871b27b1779f79fd2bc1a`，取消结果=`215e7e11293001989b449032072c07e0ac88f8bd72a966a8138683459e67e1fb`。证据目录位于`/tmp`且不进入Git；四个运行日志、Alloy/Object Storage数据及无关未跟踪目录继续排除。
+
+#### 2026-07-25 文档结构化预处理闭环计划（执行前）
+
+##### 目标与硬门禁
+
+1. 将摄取主事实源从单一`normalized.md`升级为版本化`Canonical Document IR`；Markdown仅作为展示和兼容产物。任何清洗、分块、引用和索引内容都必须能追溯到原始Block与SourceSpan。
+2. 三种格式采用专用解析路径：Markdown使用AST；DOCX保留OOXML标题、列表、表格、页眉页脚、脚注/批注/修订等可提取语义并以Docling兜底；PDF保存Docling结构化JSON与页面/坐标/阅读顺序信息，并基于页面质量选择原文本或OCR兜底。
+3. 清洗必须可逆：保留`rawText`，只生成`normalizedText`/`embeddingText`，所有抑制均用`retrievable=false + suppressionReason`表达，不物理删除原Block。代码、表格、公式、条款和OCR文本分别使用安全规则。
+4. 新增解析质量报告与状态门禁：`READY/READY_WITH_WARNING/NEEDS_REVIEW/REJECTED/FAILED`。禁止“非空文本即成功”；静默截断和低质量无告警必须为0。低质量结果不得激活新Generation。
+5. 新索引通过影子Generation写入并原子激活；旧Generation保留到验证完成，失败或取消不得污染当前检索。迁移不得直接覆盖已激活向量。
+6. 全链路中文结构化日志统一携带`traceId/taskId/documentId/versionId/stage/parserName/parserRevision/irSchemaVersion/qualityScore/inputCount/outputCount/costMs/outcome`，禁止记录正文、敏感信息或密钥。
+
+##### 实施步骤
+
+1. **现状审计与契约冻结**：定位Parser Port、Docling响应、Markdown正则解析、`StructuredRagChunker`、摄取Checkpoint、对象存储产物及Generation激活路径；记录现有数据库与向量payload兼容边界。
+2. **Document IR与版本化产物**：在Domain定义Document/Page/Region/Block/Table/Cell/Asset/SourceSpan、质量报告、清洗审计、Chunk Manifest等不可变模型和稳定枚举；Infrastructure负责JSON序列化与MinIO产物保存，至少生成`parsed/parser-output.json`、`ir/document-ir-v1.json`、`normalized/normalized.md`、`quality/quality-report.json`、`chunks/chunk-manifest.json`。
+3. **专用解析器**：引入可维护的Markdown AST解析器；DOCX使用Java OOXML解析保存结构语义，Docling作为兜底；PDF扩展Docling客户端读取结构化JSON与布局元数据，并实现`AUTO` OCR质量决策。无法提取的高级对象必须产生warning，不允许静默丢弃。
+4. **可逆清洗流水线**：实现Unicode/控制字符、PDF断行断词、重复页眉页脚、页码、水印、重复块、OCR噪声、语言和敏感/提示注入扫描的可配置Cleaner Chain；每步输出变更/抑制计数、警告和耗时。
+5. **质量门禁与备用解析**：计算文本覆盖、阅读顺序、OCR、表格保真、重复率、替换字符率和总分；主解析低质量时触发安全兜底并比较结果，仍不合格进入`NEEDS_REVIEW`或`REJECTED`，不进入向量激活。
+6. **结构感知分块与Embedding文本**：以IR替代Markdown正则作为主分块输入；普通段落按章节/句子/Token预算，列表保留引导语，表格重复表头按行组，代码按完整围栏/符号，脚注/图片/公式关联上下文。Chunk同时保存`displayText/embeddingText/sourceSpans/pageRange/blockIds/neighbors/parent/contentHash/qualityFlags`；Embedding正文加入文档标题与标题路径。
+7. **数据库与索引兼容迁移**：扩展文档版本、Chunk与任务Checkpoint字段，保存IR/质量/Parser/Cleaner/Chunker/Tokenizer版本；更新Qdrant payload但保持旧数据可读，新增Generation影子/激活/回滚门禁及幂等迁移脚本。
+8. **金标、单测与真实验收**：在项目`docs`下保存MD/DOCX/PDF可复用金标及答案；覆盖Front Matter、嵌套列表、脚注、复杂围栏、合并表格、页眉页脚、扫描/双栏/旋转/水印、损坏/加密文件。执行Java 17单元/集成测试、生产构建和真实MinIO→Parser→IR→Cleaner→Chunk→Embedding→Qdrant→检索E2E。
+9. **量化对比与收尾**：对比旧Markdown链路与IR链路的正文字符召回、编号/金额/日期保真、标题F1、表格单元格F1、OCR CER、引用页码、静默截断、延迟和资源；真实结果、失败Case、原因、瓶颈和优化建议追加本节，形成重大闭环中文本地提交。
+
+##### 范围约束
+
+- 不上传本地Java/Vue项目到服务器；服务器只保留既有解析/模型中间件及必要的受控配置。
+- 不把未经验证的IR Generation直接切换为线上Active；不删除旧Generation。
+- 不提交运行日志、对象存储运行目录、Alloy数据、凭据或无关未跟踪文件。
+- OCR、视觉模型或真实Tokenizer如受当前中间件能力限制，必须通过显式能力探测、降级状态和质量门禁表达，禁止伪造“已支持”或编造指标。
+
+##### 2026-07-25 文档结构化预处理闭环执行结果
+
+- 摄取主事实源已从`normalized.md`迁移到schema `1.0`的`DocumentIr`。IR保存原文/规范文本、SourceSpan、页面/bbox、阅读顺序、分栏、标题路径、表格、语言、置信度、质量Flag、抑制原因和完整Cleaner变更轨迹；`normalized.md`仍生成，但只作为展示与兼容派生产物。实现说明和边界集中记录在`docs/rag/document-preprocessing-closure.md`。
+- Markdown改为CommonMark AST并启用表格、任务列表和YAML Front Matter扩展；H1映射为TITLE，标题跳级按真实level维护层级。DOCX首选Apache POI OOXML解析正文顺序、标题、列表、表格合并、页眉页脚、脚注及高级对象告警，失败才调用Docling；无受控渲染器时页码明确为未知，不伪造页数。PDF把Docling结构JSON映射为页面、bbox、阅读顺序、表格和OCR置信度，AUTO质量不足时才执行FORCED OCR再评估。
+- 新增可逆Cleaner Chain：NFC与控制/零宽字符清理、断词修复、重复页眉页脚和重复块抑制、内容类型标注。被抑制Block仍留在IR且可通过`restoreOriginal`恢复；NFKC只作用于`embeddingText`检索副本，不改写展示与引用文本。
+- 新增质量报告和`READY/READY_WITH_WARNING/NEEDS_REVIEW/REJECTED/FAILED`处置。解析、IR、normalized markdown、质量报告在Embedding副作用前持久化；低质量文档以明确错误码停止激活。结构感知分块按标题、页面、表格和块类型形成父子块，同时保存display/embedding文本、来源块、source spans、页码范围、稳定ID、内容hash和显式版本化的近似Tokenizer。
+- 对象存储形成五类稳定产物：`parsed/parser-output.json`、`ir/document-ir-v1.json`、`normalized/normalized.md`、`quality/quality-report.json`、`chunks/chunk-manifest.json`。Checkpoint保存IR对象键、SHA-256和字节数；CHUNKING/VERIFYING恢复不重新下载、解析或Embedding。取消、失败清理和永久删除覆盖新旧全部产物。
+- 激活门禁不再只比较数量。Worker同时核对Qdrant exact count、数据库child count，并分页读取Qdrant payload，要求`point_id + chunk_id + content_hash`集合与数据库完全一致；篡改hash的测试证明版本不激活并清理影子向量。激活元数据新增parser/revision、IR schema、质量处置/分数、质量报告和chunk manifest对象键、tokenizer版本。
+- 定向门禁使用本机Java 25并显式增加`-Dnet.bytebuddy.experimental=true`以兼容当前Byte Buddy；最终71项解析、Cleaner、质量、Worker、仓储和Qdrant协议测试为71通过、0失败、0错误，包含Qdrant重复分页游标防死循环门禁。模块compile和全reactor`package -DskipTests`均成功。排除既有运行日志后的diff check通过。
+- 当前代码JAR以独立8092端口执行正式HTTP三格式E2E，未影响已有8091。输入文件SHA-256：Markdown=`3a0a294b67c737170adf7c50c831a06ef765a53eeae0e22e33fdc73692e97898`、DOCX=`6c7c76fb3e5c66199d4161c5935ac997516c561cca74971d6cd616658756cc52`、PDF=`5fd5a95d70b55341861538377dd0818d9c5d5ce8eb928879fc4cd369f6c66448`，fixture=`2d55a3baa532bded0b9b67e95afe15219da5f8b227eb57cfa12e1d2620753ad8`，JAR=`3be1d076cdd0a79b4caf52e1e4f6ca4fdad443e88a589e03a37e5551b6444545`。
+- E2E真实结果位于`/tmp/rag-preprocess-format-e2e-20260725`且不进入Git：Markdown第一次尝试完成、5个child、9283ms、5/5证据命中；DOCX第一次尝试完成、6个child、9878ms、5/5；PDF第一次尝试完成、6个child、69368ms、5/5；合计3/3摄取成功、15/15有答案问题的检索证据包含金标术语、0 degraded。该指标是证据术语覆盖，不是LLM回答正确率。
+- 8092当前实例日志确认PDF任务由新代码处理，Docling单次解析59538ms，占PDF摄取约85.8%，是本轮实测主瓶颈。后续优先增加内容hash解析缓存、短PDF快速路径、受限页级并发和预热，不能盲目提高并发压垮RAG服务器。
+- 全量Maven在补充分页防护测试前实际执行441项：427通过、0个断言失败、14个error。14项仍为仓库既有手工示例/环境测试：8类Agent/LLM/Tool演示缺少`API_KEY`，以及旧Chat/App测试缺少可信租户或目标Bean；它们不位于本轮修改文件。随后本轮相关定向套件以最终71/71通过复核，但未重复浪费资源运行已知由相同14项环境测试阻断的全量套件，未将全量结果伪报为全绿。
+- 明确保留的后续边界：DOCX真实排版页码需要受控渲染器；OMML公式尚不能保证语义LaTeX；图片没有VLM理解；复杂跨页表格和杂志式多栏需扩大结构金标；当前是显式版本化近似Tokenizer；`NEEDS_REVIEW`已有后端报告和激活屏障，但管理员逐块对照、修正、重建的UI/API尚未实现。上述限制及下一阶段指标已写入闭环文档，不在本轮伪装为完成。

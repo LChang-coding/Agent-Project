@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 
 /** RAG原件与解析产物的服务端对象键范围契约。 */
 public final class RagObjectStorageScope {
@@ -28,6 +29,51 @@ public final class RagObjectStorageScope {
     public static String parsedObjectKey(String tenantId, String knowledgeBaseId,
                                          String documentId, String versionId) {
         return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId) + "parsed/normalized.md";
+    }
+
+    /** Docling或本地格式解析器的原始结构化响应。 */
+    public static String parserOutputObjectKey(String tenantId, String knowledgeBaseId,
+                                               String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
+                + "parsed/parser-output.json";
+    }
+
+    /** 预处理主事实源：版本化Canonical Document IR。 */
+    public static String documentIrObjectKey(String tenantId, String knowledgeBaseId,
+                                             String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
+                + "ir/document-ir-v1.json";
+    }
+
+    /** 仅用于展示和兼容调试的规范化Markdown。 */
+    public static String normalizedMarkdownObjectKey(String tenantId, String knowledgeBaseId,
+                                                     String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
+                + "normalized/normalized.md";
+    }
+
+    /** 解析与清洗质量报告。 */
+    public static String qualityReportObjectKey(String tenantId, String knowledgeBaseId,
+                                                String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
+                + "quality/quality-report.json";
+    }
+
+    /** 可复算的分块清单。 */
+    public static String chunkManifestObjectKey(String tenantId, String knowledgeBaseId,
+                                                String documentId, String versionId) {
+        return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
+                + "chunks/chunk-manifest.json";
+    }
+
+    /** 当前IR预处理版本应存在并在取消/删除时一并清理的全部衍生产物。 */
+    public static List<String> preprocessingArtifactObjectKeys(String tenantId, String knowledgeBaseId,
+                                                               String documentId, String versionId) {
+        return List.of(parserOutputObjectKey(tenantId, knowledgeBaseId, documentId, versionId),
+                documentIrObjectKey(tenantId, knowledgeBaseId, documentId, versionId),
+                normalizedMarkdownObjectKey(tenantId, knowledgeBaseId, documentId, versionId),
+                qualityReportObjectKey(tenantId, knowledgeBaseId, documentId, versionId),
+                chunkManifestObjectKey(tenantId, knowledgeBaseId, documentId, versionId));
     }
 
     public static boolean containsVersionObject(String objectKey, String tenantId, String knowledgeBaseId,

@@ -81,12 +81,12 @@ public class DoclingDocumentParserAdapterProtocolTest {
         ParsedDocument result = adapter.parse(command(path, "knowledge.md", "text/markdown", false));
 
         Assert.assertEquals("前言\n# 产品\n产品正文\n## 限制\n限制正文", result.normalizedMarkdown());
-        Assert.assertEquals("local-markdown-java17", result.parserVersion());
+        Assert.assertEquals(MarkdownAstDocumentParser.PARSER_REVISION, result.parserVersion());
         Assert.assertEquals(3, result.sections().size());
         Assert.assertEquals("", result.sections().get(0).headingPath());
         Assert.assertEquals("产品", result.sections().get(1).headingPath());
         Assert.assertEquals("产品 / 限制", result.sections().get(2).headingPath());
-        Assert.assertEquals("local", result.metadata().get("parser"));
+        Assert.assertEquals(MarkdownAstDocumentParser.PARSER_NAME, result.metadata().get("parser"));
         Assert.assertTrue(requests.isEmpty());
     }
 

@@ -103,6 +103,87 @@ public class QdrantVectorStoreAdapterTest {
     }
 
     @Test
+    public void shouldScrollAllVersionPointSnapshotsWithTrustedScopeAndHashes() throws Exception {
+        AtomicInteger scrolls = new AtomicInteger();
+        String firstHash = "a".repeat(64);
+        String secondHash = "b".repeat(64);
+        try (Fixture fixture = fixture(exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, schema(true));
+                return;
+            }
+            if (scrolls.getAndIncrement() == 0) {
+                respond(exchange, 200, scrollResponse("point-1", "chunk-1", firstHash,
+                        "\"cursor-2\""));
+            } else {
+                respond(exchange, 200, scrollResponse("point-2", "chunk-2", secondHash,
+                        "null"));
+            }
+        })) {
+            List<VectorStorePort.VectorPointSnapshot> snapshots =
+                    fixture.adapter.listVersionPointSnapshots("tenant-a", "version-1");
+
+            Assert.assertEquals(List.of(
+                    new VectorStorePort.VectorPointSnapshot("point-1", "chunk-1", firstHash),
+                    new VectorStorePort.VectorPointSnapshot("point-2", "chunk-2", secondHash)),
+                    snapshots);
+            Assert.assertEquals(3, fixture.requests.size());
+            JsonNode first = fixture.requests.get(1).body();
+            JsonNode second = fixture.requests.get(2).body();
+            assertTenantVersionFilter(first.path("filter"));
+            Assert.assertTrue(first.path("with_payload").asBoolean());
+            Assert.assertFalse(first.path("with_vector").asBoolean());
+            Assert.assertFalse(first.has("offset"));
+            Assert.assertEquals("cursor-2", second.path("offset").asText());
+        }
+    }
+
+    @Test
+    public void shouldRejectOutOfScopeVersionPointSnapshot() throws Exception {
+        try (Fixture fixture = fixture(exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, schema(true));
+                return;
+            }
+            respond(exchange, 200,
+                    "{\"status\":\"ok\",\"result\":{\"points\":[{\"payload\":{"
+                            + "\"tenant_id\":\"tenant-b\",\"version_id\":\"version-1\","
+                            + "\"point_id\":\"point-1\",\"chunk_id\":\"chunk-1\","
+                            + "\"content_hash\":\"" + "a".repeat(64) + "\"}}],"
+                            + "\"next_page_offset\":null}}");
+        })) {
+            try {
+                fixture.adapter.listVersionPointSnapshots("tenant-a", "version-1");
+                Assert.fail("预期拒绝越租户的版本点快照");
+            } catch (AppException error) {
+                Assert.assertEquals("RAG_QDRANT_SCOPE_VIOLATION", error.getCode());
+            }
+        }
+    }
+
+    @Test
+    public void shouldRejectRepeatedScrollCursorInsteadOfLoopingForever() throws Exception {
+        AtomicInteger scrolls = new AtomicInteger();
+        try (Fixture fixture = fixture(exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, 200, schema(true));
+                return;
+            }
+            int page = scrolls.getAndIncrement();
+            respond(exchange, 200, scrollResponse("point-" + page, "chunk-" + page,
+                    "a".repeat(64), "\"same-cursor\""));
+        })) {
+            try {
+                fixture.adapter.listVersionPointSnapshots("tenant-a", "version-1");
+                Assert.fail("预期拒绝重复分页游标");
+            } catch (AppException error) {
+                Assert.assertEquals("RAG_QDRANT_RESPONSE_INVALID", error.getCode());
+            }
+            Assert.assertEquals(2, scrolls.get());
+        }
+    }
+
+    @Test
     public void shouldUseHybridQueryPrefetchRrfAndRejectOutOfScopeResponse() throws Exception {
         AtomicInteger searches = new AtomicInteger();
         try (Fixture fixture = fixture(exchange -> {
@@ -297,6 +378,13 @@ public class QdrantVectorStoreAdapterTest {
                 + "\"version\":1,\"score\":0.91,\"payload\":{\"tenant_id\":\"" + tenant + "\","
                 + "\"kb_id\":\"kb-1\",\"document_id\":\"doc-1\",\"version_id\":\"version-1\","
                 + "\"generation\":4,\"chunk_id\":\"chunk-1\",\"point_id\":\"business-point-1\"}}]}}";
+    }
+    private String scrollResponse(String pointId, String chunkId, String contentHash, String nextOffset) {
+        return "{\"status\":\"ok\",\"result\":{\"points\":[{\"payload\":{"
+                + "\"tenant_id\":\"tenant-a\",\"version_id\":\"version-1\","
+                + "\"point_id\":\"" + pointId + "\",\"chunk_id\":\"" + chunkId + "\","
+                + "\"content_hash\":\"" + contentHash + "\"}}],"
+                + "\"next_page_offset\":" + nextOffset + "}}";
     }
     private void respond(HttpExchange exchange, int status, String body) throws java.io.IOException {
         byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);

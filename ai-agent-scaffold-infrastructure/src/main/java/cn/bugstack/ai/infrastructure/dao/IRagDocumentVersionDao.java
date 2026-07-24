@@ -49,6 +49,7 @@ public interface IRagDocumentVersionDao {
                                      @Param("parsedObjectKey") String parsedObjectKey,
                                      @Param("parsedContentHash") String parsedContentHash,
                                      @Param("parsedSizeBytes") long parsedSizeBytes,
+                                     @Param("metadata") String metadata,
                                      @Param("indexedAt") LocalDateTime indexedAt);
 
     /** 取消或失败时关闭未激活版本。 */

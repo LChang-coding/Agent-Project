@@ -10,6 +10,9 @@ import cn.bugstack.ai.domain.rag.model.entity.RagDocumentEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagDocumentVersionEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagIngestJobEntity;
 import cn.bugstack.ai.domain.rag.model.entity.RagKnowledgeBaseEntity;
+import cn.bugstack.ai.domain.rag.model.document.DocumentIr;
+import cn.bugstack.ai.domain.rag.model.document.DocumentParseQualityReport;
+import cn.bugstack.ai.domain.rag.model.document.DocumentQualityDisposition;
 import cn.bugstack.ai.domain.rag.model.valobj.RagDocumentVersionStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIndexActivation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestCheckpoint;
@@ -17,8 +20,10 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
-import cn.bugstack.ai.domain.rag.service.StructuredRagChunker;
 import cn.bugstack.ai.domain.rag.service.DeterministicSparseEncoder;
+import cn.bugstack.ai.domain.rag.service.DocumentIrChunker;
+import cn.bugstack.ai.domain.rag.service.DocumentIrCleaner;
+import cn.bugstack.ai.domain.rag.service.DocumentParseQualityEvaluator;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadCommandEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageDownloadResultEntity;
 import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageFileCommandEntity;
@@ -28,6 +33,7 @@ import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import cn.bugstack.ai.types.observability.TraceContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,9 +49,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -71,7 +79,10 @@ public class RagIngestWorker {
     private final SparseEncoderPort sparseEncoder;
     private final VectorStorePort vectorStore;
     private final RagProperties properties;
-    private final StructuredRagChunker chunker = new StructuredRagChunker();
+    private final DocumentIrChunker chunker = new DocumentIrChunker();
+    private final DocumentIrCleaner cleaner = DocumentIrCleaner.standard();
+    private final DocumentParseQualityEvaluator qualityEvaluator = DocumentParseQualityEvaluator.standard();
+    private final ObjectMapper objectMapper;
     private final RagIngestErrorClassifier errorClassifier = new RagIngestErrorClassifier();
     private final Clock clock;
     private final ScheduledExecutorService heartbeatExecutor;
@@ -80,9 +91,10 @@ public class RagIngestWorker {
     public RagIngestWorker(IRagRepository repository, ObjectStorageService objectStorageService,
                            RagDocumentParserPort parser, EmbeddingPort embedding,
                            SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,
-                           RagProperties properties) {
+                           RagProperties properties, ObjectMapper objectMapper) {
         this(repository, objectStorageService, parser, embedding, sparseEncoder, vectorStore,
-                properties, Clock.systemUTC(), Executors.newSingleThreadScheduledExecutor(runnable -> {
+                properties, objectMapper, Clock.systemUTC(),
+                Executors.newSingleThreadScheduledExecutor(runnable -> {
                     Thread thread = new Thread(runnable, "rag-ingest-heartbeat");
                     thread.setDaemon(true);
                     return thread;
@@ -93,6 +105,15 @@ public class RagIngestWorker {
                     RagDocumentParserPort parser, EmbeddingPort embedding,
                     SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,
                     RagProperties properties, Clock clock, ScheduledExecutorService heartbeatExecutor) {
+        this(repository, objectStorageService, parser, embedding, sparseEncoder, vectorStore,
+                properties, new ObjectMapper().findAndRegisterModules(), clock, heartbeatExecutor);
+    }
+
+    RagIngestWorker(IRagRepository repository, ObjectStorageService objectStorageService,
+                    RagDocumentParserPort parser, EmbeddingPort embedding,
+                    SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,
+                    RagProperties properties, ObjectMapper objectMapper, Clock clock,
+                    ScheduledExecutorService heartbeatExecutor) {
         this.repository = repository;
         this.objectStorageService = objectStorageService;
         this.parser = parser;
@@ -100,6 +121,7 @@ public class RagIngestWorker {
         this.sparseEncoder = sparseEncoder;
         this.vectorStore = vectorStore;
         this.properties = properties;
+        this.objectMapper = objectMapper;
         this.clock = clock;
         this.heartbeatExecutor = heartbeatExecutor;
     }
@@ -164,12 +186,22 @@ public class RagIngestWorker {
                     job.checkpoint().processedChunks(), job.checkpoint().totalChunks(),
                     job.checkpoint().embeddingBatchIndex(), job.checkpoint().vectorUpsertIndex()));
         }
-        if (job.checkpoint().stage() != RagIngestStage.INDEXING) {
+        if (job.checkpoint().stage() == RagIngestStage.INDEXING) {
+            job = indexBatches(job, children, leaseOwner, heartbeat);
+        } else if (job.checkpoint().stage() != RagIngestStage.VERIFYING) {
             throw new AppException("RAG_INGEST_STAGE_INVALID", "摄取任务不在可恢复的索引阶段");
         }
-        job = indexBatches(job, children, leaseOwner, heartbeat);
+        verifyAndActivate(job, children, leaseOwner, heartbeat);
+    }
 
-        job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+    /**
+     * 精确核验索引快照并执行可重入激活。
+     * <p>任务已经推进到VERIFYING后发生进程退出时，重试只重复校验和CAS激活，不重新解析、分块或写向量。</p>
+     */
+    private void verifyAndActivate(RagIngestJobEntity initial, List<RagChunkEntity> children,
+                                   String leaseOwner, LeaseHeartbeat heartbeat) {
+        RagIngestJobEntity job = barrier(initial.tenantId(), initial.jobId(), leaseOwner,
+                initial.fencingToken(), heartbeat, true);
         long verifyStarted = System.nanoTime();
         stageStarted(job, "index_verify", "开始核对向量索引与数据库分块数量", children.size());
         long vectorCount = vectorStore.countVersion(job.tenantId(), job.versionId());
@@ -179,10 +211,23 @@ public class RagIngestWorker {
         if (vectorCount != children.size() || databaseCount != children.size()) {
             throw new AppException("RAG_INGEST_INDEX_COUNT_MISMATCH", "向量索引与分块快照数量不一致");
         }
+        List<VectorStorePort.VectorPointSnapshot> actualPoints =
+                vectorStore.listVersionPointSnapshots(job.tenantId(), job.versionId());
+        Set<VectorStorePort.VectorPointSnapshot> expectedPoints = children.stream()
+                .map(chunk -> new VectorStorePort.VectorPointSnapshot(
+                        chunk.vectorPointId(), chunk.chunkId(), chunk.contentHash()))
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (expectedPoints.size() != children.size() || actualPoints.size() != children.size()
+                || !expectedPoints.equals(new LinkedHashSet<>(actualPoints))) {
+            throw new AppException("RAG_INGEST_INDEX_SNAPSHOT_MISMATCH",
+                    "向量索引point_id、chunk_id或content_hash与数据库分块不一致");
+        }
         stageCompleted(job, "index_verify", "向量索引与数据库分块数量核对完成",
                 elapsedNanos(verifyStarted), children.size(), (int) databaseCount);
-        job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.VERIFYING,
-                children.size(), children.size(), job.checkpoint().embeddingBatchIndex(), children.size()));
+        if (job.checkpoint().stage() != RagIngestStage.VERIFYING) {
+            job = advance(job, leaseOwner, carry(job.checkpoint(), RagIngestStage.VERIFYING,
+                    children.size(), children.size(), job.checkpoint().embeddingBatchIndex(), children.size()));
+        }
         activate(job, leaseOwner, heartbeat);
     }
 
@@ -238,6 +283,16 @@ public class RagIngestWorker {
                         version.parsedObjectKey(), "parsed");
                 job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
                         version.parsedObjectBucket(), version.parsedObjectKey());
+            }
+            Set<String> artifacts = new LinkedHashSet<>(
+                    RagObjectStorageScope.preprocessingArtifactObjectKeys(job.tenantId(),
+                            job.knowledgeBaseId(), job.documentId(), version.versionId()));
+            artifacts.remove(version.parsedObjectKey());
+            for (String artifact : artifacts) {
+                validateDeleteObjectLocation(job, version, objectStorageService.ragBucket(),
+                        artifact, "preprocessing");
+                job = deleteObjectWithBarrier(job, leaseOwner, heartbeat,
+                        objectStorageService.ragBucket(), artifact);
             }
             stageCompleted(job, "delete_objects", "当前版本原件与解析产物删除完成",
                     elapsedNanos(sourceStarted), 1, 1);
@@ -316,7 +371,7 @@ public class RagIngestWorker {
     private void startVersionProcessing(RagDocumentVersionEntity version) {
         if (version.status() == RagDocumentVersionStatus.PROCESSING) return;
         RagDocumentVersionEntity processing = version.processing(properties.getDocling().getParserRevision(),
-                StructuredRagChunker.CHUNKER_VERSION, properties.getEmbedding().getModelRevision());
+                DocumentIrChunker.CHUNKER_VERSION, properties.getEmbedding().getModelRevision());
         if (repository.updateDocumentVersion(version.tenantId(), processing, version.revision()) != 1) {
             throw new AppException("RAG_INGEST_VERSION_CONFLICT", "文档版本处理状态已变更");
         }
@@ -344,53 +399,44 @@ public class RagIngestWorker {
         }
 
         try (RagIngestWorkspace workspace = RagIngestWorkspace.create()) {
-            job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
-            long downloadStarted = System.nanoTime();
-            stageStarted(job, "source_download", "开始从对象存储下载不可变文档版本", 1);
-            ObjectStorageDownloadResultEntity download = objectStorageService.downloadToFile(
-                    ObjectStorageDownloadCommandEntity.builder()
-                            .bucket(scope.version().objectBucket())
-                            .objectKey(scope.version().objectKey())
-                            .targetRoot(workspace.root())
-                            .relativeTargetPath(workspace.sourceRelativePath())
-                            .maxBytes(Math.min(MAX_DOCUMENT_BYTES, scope.version().sizeBytes()))
-                            .build());
-            verifyDownload(scope.version(), download);
-            stageCompleted(job, "source_download", "文档下载及摘要完整性校验完成",
-                    elapsedNanos(downloadStarted), 1, 1);
-            job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
-            long parseStarted = System.nanoTime();
-            stageStarted(job, "document_parse", "开始解析文档结构与标准化文本", 1);
-            RagDocumentParserPort.ParsedDocument parsed = parser.parse(new RagDocumentParserPort.ParseCommand(
-                    job.tenantId(), job.jobId(), job.versionId(), scope.version().fileName(),
-                    scope.version().mimeType(), download.getTargetPath(), download.getSizeBytes(), false));
-            stageCompleted(job, "document_parse", "文档结构与标准化文本解析完成",
-                    elapsedNanos(parseStarted), 1, parsed.pageCount());
-            job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+            PreprocessedDocument preprocessed;
             if (job.checkpoint().stage() == RagIngestStage.PARSING) {
+                preprocessed = preprocess(job, scope, workspace, leaseOwner, heartbeat);
                 long artifactStarted = System.nanoTime();
-                stageStarted(job, "parsed_artifact_persist", "开始保存解析产物", 1);
-                ObjectStorageResultEntity parsedObject = persistParsedArtifact(job, parsed, workspace);
-                stageCompleted(job, "parsed_artifact_persist", "解析产物保存完成",
-                        elapsedNanos(artifactStarted), 1, 1);
+                stageStarted(job, "preprocessing_artifact_persist", "开始保存解析、IR、展示和质量产物", 4);
+                ArtifactBundle artifacts = persistPreprocessingArtifacts(job, preprocessed, workspace);
+                stageCompleted(job, "preprocessing_artifact_persist", "结构化预处理产物保存完成",
+                        elapsedNanos(artifactStarted), 4, 4);
                 job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
-                int characterCount = parsed.normalizedMarkdown().codePointCount(
-                        0, parsed.normalizedMarkdown().length());
+                int characterCount = preprocessed.documentIr().blocks().stream()
+                        .filter(DocumentIr.Block::retrievable).map(DocumentIr.Block::normalizedText)
+                        .mapToInt(value -> value.codePointCount(0, value.length())).sum();
                 job = advance(job, leaseOwner, new RagIngestCheckpoint(RagIngestStage.CHUNKING,
-                        0, 0, 0, 0, parsed.pageCount(), characterCount,
-                        parsedObject.getBucket(), parsedObject.getObjectKey(), parsedObject.getSha256(),
-                        parsedObject.getSizeBytes()));
+                        0, 0, 0, 0, preprocessed.parsed().pageCount(), characterCount,
+                        artifacts.primary().getBucket(), artifacts.primary().getObjectKey(),
+                        artifacts.primary().getSha256(), artifacts.primary().getSizeBytes()));
+                // 质量不足也必须先留下可审计IR和质量报告，再停止索引副作用。
+                enforceQualityGate(preprocessed.quality());
+            } else {
+                long restoreStarted = System.nanoTime();
+                stageStarted(job, "preprocessing_artifact_restore",
+                        "开始从不可变IR产物恢复分块输入", 1);
+                preprocessed = restorePreprocessedDocument(job);
+                stageCompleted(job, "preprocessing_artifact_restore",
+                        "不可变IR产物恢复并校验完成", elapsedNanos(restoreStarted), 1, 1);
             }
             long chunkStarted = System.nanoTime();
-            stageStarted(job, "structured_chunking", "开始按标题、页面和父子结构切分文档", 1);
-            StructuredRagChunker.ChunkingResult result = chunker.chunk(job.versionId(), parsed, chunkConfig());
+            stageStarted(job, "document_ir_chunking", "开始按IR标题、表格、页面和父子关系切分文档", 1);
+            DocumentIrChunker.ChunkingResult result = chunker.chunk(job.versionId(),
+                    preprocessed.documentIr(), chunkConfig());
             List<RagChunkEntity> records = toChunkEntities(scope, result.chunks());
             List<RagChunkEntity> children = records.stream().filter(this::isChild)
                     .sorted(Comparator.comparingInt(RagChunkEntity::chunkIndex)).toList();
             if (children.isEmpty()) {
                 throw new AppException("RAG_INGEST_NO_CHILD_CHUNKS", "文档未产生可检索分块");
             }
-            stageCompleted(job, "structured_chunking", "文档结构化切分完成",
+            persistChunkManifest(job, result, workspace);
+            stageCompleted(job, "document_ir_chunking", "Document IR结构感知切分完成",
                     elapsedNanos(chunkStarted), 1, records.size());
             long persistStarted = System.nanoTime();
             stageStarted(job, "chunk_persist", "开始写入父子分块快照", records.size());
@@ -431,14 +477,14 @@ public class RagIngestWorker {
             stageStarted(job, "dense_embedding", "开始生成Dense向量", batch.size());
             EmbeddingPort.EmbeddingResult dense = embedding.embed(new EmbeddingPort.EmbeddingCommand(
                     job.tenantId(), job.jobId(), EmbeddingPort.EmbeddingInputType.PASSAGE,
-                    batch.stream().map(RagChunkEntity::content).toList()));
+                    batch.stream().map(this::embeddingText).toList()));
             stageCompleted(job, "dense_embedding", "Dense向量生成完成",
                     elapsedNanos(denseStarted), batch.size(), dense.vectors().size());
             long sparseStarted = System.nanoTime();
             stageStarted(job, "sparse_encoding", "开始生成Sparse向量", batch.size());
             SparseEncoderPort.SparseEncodingResult sparse = sparseEncoder.encode(
                     new SparseEncoderPort.SparseEncodingCommand(job.tenantId(), job.jobId(),
-                            batch.stream().map(RagChunkEntity::content).toList(),
+                            batch.stream().map(this::embeddingText).toList(),
                             DeterministicSparseEncoder.VOCABULARY_REVISION));
             stageCompleted(job, "sparse_encoding", "Sparse向量生成完成",
                     elapsedNanos(sparseStarted), batch.size(), sparse.vectors().size());
@@ -467,6 +513,13 @@ public class RagIngestWorker {
 
     private void activate(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        long metadataStarted = System.nanoTime();
+        stageStarted(job, "activation_metadata_restore",
+                "开始恢复并校验激活所需的IR质量元数据", 1);
+        PreprocessedDocument preprocessed = restorePreprocessedDocument(job);
+        stageCompleted(job, "activation_metadata_restore",
+                "激活所需的IR质量元数据恢复完成", elapsedNanos(metadataStarted), 1, 1);
+        job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
         long activationStarted = System.nanoTime();
         stageStarted(job, "generation_activate", "开始原子激活文档版本与知识库Generation", 1);
         Scope current = loadScope(job);
@@ -479,7 +532,17 @@ public class RagIngestWorker {
                         job.checkpoint().pageCount(), job.checkpoint().characterCount(),
                         job.checkpoint().totalChunks(), job.checkpoint().parsedObjectBucket(),
                         job.checkpoint().parsedObjectKey(), job.checkpoint().parsedContentHash(),
-                        job.checkpoint().parsedSizeBytes()), clock.instant());
+                        job.checkpoint().parsedSizeBytes(),
+                        preprocessed.documentIr().parserName(),
+                        preprocessed.documentIr().parserRevision(),
+                        preprocessed.documentIr().schemaVersion(),
+                        preprocessed.quality().disposition().name(),
+                        preprocessed.quality().overall(),
+                        RagObjectStorageScope.qualityReportObjectKey(job.tenantId(),
+                                job.knowledgeBaseId(), job.documentId(), job.versionId()),
+                        RagObjectStorageScope.chunkManifestObjectKey(job.tenantId(),
+                                job.knowledgeBaseId(), job.documentId(), job.versionId()),
+                        DocumentIrChunker.TOKENIZER_VERSION), clock.instant());
         stageCompleted(job, "generation_activate", "文档版本与知识库Generation已原子激活",
                 elapsedNanos(activationStarted), 1, 1);
         AiLog.info(AiLog.rag().ingestCompleted(job.tenantId(), job.jobId(), job.documentId(),
@@ -683,18 +746,139 @@ public class RagIngestWorker {
         }
     }
 
+    private PreprocessedDocument preprocess(RagIngestJobEntity initial, Scope scope,
+                                            RagIngestWorkspace workspace, String leaseOwner,
+                                            LeaseHeartbeat heartbeat) {
+        RagIngestJobEntity job = barrier(initial.tenantId(), initial.jobId(), leaseOwner,
+                initial.fencingToken(), heartbeat, true);
+        long downloadStarted = System.nanoTime();
+        stageStarted(job, "source_download", "开始从对象存储下载不可变文档版本", 1);
+        ObjectStorageDownloadResultEntity download = objectStorageService.downloadToFile(
+                ObjectStorageDownloadCommandEntity.builder()
+                        .bucket(scope.version().objectBucket())
+                        .objectKey(scope.version().objectKey())
+                        .targetRoot(workspace.root())
+                        .relativeTargetPath(workspace.sourceRelativePath())
+                        .maxBytes(Math.min(MAX_DOCUMENT_BYTES, scope.version().sizeBytes()))
+                        .build());
+        verifyDownload(scope.version(), download);
+        stageCompleted(job, "source_download", "文档下载及摘要完整性校验完成",
+                elapsedNanos(downloadStarted), 1, 1);
+        job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        RagDocumentParserPort.ParseCommand command = new RagDocumentParserPort.ParseCommand(
+                job.tenantId(), job.jobId(), job.versionId(), scope.version().fileName(),
+                scope.version().mimeType(), workspace.root(), download.getTargetPath(),
+                download.getSizeBytes(), RagDocumentParserPort.OcrMode.AUTO);
+        long parseStarted = System.nanoTime();
+        stageStarted(job, "document_parse", "开始执行格式专用结构化解析", 1);
+        RagDocumentParserPort.ParsedDocument parsed = parser.parse(command);
+        stageCompleted(job, "document_parse", "格式专用结构化解析完成",
+                elapsedNanos(parseStarted), 1, parsed.documentIr().blocks().size());
+        job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
+        PreprocessedDocument primary = cleanAndEvaluate(job, parsed);
+        if (requiresForcedOcr(scope.version().mimeType(), primary)
+                && !parsed.ocrApplied()) {
+            long ocrStarted = System.nanoTime();
+            stageStarted(job, "document_ocr_fallback", "主解析质量不足，开始强制OCR兜底解析", 1);
+            RagDocumentParserPort.ParsedDocument ocrParsed = parser.parse(
+                    new RagDocumentParserPort.ParseCommand(command.tenantId(), command.jobId(),
+                            command.versionId(), command.fileName(), command.mimeType(),
+                            command.workspaceRoot(), command.contentPath(), command.contentLength(),
+                            RagDocumentParserPort.OcrMode.FORCED));
+            PreprocessedDocument fallback = cleanAndEvaluate(job, ocrParsed);
+            stageCompleted(job, "document_ocr_fallback", "强制OCR兜底解析与质量比较完成",
+                    elapsedNanos(ocrStarted), 1, fallback.documentIr().blocks().size());
+            if (fallback.quality().overall() > primary.quality().overall()) primary = fallback;
+        }
+        return primary;
+    }
+
+    private PreprocessedDocument cleanAndEvaluate(RagIngestJobEntity job,
+                                                  RagDocumentParserPort.ParsedDocument parsed) {
+        long cleanStarted = System.nanoTime();
+        stageStarted(job, "document_cleaning", "开始执行可逆Cleaner Chain", parsed.documentIr().blocks().size());
+        DocumentIrCleaner.CleaningResult cleaned = cleaner.cleanWithAudit(parsed.documentIr());
+        for (DocumentIrCleaner.CleaningAudit audit : cleaned.audits()) {
+            stageCompleted(job, "clean_" + audit.cleanerName(),
+                    "清洗步骤完成：" + audit.cleanerName(), audit.costMs(),
+                    audit.inputBlocks(), audit.outputBlocks());
+        }
+        stageCompleted(job, "document_cleaning", "可逆Cleaner Chain执行完成",
+                elapsedNanos(cleanStarted), parsed.documentIr().blocks().size(),
+                cleaned.document().blocks().size());
+        long qualityStarted = System.nanoTime();
+        stageStarted(job, "parse_quality_evaluate", "开始计算解析质量报告", cleaned.document().blocks().size());
+        DocumentParseQualityReport quality = qualityEvaluator.evaluate(cleaned.document());
+        stageCompleted(job, "parse_quality_evaluate",
+                "解析质量评估完成，处置=" + quality.disposition().name(),
+                elapsedNanos(qualityStarted), cleaned.document().blocks().size(),
+                quality.findings().size());
+        return new PreprocessedDocument(parsed, cleaned.document(), cleaned.audits(), quality);
+    }
+
+    private boolean requiresForcedOcr(String mimeType, PreprocessedDocument value) {
+        return mimeType != null && mimeType.toLowerCase(java.util.Locale.ROOT).startsWith("application/pdf")
+                && (value.quality().disposition() == DocumentQualityDisposition.NEEDS_REVIEW
+                || value.quality().disposition() == DocumentQualityDisposition.REJECTED
+                || value.quality().coverage() < 0.70);
+    }
+
+    private void enforceQualityGate(DocumentParseQualityReport quality) {
+        if (quality.disposition() == DocumentQualityDisposition.NEEDS_REVIEW) {
+            throw new AppException("RAG_PARSE_NEEDS_REVIEW", "文档解析质量不足，需要人工复核");
+        }
+        if (quality.disposition() == DocumentQualityDisposition.REJECTED) {
+            throw new AppException("RAG_PARSE_REJECTED", "文档解析质量未达到索引门禁");
+        }
+    }
+
+    private PreprocessedDocument restorePreprocessedDocument(RagIngestJobEntity job) {
+        String expectedKey = RagObjectStorageScope.documentIrObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                job.documentId(), job.versionId());
+        if (!expectedKey.equals(job.checkpoint().parsedObjectKey())) {
+            throw new AppException("RAG_IR_ARTIFACT_SCOPE_MISMATCH", "检查点中的IR产物位置与版本范围不一致");
+        }
+        byte[] bytes = objectStorageService.getObject(job.checkpoint().parsedObjectBucket(),
+                expectedKey, Math.max(1L, properties.getDocling().getMaxResponseBytes()));
+        if (bytes.length != job.checkpoint().parsedSizeBytes()
+                || !sha256(bytes).equals(job.checkpoint().parsedContentHash())) {
+            throw new AppException("RAG_IR_ARTIFACT_INTEGRITY_FAILED", "IR产物长度或摘要与检查点不一致");
+        }
+        try {
+            DocumentIr ir = objectMapper.readValue(bytes, DocumentIr.class);
+            DocumentParseQualityReport quality = qualityEvaluator.evaluate(ir);
+            enforceQualityGate(quality);
+            String display = renderDisplay(ir);
+            RagDocumentParserPort.ParsedDocument parsed = new RagDocumentParserPort.ParsedDocument(
+                    display, List.of(), job.checkpoint().pageCount(), ir.parserRevision(),
+                    ir.metadata(), ir, "", ir.warnings(), ir.flags().contains(DocumentIr.Flag.OCR_TEXT));
+            return new PreprocessedDocument(parsed, ir, List.of(), quality);
+        } catch (AppException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new AppException("RAG_IR_ARTIFACT_INVALID", "IR产物无法反序列化", error);
+        }
+    }
+
     private List<RagChunkEntity> toChunkEntities(Scope scope,
-                                                  List<StructuredRagChunker.StructuredChunk> chunks) {
+                                                  List<DocumentIrChunker.StructuredChunk> chunks) {
         List<RagChunkEntity> result = new ArrayList<>(chunks.size());
-        for (StructuredRagChunker.StructuredChunk chunk : chunks) {
-            boolean child = chunk.level() == StructuredRagChunker.Level.CHILD;
+        for (DocumentIrChunker.StructuredChunk chunk : chunks) {
+            boolean child = chunk.level() == DocumentIrChunker.Level.CHILD;
             Map<String, String> metadata = new LinkedHashMap<>(chunk.metadata());
+            metadata.put("embedding_text", chunk.embeddingText());
+            metadata.put("page_to", Integer.toString(chunk.pageTo()));
+            metadata.put("heading_path", String.join(" / ", chunk.headingPath()));
+            metadata.put("block_ids", json(chunk.blockIds()));
+            metadata.put("source_spans", json(chunk.sourceSpans()));
+            metadata.put("quality_flags", json(chunk.qualityFlags()));
             result.add(new RagChunkEntity(scope.version().tenantId(), scope.document().ownerUserId(),
                     scope.document().visibility(), scope.version().knowledgeBaseId(), scope.version().documentId(),
                     scope.version().versionId(), scope.version().versionNumber(), scope.version().generation(),
                     chunk.chunkId(), chunk.chunkIndex(), chunk.parentChunkId(), chunk.previousChunkId(),
-                    chunk.nextChunkId(), chunk.content(), chunk.tokenCount(), chunk.pageNumber(),
-                    chunk.headingPath(), chunk.contentHash(), child ? chunk.chunkId() : null, metadata));
+                    chunk.nextChunkId(), chunk.displayText(), chunk.tokenCount(), chunk.pageFrom(),
+                    String.join(" / ", chunk.headingPath()), chunk.contentHash(),
+                    child ? chunk.chunkId() : null, metadata));
         }
         return List.copyOf(result);
     }
@@ -703,9 +887,14 @@ public class RagIngestWorker {
         return "child".equals(chunk.metadata().get("chunk_level"));
     }
 
-    private StructuredRagChunker.Config chunkConfig() {
+    private String embeddingText(RagChunkEntity chunk) {
+        String value = chunk.metadata().get("embedding_text");
+        return value == null || value.isBlank() ? chunk.content() : value;
+    }
+
+    private DocumentIrChunker.Config chunkConfig() {
         RagProperties.Worker worker = properties.getWorker();
-        return new StructuredRagChunker.Config(worker.getChildMaxChars(), worker.getChildMaxTokens(),
+        return new DocumentIrChunker.Config(worker.getChildMaxChars(), worker.getChildMaxTokens(),
                 worker.getParentMaxChars(), worker.getParentMaxTokens(), worker.getOverlapChars());
     }
 
@@ -721,34 +910,123 @@ public class RagIngestWorker {
                 source.parsedObjectKey(), source.parsedContentHash(), source.parsedSizeBytes());
     }
 
-    private ObjectStorageResultEntity persistParsedArtifact(RagIngestJobEntity job,
-                                                             RagDocumentParserPort.ParsedDocument parsed,
-                                                             RagIngestWorkspace workspace) {
+    private ArtifactBundle persistPreprocessingArtifacts(RagIngestJobEntity job,
+                                                         PreprocessedDocument value,
+                                                         RagIngestWorkspace workspace) {
         try {
-            Path path = workspace.parsedMarkdownPath();
-            Files.writeString(path, parsed.normalizedMarkdown(), StandardCharsets.UTF_8);
-            return objectStorageService.putFile(ObjectStorageFileCommandEntity.builder()
-                    .bucket(objectStorageService.ragBucket())
-                    .objectKey(RagObjectStorageScope.parsedObjectKey(job.tenantId(), job.knowledgeBaseId(),
-                            job.documentId(), job.versionId()))
-                    .sourcePath(path).sizeBytes(Files.size(path))
-                    .contentType("text/markdown; charset=utf-8").build());
-        } catch (java.io.IOException error) {
-            throw new AppException("RAG_PARSED_ARTIFACT_WRITE_FAILED", "规范化解析产物暂存失败", error);
+            String parserOutput = value.parsed().parserOutputJson().isBlank()
+                    ? json(value.parsed().documentIr()) : value.parsed().parserOutputJson();
+            Files.writeString(workspace.parserOutputPath(), parserOutput, StandardCharsets.UTF_8);
+            Files.writeString(workspace.documentIrPath(), json(value.documentIr()), StandardCharsets.UTF_8);
+            Files.writeString(workspace.normalizedMarkdownPath(), renderNormalizedMarkdown(value.documentIr()),
+                    StandardCharsets.UTF_8);
+            Files.writeString(workspace.qualityReportPath(), json(Map.of(
+                    "report", value.quality(), "cleaningAudits", value.cleaningAudits(),
+                    "parserWarnings", value.parsed().warnings())), StandardCharsets.UTF_8);
+            ObjectStorageResultEntity parserOutputObject = putArtifact(workspace.parserOutputPath(),
+                    RagObjectStorageScope.parserOutputObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()), "application/json");
+            ObjectStorageResultEntity irObject = putArtifact(workspace.documentIrPath(),
+                    RagObjectStorageScope.documentIrObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()), "application/json");
+            ObjectStorageResultEntity markdownObject = putArtifact(workspace.normalizedMarkdownPath(),
+                    RagObjectStorageScope.normalizedMarkdownObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()), "text/markdown; charset=utf-8");
+            ObjectStorageResultEntity qualityObject = putArtifact(workspace.qualityReportPath(),
+                    RagObjectStorageScope.qualityReportObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()), "application/json");
+            return new ArtifactBundle(irObject,
+                    List.of(parserOutputObject, irObject, markdownObject, qualityObject));
+        } catch (Exception error) {
+            if (error instanceof AppException appException) throw appException;
+            throw new AppException("RAG_PREPROCESSING_ARTIFACT_WRITE_FAILED",
+                    "结构化预处理产物暂存失败", error);
+        }
+    }
+
+    private void persistChunkManifest(RagIngestJobEntity job, DocumentIrChunker.ChunkingResult result,
+                                      RagIngestWorkspace workspace) {
+        try {
+            Files.writeString(workspace.chunkManifestPath(), json(Map.of(
+                    "schemaVersion", "1.0", "chunkerVersion", DocumentIrChunker.CHUNKER_VERSION,
+                    "tokenizerVersion", DocumentIrChunker.TOKENIZER_VERSION,
+                    "warnings", result.warnings(), "chunks", result.chunks())), StandardCharsets.UTF_8);
+            putArtifact(workspace.chunkManifestPath(),
+                    RagObjectStorageScope.chunkManifestObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                            job.documentId(), job.versionId()), "application/json");
+        } catch (Exception error) {
+            if (error instanceof AppException appException) throw appException;
+            throw new AppException("RAG_CHUNK_MANIFEST_WRITE_FAILED", "分块清单保存失败", error);
+        }
+    }
+
+    private ObjectStorageResultEntity putArtifact(Path path, String objectKey, String contentType)
+            throws java.io.IOException {
+        return objectStorageService.putFile(ObjectStorageFileCommandEntity.builder()
+                .bucket(objectStorageService.ragBucket()).objectKey(objectKey)
+                .sourcePath(path).sizeBytes(Files.size(path)).contentType(contentType).build());
+    }
+
+    private String json(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception error) {
+            throw new AppException("RAG_PREPROCESSING_JSON_FAILED", "预处理结构化产物序列化失败", error);
+        }
+    }
+
+    private String renderDisplay(DocumentIr ir) {
+        return ir.blocks().stream().filter(DocumentIr.Block::retrievable)
+                .map(DocumentIr.Block::normalizedText).filter(value -> !value.isBlank())
+                .collect(java.util.stream.Collectors.joining("\n\n"));
+    }
+
+    private String renderNormalizedMarkdown(DocumentIr ir) {
+        StringBuilder result = new StringBuilder();
+        for (DocumentIr.Block block : ir.blocks()) {
+            if (!block.retrievable() || block.normalizedText().isBlank()) continue;
+            if (!result.isEmpty()) result.append("\n\n");
+            if (block.type() == DocumentIr.BlockType.TITLE) {
+                result.append("# ");
+            } else if (block.type() == DocumentIr.BlockType.HEADING) {
+                result.append("## ");
+            } else if (block.type() == DocumentIr.BlockType.LIST_ITEM) {
+                result.append("- ");
+            } else if (block.type() == DocumentIr.BlockType.CODE) {
+                result.append("```\n");
+            }
+            result.append(block.normalizedText());
+            if (block.type() == DocumentIr.BlockType.CODE) result.append("\n```");
+        }
+        return result.toString().strip();
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest
+                    .getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("JVM缺少SHA-256", error);
         }
     }
 
     private RagIngestJobEntity deleteParsedArtifactWithBarrier(RagIngestJobEntity job, String leaseOwner,
                                                                  LeaseHeartbeat heartbeat) {
-        String key = RagObjectStorageScope.parsedObjectKey(job.tenantId(), job.knowledgeBaseId(),
-                job.documentId(), job.versionId());
-        RagIngestJobEntity current = cancellationBarrier(job.tenantId(), job.jobId(), leaseOwner,
-                job.fencingToken(), heartbeat);
-        objectStorageService.deleteObject(objectStorageService.ragBucket(), key);
-        current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
-                current.fencingToken(), heartbeat);
-        if (objectStorageService.objectExists(objectStorageService.ragBucket(), key)) {
-            throw new AppException("RAG_DELETE_OBJECT_REMAINS", "解析产物删除后仍然存在");
+        Set<String> keys = new LinkedHashSet<>();
+        keys.add(RagObjectStorageScope.parsedObjectKey(job.tenantId(), job.knowledgeBaseId(),
+                job.documentId(), job.versionId()));
+        keys.addAll(RagObjectStorageScope.preprocessingArtifactObjectKeys(job.tenantId(),
+                job.knowledgeBaseId(), job.documentId(), job.versionId()));
+        RagIngestJobEntity current = job;
+        for (String key : keys) {
+            current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
+                    current.fencingToken(), heartbeat);
+            objectStorageService.deleteObject(objectStorageService.ragBucket(), key);
+            current = cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
+                    current.fencingToken(), heartbeat);
+            if (objectStorageService.objectExists(objectStorageService.ragBucket(), key)) {
+                throw new AppException("RAG_DELETE_OBJECT_REMAINS", "预处理产物删除后仍然存在");
+            }
         }
         return cancellationBarrier(current.tenantId(), current.jobId(), leaseOwner,
                 current.fencingToken(), heartbeat);
@@ -807,6 +1085,22 @@ public class RagIngestWorker {
     private record DeleteScope(RagDocumentEntity document, List<RagDocumentVersionEntity> versions) {
         private DeleteScope {
             versions = List.copyOf(versions);
+        }
+    }
+
+    private record PreprocessedDocument(RagDocumentParserPort.ParsedDocument parsed,
+                                        DocumentIr documentIr,
+                                        List<DocumentIrCleaner.CleaningAudit> cleaningAudits,
+                                        DocumentParseQualityReport quality) {
+        private PreprocessedDocument {
+            cleaningAudits = List.copyOf(cleaningAudits);
+        }
+    }
+
+    private record ArtifactBundle(ObjectStorageResultEntity primary,
+                                  List<ObjectStorageResultEntity> artifacts) {
+        private ArtifactBundle {
+            artifacts = List.copyOf(artifacts);
         }
     }
 

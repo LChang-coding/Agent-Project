@@ -97,8 +97,7 @@
         UPDATE rag_document_version
         SET parsed_bucket = #{parsedBucket}, parsed_object_key = #{parsedObjectKey},
             page_count = #{pageCount}, character_count = #{characterCount}, chunk_count = #{chunkCount},
-            metadata = JSON_OBJECT('parsedContentHash', #{parsedContentHash},
-                                   'parsedSizeBytes', CAST(#{parsedSizeBytes} AS CHAR)),
+            metadata = CAST(#{metadata} AS JSON),
             status = 'ready', indexed_at = #{indexedAt}, row_version = row_version + 1
         WHERE tenant_id = #{tenantId} AND kb_id = #{knowledgeBaseId}
           AND document_id = #{documentId} AND version_id = #{versionId}
