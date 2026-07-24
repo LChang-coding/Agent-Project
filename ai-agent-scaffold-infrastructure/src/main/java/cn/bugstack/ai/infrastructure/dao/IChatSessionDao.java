@@ -91,6 +91,12 @@ public interface IChatSessionDao {
                               @Param("sessionId") String sessionId,
                               @Param("lastMessageTime") LocalDateTime lastMessageTime);
 
+    /** 按可信会话范围更新RAG开关。 */
+    int updateRagEnabled(@Param("tenantId") String tenantId,
+                         @Param("userId") String userId,
+                         @Param("sessionId") String sessionId,
+                         @Param("enabled") boolean enabled);
+
     /**
      * 原子推进上下文版本。
      *

@@ -139,6 +139,7 @@ export interface LocalChatSession {
   title: string;
   updatedAt: string;
   contextRevision?: number;
+  ragEnabled?: boolean;
 }
 
 export interface SessionListPage {
@@ -154,6 +155,7 @@ export interface SessionListPage {
     status: string;
     lastMessageTime: string;
     contextRevision: number;
+    ragEnabled: boolean;
   }>;
   nextCursor?: string;
   hasMore: boolean;
@@ -178,6 +180,15 @@ export interface SessionMessagePage {
 export interface SessionDeleteResponse {
   sessionId: string;
   contextRevision: number;
+}
+
+export interface SessionRagSetting {
+  sessionId: string;
+  enabled: boolean;
+  bindingConfigured: boolean;
+  targetType: 'AGENT' | 'WORKFLOW';
+  targetId: string;
+  message: string;
 }
 
 export interface StreamHandlers {

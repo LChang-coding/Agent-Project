@@ -138,6 +138,12 @@
         <appender-ref ref="ASYNC_OBSERVABILITY"/>
     </logger>
 
+    <!-- ADK 默认 LoggingPlugin 会逐片打印英文正文和完整请求，既泄露内容又淹没业务节点。 -->
+    <logger name="com.google.adk.plugins.LoggingPlugin" level="warn"/>
+    <logger name="cn.bugstack.ai.domain.agent.service.armory.matter.plugin.MyTestPlugin" level="warn"/>
+    <!-- Kafka 客户端 INFO 会周期性打印完整配置、心跳和重平衡；异常仍以 WARN/ERROR 保留。 -->
+    <logger name="org.apache.kafka.clients" level="warn"/>
+
     <root level="info">
         <appender-ref ref="CONSOLE"/>
         <!-- 异步日志-INFO -->

@@ -38,21 +38,40 @@ public final class ToolLog {
      * 记录工具调用开始；参数是调用上下文和工具信息；返回日志记录。
      */
     public AiLogRecord callStarted(String tenantId, String userId, String sessionId, String toolType, String toolId, String toolName, String traceId) {
-        return call(AiLogEvent.TOOL_CALL_STARTED, tenantId, userId, sessionId, toolType, toolId, toolName, traceId, null, true);
+        return callStarted(tenantId, userId, sessionId, null, toolType, toolId, toolName, traceId);
+    }
+
+    public AiLogRecord callStarted(String tenantId, String userId, String sessionId, String runId,
+                                   String toolType, String toolId, String toolName, String traceId) {
+        return call(AiLogEvent.TOOL_CALL_STARTED, tenantId, userId, sessionId, runId,
+                toolType, toolId, toolName, traceId, null, true);
     }
 
     /**
      * 记录工具调用成功；参数是调用上下文、工具信息和耗时；返回日志记录。
      */
     public AiLogRecord callSuccess(String tenantId, String userId, String sessionId, String toolType, String toolId, String toolName, String traceId, Long costMs) {
-        return call(AiLogEvent.TOOL_CALL_SUCCESS, tenantId, userId, sessionId, toolType, toolId, toolName, traceId, costMs, true);
+        return callSuccess(tenantId, userId, sessionId, null, toolType, toolId, toolName, traceId, costMs);
+    }
+
+    public AiLogRecord callSuccess(String tenantId, String userId, String sessionId, String runId,
+                                   String toolType, String toolId, String toolName, String traceId, Long costMs) {
+        return call(AiLogEvent.TOOL_CALL_SUCCESS, tenantId, userId, sessionId, runId,
+                toolType, toolId, toolName, traceId, costMs, true);
     }
 
     /**
      * 记录工具调用失败；参数是调用上下文、工具信息、耗时和异常；返回日志记录。
      */
     public AiLogRecord callFailed(String tenantId, String userId, String sessionId, String toolType, String toolId, String toolName, String traceId, Long costMs, Throwable throwable) {
-        return call(AiLogEvent.TOOL_CALL_FAILED, tenantId, userId, sessionId, toolType, toolId, toolName, traceId, costMs, false).error(throwable);
+        return callFailed(tenantId, userId, sessionId, null, toolType, toolId, toolName, traceId, costMs, throwable);
+    }
+
+    public AiLogRecord callFailed(String tenantId, String userId, String sessionId, String runId,
+                                  String toolType, String toolId, String toolName, String traceId,
+                                  Long costMs, Throwable throwable) {
+        return call(AiLogEvent.TOOL_CALL_FAILED, tenantId, userId, sessionId, runId,
+                toolType, toolId, toolName, traceId, costMs, false).error(throwable);
     }
 
     /**
@@ -62,6 +81,7 @@ public final class ToolLog {
                              String tenantId,
                              String userId,
                              String sessionId,
+                             String runId,
                              String toolType,
                              String toolId,
                              String toolName,
@@ -72,6 +92,7 @@ public final class ToolLog {
                 .field(AiLogFields.TENANT_ID, tenantId)
                 .field(AiLogFields.USER_ID, userId)
                 .field(AiLogFields.SESSION_ID, sessionId)
+                .field(AiLogFields.RUN_ID, runId)
                 .field(AiLogFields.TRACE_ID, traceId)
                 .field("toolType", toolType)
                 .field("toolId", toolId)

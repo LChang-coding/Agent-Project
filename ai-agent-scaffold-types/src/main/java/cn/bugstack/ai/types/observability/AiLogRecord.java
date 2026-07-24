@@ -17,6 +17,8 @@ public final class AiLogRecord {
         field(AiLogFields.USER_ID, TenantContextHolder.getUserId());
         field(AiLogFields.EVENT, event.code());
         field(AiLogFields.DOMAIN, event.domain().code());
+        field(AiLogFields.EVENT_NAME, event.eventName());
+        field(AiLogFields.MESSAGE, event.eventName());
     }
 
     public static AiLogRecord event(AiLogEvent event) {

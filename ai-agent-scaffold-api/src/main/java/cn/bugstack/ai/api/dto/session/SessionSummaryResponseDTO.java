@@ -20,6 +20,7 @@ public class SessionSummaryResponseDTO {
     private String appName;
     private String title;
     private String status;
+    private boolean ragEnabled;
     private LocalDateTime lastMessageTime;
     private Long contextRevision;
 }

@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,7 @@ public class SessionDomain {
                 .appName(command.getAppName())
                 .title(blankToDefault(command.getTitle(), command.getAgentName()))
                 .status(STATUS_ACTIVE)
+                .ragEnabled(false)
                 .lastMessageTime(now)
                 .contextRevision(0L)
                 .build();
@@ -189,7 +191,8 @@ public class SessionDomain {
         sessionRepository.insertMessage(message);
         sessionRepository.updateLastMessageTime(session.getTenantId(), session.getUserId(), session.getSessionId(), now);
         AiLog.info(AiLog.chat().messageSaved(message.getTenantId(), message.getUserId(), message.getSessionId(),
-                message.getMessageId(), message.getRole(), message.getSequenceNo(), contentLength(message.getContent())));
+                message.getMessageId(), message.getRole(), message.getSequenceNo(), contentLength(message.getContent()))
+                .field(AiLogFields.TRACE_ID, message.getTraceId()));
         return message;
     }
 
@@ -271,6 +274,17 @@ public class SessionDomain {
      */
     public int softDelete(String tenantId, String userId, String sessionId) {
         return sessionRepository.softDelete(blankToNull(tenantId), userId, sessionId);
+    }
+
+    /** 更新会话RAG设置；参数是可信身份、会话和开关；返回更新后的会话。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatSessionEntity updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
+        ChatSessionEntity session = lockSessionAccess(tenantId, userId, sessionId, null);
+        if (sessionRepository.updateRagEnabled(session.getTenantId(), session.getUserId(),
+                session.getSessionId(), enabled) != 1) {
+            throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置更新失败，请刷新后重试");
+        }
+        return sessionRepository.querySession(session.getTenantId(), session.getUserId(), session.getSessionId());
     }
 
     /**

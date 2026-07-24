@@ -11,6 +11,9 @@ import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
+import cn.bugstack.ai.types.observability.TraceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -79,6 +82,8 @@ public class RunControlService {
                 .sessionId(session.getSessionId())
                 .sourceType(sourceType)
                 .sourceId(sourceId)
+                .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .traceId(TraceContext.ensureTraceId())
                 .status(RunStatus.RUNNING)
                 .version(0)
                 .baseContextRevision(revision)
@@ -87,6 +92,8 @@ public class RunControlService {
                 .startedAt(now)
                 .build();
         runRepository.insert(run);
+        AiLog.info(AiLog.chat().runStarted(run.getTenantId(), run.getUserId(), run.getSessionId(),
+                run.getRunId(), run.getSourceType(), run.getSourceId(), run.getRagEnabled()));
         invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), run.getRunId());
         return run;
     }
@@ -178,6 +185,7 @@ public class RunControlService {
                 .turnId("turn_" + UUID.randomUUID())
                 .tenantId(run.getTenantId()).userId(run.getUserId()).sessionId(run.getSessionId())
                 .sourceType(run.getSourceType()).sourceId(run.getSourceId())
+                .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).traceId(run.getTraceId())
                 .status(RunStatus.CREATED).version(0)
                 .baseContextRevision(revision).currentContextRevision(revision)
                 .predecessorRunId(runId).steerInstruction(normalizedInstruction)
@@ -268,6 +276,9 @@ public class RunControlService {
         }
         invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         removeAfterCommit(runId);
+        AiLog.info(AiLog.chat().runCompleted(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                run.getRagEnabled(), content == null ? 0 : content.length(), elapsed(run))
+                .field(AiLogFields.TRACE_ID, traceId));
         return message;
     }
 
@@ -289,6 +300,9 @@ public class RunControlService {
         }
         invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         removeAfterCommit(runId);
+        AiLog.error(AiLog.chat().runFailed(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                run.getRagEnabled(), elapsed(run), new IllegalStateException(reason))
+                .field(AiLogFields.TRACE_ID, traceId));
         return message;
     }
 
@@ -371,6 +385,13 @@ public class RunControlService {
         }
         activeRunRegistry.remove(runId);
         return require(run.getTenantId(), run.getUserId(), runId);
+    }
+
+    private long elapsed(ChatRunEntity run) {
+        if (run == null || run.getStartedAt() == null) {
+            return 0L;
+        }
+        return Math.max(0L, java.time.Duration.between(run.getStartedAt(), LocalDateTime.now()).toMillis());
     }
 
     /**

@@ -334,12 +334,13 @@ public class ChatService implements IChatService {
         return Flowable.create(emitter -> {
             Future<?> future;
             try {
+                Callable<T> tracedAction = TraceContext.wrap(action);
                 future = workflowCoordinatorExecutor.submit(() -> {
                     if (emitter.isCancelled()) {
                         return;
                     }
                     try {
-                        T result = action.call();
+                        T result = tracedAction.call();
                         if (!emitter.isCancelled()) {
                             emitter.onNext(result);
                             emitter.onComplete();
@@ -407,8 +408,9 @@ public class ChatService implements IChatService {
         Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
-                        activeRun.getRunId(), activeRun.getCurrentContextRevision(), RagBindingTargetType.AGENT,
-                        describeContent(chatCommandEntity)));
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision(),
+                        ragTargetType(activeRun, RagBindingTargetType.AGENT),
+                        ragQuery(activeRun, describeContent(chatCommandEntity))));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -453,7 +455,8 @@ public class ChatService implements IChatService {
         Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder().build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
-                        activeRun.getRunId(), activeRun.getCurrentContextRevision(), RagBindingTargetType.AGENT, message));
+                        activeRun.getRunId(), activeRun.getCurrentContextRevision(),
+                        ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message)));
 
         List<String> outputs = new ArrayList<>();
         try {
@@ -504,7 +507,7 @@ public class ChatService implements IChatService {
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision(),
-                                RagBindingTargetType.AGENT, message))
+                                ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message)))
                 .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
                         .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
                 .doOnNext(event -> {
@@ -678,7 +681,7 @@ public class ChatService implements IChatService {
         String evidenceInvocationId = "wf_" + node.getNodeId() + "_" + UUID.randomUUID();
         Map<String, Object> state = runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
                 historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision(),
-                RagBindingTargetType.WORKFLOW, prompt);
+                ragTargetType(run, RagBindingTargetType.WORKFLOW), ragQuery(run, prompt));
         state.put(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID, evidenceInvocationId);
         runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
                         state)
@@ -896,6 +899,16 @@ public class ChatService implements IChatService {
         if (key != null && value != null && !value.isBlank()) {
             state.put(key, value);
         }
+    }
+
+    /** 仅当本轮运行快照启用RAG时暴露可信绑定类型。 */
+    private RagBindingTargetType ragTargetType(ChatRunEntity run, RagBindingTargetType targetType) {
+        return run != null && Boolean.TRUE.equals(run.getRagEnabled()) ? targetType : null;
+    }
+
+    /** 仅当本轮运行快照启用RAG时传递真实问题。 */
+    private String ragQuery(ChatRunEntity run, String query) {
+        return run != null && Boolean.TRUE.equals(run.getRagEnabled()) ? query : null;
     }
 
     /**

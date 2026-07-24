@@ -9,7 +9,13 @@ import {
   steerChatRun,
 } from '@/api/agent';
 import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
-import { deleteChatSession, queryChatSessionMessages, queryChatSessions } from '@/api/session';
+import {
+  deleteChatSession,
+  queryChatSessionMessages,
+  queryChatSessions,
+  querySessionRagSetting,
+  updateSessionRagSetting,
+} from '@/api/session';
 import { useAuthStore } from '@/stores/auth';
 import type {
   AiAgentConfig,
@@ -82,6 +88,10 @@ interface ChatState {
   loadingMessages: boolean;
   historyMessage: string;
   historyErrorMessage: string;
+  ragEnabled: boolean;
+  ragBindingConfigured: boolean;
+  ragSaving: boolean;
+  ragMessage: string;
 }
 
 export const useChatStore = defineStore('chat', {
@@ -115,6 +125,10 @@ export const useChatStore = defineStore('chat', {
     loadingMessages: false,
     historyMessage: '',
     historyErrorMessage: '',
+    ragEnabled: false,
+    ragBindingConfigured: false,
+    ragSaving: false,
+    ragMessage: '创建或选择会话后可启用企业知识库检索。',
   }),
   getters: {
     activeAgent: (state) => state.agents.find((agent) => agent.agentId === state.activeAgentId),
@@ -194,6 +208,7 @@ export const useChatStore = defineStore('chat', {
       this.messages = [];
       this.resetMessageHistoryState();
       this.saveCurrentSession('新会话');
+      await this.loadRagSetting(result.sessionId);
       return result.sessionId;
     },
 
@@ -218,9 +233,12 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = session.sessionId;
       this.contextRevision = session.contextRevision || 0;
+      this.ragEnabled = Boolean(session.ragEnabled);
+      this.ragBindingConfigured = false;
+      this.ragMessage = this.ragEnabled ? '正在检查知识库绑定…' : 'RAG已关闭。';
       this.messages = [];
       this.resetMessageHistoryState(false);
-      await this.reloadSessionMessages(sessionId);
+      await Promise.all([this.reloadSessionMessages(sessionId), this.loadRagSetting(sessionId)]);
     },
 
     /**
@@ -737,6 +755,7 @@ export const useChatStore = defineStore('chat', {
             title: session.title,
             updatedAt: session.lastMessageTime,
             contextRevision: session.contextRevision,
+            ragEnabled: Boolean(session.ragEnabled),
           } satisfies LocalChatSession;
         });
       } finally {
@@ -765,6 +784,9 @@ export const useChatStore = defineStore('chat', {
           this.messages = [];
           this.resetMessageHistoryState();
           this.currentRunId = '';
+          this.ragEnabled = false;
+          this.ragBindingConfigured = false;
+          this.ragMessage = '创建或选择会话后可启用企业知识库检索。';
           const next = remaining.find((item) => item.sourceType === this.activeSourceType);
           if (next) {
             await this.switchSession(next.sessionId);
@@ -807,9 +829,57 @@ export const useChatStore = defineStore('chat', {
         title: compactTitle(title),
         updatedAt: new Date().toISOString(),
         contextRevision: this.contextRevision,
+        ragEnabled: this.ragEnabled,
       };
       const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)];
       this.sessions = nextSessions;
+    },
+
+    /** 读取当前会话RAG设置和绑定状态。 */
+    async loadRagSetting(sessionId?: string) {
+      const targetSessionId = sessionId || this.sessionId;
+      if (!targetSessionId) {
+        this.ragEnabled = false;
+        this.ragBindingConfigured = false;
+        this.ragMessage = '创建或选择会话后可启用企业知识库检索。';
+        return;
+      }
+      try {
+        const setting = await querySessionRagSetting(targetSessionId);
+        if (this.sessionId !== targetSessionId) return;
+        this.ragEnabled = setting.enabled;
+        this.ragBindingConfigured = setting.bindingConfigured;
+        this.ragMessage = setting.message;
+        const session = this.sessions.find((item) => item.sessionId === targetSessionId);
+        if (session) session.ragEnabled = setting.enabled;
+      } catch (error) {
+        if (this.sessionId === targetSessionId) {
+          this.ragMessage = error instanceof Error ? error.message : 'RAG设置读取失败';
+        }
+      }
+    },
+
+    /** 切换并持久化当前会话RAG设置。 */
+    async setRagEnabled(enabled: boolean) {
+      if (!this.sessionId || this.ragSaving || this.sending) return;
+      const previous = this.ragEnabled;
+      this.ragEnabled = enabled;
+      this.ragSaving = true;
+      this.ragMessage = enabled ? '正在启用企业知识库检索…' : '正在关闭企业知识库检索…';
+      try {
+        const setting = await updateSessionRagSetting(this.sessionId, enabled);
+        this.ragEnabled = setting.enabled;
+        this.ragBindingConfigured = setting.bindingConfigured;
+        this.ragMessage = setting.message;
+        const session = this.sessions.find((item) => item.sessionId === this.sessionId);
+        if (session) session.ragEnabled = setting.enabled;
+      } catch (error) {
+        this.ragEnabled = previous;
+        this.ragMessage = error instanceof Error ? error.message : 'RAG设置保存失败';
+        throw error;
+      } finally {
+        this.ragSaving = false;
+      }
     },
 
     /**

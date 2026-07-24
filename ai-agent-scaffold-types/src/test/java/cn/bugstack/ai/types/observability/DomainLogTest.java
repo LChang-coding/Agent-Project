@@ -99,8 +99,21 @@ public class DomainLogTest {
         }
     }
 
+    @Test
+    public void shouldIncludeHumanReadableChineseEventName() {
+        String actual = AiLog.chat().runStarted("t1", "u1", "s1", "run-1",
+                "agent", "agent-1", true).toLogfmt();
+
+        Assert.assertTrue(actual.contains("event=chat_run_started"));
+        Assert.assertTrue(actual.contains("eventName=\"会话运行已开始\""));
+        Assert.assertTrue(actual.contains("message=\"会话运行已开始\""));
+        Assert.assertTrue(actual.contains("runId=run-1"));
+    }
+
     private void assertTraceIdAndLogBody(String expectedBody, String actual) {
         Assert.assertTrue("logId and traceId should be the first fields: " + actual, LOG_TRACE_PREFIX.matcher(actual).find());
-        Assert.assertEquals(expectedBody, LOG_TRACE_PREFIX.matcher(actual).replaceFirst(""));
+        String body = LOG_TRACE_PREFIX.matcher(actual).replaceFirst("")
+                .replaceFirst(" eventName=\"[^\"]+\" message=\"[^\"]+\"", "");
+        Assert.assertEquals(expectedBody, body);
     }
 }

@@ -40,6 +40,11 @@ public final class AiLog {
         OBSERVABILITY_LOG.error(record.toLogfmt());
     }
 
+    /** 打印可恢复降级日志；参数是结构化日志记录；无返回值。 */
+    public static void warn(AiLogRecord record) {
+        OBSERVABILITY_LOG.warn(record.toLogfmt());
+    }
+
     /**
      * 获取应用日志工具；无参数；返回应用日志构造器。
      */

@@ -70,6 +70,9 @@ public class ChatSessionPO extends BasePO {
      */
     private String status;
 
+    /** 是否启用会话RAG。 */
+    private Boolean ragEnabled;
+
     /**
      * 最后消息时间
      */

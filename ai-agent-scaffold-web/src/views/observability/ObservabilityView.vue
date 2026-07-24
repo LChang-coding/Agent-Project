@@ -11,10 +11,10 @@
 
     <section class="page-grid page-grid--two">
       <FeaturePlaceholder
-        title="日志查询面板"
-        description="这里后续可以内嵌 Grafana dashboard 或接一个后端日志查询代理，直接按 traceId、userId、sessionId 检索。"
-        status="Grafana 已部署"
-        :items="['token_usage 结构化日志', 'model_error 实时日志', 'auth_login / auth_register 业务日志']"
+        title="唯一链路检索"
+        description="从响应头 X-Trace-Id、工具调用或RAG审计中复制 traceId，在Grafana顶部输入后即可按时间正序还原整条业务链路。"
+        status="中文业务节点已接入"
+        :items="['HTTP → 会话运行 → Context Manager', 'RAG → 模型 → 工具 → 回答收口', 'traceId仅查询时解析，不写成Loki高基数标签']"
       />
       <div class="card">
         <div class="card__body">

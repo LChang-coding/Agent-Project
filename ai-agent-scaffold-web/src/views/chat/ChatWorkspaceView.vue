@@ -70,6 +70,27 @@
                 </option>
               </select>
             </label>
+            <label
+              :class="['rag-switch', {
+                'rag-switch--enabled': chatStore.ragEnabled,
+                'rag-switch--warning': chatStore.ragEnabled && !chatStore.ragBindingConfigured,
+              }]"
+              :title="chatStore.ragMessage"
+            >
+              <input
+                :checked="chatStore.ragEnabled"
+                type="checkbox"
+                role="switch"
+                :aria-checked="chatStore.ragEnabled"
+                :disabled="!chatStore.sessionId || chatStore.sending || chatStore.ragSaving"
+                @change="onRagToggle"
+              />
+              <span class="rag-switch__track"><i /></span>
+              <span class="rag-switch__copy">
+                <strong>{{ chatStore.ragSaving ? '保存中' : 'RAG' }}</strong>
+                <small>{{ ragSwitchLabel }}</small>
+              </span>
+            </label>
             <button class="icon-button" type="button" title="刷新运行目标" :disabled="chatStore.sending" @click="reloadTargets">刷新</button>
             <button class="icon-button" type="button" title="分享当前会话" :disabled="!chatStore.sessionId || chatStore.sending || sharing" @click="shareSession">
               {{ sharing ? '生成中' : '分享' }}
@@ -89,6 +110,10 @@
             <span>安全分享已生成：{{ shareLink }}</span>
             <button type="button" class="button button--soft" @click="copyShareLink">复制链接</button>
             <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
+          </div>
+          <div :class="['rag-state', `rag-state--${ragStateTone}`]" :title="chatStore.ragMessage">
+            <span aria-hidden="true">{{ chatStore.ragEnabled ? 'R' : '—' }}</span>
+            <strong>{{ chatStore.ragMessage }}</strong>
           </div>
         </div>
 
@@ -421,9 +446,16 @@ const historyFeedback = computed(() => {
 });
 const operationStatus = computed(() => {
   const error = chatStore.errorMessage || assetStore.errorMessage;
+  if (chatStore.ragSaving) return { tone: 'working', label: '正在保存RAG设置', detail: '保存完成后，新的运行会使用最新开关。' };
   if (chatStore.cancelling) return { tone: 'warning', label: '正在取消', detail: '等待服务端中止运行并收口上下文。' };
   if (chatStore.steering) return { tone: 'working', label: '正在引导', detail: '新指令已提交，正在切换到后继运行。' };
-  if (chatStore.sending) return { tone: 'working', label: '正在生成', detail: '可继续输入引导指令，或取消当前运行。' };
+  if (chatStore.sending) return {
+    tone: 'working',
+    label: chatStore.ragEnabled ? '正在检索并生成' : '正在生成',
+    detail: chatStore.ragEnabled
+      ? 'Context Manager 正在读取绑定知识库；完成后会连同引用一起收口。'
+      : '可继续输入引导指令，或取消当前运行。',
+  };
   if (chatStore.loadingMessages) return { tone: 'working', label: '正在载入会话', detail: '仅读取最近一页消息。' };
   if (chatStore.loadingEarlierMessages) return { tone: 'working', label: '正在读取历史', detail: '加载完成后会保持当前阅读位置。' };
   if (assetStore.uploading) return { tone: 'working', label: '正在上传附件', detail: '文件解析完成后才能选入消息。' };
@@ -435,6 +467,17 @@ const operationStatus = computed(() => {
     return { tone: 'success', label: '运行已完成', detail: '消息、上下文和调用记录已收口。' };
   }
   return { tone: 'idle', label: '工作台就绪', detail: '选择运行目标并输入指令。' };
+});
+const ragSwitchLabel = computed(() => {
+  if (!chatStore.sessionId) return '需先创建会话';
+  if (chatStore.ragSaving) return '同步数据库';
+  if (!chatStore.ragEnabled) return '已关闭';
+  return chatStore.ragBindingConfigured ? '知识库已绑定' : '缺少绑定';
+});
+const ragStateTone = computed(() => {
+  if (chatStore.ragSaving) return 'working';
+  if (!chatStore.ragEnabled) return 'off';
+  return chatStore.ragBindingConfigured ? 'ready' : 'warning';
 });
 
 onMounted(async () => {
@@ -570,6 +613,16 @@ async function onSourceChanged() {
  */
 async function onWorkflowChanged() {
   await chatStore.selectWorkflow(chatStore.activeWorkflowId);
+}
+
+/** 持久化会话RAG开关；失败时Store会回滚视觉状态。 */
+async function onRagToggle(event: Event) {
+  const enabled = (event.target as HTMLInputElement).checked;
+  try {
+    await chatStore.setRagEnabled(enabled);
+  } catch {
+    // Store 已回滚并保留可展示的错误。
+  }
 }
 
 /**
@@ -1007,6 +1060,39 @@ function formatOptionalTokens(value?: number) {
   white-space: nowrap;
 }
 
+.rag-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 420px;
+  color: var(--muted);
+}
+
+.rag-state > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.rag-state strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rag-state--ready { color: var(--success); }
+.rag-state--warning { color: var(--warning); }
+.rag-state--working { color: var(--accent); }
+
 .chat-workbench {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
@@ -1216,6 +1302,75 @@ function formatOptionalTokens(value?: number) {
   gap: 6px;
   min-width: 0;
 }
+
+.rag-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+
+.rag-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.rag-switch__track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background var(--motion-fast);
+}
+
+.rag-switch__track i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(28, 39, 42, 0.22);
+  transition: transform var(--motion-fast);
+}
+
+.rag-switch__copy {
+  display: grid;
+  gap: 1px;
+}
+
+.rag-switch__copy strong {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.rag-switch__copy small {
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.rag-switch--enabled {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--line));
+  background: color-mix(in srgb, var(--success) 6%, var(--surface));
+}
+
+.rag-switch--enabled .rag-switch__track { background: var(--success); }
+.rag-switch--enabled .rag-switch__track i { transform: translateX(13px); }
+.rag-switch--warning { border-color: color-mix(in srgb, var(--warning) 38%, var(--line)); }
+.rag-switch--warning .rag-switch__track { background: var(--warning); }
+.rag-switch:has(input:disabled) { cursor: not-allowed; opacity: 0.56; }
 
 .compact-field {
   display: grid;

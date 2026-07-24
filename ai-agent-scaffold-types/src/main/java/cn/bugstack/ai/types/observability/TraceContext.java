@@ -5,6 +5,7 @@ import org.slf4j.MDC;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class TraceContext {
 
@@ -12,6 +13,7 @@ public final class TraceContext {
     public static final String TRACE_ID_MDC_KEY = "traceId";
     public static final String LEGACY_TRACE_ID_MDC_KEY = "trace-id";
     public static final String TRACE_ID_STATE_KEY = "_observability_trace_id";
+    private static final Pattern SAFE_TRACE_ID = Pattern.compile("[A-Za-z0-9._:-]{1,64}");
 
     private static final ThreadLocal<String> TRACE_ID = new ThreadLocal<>();
 
@@ -65,6 +67,13 @@ public final class TraceContext {
 
     public static String newTraceId() {
         return UUID.randomUUID().toString();
+    }
+
+    /** 校验外部链路ID；非法、过长或可注入日志的值会替换为服务端ID。 */
+    public static String normalizeOrNew(String candidate) {
+        if (candidate == null) return newTraceId();
+        String normalized = candidate.trim();
+        return SAFE_TRACE_ID.matcher(normalized).matches() ? normalized : newTraceId();
     }
 
     public static Runnable wrap(Runnable task) {

@@ -7,6 +7,8 @@ CREATE TABLE chat_run (
     session_id VARCHAR(64) NOT NULL COMMENT '会话ID',
     source_type VARCHAR(32) NOT NULL COMMENT '来源：agent/workflow',
     source_id VARCHAR(64) NOT NULL COMMENT 'Agent 或工作流ID',
+    rag_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '运行创建时的RAG开关快照',
+    trace_id VARCHAR(64) NULL COMMENT '运行根链路ID',
     status VARCHAR(32) NOT NULL COMMENT '运行状态',
     version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     base_context_revision BIGINT NOT NULL DEFAULT 0 COMMENT '运行创建时上下文版本',
@@ -25,6 +27,7 @@ CREATE TABLE chat_run (
     PRIMARY KEY (id),
     UNIQUE KEY uk_chat_run_id (run_id),
     KEY idx_chat_run_session (tenant_id, user_id, session_id, status, create_time),
+    KEY idx_chat_run_trace (trace_id),
     KEY idx_chat_run_predecessor (predecessor_run_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='会话运行状态';
 

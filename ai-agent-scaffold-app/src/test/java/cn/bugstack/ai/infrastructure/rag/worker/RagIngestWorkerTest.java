@@ -518,7 +518,8 @@ public class RagIngestWorkerTest {
             return new RagIngestJobEntity(source.tenantId(), source.knowledgeBaseId(), source.documentId(),
                     source.versionId(), source.jobId(), source.idempotencyKey(), source.operation(),
                     source.generation(), status, source.checkpoint(), source.attemptCount(), source.maxAttempts(),
-                    null, lease, fence, revision, source.cancelReason(), source.errorCode(), source.errorMessage());
+                    null, lease, fence, revision, source.cancelReason(), source.errorCode(), source.errorMessage(),
+                    source.traceId());
         }
 
         private static List<Float> denseVector() {

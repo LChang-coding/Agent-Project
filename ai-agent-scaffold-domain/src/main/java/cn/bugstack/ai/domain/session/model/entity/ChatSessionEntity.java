@@ -34,6 +34,9 @@ public class ChatSessionEntity {
 
     private String status;
 
+    /** 是否在后续会话运行中启用RAG检索，旧会话默认关闭。 */
+    private Boolean ragEnabled;
+
     private LocalDateTime lastMessageTime;
 
     /**

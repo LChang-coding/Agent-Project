@@ -3,6 +3,8 @@ package cn.bugstack.ai.types.observability;
 public final class AiLogFields {
 
     public static final String EVENT = "event";
+    public static final String EVENT_NAME = "eventName";
+    public static final String MESSAGE = "message";
     public static final String DOMAIN = "domain";
     public static final String LOG_ID = "logId";
     public static final String TENANT_ID = "tenantId";
@@ -10,6 +12,10 @@ public final class AiLogFields {
     public static final String USERNAME = "username";
     public static final String ROLE_CODE = "roleCode";
     public static final String SESSION_ID = "sessionId";
+    public static final String RUN_ID = "runId";
+    public static final String RETRIEVAL_ID = "retrievalId";
+    public static final String TASK_ID = "taskId";
+    public static final String STAGE = "stage";
     public static final String MESSAGE_ID = "messageId";
     public static final String AGENT_ID = "agentId";
     public static final String AGENT_NAME = "agentName";

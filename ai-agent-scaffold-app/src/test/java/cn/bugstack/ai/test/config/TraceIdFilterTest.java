@@ -39,4 +39,19 @@ public class TraceIdFilterTest {
         Assert.assertEquals(response.getHeader(TraceContext.TRACE_ID_HEADER), traceIdInRequest[0]);
         Assert.assertNull(TraceContext.getTraceId());
     }
+
+    @Test
+    public void shouldReplaceUnsafeTraceIdHeader() throws Exception {
+        TraceIdFilter filter = new TraceIdFilter();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/chat");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader(TraceContext.TRACE_ID_HEADER, "bad trace\ninjected=true");
+
+        filter.doFilter(request, response, (servletRequest, servletResponse) -> {
+            Assert.assertFalse(TraceContext.getTraceId().contains("\n"));
+            Assert.assertFalse(TraceContext.getTraceId().contains(" "));
+        });
+
+        Assert.assertNotEquals("bad trace\ninjected=true", response.getHeader(TraceContext.TRACE_ID_HEADER));
+    }
 }

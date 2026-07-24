@@ -145,7 +145,7 @@ public class RagPersistenceMapper {
                 requiredInt(po.getMaxAttempts(), "任务最大尝试次数"), toInstant(po.getNextRetryAt()), lease,
                 requiredLong(po.getFencingToken(), "任务fencingToken"),
                 requiredLong(po.getRowVersion(), "任务rowVersion"), po.getCancelReason(),
-                po.getErrorCode(), po.getErrorMessage());
+                po.getErrorCode(), po.getErrorMessage(), po.getTraceId());
     }
 
     public RagIngestTaskPO toIngestTaskPo(RagIngestJobEntity entity) {
@@ -159,7 +159,7 @@ public class RagPersistenceMapper {
                 .leaseUntil(entity.lease() == null ? null : toLocalDateTime(entity.lease().expiresAt()))
                 .fencingToken(entity.fencingToken()).rowVersion(entity.revision())
                 .checkpoint(codec.writeCheckpoint(entity.checkpoint())).cancelReason(entity.cancelReason())
-                .errorCode(entity.errorCode()).errorMessage(entity.errorMessage()).build();
+                .errorCode(entity.errorCode()).errorMessage(entity.errorMessage()).traceId(entity.traceId()).build();
     }
 
     public RagRetrievalProfileEntity toRetrievalProfile(RagRetrievalProfilePO po) {

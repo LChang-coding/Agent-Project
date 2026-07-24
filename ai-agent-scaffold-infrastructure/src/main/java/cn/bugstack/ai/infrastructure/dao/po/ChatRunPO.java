@@ -25,6 +25,8 @@ public class ChatRunPO extends BasePO {
     private String sessionId;
     private String sourceType;
     private String sourceId;
+    private Boolean ragEnabled;
+    private String traceId;
     private String status;
     private Integer version;
     private Long baseContextRevision;

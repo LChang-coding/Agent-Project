@@ -116,6 +116,7 @@ CREATE TABLE `chat_session` (
   `app_name` VARCHAR(128) NULL COMMENT '应用名称',
   `title` VARCHAR(255) NULL COMMENT '会话标题',
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '会话状态：active/archived/deleted',
+  `rag_enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用会话RAG',
   `last_message_time` DATETIME(3) NULL COMMENT '最后消息时间',
   `metadata` JSON NULL COMMENT '扩展信息',
   `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',

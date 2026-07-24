@@ -5,11 +5,15 @@ import cn.bugstack.ai.api.dto.session.SessionListResponseDTO;
 import cn.bugstack.ai.api.dto.session.SessionMessagePageResponseDTO;
 import cn.bugstack.ai.api.dto.session.SessionMessageResponseDTO;
 import cn.bugstack.ai.api.dto.session.SessionSummaryResponseDTO;
+import cn.bugstack.ai.api.dto.session.SessionRagSettingRequestDTO;
+import cn.bugstack.ai.api.dto.session.SessionRagSettingResponseDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.api.dto.RagCitationValidationDTO;
 import cn.bugstack.ai.api.dto.RagCitationSourceDTO;
 import cn.bugstack.ai.domain.rag.model.entity.RagAnswerCitationValidation;
 import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
+import cn.bugstack.ai.domain.rag.model.entity.SessionRagSettingEntity;
+import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
@@ -23,6 +27,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
@@ -46,15 +52,18 @@ public class SessionController {
     private final SessionDomain sessionDomain;
     private final SessionLifecycleService lifecycleService;
     private final RagAnswerCitationMetadataService citationMetadataService;
+    private final SessionRagSettingService ragSettingService;
 
     /**
      * 创建会话接口；参数是会话领域服务；返回接口实例。
      */
     public SessionController(SessionDomain sessionDomain, SessionLifecycleService lifecycleService,
-                             RagAnswerCitationMetadataService citationMetadataService) {
+                             RagAnswerCitationMetadataService citationMetadataService,
+                             SessionRagSettingService ragSettingService) {
         this.sessionDomain = sessionDomain;
         this.lifecycleService = lifecycleService;
         this.citationMetadataService = citationMetadataService;
+        this.ragSettingService = ragSettingService;
     }
 
     /**
@@ -124,6 +133,38 @@ public class SessionController {
         }
     }
 
+    /** 查询会话RAG设置及当前目标是否已有知识库绑定。 */
+    @GetMapping("/{sessionId}/rag-setting")
+    public Response<SessionRagSettingResponseDTO> ragSetting(@PathVariable String sessionId) {
+        try {
+            return success(toRagSetting(ragSettingService.query(TenantContextHolder.getTenantId(),
+                    requireUserId(), sessionId)));
+        } catch (AppException exception) {
+            return fail(exception);
+        } catch (Exception exception) {
+            log.error("查询会话RAG设置失败 sessionId:{}", sessionId, exception);
+            return systemFail();
+        }
+    }
+
+    /** 更新会话RAG设置；运行中的Run仍使用创建时快照。 */
+    @PatchMapping("/{sessionId}/rag-setting")
+    public Response<SessionRagSettingResponseDTO> updateRagSetting(@PathVariable String sessionId,
+                                                                    @RequestBody SessionRagSettingRequestDTO request) {
+        try {
+            if (request == null || request.getEnabled() == null) {
+                throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG开关值不能为空");
+            }
+            return success(toRagSetting(ragSettingService.update(TenantContextHolder.getTenantId(),
+                    requireUserId(), sessionId, request.getEnabled())));
+        } catch (AppException exception) {
+            return fail(exception);
+        } catch (Exception exception) {
+            log.error("更新会话RAG设置失败 sessionId:{}", sessionId, exception);
+            return systemFail();
+        }
+    }
+
     /** 查询一条回答引用的当前可见正文。 */
     @GetMapping("/{sessionId}/messages/{messageId}/citations/{citationId}")
     public Response<RagCitationSourceDTO> citation(@PathVariable String sessionId,
@@ -148,8 +189,22 @@ public class SessionController {
         return SessionSummaryResponseDTO.builder().sessionId(session.getSessionId()).agentId(session.getAgentId())
                 .agentName(session.getAgentName()).appName(session.getAppName()).title(session.getTitle())
                 .sourceType(session.getSourceType()).workflowVersion(session.getWorkflowVersion()).modelCode(session.getModelCode())
-                .status(session.getStatus()).lastMessageTime(session.getLastMessageTime())
+                .status(session.getStatus()).ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision()).build();
+    }
+
+    private SessionRagSettingResponseDTO toRagSetting(SessionRagSettingEntity setting) {
+        String message;
+        if (!setting.enabled()) {
+            message = "RAG已关闭，本会话不会检索企业知识库";
+        } else if (!setting.bindingConfigured()) {
+            message = "RAG已开启，但当前运行目标尚未绑定知识库";
+        } else {
+            message = "RAG已开启，后续新运行将检索当前目标绑定的知识库";
+        }
+        return new SessionRagSettingResponseDTO(setting.sessionId(), setting.enabled(),
+                setting.bindingConfigured(), setting.targetType().name(), setting.targetId(), message);
     }
 
     private SessionMessageResponseDTO toMessage(ChatMessageEntity message) {

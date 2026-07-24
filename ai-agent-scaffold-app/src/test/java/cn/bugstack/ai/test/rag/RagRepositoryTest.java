@@ -283,7 +283,7 @@ public class RagRepositoryTest {
                 "version-2", "delete-1", "delete-key", RagIngestOperation.DELETE, 2L,
                 RagIngestJobStatus.COMPLETED,
                 new RagIngestCheckpoint(RagIngestStage.COMPLETED, 0, 0, 0, 0),
-                1, 3, null, null, 11L, 8L, null, null, null);
+                1, 3, null, null, 11L, 8L, null, null, null, "trace-delete-1");
         RagDocumentEntity deletedDocument = new RagDocumentEntity("tenant-a", "owner-a",
                 RagVisibility.TENANT, "kb-1", "doc-1", "document.md", null, 0L,
                 null, RagDocumentStatus.DELETED, 5L);
@@ -334,7 +334,7 @@ public class RagRepositoryTest {
                 "version-1", "delete-1", "delete-key", RagIngestOperation.DELETE, 2L,
                 RagIngestJobStatus.COMPLETED,
                 new RagIngestCheckpoint(RagIngestStage.COMPLETED, 0, 0, 0, 0),
-                1, 3, null, null, 11L, 8L, null, null, null);
+                1, 3, null, null, 11L, 8L, null, null, null, "trace-delete-1");
         RagDocumentEntity deletingDocument = new RagDocumentEntity("tenant-a", "owner-a",
                 RagVisibility.TENANT, "kb-1", "doc-1", "document.md", "version-1", 2L,
                 null, RagDocumentStatus.DELETING, 4L);
@@ -517,7 +517,7 @@ public class RagRepositoryTest {
                 "task-key-1", RagIngestOperation.INGEST, 2L, status, checkpoint, 1, 3,
                 null, null, 11L, 8L, null,
                 status == RagIngestJobStatus.FAILED ? "RAG_FAILED" : null,
-                status == RagIngestJobStatus.FAILED ? "failed" : null);
+                status == RagIngestJobStatus.FAILED ? "failed" : null, "trace-job-1");
     }
 
     private RagDocumentVersionEntity deletedVersion(String versionId, int number, long revision) {

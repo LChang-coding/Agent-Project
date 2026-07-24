@@ -66,6 +66,11 @@ public class SessionRepository implements ISessionRepository {
         return chatSessionDao.updateLastMessageTime(tenantId, userId, sessionId, lastMessageTime);
     }
 
+    @Override
+    public int updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
+        return chatSessionDao.updateRagEnabled(tenantId, userId, sessionId, enabled);
+    }
+
     /**
      * 查询最大消息序号；参数是租户、用户和会话ID；返回当前最大序号。
      */
@@ -149,6 +154,7 @@ public class SessionRepository implements ISessionRepository {
                 .appName(session.getAppName())
                 .title(session.getTitle())
                 .status(session.getStatus())
+                .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();
@@ -173,6 +179,7 @@ public class SessionRepository implements ISessionRepository {
                 .appName(session.getAppName())
                 .title(session.getTitle())
                 .status(session.getStatus())
+                .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
                 .build();

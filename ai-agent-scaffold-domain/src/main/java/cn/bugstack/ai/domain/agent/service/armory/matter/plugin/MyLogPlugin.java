@@ -26,6 +26,8 @@ public class MyLogPlugin extends LoggingPlugin {
 
     private final ModelUsageService modelUsageService;
     private final Map<String, ConcurrentLinkedDeque<String>> activeCallIds = new ConcurrentHashMap<>();
+    private final Map<String, String> tokenLogFingerprints = new ConcurrentHashMap<>();
+    private final Map<String, Long> modelCallStartedNanos = new ConcurrentHashMap<>();
 
     /**
      * 创建模型观测插件；参数是用量服务；返回插件实例。
@@ -38,6 +40,7 @@ public class MyLogPlugin extends LoggingPlugin {
     public Maybe<LlmResponse> beforeModelCallback(CallbackContext callbackContext, LlmRequest.Builder requestBuilder) {
         activeCallIds.computeIfAbsent(callScope(callbackContext), key -> new ConcurrentLinkedDeque<>())
                 .addLast("call_" + UUID.randomUUID());
+        modelCallStartedNanos.put(callScope(callbackContext), System.nanoTime());
         recordUsage(callbackContext, null, requestBuilder.build().model().orElse("unknown"), null,
                 "running", null);
         return super.beforeModelCallback(callbackContext, requestBuilder)
@@ -63,7 +66,7 @@ public class MyLogPlugin extends LoggingPlugin {
                             llmResponse.usageMetadata().orElse(snapshot == null ? null : snapshot.usageMetadata());
                     String modelVersion = llmResponse.modelVersion().orElse(snapshot == null ? "" : snapshot.modelVersion());
 
-                    if (usageMetadata != null) {
+                    if (hasMeasuredUsage(usageMetadata) && tokenUsageChanged(callbackContext, usageMetadata)) {
                         withCallbackTrace(callbackContext, () -> AiLog.info(AiLog.model().tokenUsage(
                                 callbackContext.userId(),
                                 callbackContext.sessionId(),
@@ -80,14 +83,19 @@ public class MyLogPlugin extends LoggingPlugin {
                                 llmResponse.turnComplete().orElse(null))));
                     }
 
-                    if (llmResponse.partial().orElse(false)) {
-                        // 部分响应若携带供应商累计 usage，先单调落库；取消/失败时仍可保留已消耗 Token。
-                        if (usageMetadata != null) {
-                            recordUsage(callbackContext, llmResponse, modelVersion, usageMetadata, "running", null);
-                        }
-                    } else {
+                    if (terminal(llmResponse)) {
+                        withCallbackTrace(callbackContext, () -> AiLog.info(AiLog.model().call(
+                                callbackContext.userId(), callbackContext.sessionId(),
+                                callbackContext.agentName(), callbackContext.invocationContext().appName(),
+                                callbackContext.invocationId(), modelVersion,
+                                elapsedModelCallMs(callbackContext), true)));
                         recordUsage(callbackContext, llmResponse, modelVersion, usageMetadata, "success", null);
                         finishCall(callbackContext);
+                        tokenLogFingerprints.remove(callScope(callbackContext));
+                        modelCallStartedNanos.remove(callScope(callbackContext));
+                    } else if (hasMeasuredUsage(usageMetadata)) {
+                        // 中间响应若携带供应商累计 usage，单调落库但不重复刷结构化日志。
+                        recordUsage(callbackContext, llmResponse, modelVersion, usageMetadata, "running", null);
                     }
 
                     ModelObservabilityContext.clear();
@@ -119,8 +127,37 @@ public class MyLogPlugin extends LoggingPlugin {
                             snapshot == null ? null : snapshot.usageMetadata(), "failed",
                             throwable == null ? "model_error" : throwable.getClass().getSimpleName());
                     finishCall(callbackContext);
+                    tokenLogFingerprints.remove(callScope(callbackContext));
+                    modelCallStartedNanos.remove(callScope(callbackContext));
                     ModelObservabilityContext.clear();
                 });
+    }
+
+    private boolean terminal(LlmResponse response) {
+        return response.turnComplete().orElse(false) || response.finishReason().isPresent();
+    }
+
+    private boolean hasMeasuredUsage(GenerateContentResponseUsageMetadata usage) {
+        return usage != null && (usage.totalTokenCount().orElse(0) > 0
+                || usage.promptTokenCount().orElse(0) > 0
+                || usage.candidatesTokenCount().orElse(0) > 0);
+    }
+
+    private boolean tokenUsageChanged(CallbackContext context, GenerateContentResponseUsageMetadata usage) {
+        String fingerprint = usage.promptTokenCount().orElse(0) + ":"
+                + usage.candidatesTokenCount().orElse(0) + ":"
+                + usage.totalTokenCount().orElse(0) + ":"
+                + usage.thoughtsTokenCount().orElse(0) + ":"
+                + usage.toolUsePromptTokenCount().orElse(0);
+        return !fingerprint.equals(tokenLogFingerprints.put(callScope(context), fingerprint));
+    }
+
+    private long elapsedModelCallMs(CallbackContext context) {
+        Long started = modelCallStartedNanos.get(callScope(context));
+        if (started == null) {
+            return 0L;
+        }
+        return Math.max(0L, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
     }
 
     private void withCallbackTrace(CallbackContext callbackContext, Runnable action) {

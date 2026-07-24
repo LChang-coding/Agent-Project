@@ -23,7 +23,8 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagFusionStrategy;
 import cn.bugstack.ai.domain.rag.model.valobj.RagRetrievalMode;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.types.exception.AppException;
-import lombok.extern.slf4j.Slf4j;
+import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -47,7 +48,6 @@ import java.util.stream.Collectors;
 /**
  * 强租户 RAG 检索编排，保留 Dense/Sparse/融合/Rerank 独立指标以支持消融评测。
  */
-@Slf4j
 @Service
 public class RagRetrievalService {
 
@@ -97,14 +97,34 @@ public class RagRetrievalService {
         String retrievalId = "ret_" + UUID.randomUUID().toString().replace("-", "");
         String query = normalizeQuery(request.query());
         AuditState audit = new AuditState();
+        AiLog.info(AiLog.rag().retrieveStarted(request.tenantId(), request.userId(), request.sessionId(),
+                request.runId(), retrievalId, request.targetType().name(), request.targetId(), query.length())
+                .field(AiLogFields.TRACE_ID, request.traceId()));
         try {
             RagRetrievalResult result = retrieveInternal(request, retrievalId, query, started, audit);
             long auditStarted = System.nanoTime();
             recordAudit(request, query, result, result.citations().isEmpty() ? "empty" : "success", null, audit);
-            return result.withCompletionTimings(elapsedMs(auditStarted), elapsedMs(started));
+            RagRetrievalResult completed = result.withCompletionTimings(elapsedMs(auditStarted), elapsedMs(started));
+            AiLog.info(AiLog.rag().retrieveCompleted(request.tenantId(), request.userId(), request.sessionId(),
+                    request.runId(), retrievalId, request.targetType().name(), request.targetId(), null,
+                    completed.metrics().fusionCandidateCount(), completed.citations().size(),
+                    completed.estimatedTokenCount(), completed.degraded(), completed.metrics().totalMs())
+                    .field(AiLogFields.TRACE_ID, request.traceId()));
+            if (completed.degraded()) {
+                AiLog.warn(AiLog.rag().retrieveDegraded(request.tenantId(), request.userId(),
+                        request.sessionId(), request.runId(), retrievalId, request.targetType().name(),
+                        request.targetId(), String.join(",", completed.degradationReasons()),
+                        completed.metrics().totalMs(), null).field(AiLogFields.TRACE_ID, request.traceId()));
+            }
+            return completed;
         } catch (RuntimeException exception) {
             RagRetrievalResult failed = RagRetrievalResult.empty(retrievalId, elapsedMs(started));
             recordAudit(request, query, failed, "failed", exception, audit);
+            String errorCode = exception instanceof AppException appException
+                    ? appException.getCode() : "RAG_RETRIEVAL_FAILED";
+            AiLog.error(AiLog.rag().retrieveFailed(request.tenantId(), request.userId(), request.sessionId(),
+                    request.runId(), retrievalId, request.targetType().name(), request.targetId(), errorCode,
+                    elapsedMs(started), exception).field(AiLogFields.TRACE_ID, request.traceId()));
             throw exception;
         }
     }
@@ -173,9 +193,6 @@ public class RagRetrievalService {
                     throw exception;
                 }
                 aggregate.degradationReasons.add("optional_binding_failed:" + value.binding().bindingId());
-                log.warn("可选RAG绑定检索降级 tenantId:{} targetId:{} bindingId:{} traceId:{} errorType:{}",
-                        request.tenantId(), request.targetId(), value.binding().bindingId(), request.traceId(),
-                        exception.getClass().getSimpleName());
             }
         }
 
@@ -196,9 +213,6 @@ public class RagRetrievalService {
                 dense.elapsedMs(), aggregate.denseMs, aggregate.sparseMs, aggregate.fusionMs,
                 aggregate.rerankMs, totalMs, aggregate.configurationMs, aggregate.hydrationMs,
                 aggregate.assemblyMs, 0, 0);
-        log.info("RAG检索完成 tenantId:{} targetType:{} targetId:{} retrievalId:{} citations:{} tokens:{} degraded:{} totalMs:{}",
-                request.tenantId(), request.targetType(), request.targetId(), retrievalId, citations.size(), tokens,
-                !aggregate.degradationReasons.isEmpty(), totalMs);
         return new RagRetrievalResult(retrievalId, citations, tokens, !aggregate.degradationReasons.isEmpty(),
                 aggregate.degradationReasons, metrics, aggregate.diagnostics.result());
     }
@@ -214,9 +228,10 @@ public class RagRetrievalService {
                     result, status, errorCode, exception == null ? null : exception.getClass().getSimpleName(),
                     request.traceId(), state.snapshot(request)));
         } catch (RuntimeException auditException) {
-            log.error("RAG检索审计写入失败 tenantId:{} targetId:{} retrievalId:{} traceId:{} errorType:{}",
-                    request.tenantId(), request.targetId(), result.retrievalId(), request.traceId(),
-                    auditException.getClass().getSimpleName());
+            AiLog.error(AiLog.rag().retrieveFailed(request.tenantId(), request.userId(), request.sessionId(),
+                    request.runId(), result.retrievalId(), request.targetType().name(), request.targetId(),
+                    "RAG_AUDIT_WRITE_FAILED", null, auditException)
+                    .field(AiLogFields.TRACE_ID, request.traceId()).field(AiLogFields.STAGE, "audit"));
         }
     }
 
@@ -349,9 +364,6 @@ public class RagRetrievalService {
             return rerankOutput;
         } catch (RuntimeException exception) {
             aggregate.degradationReasons.add("rerank_fallback:" + profile.profileId());
-            log.warn("RAG重排降级 tenantId:{} profileId:{} traceId:{} errorType:{}",
-                    request.tenantId(), profile.profileId(), request.traceId(),
-                    exception.getClass().getSimpleName());
             List<RankedChunk> fallback = candidates.stream().limit(profile.finalTopK()).toList();
             aggregate.diagnostics.captureRanked("rerank_output", fallback, "fallback_without_rerank_score");
             return fallback;

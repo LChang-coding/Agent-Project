@@ -20,6 +20,10 @@ public class ChatRunEntity {
     private String sessionId;
     private String sourceType;
     private String sourceId;
+    /** 本轮创建时固化的会话RAG设置，运行中不随会话开关变化。 */
+    private Boolean ragEnabled;
+    /** 本轮根链路ID，用于跨线程、模型、RAG和工具检索整条链路。 */
+    private String traceId;
     private RunStatus status;
     private Integer version;
     private Long baseContextRevision;

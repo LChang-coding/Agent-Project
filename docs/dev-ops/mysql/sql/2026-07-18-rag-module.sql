@@ -472,6 +472,7 @@ CREATE TABLE IF NOT EXISTS `rag_outbox` (
   `topic_name` VARCHAR(255) NOT NULL COMMENT '目标Topic',
   `partition_key` VARCHAR(255) NOT NULL COMMENT 'Kafka分区键',
   `payload` JSON NOT NULL COMMENT '不含密钥和文档正文的事件载荷',
+  `trace_id` VARCHAR(64) NULL COMMENT '原始请求链路ID',
   `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/publishing/published/retrying/dead',
   `attempt_count` INT NOT NULL DEFAULT 0 COMMENT '发布尝试次数',
   `max_attempts` INT NOT NULL DEFAULT 10 COMMENT '最大发布尝试次数',

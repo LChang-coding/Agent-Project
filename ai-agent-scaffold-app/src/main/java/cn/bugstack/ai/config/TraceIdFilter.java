@@ -24,10 +24,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String traceId = request.getHeader(TraceContext.TRACE_ID_HEADER);
-        if (traceId == null || traceId.isBlank()) {
-            traceId = TraceContext.newTraceId();
-        }
+        String traceId = TraceContext.normalizeOrNew(request.getHeader(TraceContext.TRACE_ID_HEADER));
 
         long start = System.currentTimeMillis();
         Throwable failure = null;

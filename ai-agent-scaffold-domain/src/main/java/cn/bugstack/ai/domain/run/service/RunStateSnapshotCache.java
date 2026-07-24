@@ -147,7 +147,8 @@ final class RunStateSnapshotCache {
     private ChatRunEntity copy(ChatRunEntity run) {
         return ChatRunEntity.builder().runId(run.getRunId()).turnId(run.getTurnId()).tenantId(run.getTenantId())
                 .userId(run.getUserId()).sessionId(run.getSessionId()).sourceType(run.getSourceType())
-                .sourceId(run.getSourceId()).status(run.getStatus()).version(run.getVersion())
+                .sourceId(run.getSourceId()).ragEnabled(run.getRagEnabled()).traceId(run.getTraceId())
+                .status(run.getStatus()).version(run.getVersion())
                 .baseContextRevision(run.getBaseContextRevision())
                 .currentContextRevision(run.getCurrentContextRevision()).predecessorRunId(run.getPredecessorRunId())
                 .successorRunId(run.getSuccessorRunId()).userMessageId(run.getUserMessageId())

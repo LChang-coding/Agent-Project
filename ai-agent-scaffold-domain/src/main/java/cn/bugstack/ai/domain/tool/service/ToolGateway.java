@@ -66,6 +66,7 @@ public class ToolGateway {
         }
         ToolCallLogEntity callLog = claim.getCallLog();
         AiLog.info(AiLog.tool().callStarted(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                context.getRunId(),
                 tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId()));
         try {
             String output = dispatch(tool, input);
@@ -73,12 +74,14 @@ public class ToolGateway {
             dispatchAuthorizationService.finish(callLog, toJson(Map.of("result", output)),
                     ToolStatus.SUCCESS, null, null, costMs);
             AiLog.info(AiLog.tool().callSuccess(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                    context.getRunId(),
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs));
             return Map.of("success", true, "result", output);
         } catch (Exception e) {
             long costMs = System.currentTimeMillis() - begin;
             finishFailedSafely(callLog, e, costMs);
             AiLog.error(AiLog.tool().callFailed(context.getTenantId(), context.getUserId(), context.getSessionId(),
+                    context.getRunId(),
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs, e));
             return Map.of("success", false, "error", safeMessage(e));
         }
@@ -115,6 +118,7 @@ public class ToolGateway {
                     error.getClass().getSimpleName(), safeMessage(error), costMs);
         } catch (Exception auditError) {
             AiLog.error(AiLog.tool().callFailed(log.getTenantId(), log.getUserId(), log.getSessionId(),
+                    log.getRunId(),
                     log.getToolType(), log.getToolId(), log.getToolName(), log.getTraceId(), costMs, auditError));
         }
     }

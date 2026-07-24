@@ -23,8 +23,12 @@ public final class HttpLog {
                              Integer status,
                              Long costMs,
                              Throwable throwable) {
-        return request(method, uri, status, costMs, false)
-                .field(AiLogFields.EVENT, AiLogEvent.HTTP_ERROR.code())
+        return AiLogRecord.event(AiLogEvent.HTTP_ERROR)
+                .field(AiLogFields.METHOD, method)
+                .field(AiLogFields.URI, uri)
+                .field(AiLogFields.STATUS, status)
+                .field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.SUCCESS, false)
                 .error(throwable);
     }
 }

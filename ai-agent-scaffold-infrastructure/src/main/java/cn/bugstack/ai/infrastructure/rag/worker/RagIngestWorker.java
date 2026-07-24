@@ -26,6 +26,8 @@ import cn.bugstack.ai.domain.storage.model.entity.ObjectStorageResultEntity;
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.TraceContext;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -114,6 +116,12 @@ public class RagIngestWorker {
                 now, now.plus(leaseDuration()));
         if (claimed.isEmpty()) return false;
         RagIngestJobEntity job = claimed.get();
+        String previousTraceId = TraceContext.getTraceId();
+        TraceContext.setTraceId(job.traceId() == null || job.traceId().isBlank()
+                ? TraceContext.newTraceId() : job.traceId());
+        long startedAt = System.currentTimeMillis();
+        AiLog.info(AiLog.rag().ingestStarted(job.tenantId(), job.jobId(), job.documentId(),
+                job.versionId(), job.attemptCount()));
         try (LeaseHeartbeat heartbeat = startHeartbeat(job, leaseOwner)) {
             if (job.status() == RagIngestJobStatus.CANCEL_REQUESTED) {
                 cleanupCancelled(job, leaseOwner, heartbeat);
@@ -124,8 +132,18 @@ public class RagIngestWorker {
             }
             return true;
         } catch (Exception error) {
+            RagIngestErrorClassifier.Failure failure = errorClassifier.classify(error);
+            AiLog.error(AiLog.rag().ingestFailed(job.tenantId(), job.jobId(), job.documentId(),
+                    job.versionId(), job.checkpoint().stage().name().toLowerCase(java.util.Locale.ROOT),
+                    failure.code(), System.currentTimeMillis() - startedAt, error));
             handleFailure(tenantId, jobId, leaseOwner, job.fencingToken(), error);
             return true;
+        } finally {
+            if (previousTraceId == null || previousTraceId.isBlank()) {
+                TraceContext.clear();
+            } else {
+                TraceContext.setTraceId(previousTraceId);
+            }
         }
     }
 
@@ -412,6 +430,8 @@ public class RagIngestWorker {
                         job.checkpoint().totalChunks(), job.checkpoint().parsedObjectBucket(),
                         job.checkpoint().parsedObjectKey(), job.checkpoint().parsedContentHash(),
                         job.checkpoint().parsedSizeBytes()), clock.instant());
+        AiLog.info(AiLog.rag().ingestCompleted(job.tenantId(), job.jobId(), job.documentId(),
+                job.versionId(), job.checkpoint().totalChunks(), elapsedFromLease(job)));
     }
 
     private void cleanupCancelled(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
@@ -556,7 +576,18 @@ public class RagIngestWorker {
                 job.fencingToken(), now) != 1) {
             throw new AppException("RAG_INGEST_CHECKPOINT_CONFLICT", "摄取检查点已被其他 Worker 修改");
         }
-        return repository.findIngestJob(job.tenantId(), job.jobId()).orElseThrow();
+        RagIngestJobEntity updated = repository.findIngestJob(job.tenantId(), job.jobId()).orElseThrow();
+        AiLog.info(AiLog.rag().ingestStageCompleted(updated.tenantId(), updated.jobId(),
+                updated.documentId(), updated.versionId(),
+                checkpoint.stage().name().toLowerCase(java.util.Locale.ROOT),
+                checkpoint.processedChunks(), checkpoint.totalChunks()));
+        return updated;
+    }
+
+    private long elapsedFromLease(RagIngestJobEntity job) {
+        if (job == null || job.lease() == null) return 0L;
+        return Math.max(0L, Duration.between(job.lease().expiresAt().minus(leaseDuration()),
+                clock.instant()).toMillis());
     }
 
     private RagIngestJobEntity advanceDeletion(RagIngestJobEntity job, String leaseOwner,

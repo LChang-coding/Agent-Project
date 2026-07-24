@@ -4,6 +4,8 @@ import cn.bugstack.ai.infrastructure.dao.IRagOutboxDao;
 import cn.bugstack.ai.infrastructure.dao.po.RagOutboxCandidatePO;
 import cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
+import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -92,6 +94,11 @@ public class RagOutboxPublisher {
                     required(event.getFencingToken()), now());
             if (changed != 1) {
                 log.warn("RAG Outbox ACK后栅栏已失效 eventId:{}", event.getEventId());
+            } else {
+                AiLog.info(AiLog.rag().ingestStageCompleted(event.getTenantId(), event.getTaskId(),
+                        null, null, "outbox_published", null, null)
+                        .field("eventId", event.getEventId())
+                        .field(AiLogFields.TRACE_ID, event.getTraceId()));
             }
         } catch (InterruptedException e) {
             recordFailure(event, e, config);
@@ -118,6 +125,11 @@ public class RagOutboxPublisher {
         }
         if (changed != 1) {
             log.warn("RAG Outbox失败状态栅栏已失效 eventId:{}", event.getEventId());
+        } else {
+            AiLog.warn(AiLog.rag().ingestFailed(event.getTenantId(), event.getTaskId(), null,
+                    null, "outbox_publish", "RAG_OUTBOX_PUBLISH_FAILED", null, error)
+                    .field("eventId", event.getEventId())
+                    .field(AiLogFields.TRACE_ID, event.getTraceId()));
         }
     }
 

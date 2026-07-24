@@ -26,6 +26,7 @@ public class RagOutboxPO extends BasePO {
     private String topicName;
     private String partitionKey;
     private String payload;
+    private String traceId;
     private String status;
     private Integer attemptCount;
     private Integer maxAttempts;

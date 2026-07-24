@@ -35,6 +35,8 @@ public class SessionDomainTest {
         Assert.assertEquals("agent", session.getSourceType());
         Assert.assertEquals(Integer.valueOf(1), userMessage.getSequenceNo());
         Assert.assertEquals(Integer.valueOf(2), assistantMessage.getSequenceNo());
+        Assert.assertEquals("trace_1", userMessage.getTraceId());
+        Assert.assertEquals("trace_1", assistantMessage.getTraceId());
         Assert.assertEquals(2, repository.messages.size());
         Assert.assertEquals(2, repository.touchCount);
     }
@@ -53,6 +55,18 @@ public class SessionDomainTest {
         Assert.assertEquals("workflow", session.getSourceType());
         Assert.assertEquals(Integer.valueOf(3), session.getWorkflowVersion());
         Assert.assertEquals("gemini-2.5-flash", session.getModelCode());
+    }
+
+    @Test
+    public void shouldPersistSessionRagSetting() {
+        FakeSessionRepository repository = new FakeSessionRepository();
+        SessionDomain sessionDomain = new SessionDomain(repository);
+        sessionDomain.createSession(createSessionCommand());
+
+        ChatSessionEntity updated = sessionDomain.updateRagEnabled("tenant_1", "user_1", "session_1", true);
+
+        Assert.assertTrue(updated.getRagEnabled());
+        Assert.assertTrue(repository.querySession("tenant_1", "user_1", "session_1").getRagEnabled());
     }
 
     /**
@@ -133,6 +147,14 @@ public class SessionDomainTest {
         @Override
         public int updateLastMessageTime(String tenantId, String userId, String sessionId, LocalDateTime lastMessageTime) {
             touchCount++;
+            return 1;
+        }
+
+        @Override
+        public int updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
+            ChatSessionEntity session = querySession(tenantId, userId, sessionId);
+            if (session == null) return 0;
+            session.setRagEnabled(enabled);
             return 1;
         }
 

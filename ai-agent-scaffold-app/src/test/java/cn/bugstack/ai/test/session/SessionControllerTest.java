@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.session.service.SessionLifecycleService;
 import cn.bugstack.ai.domain.rag.service.RagAnswerCitationMetadataService;
+import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import cn.bugstack.ai.domain.rag.adapter.repository.IRagRepository;
 import cn.bugstack.ai.trigger.http.SessionController;
@@ -41,7 +42,8 @@ public class SessionControllerTest {
         SessionDomain sessionDomain = mock(SessionDomain.class);
         SessionLifecycleService lifecycleService = mock(SessionLifecycleService.class);
         SessionController controller = new SessionController(sessionDomain, lifecycleService,
-                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)));
+                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)),
+                mock(SessionRagSettingService.class));
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         LocalDateTime now = LocalDateTime.of(2026, 7, 15, 20, 0);
         when(sessionDomain.querySessions("tenant-1", "user-1", null, null, 31)).thenReturn(List.of(
@@ -64,7 +66,8 @@ public class SessionControllerTest {
         SessionDomain sessionDomain = mock(SessionDomain.class);
         SessionLifecycleService lifecycleService = mock(SessionLifecycleService.class);
         SessionController controller = new SessionController(sessionDomain, lifecycleService,
-                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)));
+                new RagAnswerCitationMetadataService(sessionDomain, new ObjectMapper(), mock(IRagRepository.class)),
+                mock(SessionRagSettingService.class));
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         when(lifecycleService.delete("tenant-1", "user-1", "session-1")).thenReturn(5L);
 

@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagLease;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.TraceContext;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -31,7 +32,8 @@ public record RagIngestJobEntity(String tenantId,
                                  long revision,
                                  String cancelReason,
                                  String errorCode,
-                                 String errorMessage) {
+                                 String errorMessage,
+                                 String traceId) {
 
     public static final String FAILURE_CLEANUP_FAILED = "SYSTEM_FAILURE_CLEANUP:FAILED";
     public static final String FAILURE_CLEANUP_DEAD = "SYSTEM_FAILURE_CLEANUP:DEAD";
@@ -74,7 +76,7 @@ public record RagIngestJobEntity(String tenantId,
         return new RagIngestJobEntity(tenantId, knowledgeBaseId, documentId, versionId, jobId, idempotencyKey,
                 operation, generation, RagIngestJobStatus.PENDING, RagIngestCheckpoint.initial(), 0,
                 maxAttempts, null, null,
-                0L, 0L, null, null, null);
+                0L, 0L, null, null, null, TraceContext.currentOrNewTraceId());
     }
 
     /** 使用单调递增 fencing token 领取任务或接管过期租约。 */
@@ -296,7 +298,7 @@ public record RagIngestJobEntity(String tenantId,
         return new RagIngestJobEntity(tenantId, knowledgeBaseId, documentId, versionId, jobId, idempotencyKey,
                 operation, generation, targetStatus, targetCheckpoint, targetAttempts, maxAttempts,
                 targetRetryAt, targetLease,
-                targetFencingToken, revision + 1, targetCancelReason, targetErrorCode, targetErrorMessage);
+                targetFencingToken, revision + 1, targetCancelReason, targetErrorCode, targetErrorMessage, traceId);
     }
 
     private boolean validDeleteTransition(RagIngestStage current, RagIngestStage target) {

@@ -1,5 +1,5 @@
 import { request } from '@/api/http';
-import type { SessionDeleteResponse, SessionListPage, SessionMessagePage } from '@/types/api';
+import type { SessionDeleteResponse, SessionListPage, SessionMessagePage, SessionRagSetting } from '@/types/api';
 
 /**
  * 查询数据库会话列表；参数是可选游标和数量；返回当前用户会话页。
@@ -30,5 +30,22 @@ export async function deleteChatSession(sessionId: string) {
   return request<SessionDeleteResponse>({
     url: `/v1/sessions/${encodeURIComponent(sessionId)}`,
     method: 'DELETE',
+  });
+}
+
+/** 查询会话RAG开关与目标绑定状态。 */
+export async function querySessionRagSetting(sessionId: string) {
+  return request<SessionRagSetting>({
+    url: `/v1/sessions/${encodeURIComponent(sessionId)}/rag-setting`,
+    method: 'GET',
+  });
+}
+
+/** 持久化会话RAG开关；运行中的轮次不受影响。 */
+export async function updateSessionRagSetting(sessionId: string, enabled: boolean) {
+  return request<SessionRagSetting>({
+    url: `/v1/sessions/${encodeURIComponent(sessionId)}/rag-setting`,
+    method: 'PATCH',
+    data: { enabled },
   });
 }

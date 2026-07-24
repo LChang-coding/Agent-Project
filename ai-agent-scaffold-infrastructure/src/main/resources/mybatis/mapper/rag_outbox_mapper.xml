@@ -13,6 +13,7 @@
         <result column="topic_name" property="topicName"/>
         <result column="partition_key" property="partitionKey"/>
         <result column="payload" property="payload"/>
+        <result column="trace_id" property="traceId"/>
         <result column="status" property="status"/>
         <result column="attempt_count" property="attemptCount"/>
         <result column="max_attempts" property="maxAttempts"/>
@@ -31,7 +32,7 @@
 
     <sql id="Columns">
         id, event_id, tenant_id, task_id, aggregate_type, aggregate_id, event_type, topic_name,
-        partition_key, payload, status, attempt_count, max_attempts, next_retry_at, lease_owner,
+        partition_key, payload, trace_id, status, attempt_count, max_attempts, next_retry_at, lease_owner,
         lease_until, heartbeat_at, fencing_token, row_version, error_message, published_at,
         create_time, update_time, deleted
     </sql>
@@ -54,11 +55,11 @@
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_outbox (
             event_id, tenant_id, task_id, aggregate_type, aggregate_id, event_type, topic_name,
-            partition_key, payload, status, attempt_count, max_attempts, next_retry_at, lease_owner,
+            partition_key, payload, trace_id, status, attempt_count, max_attempts, next_retry_at, lease_owner,
             lease_until, heartbeat_at, fencing_token, row_version, error_message, published_at
         ) VALUES (
             #{eventId}, #{tenantId}, #{taskId}, COALESCE(#{aggregateType}, 'rag_ingest_task'),
-            #{aggregateId}, #{eventType}, #{topicName}, #{partitionKey}, #{payload},
+            #{aggregateId}, #{eventType}, #{topicName}, #{partitionKey}, #{payload}, #{traceId},
             COALESCE(#{status}, 'pending'), COALESCE(#{attemptCount}, 0), COALESCE(#{maxAttempts}, 10),
             #{nextRetryAt}, #{leaseOwner}, #{leaseUntil}, #{heartbeatAt}, COALESCE(#{fencingToken}, 0),
             COALESCE(#{rowVersion}, 0), #{errorMessage}, #{publishedAt}

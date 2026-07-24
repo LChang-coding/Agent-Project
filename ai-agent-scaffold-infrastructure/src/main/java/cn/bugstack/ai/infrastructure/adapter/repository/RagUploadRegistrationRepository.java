@@ -84,6 +84,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
                 .topicName(properties.getKafka().getTopic())
                 .partitionKey(registration.job().jobId())
                 .payload(payload(registration))
+                .traceId(registration.job().traceId())
                 .status("pending")
                 .attemptCount(0)
                 .maxAttempts(10)
@@ -98,6 +99,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
         payload.put("eventId", registration.eventId());
         payload.put("tenantId", registration.job().tenantId());
         payload.put("taskId", registration.job().jobId());
+        payload.put("traceId", registration.job().traceId());
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {

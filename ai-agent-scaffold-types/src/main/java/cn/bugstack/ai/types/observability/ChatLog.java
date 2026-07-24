@@ -63,4 +63,80 @@ public final class ChatLog {
                 .field(AiLogFields.ERROR_MESSAGE, errorMessage)
                 .field(AiLogFields.SUCCESS, false);
     }
+
+    /** 记录会话RAG设置变更。 */
+    public AiLogRecord ragSettingChanged(String tenantId, String userId, String sessionId,
+                                         Boolean enabled, Boolean bindingConfigured) {
+        return AiLogRecord.event(AiLogEvent.CHAT_RAG_SETTING_CHANGED)
+                .field(AiLogFields.TENANT_ID, tenantId)
+                .field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId)
+                .field("ragEnabled", enabled)
+                .field("bindingConfigured", bindingConfigured)
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录一次会话运行开始。 */
+    public AiLogRecord runStarted(String tenantId, String userId, String sessionId, String runId,
+                                  String sourceType, String sourceId, Boolean ragEnabled) {
+        return AiLogRecord.event(AiLogEvent.CHAT_RUN_STARTED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("sourceType", sourceType).field("sourceId", sourceId)
+                .field("ragEnabled", ragEnabled).field(AiLogFields.STAGE, "run")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录一次会话运行完成。 */
+    public AiLogRecord runCompleted(String tenantId, String userId, String sessionId, String runId,
+                                    Boolean ragEnabled, Integer contentLength, Long costMs) {
+        return AiLogRecord.event(AiLogEvent.CHAT_RUN_COMPLETED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field(AiLogFields.CONTENT_LENGTH, contentLength)
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.STAGE, "run")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录一次会话运行失败。 */
+    public AiLogRecord runFailed(String tenantId, String userId, String sessionId, String runId,
+                                 Boolean ragEnabled, Long costMs, Throwable throwable) {
+        return AiLogRecord.event(AiLogEvent.CHAT_RUN_FAILED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.STAGE, "run").field(AiLogFields.SUCCESS, false).error(throwable);
+    }
+
+    /** 记录上下文组装开始。 */
+    public AiLogRecord contextStarted(String tenantId, String userId, String sessionId, String runId,
+                                      Boolean ragEnabled) {
+        return AiLogRecord.event(AiLogEvent.CONTEXT_ASSEMBLY_STARTED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field(AiLogFields.STAGE, "context")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录上下文组装完成。 */
+    public AiLogRecord contextCompleted(String tenantId, String userId, String sessionId, String runId,
+                                        Boolean ragEnabled, Integer estimatedTokens, Integer ragEvidenceCount,
+                                        Long costMs) {
+        return AiLogRecord.event(AiLogEvent.CONTEXT_ASSEMBLY_COMPLETED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field("estimatedTokens", estimatedTokens)
+                .field("ragEvidenceCount", ragEvidenceCount).field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.STAGE, "context").field(AiLogFields.SUCCESS, true);
+    }
+
+    /** 记录上下文组装失败。 */
+    public AiLogRecord contextFailed(String tenantId, String userId, String sessionId, String runId,
+                                     Boolean ragEnabled, Long costMs, Throwable throwable) {
+        return AiLogRecord.event(AiLogEvent.CONTEXT_ASSEMBLY_FAILED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field(AiLogFields.COST_MS, costMs)
+                .field(AiLogFields.STAGE, "context").field(AiLogFields.SUCCESS, false).error(throwable);
+    }
 }

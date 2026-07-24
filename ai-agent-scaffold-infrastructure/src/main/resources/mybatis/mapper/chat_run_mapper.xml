@@ -11,6 +11,8 @@
         <result column="session_id" property="sessionId"/>
         <result column="source_type" property="sourceType"/>
         <result column="source_id" property="sourceId"/>
+        <result column="rag_enabled" property="ragEnabled"/>
+        <result column="trace_id" property="traceId"/>
         <result column="status" property="status"/>
         <result column="version" property="version"/>
         <result column="base_context_revision" property="baseContextRevision"/>
@@ -29,16 +31,16 @@
     </resultMap>
 
     <sql id="ChatRunColumns">
-        id, run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, status, version,
+        id, run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, rag_enabled, trace_id, status, version,
         base_context_revision, current_context_revision, predecessor_run_id, successor_run_id, user_message_id,
         steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatRunPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_run (run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, status, version,
+        INSERT INTO chat_run (run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, rag_enabled, trace_id, status, version,
                               base_context_revision, current_context_revision, predecessor_run_id, successor_run_id,
                               user_message_id, steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at)
-        VALUES (#{runId}, #{turnId}, #{tenantId}, #{userId}, #{sessionId}, #{sourceType}, #{sourceId}, #{status}, #{version},
+        VALUES (#{runId}, #{turnId}, #{tenantId}, #{userId}, #{sessionId}, #{sourceType}, #{sourceId}, #{ragEnabled}, #{traceId}, #{status}, #{version},
                 #{baseContextRevision}, #{currentContextRevision}, #{predecessorRunId}, #{successorRunId},
                 #{userMessageId}, #{steerInstruction}, #{terminalReason}, #{cancelRequestedAt}, #{startedAt}, #{finishedAt})
     </insert>

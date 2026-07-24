@@ -34,6 +34,9 @@ public interface ISessionRepository {
      */
     int updateLastMessageTime(String tenantId, String userId, String sessionId, LocalDateTime lastMessageTime);
 
+    /** 按可信会话范围更新RAG开关。 */
+    int updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled);
+
     /**
      * 查询最大消息序号；参数是租户、用户和会话ID；返回当前最大序号。
      */
