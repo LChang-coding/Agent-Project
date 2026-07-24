@@ -2305,3 +2305,37 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 正式端到端证据目录为`/tmp/rag-embedding-batch8-fix-20260724`，manifest SHA-256=`07eac00e9f25319a6bd0930068915a122a6b3337011f4e905b026ef0cdd3f30a`。使用与失败任务相同的6478字节文件，SHA-256=`7af6e095323f27b27fb61c0cebefb29a074768e7e76ac7f46432ca30801c009d`，单上传线程、单Worker重新创建隔离租户和知识库；新任务`ragtask_f7ccf58791004400848a66622f510fdd`在第一次尝试、约44.018秒内`completed`，checkpoint为3个Embedding批次、18/18 processed、18/18 vector upsert，版本`ragver_f1386969006246ffa6864ce3df6652b0`为ready。
 - 数据库交叉门禁：新Outbox事件`published/attempt=1/error=NULL`；`rag_chunk`共34行，其中18个child、18个非空且唯一vector point。网关对应记录为8、8、2三批Embedding全部HTTP 200，随后检索查询Embedding与4批Reranker也全部HTTP 200。
 - 通过正式Workflow生命周期和RAG Binding执行问题“北京出差的普通员工每天住宿费最高是多少？”，检索ID`ret_175f23a378374e21b861dfa7c239b65e`返回10条引用、`degraded=false`，引用全部来自新文档且上下文命中“450元”。这证明修复闭环覆盖上传、Outbox、Kafka、解析、切块、分批Embedding、Qdrant写入、激活、混合召回、重排和引用封装。
+
+#### 2026-07-24 可观测链路、会话RAG与链路审计计划（执行前）
+
+1. 完整盘点现有`TraceContext`、MDC入口过滤器、异步执行器、Chat/Run/Tool/RAG/Outbox/Kafka/Worker日志、Logback、Alloy/Loki/Grafana配置，以及会话、运行目标和RAG Binding的数据模型；只在现有模块边界内扩展，不新建旁路日志系统，不让浏览器直连RAG中间件。
+2. 将`traceId`确定为一次业务链路的唯一主检索键，并贯穿HTTP入口、会话消息、Chat Run、RAG检索、模型、工具、流式响应及异步摄取链路。`sessionId/runId/taskId/retrievalId`保留为辅助业务键；异步边界必须显式传递、恢复并清理MDC，不能产生串链污染，也不能把高基数`traceId`配置成Loki静态标签。
+3. 在现有日志体系上定义可读的中文业务事件字段：`event/eventName/stage/status/traceId/tenantId/userId/sessionId/runId/taskId/retrievalId/costMs/errorCode`。只在真实阶段边界记录“开始、完成、降级、失败、取消”，中文描述说明当前节点、输入规模、结果与下一步；不打印密码、Token、原始提示词、文档正文或模型密钥。
+4. 优先补齐一条完整聊天链路与一条RAG摄取链路的节点日志，并使Grafana/Loki能够通过一个`traceId`查询并按时间理解全链路；若项目内已有看板或可观测页面则原位增强查询提示、链路摘要和中文状态，不擅自迁移Grafana或改变中间件架构。
+5. 为会话增加持久化RAG开关，默认关闭；开关由租户内会话权限接口修改，发送消息时由服务端读取会话真实配置并固化为本次Run快照，不能仅信任浏览器临时参数。启用后复用会话绑定的Agent/Workflow及现有RAG Binding、检索、引用和降级语义；无有效运行目标或知识库绑定时给出可理解提醒，不能静默假装已检索。
+6. 在现有聊天工作台加入与产品设计一致的RAG开关和明确反馈：关闭、已开启、保存中、检索中、无绑定、降级、引用就绪、失败均可见；防止重复点击和状态覆盖，刷新后从数据库恢复。后端DTO、领域实体、仓储、MyBatis、兼容迁移与基线SQL同步更新，旧会话保持默认关闭。
+7. 基于当前Java实现、真实测试留痕和既有评测证据整理RAG链路审计文档，至少覆盖格式解析、结构保真、表格/页眉页脚/OCR、父子切块、元数据、Embedding、索引、混合召回、融合、重排、上下文预算、引用、取消/重建、权限隔离、可观测性和评测。每项明确“当前证据、考虑不足、可能失败案例、原因、优化方案、验收方法”，未知项明确标为待测，禁止编造数据。
+8. 验收包括Java定向单元/仓储/控制器测试、相关模块构建、Vue类型检查与生产构建，以及真实端到端：创建会话、切换RAG并刷新验证持久化、发送问题验证Run快照与检索/引用、关闭后验证不调用RAG、无绑定提示、按`traceId`检索完整中文节点。测试失败先追加诊断再修复，最终把实际改动、命令、结果、未覆盖风险追加本节。
+9. 每形成一个重大闭环即仅暂存本轮相关文件并使用中文提交信息本地提交；已有日志、运行数据及无关未跟踪文件始终排除，不上传本地Java项目到服务器。
+
+##### 2026-07-25 最终黑盒验收诊断与修复计划（执行前追加）
+
+- 最终构建的关闭RAG真实会话已证明Run快照为`ragEnabled=false`且没有触发任何`rag_*`事件；同一请求中运行开始、上下文、模型、运行完成和HTTP节点均使用`e2e-rag-chat-final-20260725`。
+- 门禁发现助手消息入库日志使用了异步线程中新生成的TraceId，原因是消息实体虽然保存了调用方传入的`traceId`，但`SessionDomain`记录`chat_message_saved`时只依赖当前MDC，没有把实体TraceId显式写入结构化日志。该问题使“一个唯一键还原所有节点”未闭环，不能直接收尾。
+- 修复仅限现有日志边界：消息保存事件显式使用消息实体的TraceId覆盖MDC，并增加领域测试断言；随后重跑Java定向测试、构建和真实关闭RAG会话，门禁要求用户消息与助手消息、运行完成均在同一TraceId下，`rag_*`为0、Token用量和模型完成事件各1条、原始插件内容日志为0。
+
+#### 2026-07-25 可观测链路、会话RAG与链路审计执行结果
+
+- 没有新建旁路服务或改变RAG中间件边界。现有`AiLog`事件增加稳定英文`event`、中文`eventName/message`及`runId/retrievalId/taskId/stage`等业务字段；HTTP、Chat Run、上下文、模型、工具、RAG检索、RAG Outbox/Kafka/Worker均在阶段边界记录开始、完成、降级或失败。外部传入TraceId先做格式与长度校验；异步聊天执行、摄取Outbox和Kafka消息显式携带并恢复TraceId。
+- 会话增加数据库持久化`rag_enabled`，运行创建时把开关和TraceId固化到`chat_run`快照。新增租户权限范围内的`GET/PATCH /api/v1/sessions/{sessionId}/rag-setting`；开关开启但运行目标未绑定知识库时返回明确提醒。聊天执行仅在本次Run快照开启时调用现有RAG上下文贡献器，运行中修改开关不会污染已经开始的轮次。
+- 聊天工作台增加可访问的RAG开关、保存中/关闭/已绑定/缺少绑定状态和检索中提示，采用乐观更新并在失败时回滚，刷新后从数据库恢复；会话摘要同步返回RAG状态。可观测页面移除“等待真实统计”式占位说明。
+- 数据库兼容脚本`2026-07-24-chat-session-rag-observability.sql`已实际应用到开发MySQL，新增`chat_session.rag_enabled`、`chat_run.rag_enabled/trace_id`、`rag_outbox.trace_id`及`idx_chat_run_trace`，并同步更新三份基线SQL。迁移使用幂等列/索引判断，没有迁移MySQL或改动其他中间件。
+- Grafana看板增加“按唯一TraceId还原完整业务链路（中文节点）”，Loki查询先筛选结构化`event=`再`logfmt`解析TraceId，按时间升序展示；TraceId保持字段而非高基数Loki标签。Provisioned看板不能经API覆盖，因此只通过SSH复制该看板JSON到既有Grafana provisioning目录并重启Grafana，未上传Java/Vue项目；在线API确认看板版本2和新查询均已生效。
+- Logback关闭ADK `LoggingPlugin`、测试插件原始内容和Kafka client的常规INFO噪声；模型流式用量按调用指纹去重，零用量中间片段不落日志，每次真实调用只记录一次非零Token和一次模型完成事件，避免Grafana被重复片段淹没。
+- 新增审计文档`docs/rag/RAG链路缺口与优化审计-2026-07-24.md`。文档基于当前代码和已有真实评测，逐项说明解析结构保真、表格/OCR/页眉页脚、父子切块、真实Tokenizer、Embedding与模型版本、Qdrant一致性、Query改写与路由、Hybrid/RRF、Rerank、上下文预算、提示注入、引用蕴含、权限、恢复和评测的当前证据、缺口、失败因果、优化及验收方法；未知项均标记待测。既有SciFact结果明确显示Dense优于当前Hybrid，而Rerank对Hybrid的MRR/nDCG/MAP有真实增益，未把候选命中冒充最终回答质量。
+- Java 17定向回归覆盖日志、Trace过滤、会话/RAG设置、控制器、Run快照、RAG检索/摄取/仓储/Outbox和Mapper，共72/72通过；最终异步Trace修复后`SessionDomainTest`4/4通过。第一次误用本机Java 25时出现23个Mockito/ByteBuddy兼容错误、断言失败为0，切回项目约束的Java 17后通过，该环境诊断未隐瞒。
+- 六模块`mvn -pl ai-agent-scaffold-app -am -DskipTests package`最终BUILD SUCCESS，JAR SHA-256为`03d92873035195b7fb8657b4956cbd26fc4f07fff8858628f791b866364d149d`；Vue `npm run build`完成类型检查和生产构建，1916个模块成功转换。三份MyBatis XML、Grafana JSON和排除运行日志后的`git diff --check`均通过。
+- 第一次开启RAG真实会话使用TraceId `e2e-rag-chat-on-20260725`，设置接口持久化`enabled=true`并明确提示当前Agent无知识库绑定；Run `run_395802a7-2eaa-4f94-8476-0d9cdfc2dab8`数据库快照为`rag_enabled=1`且TraceId一致，请求49453毫秒完成，实际进入RAG检索并以0绑定、0引用、非降级返回。该用例验证了“开启会调用RAG”与“无绑定不静默假装命中”。
+- 关闭RAG用例先暴露助手消息日志在异步线程生成新TraceId；按上面的执行前诊断计划修复后，最终TraceId `e2e-rag-chat-final-fixed-20260725`对应Run `run_094ae3f7-fa7a-4497-bbbd-6d3ef4cad774`，HTTP 200、9073毫秒完成。单个TraceId精确得到9个中文结构化节点：运行开始、用户消息、上下文开始/完成、Token、模型完成、助手消息、运行完成、HTTP完成；其中用户和助手消息各1、`rag_*`为0、非零Token为1、模型完成为1、运行完成为1、原始`LoggingPlugin/MyTestPlugin`内容为0。
+- Alloy推送后通过本机Loki隧道查询最终TraceId返回`status=success`、2个日志流、11行（包含结构化链路与同Trace的常规应用日志），证明Grafana使用同一键可以检索真实落地数据。最终JAR仍在本机8091运行，RAG Kafka消费者已订阅三分区；测试凭据和`/tmp/session-rag-toggle-e2e-20260725.ZdVSov`证据未进入Git。
+- 遗留边界：本轮开启路径使用的是“无绑定”会话，因此没有重复执行已有文档绑定后的完整引用问答；此前RAG模块的正式Workflow绑定、18/18向量写入和10条引用端到端证据仍有效。审计文档列出的Query路由、真实Tokenizer、引用蕴含校验、OCR/复杂表格和并发Rerank容量属于后续优化项，不在本轮伪装为已完成。
