@@ -64,7 +64,7 @@ ai:
       api-key: ${AI_RAG_EMBEDDING_API_KEY:}
       timeout: ${AI_RAG_EMBEDDING_TIMEOUT:10s}
       max-concurrency: ${AI_RAG_EMBEDDING_MAX_CONCURRENCY:2}
-      batch-size: ${AI_RAG_EMBEDDING_BATCH_SIZE:16}
+      batch-size: ${AI_RAG_EMBEDDING_BATCH_SIZE:8}
       request-timeout: ${AI_RAG_EMBEDDING_REQUEST_TIMEOUT:10s}
       dimension: ${AI_RAG_EMBEDDING_DIMENSION:768}
       model-revision: ${AI_RAG_EMBEDDING_MODEL_REVISION:d128750597153bb5987e10b1c3493a34e5a4502a}

@@ -62,7 +62,7 @@ services:
       - --max-batch-tokens
       - "8192"
       - --max-client-batch-size
-      - "16"
+      - "8"
     expose:
       - "80"
     volumes:

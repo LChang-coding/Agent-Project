@@ -2284,3 +2284,24 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 最终运行时PID 90948仍监听8091，实际TCP只连接新MySQL`103.205.240.84:3306`，Kafka仍连接既有`69.165.65.123:9094`；Outbox共45/45 published。`ai-agent-rag-ingest`消费者三分区offset分别17/16/12且lag均0，证明Outbox、Kafka Listener与MySQL补偿扫描均处于可用状态。
 - 验证：Java 17 `RagPropertiesTest`11个、`SchedulingConfigTest`2个，共13/13通过；六模块两次`package -DskipTests`均BUILD SUCCESS。最终manifest SHA-256=`55a2b30c9044a4b84330b685cf8332f2347e24e4582c8d32e869d44ad4039802`，运行JAR SHA-256=`2e10276fe85e5cb91bce10830e2df4e914e74a62832f6ba63c888a7bdd710e4d`。
 - `codex.md`本机记录已补充RAG Topic与消费组，但该文件按项目安全约定被Git忽略。首次缺Topic产生的历史WARN与两轮失败证据均保留；本轮没有上传Java项目到服务器，也没有迁移Kafka、MinIO、Nacos或其他中间件。
+
+#### 2026-07-24 RAG Embedding瞬态HTTP错误3/3诊断与恢复计划（执行前）
+
+1. 以任务后缀`9e1e`和文档名`rag-demo-employee-handbook.md`反查完整任务、文档、版本、知识库与Outbox，冻结`attempt=3/3`终态、checkpoint、错误原文和各阶段时间；不直接修改或复活已耗尽重试的任务。
+2. 按完整任务ID和时间窗关联8091应用日志，确认三次重试间隔、实际HTTP状态/异常类型、批次大小和失败阶段，区分429、4xx请求边界、5xx、连接重置与客户端超时。
+3. 在RAG服务器读取同一时间窗的Embedding模型与网关日志，并核对容器健康、重启、OOM和即时资源；现场冻结后才允许执行最小授权探针，不用盲目重试覆盖证据。
+4. 对照开发环境Embedding批量、并发、请求/总超时及服务器模型批处理限制，判定逻辑、状态或环境根因；只实施与证据匹配、可回退的最小修复。
+5. 修复后不复活旧任务，通过正式HTTP重新上传同一文档生成新版本和新任务；门禁为Outbox已发布、任务首次或合理重试后completed、版本ready、18个chunk全部写入、Qdrant可检索且无degraded。
+6. 执行相关Java定向测试、构建及端到端回归，把故障模式、根因、恢复动作、真实结果和遗留风险追加本节；仅暂存相关代码、配置与计划文件，形成重大闭环后使用中文本地提交。
+
+#### 2026-07-24 RAG Embedding瞬态HTTP错误3/3诊断与恢复结果
+
+- 完整失败对象为任务`ragtask_2f26c51f6d364151bb6464ce1dd59e1e`、文档`doc_b142da28f4174ef18881592aa5ee7d27`、版本`ragver_5d46b657b2b540a7b920bb6c10f37ac7`。原文件6478字节已成功下载和解析，checkpoint为2613字符、18个child chunk，但`embeddingBatchIndex=0`、`vectorUpsertIndex=0`；任务最终`indexing/dead/3/3`，错误码`RAG_EMBEDDING_TRANSIENT_HTTP_ERROR`。旧任务未被改库或复活，继续保留为失败证据。
+- 网关与TEI日志给出确定因果链：Java默认`AI_RAG_EMBEDDING_BATCH_SIZE=16`，服务器TEI虽然允许`max-client-batch-size=16`，但只有`max-concurrent-requests=8`。任务第一批16条输入时，TEI逐次记录`no permits available`并返回HTTP 429；自动三次任务尝试共放大为12次HTTP请求，用户人工重试后又产生12次429。失败不是API Key、网络、客户端超时、Docling、Kafka、Outbox或Qdrant问题。
+- 冻结现场后的授权边界探针复现：8条输入HTTP 200、0.802秒；9条输入HTTP 429、0.193秒且响应`Model is overloaded`；16条输入HTTP 429、0.177秒。单条健康探针HTTP 200、0.738秒，证明服务本身可用，故障是确定性的批次/许可配置冲突，而非随机容量抖动。
+- 最小修复把Java配置文件和`RagProperties`的Embedding默认批次统一收紧为8，并新增低资源默认值断言；RAG服务器部署声明也只把Embedding的`max-client-batch-size`由16改为8，Reranker保持不变。服务器只重建`rag-embedding`容器，没有上传本地Java/Vue项目；容器恢复healthy，restart count=0、OOMKilled=false，运行命令确认并发许可和客户端批次均为8。项目与服务器`docker-compose.yml` SHA-256一致，均为`42966a6a59caa47d323848af29c8b7710a633b7564900bdc469626364796172e`。
+- 修复后的服务边界更明确：8条输入HTTP 200、1.432秒；9条输入HTTP 422、0.130秒，错误明确为`batch size 9 > maximum allowed batch size 8`，不再伪装成瞬态过载。`codex.md`已在本机补充“Java批次不得大于8”的中间件契约；该文件按安全约定不进入Git。
+- Java 17定向测试`TeiModelAdapterProtocolTest`16个、`RagIngestWorkerTest`12个、`RagPropertiesTest`12个，共40/40通过；新增配置门禁会直接拒绝Embedding批次大于8。六模块`package -DskipTests`为BUILD SUCCESS。最终JAR SHA-256=`bdbabce267d4b5e6ae45afdd6cf5bed030e26b35d25bf1c42863c98c2b85fe0d`，已重启为本地8091进程PID 41987，启动日志显示应用成功、RAG Kafka消费者订阅三分区，未登录RAG接口按预期返回401。
+- 正式端到端证据目录为`/tmp/rag-embedding-batch8-fix-20260724`，manifest SHA-256=`07eac00e9f25319a6bd0930068915a122a6b3337011f4e905b026ef0cdd3f30a`。使用与失败任务相同的6478字节文件，SHA-256=`7af6e095323f27b27fb61c0cebefb29a074768e7e76ac7f46432ca30801c009d`，单上传线程、单Worker重新创建隔离租户和知识库；新任务`ragtask_f7ccf58791004400848a66622f510fdd`在第一次尝试、约44.018秒内`completed`，checkpoint为3个Embedding批次、18/18 processed、18/18 vector upsert，版本`ragver_f1386969006246ffa6864ce3df6652b0`为ready。
+- 数据库交叉门禁：新Outbox事件`published/attempt=1/error=NULL`；`rag_chunk`共34行，其中18个child、18个非空且唯一vector point。网关对应记录为8、8、2三批Embedding全部HTTP 200，随后检索查询Embedding与4批Reranker也全部HTTP 200。
+- 通过正式Workflow生命周期和RAG Binding执行问题“北京出差的普通员工每天住宿费最高是多少？”，检索ID`ret_175f23a378374e21b861dfa7c239b65e`返回10条引用、`degraded=false`，引用全部来自新文档且上下文命中“450元”。这证明修复闭环覆盖上传、Outbox、Kafka、解析、切块、分批Embedding、Qdrant写入、激活、混合召回、重排和引用封装。

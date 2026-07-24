@@ -28,6 +28,7 @@ public class RagPropertiesTest {
 
         Assert.assertFalse(properties.isEnabled());
         Assert.assertEquals(768, properties.getEmbedding().getDimension());
+        Assert.assertEquals(8, properties.getEmbedding().getBatchSize());
         Assert.assertEquals("ai_agent_rag_e5_v1", properties.getQdrant().getCollection());
         Assert.assertEquals("rag.ingest.request.v1", properties.getKafka().getTopic());
         Assert.assertFalse(properties.getKafka().isListenerEnabled());
@@ -77,7 +78,7 @@ public class RagPropertiesTest {
                 Map.entry("ai.rag.embedding.endpoint", "https://rag.internal.example/embed"),
                 Map.entry("ai.rag.embedding.timeout", "2500ms"),
                 Map.entry("ai.rag.embedding.max-concurrency", "3"),
-                Map.entry("ai.rag.embedding.batch-size", "24"),
+                Map.entry("ai.rag.embedding.batch-size", "8"),
                 Map.entry("ai.rag.embedding.max-retries", "4"),
                 Map.entry("ai.rag.embedding.retry-initial-backoff", "100ms"),
                 Map.entry("ai.rag.embedding.retry-max-backoff", "1500ms"),
@@ -101,7 +102,7 @@ public class RagPropertiesTest {
         Assert.assertEquals(URI.create("https://rag.internal.example/embed"), properties.getEmbedding().getEndpoint());
         Assert.assertEquals(Duration.ofMillis(2500), properties.getEmbedding().getTimeout());
         Assert.assertEquals(3, properties.getEmbedding().getMaxConcurrency());
-        Assert.assertEquals(24, properties.getEmbedding().getBatchSize());
+        Assert.assertEquals(8, properties.getEmbedding().getBatchSize());
         Assert.assertEquals(4, properties.getEmbedding().getMaxRetries());
         Assert.assertEquals(Duration.ofMillis(100), properties.getEmbedding().getRetryInitialBackoff());
         Assert.assertEquals(Duration.ofMillis(1500), properties.getEmbedding().getRetryMaxBackoff());
@@ -148,6 +149,16 @@ public class RagPropertiesTest {
                 "embedding.maxRetries".equals(violation.getPropertyPath().toString())));
         Assert.assertTrue(violations.stream().anyMatch(violation ->
                 "embedding.retryBackoffValid".equals(violation.getPropertyPath().toString())));
+    }
+
+    /** 校验已部署TEI许可边界；避免Java批次再次超过服务器的8个并发许可。 */
+    @Test
+    public void shouldRejectEmbeddingBatchBeyondServerPermitBoundary() {
+        RagProperties properties = enabledProperties();
+        properties.getEmbedding().setBatchSize(9);
+
+        Assert.assertTrue(validator.validate(properties).stream().anyMatch(violation ->
+                "embedding.batchSize".equals(violation.getPropertyPath().toString())));
     }
 
     /** 校验重排HTTP分批不得超过业务候选上限。 */

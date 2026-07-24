@@ -188,7 +188,8 @@ public class RagProperties {
 
         /** 单批向量化文本数量。 */
         @Min(1)
-        private int batchSize = 16;
+        @Max(8)
+        private int batchSize = 8;
 
         /** 单次HTTP尝试时限；通用timeout作为整个Embedding操作总deadline。 */
         @NotNull
