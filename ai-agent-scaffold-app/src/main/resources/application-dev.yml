@@ -45,7 +45,7 @@ spring:
   datasource:
     username: ${MYSQL_USERNAME:ai_agent_app}
     password: ${MYSQL_PASSWORD:}
-    url: jdbc:mysql://${MYSQL_HOST:69.165.65.123}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ai_agent_scaffold}?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:103.205.240.84}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ai_agent_scaffold}?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&sslMode=REQUIRED&allowPublicKeyRetrieval=false&connectTimeout=5000&socketTimeout=15000&tcpKeepAlive=true
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
@@ -112,6 +112,26 @@ security:
     refresh-expire-seconds: 2592000
 
 ai:
+  rag:
+    enabled: ${AI_RAG_ENABLED:true}
+    qdrant:
+      endpoint: ${AI_RAG_QDRANT_ENDPOINT:http://103.205.240.84:6333}
+    embedding:
+      endpoint: ${AI_RAG_EMBEDDING_ENDPOINT:http://103.205.240.84:8081}
+      request-timeout: ${AI_RAG_EMBEDDING_REQUEST_TIMEOUT:20s}
+      timeout: ${AI_RAG_EMBEDDING_TIMEOUT:60s}
+    reranker:
+      endpoint: ${AI_RAG_RERANKER_ENDPOINT:http://103.205.240.84:8082}
+      request-timeout: ${AI_RAG_RERANKER_REQUEST_TIMEOUT:20s}
+      timeout: ${AI_RAG_RERANKER_TIMEOUT:60s}
+    docling:
+      endpoint: ${AI_RAG_DOCLING_ENDPOINT:http://103.205.240.84:5001/v1}
+    kafka:
+      listener-enabled: ${AI_RAG_KAFKA_LISTENER_ENABLED:true}
+    outbox:
+      enabled: ${AI_RAG_OUTBOX_ENABLED:true}
+    worker:
+      enabled: ${AI_RAG_WORKER_ENABLED:true}
   context:
     enabled: ${AI_CONTEXT_ENABLED:false}
     policy-version: v1

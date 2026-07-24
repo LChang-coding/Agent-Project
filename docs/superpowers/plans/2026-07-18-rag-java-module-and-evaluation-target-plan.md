@@ -2247,3 +2247,40 @@ artifacts/rag-eval/                     本地原始结果（按体积和许可�
 - 根因是运行配置未开启摄取执行链：`application.yml`中`AI_RAG_OUTBOX_ENABLED`、`AI_RAG_WORKER_ENABLED`、`AI_RAG_KAFKA_LISTENER_ENABLED`默认均为`false`，PID 35548的命令行和进程环境没有对应覆盖值；两个执行Bean又分别受`@ConditionalOnProperty(... havingValue="true")`约束，因此当前应用根本没有创建`RagOutboxPublisher`和`RagIngestWorker`。
 - 用户随后发出的取消已真实落库：任务与版本均为`cancelled`，`cancel_requested_at=2026-07-24 10:26:46.641`，任务完成时间`10:26:47.896`；文档聚合状态为`failed`，但Outbox仍为`pending`。页面继续显示“处理中”与数据库终态不一致，属于前端轮询终止/任务与文档状态映射问题，不能据此判断后台仍在运行。
 - 本轮严格只读，没有重发Outbox、启动Worker、修改任务或数据库。最小恢复路径是在下一次启动8091前显式开启Outbox和一种消费方式：同进程轮询Worker可启用`AI_RAG_OUTBOX_ENABLED=true`与`AI_RAG_WORKER_ENABLED=true`；若选择Kafka监听消费，则启用Outbox和Kafka Listener，并确保只保留一种任务领取入口。由于当前任务已取消，不应复活旧任务；配置修正后应重新上传生成新版本/新任务验证端到端。
+
+#### 2026-07-24 RAG摄取执行链启用与新数据库切换计划（执行前）
+
+1. 完整读取本地`codex.md`并核对开发环境配置来源、RAG服务器地址、MySQL TLS、Kafka、MinIO、Qdrant、Embedding、Reranker和Docling边界；凭据只进入本机忽略配置或IDE运行环境，不写入Git跟踪文件。
+2. 追踪当前8091实际配置覆盖链（`application.yml`、开发profile、Nacos及IDE启动参数），找出旧MySQL `69.165.65.123`的最终来源；将本地开发运行时切换为新MySQL `103.205.240.84:3306`，同时显式开启Outbox、Worker和Kafka Listener。
+3. 切换前核对新库迁移表结构及必要基础数据，避免应用启动后因缺表或租户配置缺失失败；不迁移旧数据库业务数据，不复活已取消的旧摄取任务。
+4. 安全停止并重启当前IDE 8091进程，验证启动日志、实际TCP目标、Spring条件Bean、Kafka消费者组以及新MySQL连接；检查RAG服务器组件健康，不上传本地Java项目。
+5. 通过正式HTTP接口创建隔离测试知识库并上传一份小型Markdown，持续读取任务、文档、版本、Outbox和向量结果，门禁为Outbox已发布、任务完成、版本ready、chunk大于0、Qdrant可检索；失败则先追加诊断记录再处理。
+6. 执行相关Java 17定向测试或最小回归，检查前端/接口未受配置变化影响；把实际改动、命令边界、测试结果和遗留风险追加本节，只暂存相关配置与计划文件，重大闭环使用中文本地提交。
+
+#### 2026-07-24 新运行时首次摄取失败诊断计划（执行前）
+
+1. 冻结首次黑盒目录`/tmp/rag-dev-switch-20260724T143913Z`及任务数据库终态，不重写为成功；记录Markdown任务已从received推进至indexing、attempt=1并以`RAG_EMBEDDING_TIMEOUT`失败。
+2. 读取该任务checkpoint、阶段时间、错误信息及22:39时间窗应用日志，确认解析、切块和Embedding批次数；只对RAG服务器Embedding网关执行同等规模的授权合成请求，分别记录首包/总耗时。
+3. 核对当前开发运行值`AI_RAG_EMBEDDING_REQUEST_TIMEOUT`与`AI_RAG_EMBEDDING_TIMEOUT`，结合既有性能评测确定最小合理时限；不通过无限增大超时掩盖服务异常。
+4. 若服务健康且只是默认10秒总deadline不足，仅在dev profile提高单请求和总deadline并补配置校验测试；若网关或模型异常，优先恢复服务，不修改业务重试语义。
+5. 重启后使用全新隔离租户和新任务重新执行MD/DOCX/PDF黑盒；首次失败任务保持failed，不直接改库重试。结果追加到执行计划并保留失败与成功两套证据。
+
+#### 2026-07-24 格式黑盒绑定契约漂移诊断计划（执行前）
+
+1. 冻结第二轮目录`/tmp/rag-dev-switch-retry-20260724T144228Z`：Markdown摄取已真实completed/ready且5个chunk写入，但旧harness用虚构Workflow ID创建Binding，被当前服务端`RAG_BINDING_TARGET_NOT_FOUND`正确拒绝。
+2. 对照当前Workflow正式创建/发布API与既有Agent/Workflow黑盒，确认最小合法目标生命周期；不绕过新增的租户与目标存在性校验，不通过SQL伪造目标。
+3. 更新格式E2E harness，使每个格式先通过HTTP创建并发布最小Workflow，再绑定知识库；保存Workflow响应和传输指标，保持原摄取与检索断言不变。
+4. 先做Python语法检查，再用全新租户第三次执行三格式黑盒；前两轮失败证据均保留，不能计入最终通过数量。
+
+#### 2026-07-24 RAG摄取执行链启用与新数据库切换结果
+
+- 开发profile的MySQL默认地址由旧`69.165.65.123:3306`切换为`103.205.240.84:3306`，JDBC显式使用`sslMode=REQUIRED`、5秒连接超时、15秒socket超时和TCP keepalive；Nacos `ai-agent-scaffold-app-dev.yml`中硬编码的旧URL也做了同一项唯一替换，远程配置SHA从`1134657d0b2899344535e6be4e7b76d2b14f366fd783aebd4e424e914fe9824b`变为`4092591e8f78da03c4668bfa5b230675a398c0eb5adf984a1adbcb6df2827f00`。
+- `application-dev.yml`只在开发环境默认开启`AI_RAG_ENABLED`、Outbox、Worker和Kafka Listener，并把Qdrant/Embedding/Reranker/Docling默认端点指向RAG服务器；数据库密码与三个模型Key只写入Git忽略的本机`secrets.properties`，未进入跟踪配置、日志、提交或测试产物。
+- 首次重启PID 81467即只建立到新MySQL的连接，RAG Kafka消费者确实启动；同时暴露Kafka缺少`rag.ingest.request.v1`。已在现有单Broker上创建3分区、单副本Topic，三分区leader/ISR均为1；历史40条Outbox全部从pending收口到published。
+- 首轮黑盒`/tmp/rag-dev-switch-20260724T143913Z`保留真实失败：Markdown已解析为1232字符/5 chunks，但Embedding批次0、向量写入0，以`RAG_EMBEDDING_TIMEOUT`失败。授权网关同等5输入实测HTTP 200、`5×768`、13.468秒，超过原10秒总deadline；据此只把dev Embedding调整为单请求20秒/总60秒，并同步使用既有评测边界将Reranker设为20秒/60秒，没有无限放宽或改重试语义。
+- 第二轮`/tmp/rag-dev-switch-retry-20260724T144228Z`证明超时修复有效：新Markdown任务29～41秒内completed/ready、5 chunks、Embedding批次1、向量5/5；随后旧格式harness用虚构Workflow ID绑定，被当前权限契约以`RAG_BINDING_TARGET_NOT_FOUND`正确拒绝。该轮仍记失败，未绕过服务端校验。
+- 格式harness已改为通过正式HTTP依次创建、保存草稿并发布最小Workflow，再用真实Workflow ID绑定知识库；每个格式保存create/draft/publish响应与传输指标。Python `py_compile`通过。
+- 最终黑盒`/tmp/rag-dev-switch-final-20260724T144450Z`使用全新租户完成：Markdown 29293ms/5 chunks、DOCX 25408ms/6 chunks、PDF 81554ms/3页/6 chunks；三个任务均attempt=1、completed/ready、activeGeneration=1、errorCode为空。三格式各5个有答案问题，15/15检索证据断言通过，0 degraded、0非200；接口延迟min/avg/max为5269/8889.67/22402ms。每格式的无答案检索响应也已留痕，但harness明确不把检索响应冒充最终LLM拒答正确率。
+- 最终运行时PID 90948仍监听8091，实际TCP只连接新MySQL`103.205.240.84:3306`，Kafka仍连接既有`69.165.65.123:9094`；Outbox共45/45 published。`ai-agent-rag-ingest`消费者三分区offset分别17/16/12且lag均0，证明Outbox、Kafka Listener与MySQL补偿扫描均处于可用状态。
+- 验证：Java 17 `RagPropertiesTest`11个、`SchedulingConfigTest`2个，共13/13通过；六模块两次`package -DskipTests`均BUILD SUCCESS。最终manifest SHA-256=`55a2b30c9044a4b84330b685cf8332f2347e24e4582c8d32e869d44ad4039802`，运行JAR SHA-256=`2e10276fe85e5cb91bce10830e2df4e914e74a62832f6ba63c888a7bdd710e4d`。
+- `codex.md`本机记录已补充RAG Topic与消费组，但该文件按项目安全约定被Git忽略。首次缺Topic产生的历史WARN与两轮失败证据均保留；本轮没有上传Java项目到服务器，也没有迁移Kafka、MinIO、Nacos或其他中间件。

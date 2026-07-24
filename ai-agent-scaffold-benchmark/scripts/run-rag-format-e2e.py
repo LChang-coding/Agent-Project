@@ -46,6 +46,50 @@ def append_jsonl(path: Path, value: object) -> None:
         os.fsync(stream.fileno())
 
 
+def create_workflow_target(api: "Api", suffix: str, model: str, output_dir: Path) -> str:
+    """通过正式生命周期创建可授权绑定的最小Workflow目标。"""
+    name = f"RAG Format Target {suffix}"[:96]
+    created, create_transport = api.call("POST", "/v1/workflows", json={
+        "workflowName": name,
+        "description": "RAG format retrieval-debug binding target",
+        "defaultModelCode": model,
+        "visibility": "private",
+    })
+    workflow_id = created["data"]["workflowId"]
+    graph = {
+        "mode": "sequential",
+        "rootNodeId": "rag_format_target",
+        "nodes": [{
+            "nodeId": "rag_format_target",
+            "nodeType": "llm",
+            "name": "RAG format target",
+            "description": "Formal published target for retrieval-debug authorization",
+            "instruction": "Only answer from injected RAG context.",
+            "modelCode": model,
+            "mcpIds": [],
+            "skillIds": [],
+            "maxIterations": 1,
+            "x": 0,
+            "y": 0,
+        }],
+        "edges": [],
+    }
+    drafted, draft_transport = api.call("POST", f"/v1/workflows/{workflow_id}/draft", json={
+        "workflowName": name,
+        "description": "RAG format retrieval-debug binding target",
+        "defaultModelCode": model,
+        "visibility": "private",
+        "graph": graph,
+    })
+    published, publish_transport = api.call("POST", f"/v1/workflows/{workflow_id}/publish")
+    dump(output_dir / "workflow.json", {
+        "create": {"response": created, "transport": create_transport},
+        "draft": {"response": drafted, "transport": draft_transport},
+        "publish": {"response": published, "transport": publish_transport},
+    })
+    return workflow_id
+
+
 class Api:
     def __init__(self, base_url: str, token: str | None = None, timeout: int = 180):
         self.base_url = base_url.rstrip("/")
@@ -87,6 +131,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ingest-timeout-seconds", type=int, default=900)
     parser.add_argument("--request-timeout-seconds", type=int, default=180)
     parser.add_argument("--app-jar", type=Path, required=True)
+    parser.add_argument("--model", default="deepseek-v4-flash")
     return parser.parse_args()
 
 
@@ -118,6 +163,7 @@ def main() -> None:
         "appJarSha256": sha256(args.app_jar),
         "requestTimeoutSeconds": args.request_timeout_seconds,
         "ingestTimeoutSeconds": args.ingest_timeout_seconds,
+        "workflowModel": args.model,
         "uploadThreads": 1,
         "workerThreads": 1,
         "queryThreads": 1,
@@ -230,7 +276,9 @@ def main() -> None:
             if not document or str(document.get("status", "")).lower() != "ready":
                 raise RuntimeError(f"{format_name} document not READY after completed task")
 
-            target_id = f"format_{args.run_id}_{format_name}"[:120]
+            target_id = create_workflow_target(
+                api, f"{args.run_id}_{format_name}", args.model, format_dir
+            )
             binding, binding_transport = api.call("POST", "/v1/rag/bindings", json={
                 "targetType": "workflow",
                 "targetId": target_id,
