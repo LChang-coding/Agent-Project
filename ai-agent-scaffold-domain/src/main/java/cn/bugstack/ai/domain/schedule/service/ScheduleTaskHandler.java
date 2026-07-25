@@ -5,7 +5,9 @@ package cn.bugstack.ai.domain.schedule.service;
  */
 public interface ScheduleTaskHandler {
 
+    /** 返回该处理器支持的持久化任务类型。 */
     String taskType();
 
+    /** 执行已抢占的可信任务上下文，并返回可持久化结果。 */
     String execute(ScheduleTaskContext context) throws Exception;
 }

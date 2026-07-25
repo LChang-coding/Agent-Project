@@ -52,6 +52,7 @@ public class ScheduleDispatcher {
     private final String instanceId;
     private final Clock clock = Clock.systemUTC();
 
+    /** 建立有界执行池、单线程续租器和任务类型到处理器的不可变映射。 */
     public ScheduleDispatcher(IScheduleRepository repository, CronScheduleSupport cronSupport,
                               SchedulerProperties properties, List<ScheduleTaskHandler> handlers) {
         this.repository = repository;
@@ -75,7 +76,9 @@ public class ScheduleDispatcher {
         this.instanceId = hostName() + ":" + UUID.randomUUID();
     }
 
+    /** 串行组织一个扫描批次，分波并行执行，返回实际抢占任务数。 */
     public int dispatchBatch(int maxTasks) {
+        // 单实例只允许一个批次生产任务，避免多个触发器把本地有界队列打满。
         batchLock.lock();
         try {
             if (closed.get()) {
@@ -89,6 +92,7 @@ public class ScheduleDispatcher {
                 List<ScheduleTaskEntity> claimed;
                 List<Future<?>> futures;
                 synchronized (submissionMonitor) {
+                    // 与 shutdown 共用监视器，封闭“检查未关闭后仍提交新任务”的竞态。
                     if (closed.get()) {
                         break;
                     }
@@ -110,6 +114,7 @@ public class ScheduleDispatcher {
         }
     }
 
+    /** 逐个原子抢占到期任务，每个任务使用独立租约所有者。 */
     private List<ScheduleTaskEntity> claimWave(int waveLimit) {
         List<ScheduleTaskEntity> claimed = new ArrayList<>(waveLimit);
         for (int i = 0; i < waveLimit; i++) {
@@ -125,6 +130,7 @@ public class ScheduleDispatcher {
         return claimed;
     }
 
+    /** 将已持有租约的任务提交到固定大小的有界工作池。 */
     private List<Future<?>> submitWave(List<ScheduleTaskEntity> claimed) {
         List<Future<?>> futures = new ArrayList<>(claimed.size());
         for (ScheduleTaskEntity task : claimed) {
@@ -133,6 +139,7 @@ public class ScheduleDispatcher {
         return futures;
     }
 
+    /** 等待本波任务完成，同时延迟恢复中断标记以免遗留无人提交的租约。 */
     private void awaitWave(List<Future<?>> futures) {
         boolean interrupted = false;
         for (Future<?> future : futures) {
@@ -142,6 +149,7 @@ public class ScheduleDispatcher {
                     future.get();
                     completed = true;
                 } catch (InterruptedException e) {
+                    // 先等待所有已提交任务收尾，再把中断语义交还上层。
                     interrupted = true;
                 } catch (ExecutionException e) {
                     log.warn("定时任务 worker 异常终止", e.getCause());
@@ -154,16 +162,19 @@ public class ScheduleDispatcher {
         }
     }
 
+    /** 校验运行态、登记幂等执行、维持租约并用栅栏令牌提交最终结果。 */
     private void dispatch(ScheduleTaskEntity task) {
         ScheduleConfigEntity config = repository.findConfig(task.getConfigId());
         LocalDateTime plannedTime = task.getNextFireTime();
         if (config == null || !config.isEnabled() || !"active".equals(config.getStatus())) {
+            // 抢占后配置可能已删除或停用，直接封存该触发点，不能再调用 Agent。
             repository.releaseFailedOccurrence(task.getTaskId(), task.getLeaseOwner(), task.getFencingToken(),
                     plannedTime, plannedTime.plusYears(100));
             return;
         }
         LocalDateTime startedAt = LocalDateTime.now(clock);
         if ("skip".equals(task.getMisfirePolicy()) && plannedTime.isBefore(startedAt.minusSeconds(1))) {
+            // skip 策略只推进游标，不补跑已经错过的业务动作。
             LocalDateTime next = cronSupport.next(task.getCronExpr(), task.getTimezone(), startedAt);
             repository.completeTask(task.getTaskId(), task.getLeaseOwner(), task.getFencingToken(), plannedTime, next);
             return;
@@ -175,11 +186,13 @@ public class ScheduleDispatcher {
                 .plannedTime(plannedTime).attemptNo(1).fencingToken(task.getFencingToken())
                 .leaseOwner(task.getLeaseOwner()).startTime(startedAt).status("running").build());
         if (execution == null) {
+            // 相同触发键已由另一实例登记，当前 Worker 不得重复产生副作用。
             log.warn("调度触发点正在被其他栅栏执行 taskId:{} plannedTime:{}", task.getTaskId(), plannedTime);
             return;
         }
         LocalDateTime next = nextAfter(task, plannedTime, startedAt);
         if ("success".equals(execution.getStatus()) || "dead".equals(execution.getStatus())) {
+            // 幂等命中终态记录时只推进任务游标，不再执行处理器。
             repository.completeTask(task.getTaskId(), task.getLeaseOwner(), task.getFencingToken(), plannedTime, next);
             return;
         }
@@ -198,6 +211,7 @@ public class ScheduleDispatcher {
             boolean terminal = retryCount > task.getMaxRetries();
             LocalDateTime retryAt = LocalDateTime.now(clock).plusSeconds(backoffSeconds(retryCount));
             try {
+                // 执行记录与任务重试游标必须由仓储在同一事务内提交。
                 repository.finishFailure(execution.getExecutionId(), task.getTaskId(), task.getLeaseOwner(),
                         task.getFencingToken(), LocalDateTime.now(clock), duration, readableMessage(e), terminal,
                         retryCount, retryAt, plannedTime, next);
@@ -212,6 +226,7 @@ public class ScheduleDispatcher {
         }
     }
 
+    /** 在当前工作线程恢复配置固化的租户身份，并保证执行后清理。 */
     private String executeWithIdentity(ScheduleConfigEntity config, ScheduleExecutionEntity execution,
                                        ScheduleTaskHandler handler) throws Exception {
         TenantContextHolder.set(TenantContext.builder().tenantId(config.getTenantId())
@@ -223,6 +238,7 @@ public class ScheduleDispatcher {
         }
     }
 
+    /** 周期续租长任务；续租失败只记录，由最终栅栏提交决定结果是否有效。 */
     private ScheduledFuture<?> startHeartbeat(ScheduleTaskEntity task) {
         int interval = Math.max(5, Math.min(properties.getHeartbeatSeconds(),
                 Math.max(5, properties.getLeaseSeconds() / 2)));
@@ -237,39 +253,47 @@ public class ScheduleDispatcher {
         }, interval, interval, TimeUnit.SECONDS);
     }
 
+    /** 根据错过策略选择从原计划点追赶，或从实际执行时刻继续。 */
     private LocalDateTime nextAfter(ScheduleTaskEntity task, LocalDateTime planned, LocalDateTime now) {
         String policy = task.getMisfirePolicy() == null ? "fire_once_now" : task.getMisfirePolicy();
         LocalDateTime cursor = "catch_up".equals(policy) ? planned : now;
         return cronSupport.next(task.getCronExpr(), task.getTimezone(), cursor);
     }
 
+    /** 构造一个配置版本下单个计划时间的全局幂等键。 */
     private String triggerKey(ScheduleTaskEntity task, LocalDateTime planned) {
         return task.getBusinessKey() + ":" + task.getConfigVersion() + ":" + planned;
     }
 
+    /** 计算封顶一小时的指数退避时间。 */
     private long backoffSeconds(int retryCount) {
         long multiplier = 1L << Math.min(Math.max(0, retryCount - 1), 10);
         return Math.min(3600L, Math.max(1, properties.getRetryBaseSeconds()) * multiplier);
     }
 
+    /** 将异常转换为最长一千字符的持久化消息。 */
     private String readableMessage(Exception e) {
         String message = e.getMessage();
         return message == null || message.isBlank() ? e.getClass().getSimpleName() : message.substring(0, Math.min(1000, message.length()));
     }
 
+    /** 获取实例可读主机名；容器未注入时使用稳定占位值。 */
     private String hostName() {
         String host = System.getenv("HOSTNAME");
         return host == null || host.isBlank() ? "unknown-host" : host;
     }
 
+    /** 强制租约不少于十五秒，避免高频抢占抖动。 */
     private int leaseSeconds() {
         return Math.max(15, properties.getLeaseSeconds());
     }
 
+    /** 将单实例并发限制在一至十六之间。 */
     private int dispatchConcurrency() {
         return Math.max(1, Math.min(properties.getDispatchConcurrency(), 16));
     }
 
+    /** 阻止新提交、中断后台线程，并等待当前批次退出关键区。 */
     @PreDestroy
     public void shutdown() {
         synchronized (submissionMonitor) {

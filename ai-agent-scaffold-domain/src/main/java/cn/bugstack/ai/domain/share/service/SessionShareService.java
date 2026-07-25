@@ -58,6 +58,7 @@ public class SessionShareService {
     private final TransactionTemplate transactionTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    /** 组装分享依赖；事务管理器缺失时保留可测试的无事务执行模式。 */
     public SessionShareService(SessionDomain sessionDomain, ISessionShareRepository shareRepository,
                                ObjectStorageService storageService, ObjectMapper objectMapper,
                                ObjectProvider<PlatformTransactionManager> transactionManagerProvider,
@@ -83,6 +84,7 @@ public class SessionShareService {
         SessionExportDocument document = buildDocument(session, messages, dependencies);
         byte[] bytes = serialize(document);
         checkDocument(document, bytes);
+        // 原令牌只返回一次，数据库仅保存摘要。
         String shareId = "share_" + UUID.randomUUID();
         String token = randomToken();
         String bucket = storageService.assetBucket();
@@ -101,6 +103,7 @@ public class SessionShareService {
                 throw new AppException("CHAT_SHARE_SAVE_FAILED", "分享授权保存失败");
             }
         } catch (RuntimeException e) {
+            // 授权落库失败时补偿删除对象，避免产生无法回收的孤儿快照。
             deleteQuietly(bucket, objectKey);
             throw e;
         }
@@ -122,6 +125,7 @@ public class SessionShareService {
      */
     public SessionShareResultEntity download(String token) {
         SessionShareEntity share = resolveActive(token);
+        // 先验真再消费额度，损坏对象不应扣减用户次数。
         byte[] bytes = readVerified(share);
         if (shareRepository.consumeAccess(share.getShareId()) != 1) {
             throw new AppException("CHAT_SHARE_LIMIT_REACHED", "分享已失效或读取次数已用完");
@@ -154,17 +158,21 @@ public class SessionShareService {
             throw new AppException("CHAT_SHARE_NOT_FOUND", "分享不存在或无权访问");
         }
         if (shareRepository.revoke(tenantId, userId, shareId) == 1) {
+            // 状态先落库，确保对象删除失败时授权也已不可继续使用。
             deleteQuietly(share.getBucket(), share.getObjectKey());
         }
     }
 
+    /** 在分享行锁内完成幂等检查、额度消费、会话复制和导入记录保存。 */
     private SessionShareResultEntity importTransactional(String tenantId, String userId, SessionShareEntity initial,
                                                           SessionExportDocument document,
                                                           boolean confirmToolAccessRisk) {
         SessionShareEntity share = shareRepository.lockByShareId(initial.getShareId());
+        // 作用域键隐藏接收方身份，同时形成“一个接收方只导入一次”的唯一键。
         String scopeKey = sha256(((tenantId == null ? "" : tenantId) + ':' + userId).getBytes(StandardCharsets.UTF_8));
         SessionImportEntity existing = shareRepository.queryImport(share.getShareId(), scopeKey);
         if (existing != null) {
+            // 幂等重试直接返回旧会话，不重复消费分享额度。
             return loadImported(tenantId, userId, existing.getNewSessionId(), share, document);
         }
         assertActive(share);
@@ -177,6 +185,7 @@ public class SessionShareService {
         }
         String sessionId = "import_" + UUID.randomUUID();
         CreateSessionCommandEntity command = new CreateSessionCommandEntity();
+        // 只使用快照白名单字段，并把所有权重建为接收方身份。
         command.setTenantId(tenantId); command.setUserId(userId); command.setSessionId(sessionId);
         command.setAgentId(document.getSession().getAgentId()); command.setAgentName(document.getSession().getAgentName());
         command.setSourceType(normalizeSourceType(document.getSession().getSourceType()));
@@ -185,6 +194,7 @@ public class SessionShareService {
         command.setAppName(document.getSession().getAppName()); command.setTitle(document.getSession().getTitle());
         ChatSessionEntity session = sessionDomain.createSession(command);
         for (SessionExportDocument.Message message : document.getMessages()) {
+            // 通过会话领域方法重建消息，禁止复制源消息主键和租户字段。
             if (SessionDomain.ROLE_USER.equals(message.getRole())) {
                 sessionDomain.appendUserMessage(tenantId, userId, sessionId, message.getContent(), null);
             } else if (SessionDomain.ROLE_ASSISTANT.equals(message.getRole())) {
@@ -201,6 +211,7 @@ public class SessionShareService {
                 .toBuilder().toolPrecheck(precheck(tenantId, userId, document)).build();
     }
 
+    /** 加载接收方已完成的导入副本，作为重试的稳定结果。 */
     private SessionShareResultEntity loadImported(String tenantId, String userId, String sessionId,
                                                   SessionShareEntity share, SessionExportDocument document) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);
@@ -208,6 +219,7 @@ public class SessionShareService {
                 .toBuilder().toolPrecheck(precheck(tenantId, userId, document)).build();
     }
 
+    /** 从数据库有效消息和服务端工具证据构造版本化白名单快照。 */
     private SessionExportDocument buildDocument(ChatSessionEntity session, List<ChatMessageEntity> messages,
                                                 List<SessionToolDependencyEntity> dependencies) {
         List<SessionExportDocument.Message> exports = messages.stream().map(message -> SessionExportDocument.Message.builder()
@@ -222,12 +234,14 @@ public class SessionShareService {
                 .messages(exports).toolDependencies(dependencies == null ? List.of() : dependencies).build();
     }
 
+    /** 解析令牌并校验分享当前可读取。 */
     private SessionShareEntity resolveActive(String token) {
         SessionShareEntity share = resolve(token);
         assertActive(share);
         return share;
     }
 
+    /** 校验原令牌形态并用摘要查找分享授权。 */
     private SessionShareEntity resolve(String token) {
         if (token == null || token.length() < 32 || token.length() > 256) {
             throw new AppException("CHAT_SHARE_TOKEN_INVALID", "分享令牌不合法");
@@ -239,6 +253,7 @@ public class SessionShareService {
         return share;
     }
 
+    /** 拒绝已撤销、过期或用尽额度的分享。 */
     private void assertActive(SessionShareEntity share) {
         if (share == null) throw new AppException("CHAT_SHARE_NOT_FOUND", "分享不存在");
         if (!"active".equals(share.getStatus()) || !share.getExpiresAt().isAfter(LocalDateTime.now()))
@@ -247,6 +262,7 @@ public class SessionShareService {
             throw new AppException("CHAT_SHARE_LIMIT_REACHED", "分享读取次数已用完");
     }
 
+    /** 有界读取对象并核对创建时摘要，防止快照被替换。 */
     private byte[] readVerified(SessionShareEntity share) {
         byte[] bytes = storageService.getObject(share.getBucket(), share.getObjectKey(), MAX_EXPORT_BYTES);
         if (!share.getContentSha256().equals(sha256(bytes))) {
@@ -255,6 +271,7 @@ public class SessionShareService {
         return bytes;
     }
 
+    /** 校验协议、大小、消息白名单和工具依赖边界。 */
     private void checkDocument(SessionExportDocument document, byte[] bytes) {
         if (document == null || (!SCHEMA_VERSION.equals(document.getSchemaVersion())
                 && !LEGACY_SCHEMA_VERSION.equals(document.getSchemaVersion())) || document.getSession() == null
@@ -262,6 +279,7 @@ public class SessionShareService {
         if (bytes.length > MAX_EXPORT_BYTES || document.getMessages().size() > MAX_MESSAGES)
             throw new AppException("CHAT_SHARE_TOO_LARGE", "分享文件超过限制");
         for (SessionExportDocument.Message message : document.getMessages()) {
+            // 分享只复制人机纯文本，不携带工具原始结果、附件地址或内部事件。
             if (message == null || (!SessionDomain.ROLE_USER.equals(message.getRole())
                     && !SessionDomain.ROLE_ASSISTANT.equals(message.getRole()))
                     || !"text".equals(message.getContentType()) || message.getContent() == null
@@ -280,6 +298,7 @@ public class SessionShareService {
         }
     }
 
+    /** 读取、验真、反序列化并执行完整协议校验。 */
     private SessionExportDocument readDocument(SessionShareEntity share) {
         byte[] bytes = readVerified(share);
         SessionExportDocument document = deserialize(bytes);
@@ -287,6 +306,7 @@ public class SessionShareService {
         return document;
     }
 
+    /** 将快照来源元数据映射为统一用例结果，并兼容 v1 工作流标识。 */
     private SessionShareResultEntity result(SessionShareEntity share, ChatSessionEntity session,
                                             List<ChatMessageEntity> messages, SessionExportDocument document) {
         SessionExportDocument.Session source = document.getSession();
@@ -301,16 +321,19 @@ public class SessionShareService {
                 .legacySnapshot(LEGACY_SCHEMA_VERSION.equals(document.getSchemaVersion())).build();
     }
 
+    /** 将快照工具依赖与接收方当前可用目录逐项比对。 */
     private SessionToolPrecheckEntity precheck(String tenantId, String userId, SessionExportDocument document) {
         List<SessionToolDependencyEntity> dependencies = dependencies(document);
         Map<String, ToolCatalogEntity> available = new LinkedHashMap<>();
         if (!blank(tenantId) && !blank(userId)) {
+            // 未登录预览不会假定拥有任何工具，所有依赖均提示风险。
             for (ToolCatalogEntity item : toolRepository.queryAvailableTools(tenantId, userId)) {
                 available.put(toolKey(item.getToolType(), item.getToolId()), item);
             }
         }
         List<SessionToolAccessEntity> items = dependencies.stream().map(dependency -> {
             ToolCatalogEntity catalog = available.get(toolKey(dependency.getToolType(), dependency.getToolId()));
+            // 同标识不同版本也不能视为可复现，避免工作流行为静默漂移。
             boolean versionMatch = catalog != null && (blank(dependency.getVersion())
                     || dependency.getVersion().equals(catalog.getVersion()));
             String access = versionMatch ? "available" : "missing";
@@ -326,34 +349,46 @@ public class SessionShareService {
                 .missingCount(missingCount).deniedCount(0).items(items).build();
     }
 
+    /** 返回不可修改的依赖副本，并兼容旧版快照缺失字段。 */
     private List<SessionToolDependencyEntity> dependencies(SessionExportDocument document) {
         return document.getToolDependencies() == null ? List.of() : List.copyOf(document.getToolDependencies());
     }
 
+    /** 用规范化类型与标识构造目录比对键。 */
     private String toolKey(String toolType, String toolId) {
         return (toolType == null ? "" : toolType.toLowerCase()) + ':' + toolId;
     }
 
+    /** 判断可选字符串是否缺失。 */
     private boolean blank(String value) { return value == null || value.isBlank(); }
 
+    /** 将未知旧值收敛为普通 Agent 来源。 */
     private String normalizeSourceType(String sourceType) {
         return "workflow".equals(sourceType) ? "workflow" : "agent";
     }
 
+    /** 将导出文档序列化为对象存储字节。 */
     private byte[] serialize(SessionExportDocument document) {
         try { return objectMapper.writeValueAsBytes(document); }
         catch (Exception e) { throw new AppException("CHAT_SHARE_SERIALIZE_FAILED", "会话导出失败", e); }
     }
 
+    /** 将已验真字节反序列化为版本化导出文档。 */
     private SessionExportDocument deserialize(byte[] bytes) {
         try { return objectMapper.readValue(bytes, SessionExportDocument.class); }
         catch (Exception e) { throw new AppException("CHAT_SHARE_SCHEMA_INVALID", "分享文件无法解析", e); }
     }
 
+    /** 将有效小时限制在一小时至三十天。 */
     private int normalizeHours(Integer hours) { return hours == null ? 72 : Math.max(1, Math.min(hours, 720)); }
+    /** 将读取额度限制在一次至一千次。 */
     private int normalizeDownloads(Integer count) { return count == null ? 20 : Math.max(1, Math.min(count, 1000)); }
+    /** 生成二百五十六位 URL 安全随机令牌。 */
     private String randomToken() { byte[] bytes=new byte[32]; secureRandom.nextBytes(bytes); return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
+    /** 计算令牌或快照字节的 SHA-256。 */
     private String sha256(byte[] bytes) { try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); } catch(Exception e) { throw new AppException("CHAT_SHARE_HASH_FAILED", "摘要计算失败", e); } }
+    /** 在可用事务管理器内执行导入临界区。 */
     private <T> T inTransaction(java.util.function.Supplier<T> action) { return transactionTemplate == null ? action.get() : transactionTemplate.execute(status -> action.get()); }
+    /** 补偿清理对象；授权状态正确时不因清理失败覆盖主异常。 */
     private void deleteQuietly(String bucket,String objectKey) { try { storageService.deleteObject(bucket,objectKey); } catch(Exception ignored) { } }
 }

@@ -18,6 +18,7 @@ import java.util.List;
 @Component
 public class CronScheduleSupport {
 
+    /** 压缩空白并验证 Spring 六段式 Cron，返回可稳定计算摘要的形式。 */
     public String normalize(String expression) {
         if (expression == null || expression.isBlank()) {
             throw new AppException("SCHEDULE_CRON_INVALID", "Cron 表达式不能为空");
@@ -31,6 +32,7 @@ public class CronScheduleSupport {
         return normalized;
     }
 
+    /** 校验 IANA 时区；未配置时采用产品默认时区。 */
     public String normalizeTimezone(String timezone) {
         String normalized = timezone == null || timezone.isBlank() ? "Asia/Shanghai" : timezone.trim();
         try {
@@ -41,6 +43,7 @@ public class CronScheduleSupport {
         return normalized;
     }
 
+    /** 在配置时区计算下一个触发点，再转换为 UTC 无时区值入库。 */
     public LocalDateTime next(String expression, String timezone, LocalDateTime afterUtc) {
         CronExpression cron = CronExpression.parse(normalize(expression));
         ZoneId zone = ZoneId.of(normalizeTimezone(timezone));
@@ -52,6 +55,7 @@ public class CronScheduleSupport {
         return LocalDateTime.ofInstant(next.toInstant(), ZoneOffset.UTC);
     }
 
+    /** 最多预览二十个未来触发点，防止接口被用于无界计算。 */
     public List<LocalDateTime> preview(String expression, String timezone, int count, LocalDateTime nowUtc) {
         int safeCount = Math.max(1, Math.min(count, 20));
         List<LocalDateTime> result = new ArrayList<>(safeCount);

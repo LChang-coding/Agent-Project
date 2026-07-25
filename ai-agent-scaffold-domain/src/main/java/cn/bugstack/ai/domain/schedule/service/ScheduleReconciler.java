@@ -27,6 +27,7 @@ public class ScheduleReconciler {
     private final ObjectMapper objectMapper;
     private final Clock clock = Clock.systemUTC();
 
+    /** 有界扫描待收敛配置，并停用失去有效配置的运行态。 */
     public int reconcileBatch(int limit) {
         int count = 0;
         for (ScheduleConfigEntity config : repository.listForReconcile(Math.max(1, Math.min(limit, 1000)))) {
@@ -37,17 +38,20 @@ public class ScheduleReconciler {
         return count;
     }
 
+    /** 按配置标识执行一次幂等收敛；配置已删除时返回空。 */
     public ScheduleTaskEntity reconcile(String configId) {
         ScheduleConfigEntity config = repository.findConfig(configId);
         return config == null ? null : reconcile(config);
     }
 
+    /** 将配置规范化、计算摘要并按稳定业务键冲突更新运行态。 */
     public ScheduleTaskEntity reconcile(ScheduleConfigEntity config) {
         LocalDateTime now = LocalDateTime.now(clock);
         String cron = cronSupport.normalize(config.getCronExpr());
         String timezone = cronSupport.normalizeTimezone(config.getTimezone());
         String hash = configHash(config, cron, timezone);
         LocalDateTime next = cronSupport.next(cron, timezone, now);
+        // 业务键只由租户和配置标识决定，Cron 修改不会生成重复任务。
         String businessKey = sha256(nullSafe(config.getTenantId()) + "|" + config.getConfigId());
         ScheduleTaskEntity task = repository.upsertTask(ScheduleTaskEntity.builder()
                 .tenantId(config.getTenantId()).userId(config.getRunAsUserId()).configId(config.getConfigId())
@@ -61,6 +65,7 @@ public class ScheduleReconciler {
         return task;
     }
 
+    /** 只纳入会改变执行语义的字段，避免展示字段触发无意义版本升级。 */
     private String configHash(ScheduleConfigEntity config, String cron, String timezone) {
         return sha256(String.join("|", nullSafe(config.getTaskType()), nullSafe(config.getAgentId()), cron,
                 timezone, canonicalJson(config.getTaskPayload()), nullSafe(config.getRunAsUserId()),
@@ -69,6 +74,7 @@ public class ScheduleReconciler {
                 nullSafe(config.getStatus())));
     }
 
+    /** 规范化 JSON 键顺序，使等价载荷得到相同摘要。 */
     private String canonicalJson(String json) {
         try {
             JsonNode node = objectMapper.readTree(json == null ? "{}" : json);
@@ -79,6 +85,7 @@ public class ScheduleReconciler {
         }
     }
 
+    /** 生成数据库业务键与配置摘要使用的 SHA-256。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -88,6 +95,7 @@ public class ScheduleReconciler {
         }
     }
 
+    /** 将缺失字符串稳定映射为空串，避免摘要计算歧义。 */
     private String nullSafe(String value) {
         return value == null ? "" : value;
     }
