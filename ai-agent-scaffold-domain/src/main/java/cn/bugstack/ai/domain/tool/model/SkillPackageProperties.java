@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "ai.skill-package")
 public class SkillPackageProperties {
 
+    /** 单个压缩包允许的最大文件条目数，防止 Zip Bomb。 */
     private int maxEntries = 256;
+    /** 单个解压条目的最大字节数。 */
     private int maxEntryBytes = 1024 * 1024;
 }

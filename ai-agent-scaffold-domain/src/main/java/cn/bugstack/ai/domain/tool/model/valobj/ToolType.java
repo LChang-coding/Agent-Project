@@ -5,12 +5,12 @@ package cn.bugstack.ai.domain.tool.model.valobj;
  */
 public final class ToolType {
 
+    /** 文件包定义的本地 Skill。 */
     public static final String SKILL = "skill";
+    /** MCP 协议工具集。 */
     public static final String MCP = "mcp";
 
-    /**
-     * 禁止创建常量类；无参数；无返回值。
-     */
+    /** 禁止实例化常量类。 */
     private ToolType() {
     }
 }
