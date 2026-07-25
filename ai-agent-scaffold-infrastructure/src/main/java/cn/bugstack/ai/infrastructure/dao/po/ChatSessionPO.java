@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** 用户会话及其固定运行目标和上下文修订状态。 */
 @Data
 @Builder
 @AllArgsConstructor

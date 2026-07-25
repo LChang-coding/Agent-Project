@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** 用户声明的 Cron 配置及协调器同步游标。 */
 @Data
 @Builder
 @AllArgsConstructor
@@ -50,10 +51,13 @@ public class AgentScheduleConfigPO extends BasePO {
      */
     private String agentName;
 
+    /** 执行目标类型，如 Agent 或 Workflow。 */
     private String taskType;
 
+    /** 触发时传给目标的序列化业务参数。 */
     private String taskPayload;
 
+    /** 定时执行采用的可信角色。 */
     private String runAsRoleCode;
 
     /**
@@ -76,14 +80,19 @@ public class AgentScheduleConfigPO extends BasePO {
      */
     private String status;
 
+    /** 错过计划时刻后的补偿策略。 */
     private String misfirePolicy;
 
+    /** 单次计划发生允许的最大重试数。 */
     private Integer maxRetries;
 
+    /** 参与运行时落库字段的稳定摘要。 */
     private String configHash;
 
+    /** 每次有效配置变更递增的版本。 */
     private Long configVersion;
 
+    /** 长周期协调器最近成功同步时间。 */
     private LocalDateTime lastReconciledAt;
 
     /**

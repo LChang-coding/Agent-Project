@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 附件或生成物在对象存储中的索引与解析快照。 */
 @Data
 @Builder
 @AllArgsConstructor

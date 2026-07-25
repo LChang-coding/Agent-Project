@@ -15,11 +15,18 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 public class AgentTenantOverridePO extends BasePO {
+    /** 覆盖规则所属租户。 */
     private String tenantId;
+    /** 被覆盖的平台 Agent。 */
     private String agentId;
+    /** 租户内状态，如 enabled/disabled。 */
     private String status;
+    /** 管理员停用或恢复原因。 */
     private String reason;
+    /** 最近修改规则的用户。 */
     private String updatedBy;
+    /** 乐观并发修订号。 */
     private Long revision;
+    /** 最近一次停用生效时间。 */
     private LocalDateTime disabledAt;
 }

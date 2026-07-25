@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 会话内按序持久化且可失效的消息。 */
 @Data
 @Builder
 @AllArgsConstructor

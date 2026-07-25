@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 单次模型调用的幂等 Token 用量账本。 */
 @Data
 @Builder
 @AllArgsConstructor
@@ -73,10 +74,13 @@ public class ModelUsagePO extends BasePO {
      */
     private String modelVersion;
 
+    /** 用量来源类型，如 chat/workflow/tool。 */
     private String usageType;
 
+    /** running/success/failed/cancelled 调用状态。 */
     private String callStatus;
 
+    /** 模型返回的停止原因。 */
     private String finishReason;
 
     /**

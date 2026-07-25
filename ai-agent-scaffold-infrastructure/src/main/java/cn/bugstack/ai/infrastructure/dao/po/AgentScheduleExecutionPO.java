@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** 单个计划发生的幂等执行账本。 */
 @Data
 @Builder
 @AllArgsConstructor
@@ -30,6 +31,7 @@ public class AgentScheduleExecutionPO extends BasePO {
      */
     private String taskId;
 
+    /** 产生本次执行的配置 ID。 */
     private String configId;
 
     /**
@@ -37,6 +39,7 @@ public class AgentScheduleExecutionPO extends BasePO {
      */
     private String executionId;
 
+    /** 配置与计划时刻构成的幂等键。 */
     private String triggerKey;
 
     /**
@@ -44,12 +47,16 @@ public class AgentScheduleExecutionPO extends BasePO {
      */
     private String traceId;
 
+    /** 本次执行对应的 Cron 计划时刻。 */
     private LocalDateTime plannedTime;
 
+    /** 当前计划发生的尝试序号。 */
     private Integer attemptNo;
 
+    /** 领取任务时冻结的围栏令牌。 */
     private Long fencingToken;
 
+    /** 获得本次执行权的实例标识。 */
     private String leaseOwner;
 
     /**
@@ -77,6 +84,7 @@ public class AgentScheduleExecutionPO extends BasePO {
      */
     private String errorMessage;
 
+    /** 目标返回结果的受限 JSON 快照。 */
     private String resultJson;
 
     /**

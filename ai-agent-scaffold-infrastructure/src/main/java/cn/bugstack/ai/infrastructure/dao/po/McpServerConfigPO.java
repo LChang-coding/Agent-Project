@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** MCP 定义、版本指针和最近连接测试状态。 */
 @Data
 @Builder
 @AllArgsConstructor
