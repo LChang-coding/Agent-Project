@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatSessionDao">
 
+    <!-- 会话读写必须限定可信租户和用户；删除仅做软删除并由上层撤销关联分享。 -->
     <resultMap id="ChatSessionMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

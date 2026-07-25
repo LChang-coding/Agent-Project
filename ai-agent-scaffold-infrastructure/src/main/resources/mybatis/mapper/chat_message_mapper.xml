@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatMessageDao">
 
+    <!-- 会话消息按租户、用户、会话和顺序号组成上下文；失效消息必须从有效上下文查询中排除。 -->
     <resultMap id="ChatMessageMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatMessagePO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
@@ -106,6 +107,7 @@
         </choose>
     </select>
 
+    <!-- 上下文范围只读取有效消息；取消或 steer 失效的消息不得进入模型输入。 -->
     <select id="queryContextRange" resultMap="ChatMessageMap">
         SELECT <include refid="ChatMessageColumns"/>
         FROM chat_message
@@ -145,6 +147,7 @@
         </choose>
     </select>
 
+    <!-- 取消运行按 runId 批量失效其消息，使压缩与后续上下文组装同时不可见。 -->
     <update id="invalidateRunMessages">
         UPDATE chat_message
         SET validity_status = 'invalidated', invalid_reason = #{reason}, invalidated_at = #{invalidatedAt}

@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao">
 
+    <!-- 资产元数据始终按租户和所有者读取；对象存储位置不是授权凭据。 -->
     <resultMap id="ArtifactAssetMap" type="cn.bugstack.ai.infrastructure.dao.po.ArtifactAssetPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

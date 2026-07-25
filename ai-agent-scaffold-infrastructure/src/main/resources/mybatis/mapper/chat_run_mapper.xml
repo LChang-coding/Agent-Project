@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IChatRunDao">
 
+    <!-- 运行状态以 userId、runId 隔离；状态、消息绑定和上下文修订均用 version 做 CAS。 -->
     <resultMap id="ChatRunMap" type="cn.bugstack.ai.infrastructure.dao.po.ChatRunPO">
         <id column="id" property="id"/>
         <result column="run_id" property="runId"/>
@@ -58,6 +59,7 @@
         LIMIT 1
     </select>
 
+    <!-- 锁定单个运行后再处理取消、steer 或终态，避免并发分支交叉推进。 -->
     <select id="lock" resultMap="ChatRunMap">
         SELECT <include refid="ChatRunColumns"/> FROM chat_run
         WHERE user_id = #{userId} AND run_id = #{runId} AND deleted = 0
@@ -83,6 +85,7 @@
         ORDER BY id ASC
     </select>
 
+    <!-- 状态迁移必须命中预期 version；影响行数为 0 表示并发状态已经变化。 -->
     <update id="transition">
         UPDATE chat_run SET status = #{targetStatus}, version = version + 1,
             terminal_reason = COALESCE(#{reason}, terminal_reason),

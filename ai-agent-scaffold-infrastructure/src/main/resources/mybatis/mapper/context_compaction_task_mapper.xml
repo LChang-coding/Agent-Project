@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao">
 
+    <!-- 压缩任务以覆盖范围哈希幂等；领取增加围栏令牌，旧租约不得完成或重试新任务。 -->
     <resultMap id="TaskMap" type="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
         <id column="id" property="id"/>
         <result column="task_id" property="taskId"/>
@@ -35,6 +36,7 @@
         trace_id, create_time, update_time, deleted
     </sql>
 
+    <!-- taskKey 唯一约束吸收重复阈值检测，避免相同覆盖范围生成多份摘要。 -->
     <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ContextCompactionTaskPO">
         INSERT IGNORE INTO context_compaction_task (
             task_id, task_key, tenant_id, user_id, session_id, run_id, from_sequence, to_sequence,
@@ -97,6 +99,7 @@
         LIMIT 1
     </select>
 
+    <!-- 领取只认待执行或过期租约，并递增 fencingToken。 -->
     <update id="claim">
         UPDATE context_compaction_task
         SET status = 'processing',
@@ -142,6 +145,7 @@
           AND deleted = 0
     </update>
 
+    <!-- 取消消息落入覆盖范围时，将重叠任务置 stale，禁止摘要污染后续修订。 -->
     <update id="staleOverlapping">
         UPDATE context_compaction_task
         SET status = 'stale', lease_owner = NULL, lease_until = NULL, error_message = #{reason}

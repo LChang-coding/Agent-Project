@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagAgentBindingDao">
 
+    <!-- RAG 绑定按租户和运行目标读取；禁用使用 revision CAS，防止覆盖并发策略变更。 -->
     <resultMap id="RagAgentBindingMap" type="cn.bugstack.ai.infrastructure.dao.po.RagAgentBindingPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentScheduleExecutionDao">
 
+    <!-- 执行记录以 triggerKey 幂等；终态更新必须同时命中持有者、围栏令牌和 running 状态。 -->
     <resultMap id="AgentScheduleExecutionMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleExecutionPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

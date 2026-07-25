@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.ISkillVersionDao">
 
+    <!-- Skill 版本保存不可变包摘要、对象位置和 manifest；发布后不得原地覆盖。 -->
     <resultMap id="SkillVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.SkillVersionPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

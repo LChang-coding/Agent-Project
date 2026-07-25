@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalProfileDao">
 
+    <!-- 检索策略按租户、profileId 和 revision 版本化；运行使用冻结快照而非漂移配置。 -->
     <resultMap id="RagRetrievalProfileMap" type="cn.bugstack.ai.infrastructure.dao.po.RagRetrievalProfilePO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

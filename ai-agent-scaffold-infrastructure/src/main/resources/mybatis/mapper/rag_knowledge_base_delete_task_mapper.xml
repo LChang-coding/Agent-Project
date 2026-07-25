@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDeleteTaskDao">
 
+    <!-- 知识库删除任务按步骤续跑；每次推进都校验租约和围栏，避免旧 Worker 越级清理。 -->
     <resultMap id="TaskMap" type="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBaseDeleteTaskPO">
         <id column="id" property="id"/>
         <result column="task_id" property="taskId"/>
@@ -55,6 +56,7 @@
         WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0 LIMIT 1
     </select>
 
+    <!-- 级联删除登记在行锁内检查当前步骤，避免并发重复启动。 -->
     <select id="queryByTenantAndTaskIdForUpdate" resultMap="TaskMap">
         SELECT <include refid="Columns"/> FROM rag_knowledge_base_delete_task
         WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND deleted = 0
@@ -80,6 +82,7 @@
         LIMIT #{limit}
     </select>
 
+    <!-- 删除任务领取递增围栏；旧 Worker 不得继续删除新 generation 的资源。 -->
     <update id="claimDue">
         UPDATE rag_knowledge_base_delete_task
         SET attempt_count = attempt_count + CASE WHEN status = 'waiting' THEN 0 ELSE 1 END,
@@ -120,6 +123,7 @@
           AND row_version = #{expectedRevision} AND deleted = 0
     </update>
 
+    <!-- 每完成一个清理步骤才按当前租约推进 checkpoint，失败可从原步骤重试。 -->
     <update id="updateClaimedByTenantFenceAndRevision">
         UPDATE rag_knowledge_base_delete_task
         SET status = #{task.status}, checkpoint = #{task.checkpoint},

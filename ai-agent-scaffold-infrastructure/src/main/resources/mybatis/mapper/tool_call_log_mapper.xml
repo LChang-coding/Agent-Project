@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IToolCallLogDao">
 
+    <!-- 工具调用以幂等键领取副作用；终态更新必须命中调用身份和当前执行状态。 -->
     <resultMap id="ToolCallLogMap" type="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
@@ -39,6 +40,7 @@
         VALUES (#{tenantId}, #{userId}, #{sessionId}, #{runId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{functionCallId}, #{idempotencyKey}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{startedAt}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
     </insert>
 
+    <!-- 幂等键冲突表示副作用已被领取，调用方必须读取既有记录而非再次执行工具。 -->
     <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolCallLogPO" useGeneratedKeys="true" keyProperty="id">
         INSERT IGNORE INTO tool_call_log (tenant_id, user_id, session_id, run_id, workflow_id, tool_type, tool_id, tool_name, version, invocation_id, function_call_id, idempotency_key, trace_id, input_json, output_json, status, started_at, error_type, error_message, cost_ms, metadata)
         VALUES (#{tenantId}, #{userId}, #{sessionId}, #{runId}, #{workflowId}, #{toolType}, #{toolId}, #{toolName}, #{version}, #{invocationId}, #{functionCallId}, #{idempotencyKey}, #{traceId}, #{inputJson}, #{outputJson}, #{status}, #{startedAt}, #{errorType}, #{errorMessage}, #{costMs}, #{metadata})
@@ -50,6 +52,7 @@
         WHERE id = #{id} AND deleted = 0
     </update>
 
+    <!-- 只允许 processing 记录写入一次终态，重复回调不能覆盖首次结果。 -->
     <update id="finishByIdempotencyKey">
         UPDATE tool_call_log
         SET output_json = #{outputJson}, status = #{status}, error_type = #{errorType},

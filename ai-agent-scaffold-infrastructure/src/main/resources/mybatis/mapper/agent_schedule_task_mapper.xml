@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentScheduleTaskDao">
 
+    <!-- 调度任务由配置哈希唯一定位；领取和推进游标依赖租约、版本与到期时间共同约束。 -->
     <resultMap id="AgentScheduleTaskMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
@@ -89,6 +90,7 @@
         ORDER BY planned_time ASC, id ASC
     </select>
 
+    <!-- 以配置唯一键冲突更新运行时任务，Cron 变更不能重复入库。 -->
     <insert id="upsertRuntime" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleTaskPO">
         INSERT INTO agent_schedule_task (tenant_id, user_id, config_id, task_id, business_key, config_hash,
             config_version, cron_expr, timezone, misfire_policy, max_retries, planned_time, next_fire_time,
@@ -129,6 +131,7 @@
           AND (config.config_id IS NULL OR config.enabled = 0 OR config.status &lt;&gt; 'active')
     </update>
 
+    <!-- 短周期扫描只领取到期且租约可用的任务，并递增围栏令牌隔离旧执行器。 -->
     <update id="claimDue">
         UPDATE agent_schedule_task
         SET status = 'running', lease_owner = #{leaseOwner}, lease_until = #{leaseUntil},
@@ -158,6 +161,7 @@
           AND status = 'running' AND deleted = 0
     </update>
 
+    <!-- 成功执行只允许当前租约持有者推进下一次触发时间。 -->
     <update id="complete">
         UPDATE agent_schedule_task
         SET planned_time = #{nextFireTime}, next_fire_time = #{nextFireTime},

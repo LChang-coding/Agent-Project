@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagOutboxDao">
 
+    <!-- Outbox 先随业务事务落库，再由租约发布；只有 Broker ACK 后才能标记 published。 -->
     <resultMap id="RagOutboxMap" type="cn.bugstack.ai.infrastructure.dao.po.RagOutboxPO">
         <id column="id" property="id"/>
         <result column="event_id" property="eventId"/>
@@ -77,6 +78,7 @@
         ORDER BY id ASC
     </select>
 
+    <!-- 发布器按租约领取事件并递增围栏，避免多实例重复确认同一消息。 -->
     <update id="claimDue">
         UPDATE rag_outbox
         SET status = 'publishing', attempt_count = attempt_count + 1, next_retry_at = NULL,
@@ -99,6 +101,7 @@
           AND fencing_token = #{fencingToken} AND lease_until &gt; #{now} AND deleted = 0
     </update>
 
+    <!-- 只有当前租约持有者收到 Broker ACK 后才能写 published。 -->
     <update id="markPublished">
         UPDATE rag_outbox
         SET status = 'published', next_retry_at = NULL, lease_owner = NULL, lease_until = NULL,

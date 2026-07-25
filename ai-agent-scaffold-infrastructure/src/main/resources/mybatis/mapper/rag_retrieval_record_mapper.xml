@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalRecordDao">
+    <!-- 检索记录保存策略版本、阶段耗时和降级事实；只用于审计与评测，不驱动在线排序。 -->
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.RagRetrievalRecordPO"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_retrieval_record (

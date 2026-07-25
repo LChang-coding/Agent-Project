@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentScheduleConfigDao">
 
+    <!-- 调度配置以租户和 configId 隔离；版本条件负责阻止旧扫描器覆盖新 Cron。 -->
     <resultMap id="AgentScheduleConfigMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentScheduleConfigPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>
@@ -102,6 +103,7 @@
         ORDER BY id DESC
     </select>
 
+    <!-- 长周期扫描只读取待协调配置；后续以 configHash 判断插入还是冲突更新。 -->
     <select id="queryForReconcile" resultMap="AgentScheduleConfigMap">
         SELECT <include refid="AgentScheduleConfigColumns"/>
         FROM agent_schedule_config
@@ -144,6 +146,7 @@
           AND config_id = #{configId} AND deleted = 0
     </update>
 
+    <!-- 仅在配置版本未漂移时记录协调结果，避免旧扫描覆盖新 Cron。 -->
     <update id="updateReconciled">
         UPDATE agent_schedule_config
         SET config_hash = #{configHash}, config_version = #{configVersion},

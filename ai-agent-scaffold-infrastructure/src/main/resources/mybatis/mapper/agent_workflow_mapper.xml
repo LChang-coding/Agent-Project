@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentWorkflowDao">
 
+    <!-- 工作流主表保存租户内稳定身份与当前版本指针；软删除记录不参与运行时装配。 -->
     <resultMap id="AgentWorkflowMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentWorkflowPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

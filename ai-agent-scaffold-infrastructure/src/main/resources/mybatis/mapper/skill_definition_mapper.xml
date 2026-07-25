@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.ISkillDefinitionDao">
 
+    <!-- Skill 定义保存租户内稳定身份和活动版本指针；删除不物理移除历史版本。 -->
     <resultMap id="SkillDefinitionMap" type="cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

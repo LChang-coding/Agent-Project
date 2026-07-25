@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IConversationMemorySnapshotDao">
 
+    <!-- 记忆快照按租户、用户、会话和 revision 追加；CAS 只允许从预期版本推进。 -->
     <resultMap id="SnapshotMap" type="cn.bugstack.ai.infrastructure.dao.po.ConversationMemorySnapshotPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

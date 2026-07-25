@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagChunkDao">
 
+    <!-- 分块始终按租户、文档版本和 generation 隔离；活动检索排除软删除与非 active 数据。 -->
     <resultMap id="RagChunkMap" type="cn.bugstack.ai.infrastructure.dao.po.RagChunkPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

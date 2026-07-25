@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagIngestTaskDao">
 
+    <!-- 摄取任务的租约、心跳、checkpoint 和终态均受 leaseOwner、fencingToken、revision 保护。 -->
     <resultMap id="RagIngestTaskMap" type="cn.bugstack.ai.infrastructure.dao.po.RagIngestTaskPO">
         <id column="id" property="id"/>
         <result column="task_id" property="taskId"/>
@@ -103,6 +104,7 @@
           )
     </select>
 
+    <!-- 全局候选扫描仅返回领取所需身份；真正处理前仍需按租户原子领取。 -->
     <select id="queryDueCandidates" resultType="cn.bugstack.ai.infrastructure.dao.po.RagIngestCandidatePO">
         SELECT tenant_id AS tenantId, task_id AS jobId
         FROM rag_ingest_task
@@ -119,6 +121,7 @@
         LIMIT #{limit}
     </select>
 
+    <!-- 到期任务领取同时推进租约、围栏和 revision，旧 Worker 立即失去写权限。 -->
     <update id="claimDue">
         UPDATE rag_ingest_task
         SET status = 'running', attempt_count = attempt_count + 1, next_retry_at = NULL,
@@ -200,6 +203,7 @@
         row_version = row_version + 1
     </sql>
 
+    <!-- checkpoint 与终态写入必须命中当前租约、围栏和 revision。 -->
     <update id="updateClaimedByTenantFenceAndRevision">
         UPDATE rag_ingest_task
         SET <include refid="WorkerStateSet"/>

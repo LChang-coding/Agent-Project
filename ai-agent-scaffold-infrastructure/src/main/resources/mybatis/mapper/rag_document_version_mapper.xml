@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao">
 
+    <!-- 文档版本状态推进使用 rowVersion CAS；激活、关闭和删除只接受规定的前置状态。 -->
     <resultMap id="RagDocumentVersionMap" type="cn.bugstack.ai.infrastructure.dao.po.RagDocumentVersionPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

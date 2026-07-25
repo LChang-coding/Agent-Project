@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.ITenantDao">
 
+    <!-- 租户主表提供平台级租户身份；所有业务聚合仍需自行携带 tenantId 条件。 -->
     <select id="queryTenantCount" resultType="int">
         SELECT COUNT(1)
         FROM tenant

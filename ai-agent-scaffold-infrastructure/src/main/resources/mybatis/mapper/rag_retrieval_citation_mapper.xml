@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagRetrievalCitationDao">
+    <!-- 引用按租户和 retrievalId 批量留痕；审计写失败不得反向改变已返回的检索结果。 -->
     <insert id="insertBatch">
         INSERT INTO rag_retrieval_citation (
             tenant_id, retrieval_id, citation_id, rank_no, kb_id, document_id, document_version,

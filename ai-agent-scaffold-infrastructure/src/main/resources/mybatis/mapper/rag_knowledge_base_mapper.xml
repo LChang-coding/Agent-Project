@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.IRagKnowledgeBaseDao">
 
+    <!-- 知识库生命周期按租户隔离并以 revision CAS；deleting 状态立即退出在线检索。 -->
     <resultMap id="RagKnowledgeBaseMap" type="cn.bugstack.ai.infrastructure.dao.po.RagKnowledgeBasePO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

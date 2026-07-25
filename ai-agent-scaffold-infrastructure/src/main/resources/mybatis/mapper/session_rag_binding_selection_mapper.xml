@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="cn.bugstack.ai.infrastructure.dao.ISessionRagBindingSelectionDao">
 
+    <!-- 手动选择按租户、用户、会话和运行目标隔离；selectionOrder 固定多绑定顺序。 -->
     <resultMap id="SessionRagBindingSelectionMap"
                type="cn.bugstack.ai.infrastructure.dao.po.SessionRagBindingSelectionPO">
         <id column="id" property="id"/>
