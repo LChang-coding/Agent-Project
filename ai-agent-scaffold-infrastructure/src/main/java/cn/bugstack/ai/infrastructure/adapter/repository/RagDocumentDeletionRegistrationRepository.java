@@ -29,8 +29,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RagDocumentDeletionRegistrationRepository implements RagDocumentDeletionRegistrationPort {
 
+    /** 删除与摄取共享 Worker Topic，通过 operation 区分。 */
     private static final String EVENT_TYPE = "rag.ingest.requested.v1";
 
+    /** 删除登记所需 DAO；锁定、建账和 outbox 必须同事务。 */
     private final IRagIngestTaskDao ingestTaskDao;
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
@@ -42,6 +44,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 锁定文档后登记删除 generation、任务和 outbox，拒绝与活动摄取并发。 */
     public boolean register(String tenantId, RagDocumentDeletionRegistration registration) {
         requireScope(tenantId, registration);
         RagKnowledgeBasePO lockedKnowledgeBase = knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
@@ -82,6 +85,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
         return true;
     }
 
+    /** 构造删除请求 outbox。 */
     private RagOutboxPO outbox(RagDocumentDeletionRegistration registration) {
         return RagOutboxPO.builder().eventId(registration.eventId()).tenantId(registration.job().tenantId())
                 .taskId(registration.job().jobId()).aggregateType("rag_ingest_task")
@@ -91,6 +95,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
                 .fencingToken(0L).rowVersion(0L).build();
     }
 
+    /** 编码 Worker 执行删除所需稳定身份与 generation。 */
     private String payload(RagDocumentDeletionRegistration registration) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("schemaVersion", 1);
@@ -104,6 +109,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
         }
     }
 
+    /** 校验可信租户与登记范围完全一致。 */
     private void requireScope(String tenantId, RagDocumentDeletionRegistration registration) {
         if (tenantId == null || tenantId.isBlank() || registration == null
                 || !tenantId.equals(registration.document().tenantId())
@@ -112,6 +118,7 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
         }
     }
 
+    /** 将影响行数 0 映射为并发冲突，阻止部分登记提交。 */
     private void requireChanged(int changed) {
         if (changed != 1) {
             throw new AppException("RAG_DELETE_CONCURRENT_UPDATE", "文档删除登记发生并发变化");

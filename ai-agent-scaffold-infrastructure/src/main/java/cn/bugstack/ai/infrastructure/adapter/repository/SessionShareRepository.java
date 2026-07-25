@@ -15,7 +15,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class SessionShareRepository implements ISessionShareRepository {
 
+    /** 分享定义与访问计数入口。 */
     private final IChatSessionShareDao shareDao;
+    /** 接收方导入幂等账本入口。 */
     private final IChatSessionImportDao importDao;
 
     public SessionShareRepository(IChatSessionShareDao shareDao, IChatSessionImportDao importDao) {
@@ -24,6 +26,7 @@ public class SessionShareRepository implements ISessionShareRepository {
     }
 
     @Override
+    /** 持久化不可变分享快照索引。 */
     public int insertShare(SessionShareEntity entity) {
         ChatSessionSharePO po = toSharePO(entity);
         int affected = shareDao.insert(po);
@@ -32,41 +35,49 @@ public class SessionShareRepository implements ISessionShareRepository {
     }
 
     @Override
+    /** 通过令牌摘要解析分享，不接触明文令牌。 */
     public SessionShareEntity queryByTokenHash(String tokenHash) {
         return toShareEntity(shareDao.queryByTokenHash(tokenHash));
     }
 
     @Override
+    /** 所有者范围查询用于管理和撤销。 */
     public SessionShareEntity queryOwnerShare(String tenantId, String userId, String shareId) {
         return toShareEntity(shareDao.queryOwnerShare(tenantId, userId, shareId));
     }
 
     @Override
+    /** 消费下载次数前锁定分享。 */
     public SessionShareEntity lockByShareId(String shareId) {
         return toShareEntity(shareDao.lockByShareId(shareId));
     }
 
     @Override
+    /** 原子增加访问次数；0 表示已失效或达到上限。 */
     public int consumeAccess(String shareId) {
         return shareDao.consumeAccess(shareId);
     }
 
     @Override
+    /** 所有者撤销单个分享。 */
     public int revoke(String tenantId, String userId, String shareId) {
         return shareDao.revoke(tenantId, userId, shareId);
     }
 
     @Override
+    /** 删除会话时撤销其全部分享。 */
     public int revokeBySession(String tenantId, String userId, String sessionId) {
         return shareDao.revokeBySession(tenantId, userId, sessionId);
     }
 
     @Override
+    /** 查询接收方是否已经导入该分享。 */
     public SessionImportEntity queryImport(String shareId, String recipientScopeKey) {
         return toImportEntity(importDao.queryByRecipient(shareId, recipientScopeKey));
     }
 
     @Override
+    /** 插入导入结果；唯一键保证同一接收方只导入一次。 */
     public int insertImport(SessionImportEntity entity) {
         ChatSessionImportPO po = toImportPO(entity);
         int affected = importDao.insert(po);

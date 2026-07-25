@@ -37,6 +37,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseDeletionRepository {
 
+    /** 级联任务、聚合墓碑、分块和绑定的持久化入口。 */
     private final IRagKnowledgeBaseDeleteTaskDao taskDao;
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
@@ -48,12 +49,14 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     private final ObjectMapper objectMapper;
 
     @Override
+    /** 在租户范围内查询删除任务。 */
     public Optional<RagKnowledgeBaseDeleteTaskEntity> findByTaskId(String tenantId, String taskId) {
         return Optional.ofNullable(toEntity(taskDao.queryByTenantAndTaskId(
                 requireText(tenantId), requireText(taskId))));
     }
 
     @Override
+    /** 查询知识库当前唯一删除任务。 */
     public Optional<RagKnowledgeBaseDeleteTaskEntity> findByKnowledgeBaseId(String tenantId,
                                                                             String knowledgeBaseId) {
         return Optional.ofNullable(toEntity(taskDao.queryByTenantAndKnowledgeBaseId(
@@ -62,6 +65,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 锁定知识库并原子写删除墓碑、禁用绑定和创建级联任务。 */
     public boolean register(String tenantId, RagKnowledgeBaseDeleteRegistration registration) {
         requireScope(tenantId, registration);
         RagKnowledgeBaseEntity locked = mapper.toKnowledgeBase(
@@ -99,6 +103,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     }
 
     @Override
+    /** 以期望修订号推进未领取任务。 */
     public int update(String tenantId, RagKnowledgeBaseDeleteTaskEntity task, long expectedRevision) {
         if (task == null || !requireText(tenantId).equals(task.tenantId()) || expectedRevision < 0) {
             throw new IllegalArgumentException("知识库删除任务更新范围非法");
@@ -107,6 +112,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     }
 
     @Override
+    /** 全局只扫描最小候选身份，后续仍需按租户领取。 */
     public List<RagKnowledgeBaseDeleteCandidate> listDueCandidates(java.time.Instant now, int limit) {
         if (now == null || limit < 1 || limit > 200) {
             throw new IllegalArgumentException("知识库删除扫描参数非法");
@@ -117,6 +123,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     }
 
     @Override
+    /** 原子领取后重新读取任务，返回持有新 fencing token 的快照。 */
     public Optional<RagKnowledgeBaseDeleteTaskEntity> claim(String tenantId, String taskId,
                                                               String leaseOwner, java.time.Instant now,
                                                               java.time.Instant leaseUntil) {
@@ -127,6 +134,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     }
 
     @Override
+    /** 当前租约和围栏令牌匹配时续租。 */
     public int heartbeat(String tenantId, String taskId, String leaseOwner, long fencingToken,
                          java.time.Instant now, java.time.Instant leaseUntil) {
         requireLeaseWindow(now, leaseUntil);
@@ -136,6 +144,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
     }
 
     @Override
+    /** 同时校验租约、围栏和修订号推进 checkpoint。 */
     public int updateClaimed(String tenantId, RagKnowledgeBaseDeleteTaskEntity task,
                              long expectedRevision, String leaseOwner, long fencingToken,
                              java.time.Instant now) {
@@ -151,6 +160,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 只有文档、版本、分块和摄取任务全部收口后才物理关闭知识库。 */
     public void completeClaimed(String tenantId, String taskId, long expectedTaskRevision,
                                 String leaseOwner, long fencingToken, java.time.Instant now) {
         String trustedTenant = requireText(tenantId);
@@ -243,6 +253,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         }
     }
 
+    /** 校验可信租户、任务和知识库身份。 */
     private void requireScope(String tenantId, RagKnowledgeBaseDeleteRegistration registration) {
         if (registration == null || !requireText(tenantId).equals(registration.knowledgeBase().tenantId())
                 || !tenantId.equals(registration.task().tenantId())) {
@@ -263,6 +274,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         return value == null ? null : value.toInstant(ZoneOffset.UTC);
     }
 
+    /** 租约结束必须严格晚于领取时刻。 */
     private void requireLeaseWindow(java.time.Instant now, java.time.Instant leaseUntil) {
         if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {
             throw new IllegalArgumentException("知识库删除租约时间非法");

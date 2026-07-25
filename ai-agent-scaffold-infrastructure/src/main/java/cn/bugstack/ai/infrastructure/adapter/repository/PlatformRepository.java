@@ -7,9 +7,11 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/** 平台基础表的薄适配器；不在此层补授权、事务或领域规则。 */
 @Repository
 public class PlatformRepository implements IPlatformRepository {
 
+    /** 各基础聚合的 MyBatis 入口；调用方法保持一对一透传。 */
     private final ITenantDao tenantDao;
 
     private final IUserAccountDao userAccountDao;
@@ -69,6 +71,7 @@ public class PlatformRepository implements IPlatformRepository {
         return tenantDao.queryTenantCount() >= 0;
     }
 
+    /** 租户定义的基础 CRUD 适配。 */
     public int insertTenant(TenantPO tenant) {
         return tenantDao.insert(tenant);
     }
@@ -89,6 +92,7 @@ public class PlatformRepository implements IPlatformRepository {
         return tenantDao.queryListByTenantId(tenantId);
     }
 
+    /** 用户账号的基础 CRUD 适配。 */
     public int insertUserAccount(UserAccountPO userAccount) {
         return userAccountDao.insert(userAccount);
     }
@@ -109,6 +113,7 @@ public class PlatformRepository implements IPlatformRepository {
         return userAccountDao.queryListByUserId(userId);
     }
 
+    /** 租户成员关系的基础 CRUD 适配。 */
     public int insertTenantUser(TenantUserPO tenantUser) {
         return tenantUserDao.insert(tenantUser);
     }
@@ -129,6 +134,7 @@ public class PlatformRepository implements IPlatformRepository {
         return tenantUserDao.queryListByUserId(userId);
     }
 
+    /** 用户凭证摘要的基础 CRUD 适配。 */
     public int insertUserSecret(UserSecretPO userSecret) {
         return userSecretDao.insert(userSecret);
     }
@@ -149,6 +155,7 @@ public class PlatformRepository implements IPlatformRepository {
         return userSecretDao.queryListByUserId(userId);
     }
 
+    /** 会话主表的基础 CRUD 适配。 */
     public int insertChatSession(ChatSessionPO chatSession) {
         return chatSessionDao.insert(chatSession);
     }
@@ -177,6 +184,7 @@ public class PlatformRepository implements IPlatformRepository {
         return chatSessionDao.queryListBySessionId(sessionId);
     }
 
+    /** 会话消息的基础 CRUD 适配。 */
     public int insertChatMessage(ChatMessagePO chatMessage) {
         return chatMessageDao.insert(chatMessage);
     }
@@ -205,6 +213,7 @@ public class PlatformRepository implements IPlatformRepository {
         return chatMessageDao.queryListBySessionId(sessionId);
     }
 
+    /** 模型用量账本的基础 CRUD 适配。 */
     public int insertModelUsage(ModelUsagePO modelUsage) {
         return modelUsageDao.insert(modelUsage);
     }
@@ -229,6 +238,7 @@ public class PlatformRepository implements IPlatformRepository {
         return modelUsageDao.queryListBySessionId(sessionId);
     }
 
+    /** 资产索引的基础 CRUD 适配。 */
     public int insertArtifactAsset(ArtifactAssetPO artifactAsset) {
         return artifactAssetDao.insert(artifactAsset);
     }
@@ -261,6 +271,7 @@ public class PlatformRepository implements IPlatformRepository {
         return artifactAssetDao.queryListByTenantIdAndVisibility(tenantId, visibility);
     }
 
+    /** Skill 定义的基础 CRUD 适配。 */
     public int insertSkillDefinition(SkillDefinitionPO skillDefinition) {
         return skillDefinitionDao.insert(skillDefinition);
     }
@@ -289,6 +300,7 @@ public class PlatformRepository implements IPlatformRepository {
         return skillDefinitionDao.queryListByTenantIdAndVisibility(tenantId, visibility);
     }
 
+    /** MCP 定义的基础 CRUD 适配。 */
     public int insertMcpServerConfig(McpServerConfigPO mcpServerConfig) {
         return mcpServerConfigDao.insert(mcpServerConfig);
     }
@@ -317,6 +329,7 @@ public class PlatformRepository implements IPlatformRepository {
         return mcpServerConfigDao.queryListByTenantIdAndVisibility(tenantId, visibility);
     }
 
+    /** 定时配置的基础 CRUD 适配。 */
     public int insertAgentScheduleConfig(AgentScheduleConfigPO agentScheduleConfig) {
         return agentScheduleConfigDao.insert(agentScheduleConfig);
     }
@@ -353,6 +366,7 @@ public class PlatformRepository implements IPlatformRepository {
         return agentScheduleConfigDao.queryListByTenantIdAndVisibility(tenantId, visibility);
     }
 
+    /** 调度运行时任务的基础 CRUD 适配。 */
     public int insertAgentScheduleTask(AgentScheduleTaskPO agentScheduleTask) {
         return agentScheduleTaskDao.insert(agentScheduleTask);
     }
@@ -385,6 +399,7 @@ public class PlatformRepository implements IPlatformRepository {
         return agentScheduleTaskDao.queryListByTaskId(taskId);
     }
 
+    /** 调度执行账本的基础 CRUD 适配。 */
     public int insertAgentScheduleExecution(AgentScheduleExecutionPO agentScheduleExecution) {
         return agentScheduleExecutionDao.insert(agentScheduleExecution);
     }

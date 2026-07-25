@@ -29,7 +29,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RagUploadRegistrationRepository implements RagUploadRegistrationPort {
 
+    /** 与 Kafka 消费契约匹配的摄取事件版本。 */
     private static final String EVENT_TYPE = "rag.ingest.requested.v1";
+    /** 聚合登记所需 DAO；全部写入共享同一数据库事务。 */
     private final IRagIngestTaskDao ingestTaskDao;
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
     private final IRagDocumentDao documentDao;
@@ -41,6 +43,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 原子登记任务、文档、版本和 outbox；重复 taskKey 只重放既有结果。 */
     public boolean register(String tenantId, RagUploadRegistration registration) {
         requireScope(tenantId, registration);
         RagKnowledgeBasePO locked = knowledgeBaseDao.queryByTenantAndKnowledgeBaseIdForUpdate(
@@ -73,6 +76,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
         return true;
     }
 
+    /** 构造待发布事件；事件 ID 与任务一一对应。 */
     private RagOutboxPO outbox(RagUploadRegistration registration) {
         return RagOutboxPO.builder()
                 .eventId(registration.eventId())
@@ -93,6 +97,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
                 .build();
     }
 
+    /** 只编码 Worker 所需稳定身份，不携带租约或可变状态。 */
     private String payload(RagUploadRegistration registration) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("schemaVersion", 1);
@@ -107,6 +112,7 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
         }
     }
 
+    /** 拒绝调用方租户与登记聚合不一致。 */
     private void requireScope(String tenantId, RagUploadRegistration registration) {
         if (tenantId == null || tenantId.isBlank() || registration == null
                 || !tenantId.equals(registration.document().tenantId())

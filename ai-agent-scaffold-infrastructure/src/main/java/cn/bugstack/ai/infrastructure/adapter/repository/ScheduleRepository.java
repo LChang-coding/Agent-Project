@@ -24,8 +24,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ScheduleRepository implements IScheduleRepository {
 
+    /** 用户配置持久化入口。 */
     private final IAgentScheduleConfigDao configDao;
+    /** 可领取任务持久化入口。 */
     private final IAgentScheduleTaskDao taskDao;
+    /** 单次计划发生账本入口。 */
     private final IAgentScheduleExecutionDao executionDao;
 
     @Override
@@ -72,6 +75,7 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 冲突更新唯一任务并在同一事务中回读完整运行时。 */
     public ScheduleTaskEntity upsertTask(ScheduleTaskEntity task) {
         taskDao.upsertRuntime(toTaskPo(task));
         return toTask(taskDao.queryByConfigId(task.getConfigId()));
@@ -84,6 +88,7 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 领取成功后按本轮唯一 leaseOwner 回查，避免返回扫描旧快照。 */
     public ScheduleTaskEntity claimDueTask(String leaseOwner, LocalDateTime now, LocalDateTime leaseUntil) {
         if (taskDao.claimDue(leaseOwner, now, leaseUntil) != 1) {
             return null;
@@ -127,6 +132,7 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 按 triggerKey 幂等建账；已完成发生直接重放，未完成发生必须重新获得执行权。 */
     public ScheduleExecutionEntity beginExecution(ScheduleExecutionEntity execution) {
         AgentScheduleExecutionPO po = toExecutionPo(execution);
         if (executionDao.insertIgnore(po) == 0) {
@@ -153,6 +159,7 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 执行终态与下一 Cron 游标必须同时提交，否则整体回滚。 */
     public void finishSuccess(String executionId, String taskId, String leaseOwner, long fencingToken,
                               LocalDateTime endTime, long durationMs, String resultJson,
                               LocalDateTime plannedTime, LocalDateTime nextFireTime) {
@@ -165,6 +172,7 @@ public class ScheduleRepository implements IScheduleRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 失败账本与任务重试/游标推进必须同时提交。 */
     public void finishFailure(String executionId, String taskId, String leaseOwner, long fencingToken,
                               LocalDateTime endTime, long durationMs, String errorMessage, boolean terminal,
                               int retryCount, LocalDateTime retryAt, LocalDateTime plannedTime,
@@ -187,6 +195,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .map(this::toExecution).toList();
     }
 
+    /** 将数据库空值归一为领域默认值。 */
     private ScheduleConfigEntity toConfig(AgentScheduleConfigPO po) {
         if (po == null) return null;
         return ScheduleConfigEntity.builder().tenantId(po.getTenantId()).ownerUserId(po.getOwnerUserId())
@@ -212,6 +221,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .lastReconciledAt(entity.getLastReconciledAt()).build();
     }
 
+    /** 恢复任务租约、围栏和 Cron 游标。 */
     private ScheduleTaskEntity toTask(AgentScheduleTaskPO po) {
         if (po == null) return null;
         return ScheduleTaskEntity.builder().tenantId(po.getTenantId()).userId(po.getUserId())
@@ -235,6 +245,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .fencingToken(entity.getFencingToken()).rowVersion(entity.getRowVersion()).build();
     }
 
+    /** 恢复单次计划发生的幂等执行账本。 */
     private ScheduleExecutionEntity toExecution(AgentScheduleExecutionPO po) {
         if (po == null) return null;
         return ScheduleExecutionEntity.builder().tenantId(po.getTenantId()).userId(po.getUserId())
