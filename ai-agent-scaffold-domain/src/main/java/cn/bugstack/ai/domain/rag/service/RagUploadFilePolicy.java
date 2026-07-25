@@ -28,6 +28,7 @@ import java.util.zip.ZipFile;
  */
 public final class RagUploadFilePolicy {
 
+    /** 上传、文件名、文本扫描和 ZIP 解压的硬安全预算。 */
     public static final long MAX_FILE_BYTES = 50L * 1024 * 1024;
     private static final int MAX_FILE_NAME_LENGTH = 255;
     private static final int TEXT_BUFFER_CHARS = 8 * 1024;
@@ -37,6 +38,7 @@ public final class RagUploadFilePolicy {
     private static final String CONTENT_TYPES_ENTRY = "[Content_Types].xml";
     private static final String DOCUMENT_ENTRY = "word/document.xml";
 
+    /** 扩展名决定实际校验器；客户端 MIME 只作为一致性声明。 */
     private static final Map<String, SupportedType> TYPES = Map.of(
             "pdf", new SupportedType("pdf", "application/pdf", Set.of("application/pdf")),
             "docx", new SupportedType("docx",
@@ -69,6 +71,7 @@ public final class RagUploadFilePolicy {
                 type.canonicalExtension(), type.canonicalMime(), actualSize);
     }
 
+    /** 在访问磁盘前拒绝空文件、负值和超限声明。 */
     private void validateDeclaredSize(long declaredSize) {
         if (declaredSize == 0) {
             throw error("RAG_FILE_EMPTY", "上传文件不能为空");
@@ -78,6 +81,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 拒绝符号链接和非普通文件，收紧校验对象边界。 */
     private Path normalizeControlledPath(Path input) {
         Path path = input.toAbsolutePath().normalize();
         if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
@@ -87,6 +91,7 @@ public final class RagUploadFilePolicy {
         return path;
     }
 
+    /** 以磁盘实长为准，并要求与上传声明完全一致。 */
     private long readAndValidateSize(Path path, long declaredSize) {
         try {
             long actualSize = Files.size(path);
@@ -105,6 +110,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 规范化显示名并拒绝路径片段、隐藏名和危险字符。 */
     private SafeName normalizeFileName(String originalFileName) {
         if (originalFileName == null || originalFileName.isBlank()) {
             throw error("RAG_FILE_NAME_INVALID", "文件名不能为空");
@@ -129,6 +135,7 @@ public final class RagUploadFilePolicy {
         return new SafeName(baseName, extension);
     }
 
+    /** 文件名只允许跨平台安全且适合对象键展示的字符。 */
     private boolean containsUnsafeCharacter(String value) {
         return value.codePoints().anyMatch(codePoint -> Character.isISOControl(codePoint)
                 || !(Character.isLetterOrDigit(codePoint) || codePoint == ' ' || codePoint == '_'
@@ -136,6 +143,7 @@ public final class RagUploadFilePolicy {
                 || codePoint == '[' || codePoint == ']'));
     }
 
+    /** 将扩展名映射到唯一规范类型。 */
     private SupportedType requireSupportedType(String extension) {
         SupportedType type = TYPES.get(extension);
         if (type == null) {
@@ -144,6 +152,7 @@ public final class RagUploadFilePolicy {
         return type;
     }
 
+    /** 剥离 MIME 参数后检查声明与扩展名是否一致。 */
     private void validateDeclaredMime(String declaredMimeType, SupportedType type) {
         if (declaredMimeType == null || declaredMimeType.isBlank()) {
             throw error("RAG_FILE_MIME_INVALID", "文件 MIME 不能为空");
@@ -154,6 +163,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 按规范扩展名执行文件内容级校验，拒绝仅改后缀的文件。 */
     private void validateContent(Path path, SupportedType type) {
         try {
             switch (type.canonicalExtension()) {
@@ -169,6 +179,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 校验 PDF 固定魔数，不在此阶段承担完整解析。 */
     private void validatePdf(Path path) throws IOException {
         byte[] prefix = readPrefix(path, 5);
         byte[] expected = "%PDF-".getBytes(StandardCharsets.US_ASCII);
@@ -182,6 +193,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 校验 DOCX 容器预算、条目路径和最低 OOXML 结构。 */
     private void validateDocx(Path path) throws IOException {
         validateZipMagic(path);
         try (ZipFile zipFile = new ZipFile(path.toFile(), StandardCharsets.UTF_8)) {
@@ -231,6 +243,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 接受 ZIP 文件、空归档和分卷标记三种合法 PK 头。 */
     private void validateZipMagic(Path path) throws IOException {
         byte[] prefix = readPrefix(path, 4);
         boolean zip = prefix.length == 4 && prefix[0] == 'P' && prefix[1] == 'K'
@@ -242,6 +255,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 拒绝绝对路径、反斜杠、盘符、重复分隔符和路径穿越。 */
     private String validateZipEntryName(String rawName) {
         if (rawName == null || rawName.isBlank() || rawName.startsWith("/") || rawName.startsWith("\\")
                 || rawName.indexOf('\\') >= 0 || rawName.indexOf(':') >= 0 || rawName.indexOf('\0') >= 0
@@ -259,12 +273,14 @@ public final class RagUploadFilePolicy {
         return rawName;
     }
 
+    /** 只读取魔数所需前缀，避免为格式识别加载整文件。 */
     private byte[] readPrefix(Path path, int length) throws IOException {
         try (InputStream input = Files.newInputStream(path)) {
             return input.readNBytes(length);
         }
     }
 
+    /** 流式验证 Markdown 为严格 UTF-8 且不含 NUL。 */
     private void validateUtf8Markdown(Path path) throws IOException {
         var decoder = StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
@@ -284,6 +300,7 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 校验结束后复核长度，缩小并发替换文件的竞态窗口。 */
     private void ensureUnchangedSize(Path path, long expectedSize) {
         try {
             if (Files.size(path) != expectedSize) {
@@ -294,13 +311,16 @@ public final class RagUploadFilePolicy {
         }
     }
 
+    /** 统一构造可被接口层稳定识别的业务异常。 */
     private AppException error(String code, String message) {
         return new AppException(code, message);
     }
 
+    /** 已排除路径语义的规范文件名。 */
     private record SafeName(String baseName, String extension) {
     }
 
+    /** 扩展名对应的规范 MIME 与允许声明集合。 */
     private record SupportedType(String canonicalExtension, String canonicalMime,
                                  Set<String> allowedDeclaredMimes) {
     }

@@ -15,8 +15,10 @@ import java.util.regex.Pattern;
 /** 结构优先、预算受控的确定性 Parent/Child 分块器。 */
 public final class StructuredRagChunker {
 
+    /** 算法、Token 估算和 Markdown 结构识别的稳定版本标识。 */
     public static final String CHUNKER_VERSION = "structured-java-v1";
     public static final String TOKENIZER_VERSION = "approx-unicode-v1";
+    /** 结构模式只识别语法明确的 Markdown 标题、列表和表格分隔行。 */
     private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(.+?)\\s*$");
     private static final Pattern LIST = Pattern.compile("^\\s*(?:[-*+] |\\d+[.)] ).+");
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("^\\s*\\|?(?:\\s*:?-{3,}:?\\s*\\|)+\\s*$");
@@ -47,6 +49,7 @@ public final class StructuredRagChunker {
         return materialize(sourceId, groups);
     }
 
+    /** 将文本解析为标题路径明确的段落、列表、表格和代码块。 */
     private List<Block> parseBlocks(String text, String inheritedHeading, Integer page) {
         List<Block> result = new ArrayList<>();
         List<String> headings = new ArrayList<>();
@@ -100,6 +103,7 @@ public final class StructuredRagChunker {
         return result;
     }
 
+    /** 在结构边界与双预算内生成子块草稿。 */
     private List<Draft> childDrafts(List<Block> blocks, Config config) {
         List<Draft> result = new ArrayList<>();
         Draft current = null;
@@ -129,6 +133,7 @@ public final class StructuredRagChunker {
         return result;
     }
 
+    /** 只合并同章节且未超过父级预算的相邻子块。 */
     private List<ParentGroup> parentGroups(List<Draft> children, Config config) {
         List<ParentGroup> groups = new ArrayList<>();
         List<Draft> current = new ArrayList<>();
@@ -145,6 +150,7 @@ public final class StructuredRagChunker {
         return groups;
     }
 
+    /** 生成稳定父子 ID，并串联相邻子块供上下文扩展。 */
     private ChunkingResult materialize(String sourceId, List<ParentGroup> groups) {
         List<Partial> partials = new ArrayList<>();
         int childOrdinal = 0;
@@ -183,6 +189,7 @@ public final class StructuredRagChunker {
         return new ChunkingResult(result);
     }
 
+    /** 对超限结构块滑窗切分，同时保护 Unicode 代理对。 */
     private List<String> splitOversized(String content, int maxChars, int maxTokens, int overlapChars) {
         List<String> parts = new ArrayList<>();
         int cursor = 0;
@@ -205,6 +212,7 @@ public final class StructuredRagChunker {
         return parts;
     }
 
+    /** 二分求出满足 Token 预算的最大字符边界。 */
     private int maxTokenEnd(String value, int start, int hardEnd, int maxTokens) {
         int low = Math.min(start + 1, hardEnd), high = hardEnd, best = start;
         while (low <= high) {
@@ -218,6 +226,7 @@ public final class StructuredRagChunker {
         return best;
     }
 
+    /** 优先在自然断句处切分，并确保边界越过已消费位置。 */
     private int safeBoundary(String value, int start, int proposed, int consumedThrough) {
         int minimum = Math.max(consumedThrough + 1, start + Math.max(1, (proposed - start) / 2));
         for (int i = proposed; i >= minimum; i--) {
@@ -243,34 +252,43 @@ public final class StructuredRagChunker {
         return tokens;
     }
 
+    /** 字符数和估算 Token 必须同时不超预算。 */
     private boolean fits(String value, int chars, int tokens) {
         return value.length() <= chars && approximateTokens(value) <= tokens;
     }
 
+    /** Markdown 表头后必须紧跟合法分隔行才识别为表格。 */
     private boolean isTableStart(String[] lines, int index) {
         return index + 1 < lines.length && lines[index].contains("|")
                 && TABLE_SEPARATOR.matcher(lines[index + 1]).matches();
     }
 
+    /** 去除结构块首尾空白后保存其章节与页码来源。 */
     private Block block(String content, String heading, Integer page, BlockType type) {
         return new Block(content.trim(), heading, page, type);
     }
 
+    /** 按原换行连接半开区间内的源文本。 */
     private String join(String[] lines, int from, int to) {
         return String.join("\n", java.util.Arrays.copyOfRange(lines, from, to)).trim();
     }
 
+    /** 将标题栈压平为稳定章节路径。 */
     private String path(List<String> headings) { return headings.isEmpty() ? null : String.join(" > ", headings); }
+    /** 空值安全地判断两个章节路径是否一致。 */
     private boolean same(String left, String right) { return java.util.Objects.equals(left, right); }
+    /** 预演追加子块后的父块正文。 */
     private String joinDrafts(List<Draft> values, Draft addition) {
         if (values.isEmpty()) return addition.content();
         return values.stream().map(Draft::content).collect(java.util.stream.Collectors.joining("\n\n"))
                 + "\n\n" + addition.content();
     }
 
+    /** 来源、层级、顺序和内容共同决定可复现的分块 ID。 */
     private String stableId(String sourceId, String level, int ordinal, String contentHash) {
         return "chk_" + sha256(sourceId + '\0' + level + '\0' + ordinal + '\0' + contentHash).substring(0, 48);
     }
+    /** 使用 SHA-256 生成跨进程稳定摘要。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -278,17 +296,24 @@ public final class StructuredRagChunker {
         } catch (NoSuchAlgorithmException e) { throw new IllegalStateException("JVM缺少SHA-256", e); }
     }
 
+    /** 父块承载扩展上下文，子块承担精确召回。 */
     public enum Level { PARENT, CHILD }
+    /** 影响合并边界的 Markdown 结构类型。 */
     private enum BlockType { PARAGRAPH, LIST, TABLE, CODE }
+    /** 从 Markdown 解析出的最小结构块。 */
     private record Block(String content, String heading, Integer page, BlockType type) {}
+    /** 尚未分配稳定 ID 的子块。 */
     private record Draft(String content, String heading, Integer page, BlockType type) {}
+    /** 同章节、同父级预算内的子块集合。 */
     private record ParentGroup(List<Draft> children) {
         String content() { return children.stream().map(Draft::content)
                 .collect(java.util.stream.Collectors.joining("\n\n")); }
     }
+    /** 等待补齐相邻关系的分块中间态。 */
     private record Partial(Level level, String chunkId, String parentChunkId, String content,
                            int tokenCount, Integer page, String heading, String contentHash) {}
 
+    /** 父子分块的字符、Token 与重叠预算。 */
     public record Config(int childMaxChars, int childMaxTokens, int parentMaxChars,
                          int parentMaxTokens, int overlapChars) {
         public Config {
@@ -298,18 +323,23 @@ public final class StructuredRagChunker {
                 throw new IllegalArgumentException("分块字符、Token或重叠配置非法");
             }
         }
+        /** 返回平台默认的父子预算与重叠窗口。 */
         public static Config defaults() { return new Config(1800, 480, 6000, 1500, 160); }
     }
 
+    /** 对外暴露的结构化分块及其溯源元数据。 */
     public record StructuredChunk(Level level, String chunkId, String parentChunkId,
                                   String previousChunkId, String nextChunkId, int chunkIndex,
                                   String content, int tokenCount, Integer pageNumber,
                                   String headingPath, String contentHash, Map<String, String> metadata) {}
+    /** 完整分块结果，内部复制列表以阻断外部修改。 */
     public record ChunkingResult(List<StructuredChunk> chunks) {
         public ChunkingResult { chunks = chunks == null ? List.of() : List.copyOf(chunks); }
+        /** 返回承担向量召回的子块。 */
         public List<StructuredChunk> children() {
             return chunks.stream().filter(chunk -> chunk.level() == Level.CHILD).toList();
         }
+        /** 返回用于扩展上下文的父块。 */
         public List<StructuredChunk> parents() {
             return chunks.stream().filter(chunk -> chunk.level() == Level.PARENT).toList();
         }

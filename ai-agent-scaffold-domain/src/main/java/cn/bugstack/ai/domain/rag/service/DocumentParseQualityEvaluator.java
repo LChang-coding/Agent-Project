@@ -22,6 +22,7 @@ import java.util.Objects;
  */
 public final class DocumentParseQualityEvaluator {
 
+    /** 各维度权重总和固定为 1，保证总分仍落在零到一之间。 */
     private static final double COVERAGE_WEIGHT = 0.25;
     private static final double ORDER_WEIGHT = 0.15;
     private static final double OCR_WEIGHT = 0.15;
@@ -74,6 +75,7 @@ public final class DocumentParseQualityEvaluator {
                 round(duplicate), round(replacement), overall, disposition, findings);
     }
 
+    /** 合并同一来源的字符区间，衡量解析结果对原文的覆盖程度。 */
     private double coverage(DocumentIr document, List<Finding> findings) {
         Map<String, List<SourceSpan>> bySource = new LinkedHashMap<>();
         document.blocks().stream().map(Block::sourceSpan).filter(Objects::nonNull)
@@ -111,6 +113,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 统计页面内阅读序号回退，暴露多栏或版面排序错误。 */
     private double order(DocumentIr document, List<Finding> findings) {
         int comparisons = 0;
         int violations = 0;
@@ -134,6 +137,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 仅对 OCR 来源块聚合置信度，原生文本不稀释 OCR 风险。 */
     private double ocr(DocumentIr document, List<Finding> findings) {
         List<Block> blocks = document.blocks().stream()
                 .filter(block -> block.flags().contains(Flag.OCR_TEXT)
@@ -147,6 +151,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 以非空单元格比例评估表格结构是否可用于检索。 */
     private double table(DocumentIr document, List<Finding> findings) {
         List<Block> tables = document.blocks().stream()
                 .filter(block -> block.type() == BlockType.TABLE || block.table() != null).toList();
@@ -176,6 +181,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 用已标记重复块占比衡量清洗后的有效内容密度。 */
     private double duplicate(DocumentIr document, List<Finding> findings) {
         List<Block> textual = document.blocks().stream().filter(block -> !block.normalizedText().isBlank()).toList();
         List<Block> duplicates = textual.stream()
@@ -188,6 +194,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 将替换字符按每百字符惩罚，快速识别解码损坏。 */
     private double replacement(DocumentIr document, List<Finding> findings) {
         long characters = document.blocks().stream().map(Block::normalizedText).mapToLong(String::length).sum();
         long replacements = document.blocks().stream().map(Block::normalizedText)
@@ -202,6 +209,7 @@ public final class DocumentParseQualityEvaluator {
         return score;
     }
 
+    /** 将安全和语言风险写入报告，但不重复改变质量分。 */
     private void annotateRisks(DocumentIr document, List<Finding> findings) {
         List<Block> injection = flagged(document, Flag.PROMPT_INJECTION);
         if (!injection.isEmpty()) {
@@ -220,6 +228,7 @@ public final class DocumentParseQualityEvaluator {
         }
     }
 
+    /** 按硬拒绝、人工复核、带警告可用、直接可用的顺序裁决。 */
     private DocumentQualityDisposition disposition(DocumentIr document, double coverage, double order,
                                                    double ocr, double table, double duplicate,
                                                    double replacement, double overall, List<Finding> findings) {
@@ -238,22 +247,27 @@ public final class DocumentParseQualityEvaluator {
         return DocumentQualityDisposition.READY;
     }
 
+    /** 找出包含指定风险标记的内容块。 */
     private List<Block> flagged(DocumentIr document, Flag flag) {
         return document.blocks().stream().filter(block -> block.flags().contains(flag)).toList();
     }
 
+    /** 将受影响块压缩为去重后的稳定标识列表。 */
     private Finding finding(String code, Severity severity, String message, List<Block> blocks) {
         return new Finding(code, severity, message, blocks.stream().map(Block::blockId).distinct().toList());
     }
 
+    /** 单项分低于复核阈值时升级为错误。 */
     private Severity severity(double score) {
         return score < config.reviewComponentThreshold() ? Severity.ERROR : Severity.WARNING;
     }
 
+    /** 防止浮点计算越出评分边界。 */
     private double clamp(double value) {
         return Math.max(0, Math.min(1, value));
     }
 
+    /** 统一保留四位小数，保证报告可复算和可比较。 */
     private double round(double value) {
         return Math.round(clamp(value) * 10_000.0) / 10_000.0;
     }
@@ -277,6 +291,7 @@ public final class DocumentParseQualityEvaluator {
             }
         }
 
+        /** 每个处置阈值都必须是有限概率值。 */
         private static void validate(double value, String field) {
             if (!Double.isFinite(value) || value < 0 || value > 1) {
                 throw new IllegalArgumentException(field + "必须位于0到1之间");

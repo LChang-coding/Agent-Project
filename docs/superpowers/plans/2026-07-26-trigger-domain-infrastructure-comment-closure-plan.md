@@ -334,6 +334,31 @@
 - 零上下文 diff 审计未发现新增可执行语句；本批路径 `git diff --check` 通过。
 - 执行领域层干净编译成功；运行摄取状态机、删除状态机、索引激活和回答引用等 6 个测试类：共 31 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。
 
+### 2026-07-26：领域层第六批执行计划（RAG 文档预处理算法）
+
+范围：
+
+- `DeterministicSparseEncoder`
+- `DocumentIrCleaner`
+- `DocumentParseQualityEvaluator`
+- `DocumentIrChunker`
+- `StructuredRagChunker`
+- `RagUploadFilePolicy`
+
+本批重点：
+
+- 上传文件名、扩展名、MIME、Magic、路径、文件大小和压缩炸弹防护。
+- IR 清洗中的 Unicode、控制字符、断词、重复页眉页脚、重复块、提示词注入、敏感内容与抑制可逆性。
+- 解析覆盖率、阅读顺序、OCR、表格、重复率和替换字符质量门禁。
+- 标题路径、表格行、父子块、相邻块、Token 预算和稳定 chunkId/contentHash。
+- 确定性 Sparse 词项与权重，避免把 Dense 冒充混合检索。
+
+门禁：
+
+- 6 个算法文件逐方法和分支审计，只改注释。
+- 领域层干净编译，并运行上传策略、清洗、质量、切块和 Sparse 测试。
+- 追加真实记录后中文提交。
+
 ### 2026-07-26：领域层第三批操作记录（上下文管理）
 
 - 已逐一审计 `domain/context` 27 个 Java 文件，补齐模型字段、策略参数、服务依赖、私有算法和关键并发分支注释。
@@ -409,3 +434,15 @@
 - 只改注释；零上下文 diff 不得出现可执行语句变化。
 - 领域层干净编译通过，并运行现有 context/compaction 相关测试。
 - 追加真实操作记录后中文本地提交。
+
+### 2026-07-26：领域层第六批操作记录（RAG 文档预处理算法）
+
+- 已逐一审计 6 个算法文件，只补充职责、约束、失败边界和关键分支原因注释：
+  - `RagUploadFilePolicy` 明确声明长度与磁盘实长双校验、受控普通文件、文件名归一化、MIME 一致性、Magic、DOCX 路径穿越与压缩炸弹预算，以及校验结束后的长度复核。
+  - `DocumentIrCleaner` 明确可逆清洗、正文与表格一致处理、版面元素半数页阈值、重复块只抑制不删除，以及提示注入和敏感信息只标记不改写原文。
+  - `DocumentParseQualityEvaluator` 明确来源覆盖、阅读顺序、OCR、表格、重复内容和替换字符六维评分，以及拒绝、人工复核、带警告可用和直接可用的裁决顺序。
+  - `DocumentIrChunker` 与 `StructuredRagChunker` 明确结构边界、表头重复、父子预算、自然断句、Unicode 代理对、展示文本与 Embedding 文本分离、稳定 ID 和相邻子块关系。
+  - `DeterministicSparseEncoder` 明确 CJK 单字/双字、英文词项、log-TF、哈希碰撞合并、L2 归一化和算法版本隔离。
+- 零上下文 diff 审计未发现任何新增可执行语句；6 个文件 `git diff --check` 通过。
+- 执行 `mvn -pl ai-agent-scaffold-domain -am -DskipTests clean compile`，281 个领域层源文件干净编译成功。
+- 使用 Java 25 兼容参数运行 6 个测试类：`DocumentPreprocessingPipelineTest`、`DocumentIrCleanerTest`、`DocumentParseQualityEvaluatorTest`、`DeterministicSparseEncoderTest`、`StructuredRagChunkerTest`、`RagUploadFilePolicyTest`；共 37 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。

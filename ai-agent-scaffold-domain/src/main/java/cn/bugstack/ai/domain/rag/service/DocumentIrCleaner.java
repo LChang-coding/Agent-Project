@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
  */
 public final class DocumentIrCleaner {
 
+    /** 按声明顺序执行；规则顺序属于清洗结果的一部分。 */
     private final List<CleaningRule> rules;
 
     /**
@@ -110,6 +111,7 @@ public final class DocumentIrCleaner {
         return document.withPages(pages, documentFlags);
     }
 
+    /** 从首条变更记录恢复原始文本、标记与抑制状态。 */
     private Block restoreBlock(Block block) {
         if (block.cleaningChanges().isEmpty()) {
             return block;
@@ -128,11 +130,13 @@ public final class DocumentIrCleaner {
                 suppressed ? originalSuppressionReason(block) : "", List.of());
     }
 
+    /** 保留清洗前已有的抑制原因，避免恢复时伪造来源。 */
     private String originalSuppressionReason(Block block) {
         String reason = block.cleaningChanges().get(0).suppressionReasonBefore();
         return reason.isBlank() ? "original_suppression" : reason;
     }
 
+    /** 表格单元格与正文使用同一份原文恢复规则。 */
     private Table restoreTable(Table table) {
         if (table == null) return null;
         return new Table(table.rows().stream().map(row -> new TableRow(row.rowIndex(),
@@ -185,6 +189,7 @@ public final class DocumentIrCleaner {
 
     private abstract static class BlockRule implements CleaningRule {
 
+        /** 逐页逐块应用规则，并向文档级聚合新增标记。 */
         @Override
         public DocumentIr clean(DocumentIr document) {
             List<DocumentIr.Page> pages = document.pages().stream()
@@ -194,18 +199,23 @@ public final class DocumentIrCleaner {
             return document.withPages(pages, collectFlags(document.flags(), pages));
         }
 
+        /** 子类只负责单块转换，不直接修改文档结构。 */
         protected abstract Block cleanBlock(DocumentIr document, DocumentIr.Page page, Block block);
     }
 
+    /** 清理编码与不可见字符，不改变文本语义。 */
     private static final class TextHygieneRule extends BlockRule {
 
+        /** 只拼接明确由换行断开的英文连字符，不猜测普通连字符。 */
         private static final Pattern DEHYPHENATION = Pattern.compile("(?<=\\p{L})-[\\t ]*\\R[\\t ]*(?=\\p{Ll})");
 
+        /** 返回持久化审计使用的稳定规则名。 */
         @Override
         public String name() {
             return "text_hygiene";
         }
 
+        /** 同步清理正文与结构化表格内容。 */
         @Override
         protected Block cleanBlock(DocumentIr document, DocumentIr.Page page, Block block) {
             TextResult result = cleanText(block.normalizedText());
@@ -215,12 +225,14 @@ public final class DocumentIrCleaner {
                     block.suppressed(), block.suppressionReason());
         }
 
+        /** 保留表格行列和来源坐标，只替换单元格规范文本。 */
         private Table cleanTable(Table table) {
             if (table == null) return null;
             return new Table(table.rows().stream().map(row -> new TableRow(row.rowIndex(),
                     row.cells().stream().map(this::cleanCell).toList())).toList());
         }
 
+        /** 合并单元格原有标记与本轮清洗标记。 */
         private TableCell cleanCell(TableCell cell) {
             TextResult result = cleanText(cell.normalizedText());
             Set<Flag> flags = new LinkedHashSet<>(cell.flags());
@@ -229,6 +241,7 @@ public final class DocumentIrCleaner {
                     cell.rawText(), result.text(), cell.sourceSpan(), cell.boundingBox(), flags);
         }
 
+        /** 执行 NFC、控制字符过滤、换行统一和谨慎去连字符。 */
         private TextResult cleanText(String source) {
             String value = source == null ? "" : source;
             Set<Flag> flags = new LinkedHashSet<>();
@@ -253,24 +266,29 @@ public final class DocumentIrCleaner {
             return new TextResult(joined, flags);
         }
 
+        /** 识别会污染检索但肉眼不可见的格式字符。 */
         private boolean isZeroWidth(int codePoint) {
             return codePoint == 0x200B || codePoint == 0x200C || codePoint == 0x200D
                     || codePoint == 0x2060 || codePoint == 0xFEFF;
         }
 
+        /** 保留换行和制表符，丢弃其余控制字符。 */
         private boolean isDiscardedControl(int codePoint) {
             return Character.getType(codePoint) == Character.CONTROL
                     && codePoint != '\n' && codePoint != '\t';
         }
     }
 
+    /** 识别跨页重复的页眉、页脚、页码和水印。 */
     private static final class RepeatedFurnitureRule implements CleaningRule {
 
+        /** 返回持久化审计使用的稳定规则名。 */
         @Override
         public String name() {
             return "repeated_page_furniture";
         }
 
+        /** 只有至少出现在半数页面且不少于两页的版面元素才会被抑制。 */
         @Override
         public DocumentIr clean(DocumentIr document) {
             Map<String, Set<Integer>> occurrences = new LinkedHashMap<>();
@@ -286,6 +304,7 @@ public final class DocumentIrCleaner {
             return document.withPages(pages, collectFlags(document.flags(), pages));
         }
 
+        /** 限定候选类型，避免误删正文中的高频句。 */
         private boolean candidate(Block block) {
             return switch (block.type()) {
                 case HEADER, FOOTER, PAGE_NUMBER, WATERMARK -> true;
@@ -293,6 +312,7 @@ public final class DocumentIrCleaner {
             };
         }
 
+        /** 保留原块与来源，只设置检索抑制标记。 */
         private Block suppress(Block block, Set<String> repeated) {
             if (!candidate(block) || !repeated.contains(fingerprint(block.normalizedText()))) return block;
             Flag flag = block.type() == BlockType.FOOTER || block.type() == BlockType.PAGE_NUMBER
@@ -301,13 +321,16 @@ public final class DocumentIrCleaner {
         }
     }
 
+    /** 抑制正文中较长的完全重复块。 */
     private static final class DuplicateBlockRule implements CleaningRule {
 
+        /** 返回持久化审计使用的稳定规则名。 */
         @Override
         public String name() {
             return "duplicate_block";
         }
 
+        /** 首次出现保留，后续相同块仅标记抑制以支持审计恢复。 */
         @Override
         public DocumentIr clean(DocumentIr document) {
             Set<String> seen = new LinkedHashSet<>();
@@ -329,6 +352,7 @@ public final class DocumentIrCleaner {
         }
     }
 
+    /** 标记敏感内容、提示注入和明显语言错配。 */
     private static final class ContentAnnotationRule extends BlockRule {
 
         private static final Pattern SENSITIVE = Pattern.compile(
@@ -337,11 +361,13 @@ public final class DocumentIrCleaner {
                 "(?iu)(ignore\\s+(all\\s+)?previous\\s+instructions?|reveal\\s+(the\\s+)?system\\s+prompt"
                         + "|<\\s*system\\s*>|忽略.{0,12}(指令|规则|提示)|泄露.{0,8}(系统提示|提示词))");
 
+        /** 返回持久化审计使用的稳定规则名。 */
         @Override
         public String name() {
             return "content_annotation";
         }
 
+        /** 风险规则只加标记，不改写用户原文。 */
         @Override
         protected Block cleanBlock(DocumentIr document, DocumentIr.Page page, Block block) {
             Set<Flag> flags = new LinkedHashSet<>();
@@ -355,6 +381,7 @@ public final class DocumentIrCleaner {
             return block.apply(name(), text, flags, block.suppressed(), block.suppressionReason());
         }
 
+        /** 只在有足够字母样本时判断中英文错配，降低短文本误报。 */
         private boolean languageMismatch(String documentLanguage, String blockLanguage, String text) {
             String expected = !"und".equalsIgnoreCase(blockLanguage) ? blockLanguage : documentLanguage;
             if (expected == null || expected.equalsIgnoreCase("und")) return false;
@@ -369,6 +396,7 @@ public final class DocumentIrCleaner {
         }
     }
 
+    /** 汇总块级标记，保持已有文档标记不丢失。 */
     private static Set<Flag> collectFlags(Set<Flag> original, List<DocumentIr.Page> pages) {
         Set<Flag> result = new LinkedHashSet<>(original);
         pages.stream().flatMap(page -> page.blocks().stream())
@@ -376,11 +404,13 @@ public final class DocumentIrCleaner {
         return result;
     }
 
+    /** 生成大小写与空白无关的确定性重复指纹。 */
     private static String fingerprint(String text) {
         if (text == null) return "";
         return text.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
+    /** 单次文本清洗的正文与新增标记。 */
     private record TextResult(String text, Set<Flag> flags) {
         private TextResult {
             flags = Set.copyOf(flags);

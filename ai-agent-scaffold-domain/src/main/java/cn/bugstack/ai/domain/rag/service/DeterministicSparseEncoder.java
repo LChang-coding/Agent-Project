@@ -18,19 +18,25 @@ import java.util.TreeMap;
  */
 public final class DeterministicSparseEncoder implements SparseEncoderPort {
 
+    /** 默认哈希桶数量；空间固定，避免为每个租户维护词表。 */
     public static final int DEFAULT_DIMENSION = 1 << 20;
+    /** 参与哈希的算法版本，升级算法时隔离新旧索引。 */
     public static final String VOCABULARY_REVISION = "hashing-logtf-v1";
+    /** 当前实例使用的哈希桶数量。 */
     private final int dimension;
 
+    /** 使用平台默认维度。 */
     public DeterministicSparseEncoder() {
         this(DEFAULT_DIMENSION);
     }
 
+    /** 使用指定维度；过小维度会显著放大哈希碰撞。 */
     public DeterministicSparseEncoder(int dimension) {
         if (dimension < 1024) throw new IllegalArgumentException("稀疏向量维度不能小于1024");
         this.dimension = dimension;
     }
 
+    /** 保持输入顺序，批量生成可复现的稀疏向量。 */
     @Override
     public SparseEncodingResult encode(SparseEncodingCommand command) {
         List<SparseVector> vectors = command.inputs().stream()
@@ -38,6 +44,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
         return new SparseEncodingResult(vectors, command.vocabularyRevision());
     }
 
+    /** 计算 log-TF 权重，合并哈希碰撞后做 L2 归一化。 */
     private SparseVector encodeOne(String input, String revision) {
         Map<String, Integer> termFrequency = new HashMap<>();
         for (String term : tokenize(input)) termFrequency.merge(term, 1, Integer::sum);
@@ -50,6 +57,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
         return new SparseVector(normalized);
     }
 
+    /** 将英文词、CJK 单字/双字和非空白符号拆成带类型前缀的词项。 */
     private List<String> tokenize(String input) {
         String normalized = Normalizer.normalize(input, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
         List<String> terms = new ArrayList<>();
@@ -74,6 +82,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
         return terms;
     }
 
+    /** 提交一个连续的拉丁字母或数字词。 */
     private void flushWord(StringBuilder word, List<String> terms) {
         if (!word.isEmpty()) {
             terms.add("w:" + word);
@@ -81,6 +90,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
         }
     }
 
+    /** 同时提交 CJK 单字与相邻双字，兼顾精确匹配和短语召回。 */
     private void flushCjk(StringBuilder value, List<String> terms) {
         if (value.isEmpty()) return;
         int[] points = value.codePoints().toArray();
@@ -91,6 +101,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
         value.setLength(0);
     }
 
+    /** 识别需要采用字符级切分的东亚文字。 */
     private boolean isCjk(int codePoint) {
         Character.UnicodeScript script = Character.UnicodeScript.of(codePoint);
         return script == Character.UnicodeScript.HAN
@@ -99,6 +110,7 @@ public final class DeterministicSparseEncoder implements SparseEncoderPort {
                 || script == Character.UnicodeScript.HANGUL;
     }
 
+    /** 将算法版本和词项稳定映射到非负桶下标。 */
     private int index(String revision, String term) {
         byte[] bytes = (revision + '\0' + term).getBytes(StandardCharsets.UTF_8);
         long hash = 0xcbf29ce484222325L;
