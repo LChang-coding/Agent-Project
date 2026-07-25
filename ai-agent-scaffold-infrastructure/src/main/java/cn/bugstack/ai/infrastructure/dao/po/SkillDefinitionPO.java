@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** Skill 稳定定义及草稿、发布、激活版本指针。 */
 @Data
 @Builder
 @AllArgsConstructor

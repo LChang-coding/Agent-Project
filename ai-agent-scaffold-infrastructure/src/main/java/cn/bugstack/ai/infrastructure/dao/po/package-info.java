@@ -1,4 +1,2 @@
-/**
- * 持久化对象；XxxPO 最后的 PO 是大写，UserPO
- */
+/** 数据库行映射对象；只表达存储结构，不承载领域行为。 */
 package cn.bugstack.ai.infrastructure.dao.po;

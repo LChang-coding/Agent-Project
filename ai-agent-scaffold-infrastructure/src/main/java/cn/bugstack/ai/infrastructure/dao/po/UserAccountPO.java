@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 平台用户公开资料与账号状态。 */
 @Data
 @Builder
 @AllArgsConstructor

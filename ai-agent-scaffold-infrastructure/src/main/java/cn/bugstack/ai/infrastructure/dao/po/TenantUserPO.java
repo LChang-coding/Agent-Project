@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** 用户在租户内的角色、状态和加入时间。 */
 @Data
 @Builder
 @AllArgsConstructor

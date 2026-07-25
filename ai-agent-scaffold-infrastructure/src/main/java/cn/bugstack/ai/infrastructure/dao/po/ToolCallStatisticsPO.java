@@ -7,6 +7,8 @@ import lombok.Data;
  */
 @Data
 public class ToolCallStatisticsPO {
+    /** 会话内有效成功调用总数。 */
     private Long callCount;
+    /** 会话内去重工具数量。 */
     private Long toolCount;
 }

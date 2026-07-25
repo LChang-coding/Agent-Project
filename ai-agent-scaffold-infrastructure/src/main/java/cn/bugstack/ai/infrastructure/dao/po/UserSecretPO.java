@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/** 用户凭证的摘要、盐和生命周期；不保存可直接使用的明文。 */
 @Data
 @Builder
 @AllArgsConstructor

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 企业租户的稳定身份和启停状态。 */
 @Data
 @Builder
 @AllArgsConstructor
