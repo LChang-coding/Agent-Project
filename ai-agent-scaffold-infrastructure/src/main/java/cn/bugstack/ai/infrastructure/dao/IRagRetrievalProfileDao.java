@@ -15,10 +15,13 @@ public interface IRagRetrievalProfileDao {
     RagRetrievalProfilePO queryByTenantAndProfileId(@Param("tenantId") String tenantId,
                                                     @Param("profileId") String profileId);
 
+    /** 查询租户全部未删除检索策略。 */
     List<RagRetrievalProfilePO> queryListByTenant(@Param("tenantId") String tenantId);
 
+    /** 新建检索策略及初始修订号。 */
     int insert(RagRetrievalProfilePO profile);
 
+    /** 以租户和期望修订号更新；返回 0 表示冲突或越权。 */
     int updateByTenantAndRevision(@Param("tenantId") String tenantId,
                                   @Param("profile") RagRetrievalProfilePO profile,
                                   @Param("expectedRevision") long expectedRevision);

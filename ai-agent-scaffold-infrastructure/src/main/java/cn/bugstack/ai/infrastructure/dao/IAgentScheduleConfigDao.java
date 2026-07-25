@@ -87,19 +87,25 @@ public interface IAgentScheduleConfigDao {
      */
     List<AgentScheduleConfigPO> queryListByTenantIdAndVisibility(@Param("tenantId") String tenantId, @Param("visibility") String visibility);
 
+    /** 扫描等待长周期协调器同步的启用配置。 */
     List<AgentScheduleConfigPO> queryForReconcile(@Param("limit") int limit);
 
+    /** 在租户和所有者范围内查询可修改配置。 */
     AgentScheduleConfigPO queryOwned(@Param("tenantId") String tenantId, @Param("userId") String userId,
                                      @Param("configId") String configId);
 
+    /** 查询用户拥有的全部未删除配置。 */
     List<AgentScheduleConfigPO> queryOwnedList(@Param("tenantId") String tenantId, @Param("userId") String userId);
 
+    /** 仅更新匹配租户、所有者和配置 ID 的记录。 */
     int updateOwned(AgentScheduleConfigPO config);
 
+    /** 所有者启停配置并同步领域状态。 */
     int updateEnabled(@Param("tenantId") String tenantId, @Param("userId") String userId,
                       @Param("configId") String configId, @Param("enabled") int enabled,
                       @Param("status") String status);
 
+    /** 以旧更新时间作 CAS，记录本轮配置哈希与协调版本。 */
     int updateReconciled(@Param("configId") String configId, @Param("configHash") String configHash,
                          @Param("configVersion") long configVersion,
                          @Param("reconciledAt") LocalDateTime reconciledAt,

@@ -37,6 +37,7 @@ public interface IRagChunkDao {
     long countAllByTenantAndVersionId(@Param("tenantId") String tenantId,
                                       @Param("versionId") String versionId);
 
+    /** 统计知识库全部版本的分块，包含软删除墓碑。 */
     long countAllByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                              @Param("knowledgeBaseId") String knowledgeBaseId);
 

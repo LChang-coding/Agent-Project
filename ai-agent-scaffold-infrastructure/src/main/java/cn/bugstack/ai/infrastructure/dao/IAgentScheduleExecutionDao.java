@@ -70,18 +70,23 @@ public interface IAgentScheduleExecutionDao {
      */
     List<AgentScheduleExecutionPO> queryListByTaskId(@Param("taskId") String taskId);
 
+    /** 按触发唯一键幂等创建执行账本。 */
     int insertIgnore(AgentScheduleExecutionPO execution);
 
+    /** 查询同一计划时刻对应的执行记录。 */
     AgentScheduleExecutionPO queryByTriggerKey(@Param("triggerKey") String triggerKey);
 
+    /** 仅由匹配租约和围栏令牌的执行者标记运行中。 */
     int markRunning(@Param("executionId") String executionId, @Param("leaseOwner") String leaseOwner,
                     @Param("fencingToken") long fencingToken, @Param("startTime") LocalDateTime startTime);
 
+    /** 仅由当前合法执行者写入终态、耗时和结果。 */
     int complete(@Param("executionId") String executionId, @Param("leaseOwner") String leaseOwner,
                  @Param("fencingToken") long fencingToken, @Param("status") String status,
                  @Param("endTime") LocalDateTime endTime, @Param("durationMs") long durationMs,
                  @Param("errorMessage") String errorMessage, @Param("resultJson") String resultJson);
 
+    /** 查询所有者指定配置最近的执行历史。 */
     List<AgentScheduleExecutionPO> queryOwnedByConfig(@Param("tenantId") String tenantId,
                                                       @Param("userId") String userId,
                                                       @Param("configId") String configId,

@@ -33,9 +33,11 @@ public interface IRagDocumentDao {
     List<RagDocumentPO> queryListByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                             @Param("knowledgeBaseId") String knowledgeBaseId);
 
+    /** 统计知识库全部文档，包含删除中的墓碑。 */
     int countByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                         @Param("knowledgeBaseId") String knowledgeBaseId);
 
+    /** 统计尚未完成删除的文档，作为知识库删除收口门禁。 */
     int countNotDeletedByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                    @Param("knowledgeBaseId") String knowledgeBaseId);
 

@@ -33,9 +33,11 @@ public interface IRagIngestTaskDao {
     RagIngestTaskPO queryActiveByTenantAndDocumentId(@Param("tenantId") String tenantId,
                                                      @Param("documentId") String documentId);
 
+    /** 统计知识库仍占用摄取租约或等待处理的任务。 */
     int countActiveByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                               @Param("knowledgeBaseId") String knowledgeBaseId);
 
+    /** 统计尚未产生完整删除终态的文档，作为级联删除门禁。 */
     int countDocumentsWithoutCompletedDelete(@Param("tenantId") String tenantId,
                                               @Param("knowledgeBaseId") String knowledgeBaseId);
 

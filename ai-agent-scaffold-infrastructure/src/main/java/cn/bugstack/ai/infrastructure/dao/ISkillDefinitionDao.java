@@ -61,6 +61,7 @@ public interface ISkillDefinitionDao {
      */
     List<SkillDefinitionPO> queryListByOwnerUserId(@Param("ownerUserId") String ownerUserId);
 
+    /** 在租户边界内查询所有者的 Skill 定义。 */
     List<SkillDefinitionPO> queryListByTenantIdAndOwnerUserId(@Param("tenantId") String tenantId,
                                                                @Param("ownerUserId") String ownerUserId);
 

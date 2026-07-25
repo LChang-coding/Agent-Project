@@ -27,6 +27,7 @@ public interface IRagDocumentVersionDao {
     List<RagDocumentVersionPO> queryListByTenantAndDocumentIdForUpdate(@Param("tenantId") String tenantId,
                                                                        @Param("documentId") String documentId);
 
+    /** 统计知识库尚未完成删除的版本墓碑。 */
     int countNotDeletedByTenantAndKnowledgeBaseId(@Param("tenantId") String tenantId,
                                                    @Param("knowledgeBaseId") String knowledgeBaseId);
 

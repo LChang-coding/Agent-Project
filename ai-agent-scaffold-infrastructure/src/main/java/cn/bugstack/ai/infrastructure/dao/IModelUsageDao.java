@@ -67,15 +67,19 @@ public interface IModelUsageDao {
      */
     List<ModelUsagePO> queryListBySessionId(@Param("sessionId") String sessionId);
 
+    /** 查询会话最近一次模型调用用量。 */
     ModelUsagePO queryLatest(@Param("tenantId") String tenantId, @Param("userId") String userId,
                              @Param("sessionId") String sessionId);
 
+    /** 汇总指定会话或运行的 Token 与调用数。 */
     ModelUsageSummaryPO summarizeSession(@Param("tenantId") String tenantId, @Param("userId") String userId,
                                          @Param("sessionId") String sessionId, @Param("runId") String runId);
 
+    /** 汇总用户最近若干天的模型消耗。 */
     ModelUsageSummaryPO summarizeRecent(@Param("tenantId") String tenantId, @Param("userId") String userId,
                                         @Param("days") int days);
 
+    /** 将取消运行中尚未闭合的用量记录转为取消终态。 */
     int cancelRunning(@Param("tenantId") String tenantId, @Param("userId") String userId,
                       @Param("sessionId") String sessionId, @Param("runId") String runId,
                       @Param("reason") String reason);

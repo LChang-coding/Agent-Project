@@ -78,33 +78,43 @@ public interface IAgentScheduleTaskDao {
      */
     List<AgentScheduleTaskPO> queryListByTaskId(@Param("taskId") String taskId);
 
+    /** 按配置 ID 冲突更新唯一运行时任务，避免 Cron 变更重复入库。 */
     int upsertRuntime(AgentScheduleTaskPO task);
 
+    /** 查询配置对应的唯一调度任务。 */
     AgentScheduleTaskPO queryByConfigId(@Param("configId") String configId);
 
+    /** 禁用来源配置已失效的任务。 */
     int disableInactive();
 
+    /** 原子领取一条到期任务、设置租约并递增 fencing token。 */
     int claimDue(@Param("leaseOwner") String leaseOwner, @Param("now") LocalDateTime now,
                  @Param("leaseUntil") LocalDateTime leaseUntil);
 
+    /** 按本轮唯一租约所有者读取刚领取的任务。 */
     AgentScheduleTaskPO queryByLeaseOwner(@Param("leaseOwner") String leaseOwner);
 
+    /** 当前持有者携带匹配围栏令牌才可续租。 */
     int renewLease(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
                    @Param("fencingToken") long fencingToken, @Param("leaseUntil") LocalDateTime leaseUntil);
 
+    /** 成功后推进上次计划时刻与下一次触发时刻并释放租约。 */
     int complete(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
                  @Param("fencingToken") long fencingToken, @Param("lastPlannedTime") LocalDateTime lastPlannedTime,
                  @Param("nextFireTime") LocalDateTime nextFireTime);
 
+    /** 失败可重试时推进重试次数和重试时刻并释放租约。 */
     int retry(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
               @Param("fencingToken") long fencingToken, @Param("retryCount") int retryCount,
               @Param("retryAt") LocalDateTime retryAt);
 
+    /** 本次发生永久失败后仍推进 Cron 游标，防止坏时刻无限重放。 */
     int releaseFailedOccurrence(@Param("taskId") String taskId, @Param("leaseOwner") String leaseOwner,
                                 @Param("fencingToken") long fencingToken,
                                 @Param("lastPlannedTime") LocalDateTime lastPlannedTime,
                                 @Param("nextFireTime") LocalDateTime nextFireTime);
 
+    /** 所有者手动把指定任务的下一触发时刻推进到现在。 */
     int triggerNow(@Param("tenantId") String tenantId, @Param("userId") String userId,
                    @Param("configId") String configId, @Param("now") LocalDateTime now);
 }
