@@ -1132,3 +1132,29 @@
 - 对 36 个文件分别剥离 XML 注释和空白后与提交前版本比对，映射和 SQL 内容差异为 0：`XML_COMMENT_ONLY_AUDIT_OK 36/36`；限定 Mapper 路径的 `git diff --check` 通过。
 - 基建层编译成功，36 个 Mapper 资源正常复制。
 - 实际运行 MyBatis 全量加载、RAG Mapper/端口契约、调度协调/派发、工作流生命周期、会话分享和工具授权 13 个测试类：共 32 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。
+
+### 2026-07-26：基建层全量审计计划
+
+范围：
+
+- 基建层 130 个 Java 文件和 36 个 MyBatis XML，以基建注释开始前提交 `1721d79` 为行为基线。
+
+门禁：
+
+- Java 剥离块注释、行注释和空白后逐文件一致；XML 剥离注释和空白后逐文件一致。
+- 130 个 Java 文件全部含中文职责或关键分支注释；36 个 XML 全部含中文契约注释。
+- 基建层干净编译；运行覆盖 DAO/仓储、RAG、对象存储、调度、分享、认证、工作流和上下文的测试集合。
+- 审计和测试结果追加到本文档后中文本地提交。
+
+### 2026-07-26：基建层全量审计记录
+
+- 以 `1721d79` 为基建注释前行为基线，逐文件审计 130 个 Java 和 36 个 Mapper XML。
+- Java 剥离块注释、行注释和空白后差异为 0；XML 剥离注释和空白后映射/SQL 差异为 0；全部文件均有中文职责或关键分支注释：`INFRASTRUCTURE_FULL_AUDIT_OK java=130 xml=36`。
+- 基建层执行 `clean compile` 成功：types 26、domain 281、infrastructure 130 个源文件重新编译，36 个 Mapper 资源重新复制，`BUILD SUCCESS`。
+- 先前分批隔离测试均通过；本轮又执行全仓 `mvn -Dnet.bytebuddy.experimental=true test`：
+  - app 模块实际运行 448 个测试，其中 434 个通过、0 个断言失败、14 个初始化/环境错误。
+  - 9 个错误来自只有示例代码、没有 `@Test` 方法的类，被旧版 Surefire 当作 JUnit4 测试后报 `No runnable methods`。
+  - 2 个 `ChatServiceTest` 错误来自测试未设置可信租户上下文，触发 `TENANT_CONTEXT_MISSING`。
+  - 3 个 `AiAgentAutoConfigTest` 错误来自测试依赖未装配的示例 Agent Bean 或缺少工具运行身份。
+  - 上述 14 个错误与本次纯注释改动无因果关系；对应生产代码与测试均未改动。因 app 模块错误，benchmark 和根聚合模块被 Maven 跳过。
+- 全量测试期间外部 Kafka 在当前 Java 运行时出现 SASL `Subject.getSubject` 不兼容日志，但相关隔离单元测试仍通过；该环境告警未被伪记为成功的端到端验证。
