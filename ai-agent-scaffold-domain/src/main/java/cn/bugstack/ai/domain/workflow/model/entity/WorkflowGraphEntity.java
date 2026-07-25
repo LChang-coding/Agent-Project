@@ -16,14 +16,10 @@ import java.util.List;
 @NoArgsConstructor
 public class WorkflowGraphEntity {
 
-    /**
-     * 编排模式：sequential/parallel/loop。
-     */
+    /** 旧式组合编排模式；DAG 执行以 edges 为准。 */
     private String mode;
 
-    /**
-     * 根节点ID。
-     */
+    /** 显式入口节点；为空时编译器选择首个零入度节点。 */
     private String rootNodeId;
 
     /**
@@ -50,9 +46,7 @@ public class WorkflowGraphEntity {
          */
         private String nodeId;
 
-        /**
-         * 节点类型。
-         */
+        /** 节点类型；当前运行时只编译 LLM 节点。 */
         private String nodeType;
 
         /**
@@ -85,9 +79,7 @@ public class WorkflowGraphEntity {
          */
         private List<String> skillIds;
 
-        /**
-         * 最大迭代次数。
-         */
+        /** 自循环节点的执行上限。 */
         private Integer maxIterations;
 
         /**
@@ -115,14 +107,10 @@ public class WorkflowGraphEntity {
          */
         private String edgeId;
 
-        /**
-         * 起点节点ID。
-         */
+        /** 上游节点ID。 */
         private String sourceNodeId;
 
-        /**
-         * 终点节点ID。
-         */
+        /** 下游节点ID；与起点相同时表示自循环。 */
         private String targetNodeId;
     }
 }

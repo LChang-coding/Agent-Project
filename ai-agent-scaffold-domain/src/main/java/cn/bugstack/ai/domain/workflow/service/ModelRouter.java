@@ -8,20 +8,19 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Set;
 
-/**
- * 动态模型路由器。
- */
+/** 按请求覆盖、节点覆盖、工作流默认、平台默认的顺序选择模型。 */
 @Service
 public class ModelRouter {
 
+    /** 低延迟模型代码。 */
     public static final String MODEL_FLASH = "deepseek-v4-flash";
+    /** 增强推理模型代码。 */
     public static final String MODEL_PRO = "deepseek-v4-pro";
 
+    /** 运行时只接受显式白名单。 */
     private static final Set<String> SUPPORTED_MODELS = Set.of(MODEL_FLASH, MODEL_PRO);
 
-    /**
-     * 选择本次有效模型；参数是请求模型、节点模型和工作流默认模型；返回可用模型编码。
-     */
+    /** 选择首个非空模型并校验白名单；未知代码不静默回退。 */
     public String route(String requestModelCode, String nodeModelCode, String workflowDefaultModelCode) {
         String modelCode = firstNotBlank(requestModelCode, nodeModelCode, workflowDefaultModelCode, MODEL_FLASH);
         if (!SUPPORTED_MODELS.contains(modelCode)) {

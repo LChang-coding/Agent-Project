@@ -26,9 +26,7 @@ public class WorkflowDagPlanEntity {
      */
     private Integer version;
 
-    /**
-     * 根节点ID。
-     */
+    /** 首个调度节点；运行时从这里展开可达边。 */
     private String rootNodeId;
 
     /**
@@ -85,9 +83,7 @@ public class WorkflowDagPlanEntity {
          */
         private String modelCode;
 
-        /**
-         * 最大循环次数。
-         */
+        /** 自循环节点的执行上限；防止无限迭代。 */
         private Integer maxIterations;
     }
 
@@ -105,14 +101,10 @@ public class WorkflowDagPlanEntity {
          */
         private String edgeId;
 
-        /**
-         * 起点节点ID。
-         */
+        /** 上游节点ID。 */
         private String sourceNodeId;
 
-        /**
-         * 终点节点ID。
-         */
+        /** 下游节点ID；与起点相同时表示有限自循环。 */
         private String targetNodeId;
     }
 }

@@ -28,32 +28,40 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/**
- * 工作流领域服务。
- */
+/** 管理草稿/发布生命周期，并按发布版本懒编译动态运行时 Agent。 */
 @Service
 public class WorkflowDomainService implements IWorkflowService {
 
+    /** 定义或版本尚未发布。 */
     private static final String STATUS_DRAFT = "draft";
+    /** 定义或版本可运行。 */
     private static final String STATUS_PUBLISHED = "published";
+    /** 仅所有者和管理员可读。 */
     private static final String VISIBILITY_PRIVATE = "private";
+    /** 当前租户成员可读，仍只有所有者/管理员可写。 */
     private static final String VISIBILITY_TENANT_PUBLIC = "tenant_public";
 
+    /** 持久化定义、版本、图和工具选项。 */
     @Resource
     private IWorkflowRepository workflowRepository;
 
+    /** 解析并校验模型覆盖。 */
     @Resource
     private ModelRouter modelRouter;
 
+    /** 将发布图编译为节点装配表和 DAG 计划。 */
     @Resource
     private WorkflowRuntimeCompiler workflowRuntimeCompiler;
 
+    /** 首次加载运行时时装配动态节点 Agent。 */
     @Resource
     private IArmoryService armoryService;
 
+    /** 删除前检查未完成的工作流运行。 */
     @Resource
     private IChatRunRepository chatRunRepository;
 
+    /** 以租户、工作流、版本和有效模型缓存不可变运行时。 */
     private final ConcurrentMap<String, WorkflowRuntimeEntity> runtimeCache = new ConcurrentHashMap<>();
 
     /**
@@ -68,9 +76,7 @@ public class WorkflowDomainService implements IWorkflowService {
                 .toList();
     }
 
-    /**
-     * 创建工作流；参数是创建命令；返回工作流摘要。
-     */
+    /** 同时创建定义和版本 1 草稿；默认图提供一个可编辑根节点。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowEntity createWorkflow(WorkflowCreateCommandEntity command) {
@@ -117,9 +123,7 @@ public class WorkflowDomainService implements IWorkflowService {
         return WorkflowDetailEntity.builder().workflow(workflow).version(version).build();
     }
 
-    /**
-     * 保存工作流草稿；参数是保存命令；返回工作流详情。
-     */
+    /** 更新现有草稿或创建下一草稿版本，不修改 publishedVersion。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetailEntity saveDraft(WorkflowSaveDraftCommandEntity command) {
@@ -149,14 +153,13 @@ public class WorkflowDomainService implements IWorkflowService {
         workflow.setCurrentVersion(draft.getVersion());
         workflow.setStatus(STATUS_DRAFT);
         workflowRepository.updateWorkflow(workflow);
+        // 草稿变化不影响既有发布版本，但清缓存保证后续显式版本加载不复用旧编译结果。
         runtimeCache.keySet().removeIf(key -> key.contains(":" + command.getWorkflowId() + ":"));
         AiLog.info(AiLog.workflow().draftSaved(command.getTenantId(), command.getUserId(), command.getWorkflowId(), draft.getVersion()));
         return queryWorkflowDetail(command.getTenantId(), command.getUserId(), command.getRoleCode(), command.getWorkflowId());
     }
 
-    /**
-     * 发布工作流；参数是租户、用户和工作流ID；返回工作流详情。
-     */
+    /** 校验图结构后推进发布指针；具体 Agent 装配在首次 loadRuntime 时执行。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowDetailEntity publishWorkflow(String tenantId, String userId, String roleCode, String workflowId) {
@@ -198,9 +201,7 @@ public class WorkflowDomainService implements IWorkflowService {
                 .build();
     }
 
-    /**
-     * 加载运行时；参数是租户、用户、工作流、版本和请求模型；返回运行时信息。
-     */
+    /** 只加载发布版本，并按版本与有效模型组合懒编译缓存。 */
     @Override
     public WorkflowRuntimeEntity loadRuntime(String tenantId, String userId, String roleCode, String workflowId,
                                              Integer workflowVersion, String requestModelCode) {
@@ -214,6 +215,7 @@ public class WorkflowDomainService implements IWorkflowService {
         String effectiveModelCode = modelRouter.route(requestModelCode, null, version.getDefaultModelCode());
         String cacheKey = tenantId + ":" + workflowId + ":" + version.getVersion() + ":" + (isBlank(requestModelCode) ? "configured" : effectiveModelCode);
         AiLog.info(AiLog.workflow().modelRouted(tenantId, userId, workflowId, effectiveModelCode));
+        // 不同请求模型覆盖必须拥有独立 Runner；同一组合只装配一次。
         return runtimeCache.computeIfAbsent(cacheKey, key -> compileRuntime(tenantId, userId, workflow, version, requestModelCode, effectiveModelCode));
     }
 
@@ -232,9 +234,7 @@ public class WorkflowDomainService implements IWorkflowService {
         runtimeCache.keySet().removeIf(key -> key.contains(":" + workflowId + ":"));
     }
 
-    /**
-     * 编译运行时；参数是身份、工作流、版本和模型；返回运行时信息。
-     */
+    /** 编译所有节点并完成装配后，才把运行时返回给缓存。 */
     private WorkflowRuntimeEntity compileRuntime(String tenantId,
                                                  String userId,
                                                  WorkflowEntity workflow,
@@ -243,6 +243,7 @@ public class WorkflowDomainService implements IWorkflowService {
                                                  String effectiveModelCode) {
         try {
             WorkflowDagCompileResultEntity compileResult = workflowRuntimeCompiler.compileDag(workflow, version, requestModelCode);
+            // 任一节点装配失败都会阻止该运行时进入缓存。
             armoryService.acceptArmoryAgents(compileResult.getTables());
             WorkflowRuntimeEntity runtime = WorkflowRuntimeEntity.builder()
                     .workflowId(workflow.getWorkflowId())
@@ -260,9 +261,7 @@ public class WorkflowDomainService implements IWorkflowService {
         }
     }
 
-    /**
-     * 解析运行版本；参数是租户、工作流和指定版本；返回可运行版本。
-     */
+    /** 未指定时取最新发布版本；显式版本也必须处于 published。 */
     private WorkflowVersionEntity resolveRuntimeVersion(String tenantId, String workflowId, Integer workflowVersion) {
         WorkflowVersionEntity version = workflowVersion == null
                 ? workflowRepository.queryLatestPublished(tenantId, workflowId)

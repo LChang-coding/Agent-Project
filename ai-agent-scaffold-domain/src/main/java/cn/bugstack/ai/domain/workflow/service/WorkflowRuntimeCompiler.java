@@ -28,20 +28,22 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * 工作流运行时编译器。
- */
+/** 将数据库图编译为每节点 Agent 装配表和 ChatService 可执行 DAG 计划。 */
 @Service
 public class WorkflowRuntimeCompiler {
 
+    /** 动态 Spring Bean/ADK Agent 名称硬上限。 */
     private static final int MAX_AGENT_NAME_LENGTH = 80;
 
+    /** 复制系统已有 AI API 通道，不在工作流保存密钥。 */
     @Resource
     private AiAgentAutoConfigProperties aiAgentAutoConfigProperties;
 
+    /** 解析工作流引用的已发布 Skill/MCP。 */
     @Resource
     private IWorkflowRepository workflowRepository;
 
+    /** 解析请求、节点和工作流默认模型。 */
     @Resource
     private ModelRouter modelRouter;
 
@@ -71,9 +73,7 @@ public class WorkflowRuntimeCompiler {
         return table;
     }
 
-    /**
-     * 编译 DAG 工作流；参数是工作流、版本和请求模型；返回节点 Agent 配置和执行计划。
-     */
+    /** 每个 LLM 节点生成独立 Runner，再输出只包含 LLM 节点的 DAG。 */
     public WorkflowDagCompileResultEntity compileDag(WorkflowEntity workflow, WorkflowVersionEntity version, String requestModelCode) {
         checkRuntimeSource(workflow, version);
         WorkflowGraphEntity graph = version.getGraph();
@@ -81,6 +81,7 @@ public class WorkflowRuntimeCompiler {
         if (llmNodes.isEmpty()) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流至少需要一个 LLM 节点");
         }
+        // 编译前拒绝非自循环环路，避免运行时 Join 永久等待。
         validateDagGraph(graph, llmNodes);
 
         String runtimeAgentId = runtimeAgentId(workflow.getWorkflowId(), version.getVersion(), requestModelCode);
@@ -90,6 +91,7 @@ public class WorkflowRuntimeCompiler {
         List<AiAgentConfigTableVO> tables = new ArrayList<>();
         List<WorkflowDagPlanEntity.Node> planNodes = new ArrayList<>();
         for (WorkflowGraphEntity.Node node : llmNodes) {
+            // 每个节点单独装配，节点模型覆盖和调用证据互不串用。
             String nodeRuntimeAgentId = runtimeNodeAgentId(runtimeAgentId, node);
             String nodeRuntimeAgentName = nodeAgentName(node);
             tables.add(buildDagNodeTable(workflow, version, requestModelCode, node, nodeRuntimeAgentId, nodeRuntimeAgentName));
@@ -115,9 +117,7 @@ public class WorkflowRuntimeCompiler {
         return WorkflowDagCompileResultEntity.builder().tables(tables).dagPlan(dagPlan).build();
     }
 
-    /**
-     * 生成运行时 Agent ID；参数是工作流、版本和请求模型；返回稳定 Bean 名称。
-     */
+    /** 工作流、版本和模型覆盖共同决定稳定运行体 ID。 */
     public String runtimeAgentId(String workflowId, Integer version, String requestModelCode) {
         String modelKey = requestModelCode == null || requestModelCode.isBlank() ? "configured" : requestModelCode;
         return safeAgentName("wf_" + workflowId + "_v" + version + "_" + modelKey, "wf_runtime");
@@ -208,9 +208,7 @@ public class WorkflowRuntimeCompiler {
         return runner;
     }
 
-    /**
-     * 复制 AI API 配置；无参数；返回现有系统模型通道。
-     */
+    /** 复制首个系统模型通道；工作流数据库不持久化 API Key。 */
     private AiAgentConfigTableVO.Module.AiApi copyAiApi() {
         AiAgentConfigTableVO source = firstConfiguredTable();
         AiAgentConfigTableVO.Module.AiApi sourceAiApi = source.getModule().getAiApi();
@@ -255,9 +253,7 @@ public class WorkflowRuntimeCompiler {
         return agents;
     }
 
-    /**
-     * 构建工作流控制节点；参数是画布和 LLM 节点；返回控制节点列表。
-     */
+    /** 兼容旧式 ADK 组合 Agent 编译；单节点非循环无需额外控制节点。 */
     private List<AiAgentConfigTableVO.Module.AgentWorkflow> buildAgentWorkflows(WorkflowGraphEntity graph,
                                                                                 List<WorkflowGraphEntity.Node> llmNodes) {
         String mode = normalizeMode(graph.getMode());
@@ -288,9 +284,7 @@ public class WorkflowRuntimeCompiler {
         return runner;
     }
 
-    /**
-     * 构建 MCP 工具配置；参数是租户和 MCP ID；返回 Armory 工具配置。
-     */
+    /** 将指定 MCP ID 解析为装配配置；当前 DAG 单节点编译未调用此兼容路径。 */
     private List<AiAgentConfigTableVO.Module.ChatModel.ToolMcp> buildMcpTools(String tenantId, List<String> mcpIds) {
         List<WorkflowMcpToolEntity> tools = workflowRepository.queryMcpTools(tenantId, mcpIds);
         if (tools.isEmpty()) {
@@ -299,9 +293,7 @@ public class WorkflowRuntimeCompiler {
         return tools.stream().map(this::toToolMcp).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
-    /**
-     * 构建 Skill 工具配置；参数是租户和 Skill ID；返回 Armory 工具配置。
-     */
+    /** 将指定 Skill ID 解析为装配配置；当前 DAG 单节点编译未调用此兼容路径。 */
     private List<AiAgentConfigTableVO.Module.ChatModel.ToolSkills> buildSkillTools(String tenantId, List<String> skillIds) {
         List<WorkflowSkillToolEntity> tools = workflowRepository.querySkillTools(tenantId, skillIds);
         if (tools.isEmpty()) {
@@ -399,9 +391,7 @@ public class WorkflowRuntimeCompiler {
                 .orElseThrow(() -> new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "系统模型通道未配置"));
     }
 
-    /**
-     * 查询 LLM 节点；参数是画布；返回按画布顺序排列的 LLM 节点。
-     */
+    /** 过滤非 LLM 画布节点，并按可达边关系生成稳定顺序。 */
     private List<WorkflowGraphEntity.Node> llmNodes(WorkflowGraphEntity graph) {
         if (graph.getNodes() == null) {
             return Collections.emptyList();
@@ -412,9 +402,7 @@ public class WorkflowRuntimeCompiler {
         return orderNodesByEdges(graph, nodes);
     }
 
-    /**
-     * 校验 DAG 结构；参数是画布和 LLM 节点；非法时抛出异常。
-     */
+    /** 使用 Kahn 算法拒绝非自循环环路；自循环保留为有限迭代语义。 */
     private void validateDagGraph(WorkflowGraphEntity graph, List<WorkflowGraphEntity.Node> llmNodes) {
         Set<String> nodeIds = llmNodes.stream().map(WorkflowGraphEntity.Node::getNodeId).collect(Collectors.toCollection(LinkedHashSet::new));
         Map<String, Integer> indegree = new LinkedHashMap<>();
@@ -426,6 +414,7 @@ public class WorkflowRuntimeCompiler {
         if (graph.getEdges() != null) {
             for (WorkflowGraphEntity.Edge edge : graph.getEdges()) {
                 if (edge.getSourceNodeId() == null || edge.getTargetNodeId() == null || edge.getSourceNodeId().equals(edge.getTargetNodeId())) {
+                    // 自循环不计拓扑入度，由节点 maxIterations 单独执行。
                     continue;
                 }
                 if (nodeIds.contains(edge.getSourceNodeId()) && nodeIds.contains(edge.getTargetNodeId())) {
@@ -456,9 +445,7 @@ public class WorkflowRuntimeCompiler {
         }
     }
 
-    /**
-     * 按画布箭头排序节点；参数是画布和 LLM 节点；返回尽量符合边关系的节点顺序。
-     */
+    /** 从根节点深度优先排序，再补齐不可达节点，保证编译结果稳定。 */
     private List<WorkflowGraphEntity.Node> orderNodesByEdges(WorkflowGraphEntity graph, List<WorkflowGraphEntity.Node> nodes) {
         if (nodes.isEmpty() || graph.getEdges() == null || graph.getEdges().isEmpty()) {
             return nodes;
@@ -505,9 +492,7 @@ public class WorkflowRuntimeCompiler {
         }
     }
 
-    /**
-     * 读取 DAG 根节点；参数是画布和节点；返回可执行根节点ID。
-     */
+    /** 优先显式 rootNodeId，否则选择首个零入度节点。 */
     private String rootDagNodeId(WorkflowGraphEntity graph, List<WorkflowGraphEntity.Node> llmNodes) {
         Set<String> nodeIds = llmNodes.stream().map(WorkflowGraphEntity.Node::getNodeId).collect(Collectors.toSet());
         if (nodeIds.contains(graph.getRootNodeId())) {
@@ -532,9 +517,7 @@ public class WorkflowRuntimeCompiler {
                 .orElse(llmNodes.get(0).getNodeId());
     }
 
-    /**
-     * 转换 DAG 边；参数是画布和节点表；返回只包含 LLM 节点的边。
-     */
+    /** 丢弃连接非 LLM 节点的边；保留自循环供运行时识别迭代。 */
     private List<WorkflowDagPlanEntity.Edge> dagEdges(WorkflowGraphEntity graph, Map<String, WorkflowGraphEntity.Node> nodeMap) {
         if (graph.getEdges() == null || graph.getEdges().isEmpty()) {
             return Collections.emptyList();

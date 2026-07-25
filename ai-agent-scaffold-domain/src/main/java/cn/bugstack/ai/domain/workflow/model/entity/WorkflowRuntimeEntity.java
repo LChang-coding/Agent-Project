@@ -29,9 +29,7 @@ public class WorkflowRuntimeEntity {
      */
     private Integer version;
 
-    /**
-     * 本次有效模型编码。
-     */
+    /** 请求覆盖与工作流配置路由后的有效模型。 */
     private String effectiveModelCode;
 
     /**
