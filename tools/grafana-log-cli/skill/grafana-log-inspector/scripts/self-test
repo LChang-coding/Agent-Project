@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+SKILL_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$SKILL_ROOT/scripts/lib/cli-runtime.sh"
+
+doctor=false
+case "${1:-}" in
+  "") ;;
+  --doctor) doctor=true ;;
+  -h|--help)
+    printf '%s\n' \
+      '用法: self-test [--doctor]' \
+      '默认只做离线完整性检查；--doctor 额外执行真实只读连通性检查。'
+    exit 0
+    ;;
+  *)
+    cli_fail "未知参数: $1"
+    exit 2
+    ;;
+esac
+[ "$#" -le 1 ] || { cli_fail "参数过多"; exit 2; }
+
+cli_verify_all_archives
+cli_prepare_binary
+version_output=$("$CLI_BINARY" --version)
+case "$version_output" in
+  *"$CLI_VERSION"*) ;;
+  *) cli_fail "CLI 版本与发布清单不一致"; exit 2 ;;
+esac
+
+printf 'status=ok\nversion=%s\nplatform=%s/%s\nassets=4\nbinary=%s\n' \
+  "$CLI_VERSION" "$CLI_OS" "$CLI_ARCH" "$CLI_BINARY"
+
+if [ "$doctor" = true ]; then
+  "$CLI_BINARY" doctor --output json
+fi

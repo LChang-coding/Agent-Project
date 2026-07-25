@@ -1,4 +1,4 @@
-.PHONY: test verify build release skill-validate
+.PHONY: test verify build release skill-test skill-validate
 
 test:
 	go test ./...
@@ -15,6 +15,9 @@ build:
 
 release:
 	./scripts/build-release.sh
+
+skill-test:
+	./scripts/test-skill-package.sh
 
 skill-validate:
 	python3 /Users/codeliu/.codex/skills/.system/skill-creator/scripts/quick_validate.py \

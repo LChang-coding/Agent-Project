@@ -47,5 +47,16 @@ make skill-validate
 ```
 
 `make release` 为 darwin/linux 的 amd64/arm64 构建可复现二进制，同时把
-压缩后的二进制和 SHA-256 清单写入 Skill 的 `assets/bin`。Skill 入口会验证
-哈希后再解压到用户缓存目录。
+压缩后的二进制、SHA-256 和 `RELEASE.json` 发布清单写入 Skill 的
+`assets/bin`。Skill 入口会验证哈希后再解压到用户缓存目录。
+
+Skill 同时提供正式 CLI 安装和离线自检：
+
+```bash
+skill/grafana-log-inspector/scripts/self-test
+skill/grafana-log-inspector/scripts/install-cli
+~/.local/bin/grafana-log --version
+```
+
+安装器默认写入 `~/.local/bin/grafana-log`，也可通过 `--bin-dir` 指定用户目录。
+它不会复制 `codex.md` 或任何认证信息，遇到不同的现有文件时默认拒绝覆盖。

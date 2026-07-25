@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "grafana-log",
+  "version": "v0.2.0",
+  "entrypoint": "scripts/grafana-log",
+  "installEntrypoint": "scripts/install-cli",
+  "platforms": [
+    {"os":"darwin","arch":"amd64","archive":"grafana-log-darwin-amd64.gz","sha256":"6663844d94b9dcce8241636827941cc34a7fda401de18069c93643171a9cb1a7"},
+    {"os":"darwin","arch":"arm64","archive":"grafana-log-darwin-arm64.gz","sha256":"d7ba0addc4c90268d02bbe675f184855933d2d54271fe2b9e113627beba21dac"},
+    {"os":"linux","arch":"amd64","archive":"grafana-log-linux-amd64.gz","sha256":"62e8520a6c0fb485f9dca1de4e4b60407f6e4342791466657648d742e5b8836c"},
+    {"os":"linux","arch":"arm64","archive":"grafana-log-linux-arm64.gz","sha256":"401927bcfd5a86b94f70bedbfe875b5a40ae0469b93f5ca14c83cd5c564068ed"}
+  ]
+}

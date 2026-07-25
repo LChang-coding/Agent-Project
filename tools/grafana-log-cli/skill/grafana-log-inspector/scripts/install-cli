@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+SKILL_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+. "$SKILL_ROOT/scripts/lib/cli-runtime.sh"
+
+bin_dir=${HOME:+"$HOME/.local/bin"}
+force=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --bin-dir)
+      [ "$#" -ge 2 ] || { cli_fail "--bin-dir 缺少目录"; exit 2; }
+      bin_dir=$2
+      shift 2
+      ;;
+    --force)
+      force=true
+      shift
+      ;;
+    -h|--help)
+      printf '%s\n' \
+        '用法: install-cli [--bin-dir <目录>] [--force]' \
+        '默认安装到 ~/.local/bin/grafana-log。不会复制 codex.md 或任何凭据。'
+      exit 0
+      ;;
+    *)
+      cli_fail "未知参数: $1"
+      exit 2
+      ;;
+  esac
+done
+
+[ -n "${bin_dir:-}" ] || { cli_fail "无法确定安装目录，请传入 --bin-dir"; exit 2; }
+case "$bin_dir" in
+  /*) ;;
+  *) cli_fail "--bin-dir 必须是绝对路径"; exit 2 ;;
+esac
+
+cli_prepare_binary
+mkdir -p "$bin_dir"
+[ ! -d "$bin_dir/grafana-log" ] || { cli_fail "安装目标是目录"; exit 2; }
+
+target="$bin_dir/grafana-log"
+if [ -e "$target" ]; then
+  current=$(cli_checksum "$target") || exit 2
+  desired=$(cli_checksum "$CLI_BINARY") || exit 2
+  if [ "$current" = "$desired" ]; then
+    printf 'grafana-log 已是 %s：%s\n' "$CLI_VERSION" "$target"
+    exit 0
+  fi
+  [ "$force" = true ] ||
+    { cli_fail "$target 已存在且内容不同；确认后使用 --force"; exit 2; }
+fi
+
+temporary="$bin_dir/.grafana-log.$$"
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+cp "$CLI_BINARY" "$temporary"
+chmod 700 "$temporary"
+mv -f "$temporary" "$target"
+trap - EXIT HUP INT TERM
+printf '已安装 grafana-log %s：%s\n' "$CLI_VERSION" "$target"
