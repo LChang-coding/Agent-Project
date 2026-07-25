@@ -10,13 +10,16 @@ import org.springframework.stereotype.Component;
 
 /**
  * Kafka 上下文压缩命令发布器。
+ * <p>消息只负责唤醒消费者；压缩任务表才是状态与幂等事实源。</p>
  */
 @Component
 public class KafkaContextCompactionPublisher implements ContextCompactionPublisher {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    /** 关闭时保留数据库任务，由扫描补偿链路接管。 */
     private final boolean enabled;
+    /** 版本化主题承载可演进的压缩命令协议。 */
     private final String topic;
 
     /**
@@ -41,13 +44,16 @@ public class KafkaContextCompactionPublisher implements ContextCompactionPublish
             return;
         }
         try {
+            // 同租户同会话使用稳定分区键，避免同会话压缩命令乱序。
             String key = String.join(":", blank(command.tenantId()), blank(command.sessionId()));
             kafkaTemplate.send(topic, key, objectMapper.writeValueAsString(command));
         } catch (JsonProcessingException e) {
+            // 序列化失败表示命令无法投递，必须显式失败而非制造假成功。
             throw new IllegalStateException("上下文压缩命令序列化失败", e);
         }
     }
 
+    /** 将空分区键片段规范化为空串。 */
     private String blank(String value) {
         return value == null ? "" : value;
     }

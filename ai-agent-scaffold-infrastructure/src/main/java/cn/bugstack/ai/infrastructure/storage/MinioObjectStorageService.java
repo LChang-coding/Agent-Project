@@ -38,17 +38,21 @@ import java.util.function.Supplier;
 /**
  * MinIO 对象存储实现。
  * <p>本地开发未配置 MinIO 时可自动降级到本地目录，避免上传流程被远端中间件阻塞。</p>
+ * <p>本类只校验存储位置与文件安全，不判断租户是否有权访问对象。</p>
  */
 @Slf4j
 @Service
 public class MinioObjectStorageService implements ObjectStorageService {
 
+    /** 默认整对象读取上限，优先使用流式下载处理大文件。 */
     private static final long DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024;
 
     private final ObjectStorageProperties properties;
     private final Supplier<MinioClient> minioClientFactory;
+    /** 分离客户端和建桶锁，避免首次连接互相扩大临界区。 */
     private final Object minioClientMonitor = new Object();
     private final Object bucketMonitor = new Object();
+    /** 仅缓存本进程已确认的桶，进程重启后重新探测。 */
     private final Set<String> readyBuckets = ConcurrentHashMap.newKeySet();
     private volatile MinioClient minioClient;
 
@@ -220,6 +224,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
             return Files.exists(localPath(bucket, objectKey), LinkOption.NOFOLLOW_LINKS);
         } catch (ErrorResponseException e) {
             String code = e.errorResponse() == null ? null : e.errorResponse().code();
+            // 只有明确的不存在响应可折叠为 false，其余服务端错误必须暴露。
             if ("NoSuchKey".equals(code) || "NoSuchObject".equals(code) || "NoSuchBucket".equals(code)) {
                 return false;
             }
@@ -331,6 +336,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
                 throw new AppException("OBJECT_STORAGE_SIZE_MISMATCH", "暂存文件长度在上传期间发生变化");
             }
             try {
+                // 同文件系统优先原子替换，避免读方观察到半文件。
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
@@ -369,6 +375,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
                     continue;
                 }
                 if (read > maxBytes - sizeBytes) {
+                    // 使用减法比较，避免 sizeBytes + read 溢出。
                     throw new AppException("OBJECT_STORAGE_TOO_LARGE", "对象大小超过流式下载上限");
                 }
                 outputStream.write(buffer, 0, read);
@@ -459,6 +466,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
             return current;
         }
         synchronized (minioClientMonitor) {
+            // 双重检查保证延迟创建且全进程复用同一客户端。
             if (minioClient == null) {
                 minioClient = minioClientFactory.get();
             }
@@ -488,6 +496,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
                 return;
             }
             boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
+            // 建桶操作串行化，避免并发首次上传重复创建。
             if (!exists) {
                 client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
             }
@@ -507,6 +516,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         checkLocation(command.getBucket(), command.getObjectKey());
     }
 
+    /** 校验暂存文件位置与调用方声明长度，防止上传期间文件被替换。 */
     private void checkFileCommand(ObjectStorageFileCommandEntity command) {
         if (command == null || command.getBucket() == null || command.getBucket().isBlank()
                 || command.getObjectKey() == null || command.getObjectKey().isBlank()
@@ -535,6 +545,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         checkLocation(command.getBucket(), command.getObjectKey());
     }
 
+    /** 创建 SHA-256 摘要器；JVM 缺失标准算法视为不可恢复配置错误。 */
     private MessageDigest sha256Digest() {
         try {
             return MessageDigest.getInstance("SHA-256");
@@ -543,6 +554,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    /** 拒绝非法桶名片段和 NUL；本地模式另做规范化路径越界校验。 */
     private void checkLocation(String bucket, String objectKey) {
         if (bucket == null || bucket.isBlank() || objectKey == null || objectKey.isBlank()
                 || bucket.contains("/") || bucket.contains("\\") || objectKey.indexOf('\0') >= 0) {
@@ -550,6 +562,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    /** 在分配整对象字节数组前执行大小门禁。 */
     private void checkReadSize(long actualBytes, long maxBytes) {
         if (actualBytes > maxBytes) {
             throw new AppException("OBJECT_STORAGE_TOO_LARGE", "对象大小超过读取上限");

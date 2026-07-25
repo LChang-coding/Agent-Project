@@ -11,6 +11,7 @@ import java.util.List;
 
 /**
  * Spring AI 上下文压缩端口。
+ * <p>只调用模型并返回原始摘要；任务状态、范围校验和取消屏障由领域层负责。</p>
  */
 @Component
 public class SpringAiContextCompressionPort implements ContextCompressionPort {
@@ -23,7 +24,9 @@ public class SpringAiContextCompressionPort implements ContextCompressionPort {
         if (chatModel == null) {
             throw new IllegalStateException("上下文压缩缺少 ChatModel");
         }
+        // 压缩提示词已由领域层按 Token 预算封装，此处保持单轮调用。
         ChatResponse response = chatModel.call(new Prompt(List.of(new UserMessage(prompt))));
+        // 空响应不能当作有效摘要写入上下文修订。
         if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
             throw new IllegalStateException("上下文压缩模型返回为空");
         }

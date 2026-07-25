@@ -21,8 +21,11 @@ import java.util.stream.Collectors;
 @Service
 public class DefaultAssetTextExtractor implements AssetTextExtractor {
 
+    /** 限制可注入上下文长度，避免单附件挤占模型窗口。 */
     static final int MAX_EXTRACTED_CHARS = 60_000;
+    /** 拒绝超大 PDF，控制解析内存和 CPU。 */
     static final int MAX_PDF_PAGES = 200;
+    /** 错误摘要只保留诊断信息，不回传无限异常文本。 */
     static final int MAX_ERROR_CHARS = 240;
 
     /** 解析附件；参数是名称、MIME 和字节；返回受限文本结果。 */
@@ -31,6 +34,7 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
         String extension = extension(fileName);
         String mime = mimeType == null ? "" : mimeType.toLowerCase(Locale.ROOT);
         try {
+            // MIME 与扩展名任一命中白名单即可解析，兼容浏览器缺失或泛化 MIME。
             if (mime.startsWith("text/") || extension.equals("txt") || extension.equals("md")
                     || extension.equals("markdown") || extension.equals("csv") || extension.equals("json")) {
                 return ready(truncate(new String(bytes, StandardCharsets.UTF_8)));
@@ -45,14 +49,17 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
                 return AssetParseResultEntity.builder().parseStatus("unsupported")
                         .errorSummary("图片已保存，本阶段不做 OCR 或模型注入").build();
             }
+            // 未知二进制格式只保存资产，禁止猜测编码后污染模型上下文。
             return AssetParseResultEntity.builder().parseStatus("unsupported")
                     .errorSummary("当前格式不支持文本提取").build();
         } catch (Exception e) {
+            // 解析失败降级为资产可用、文本不可用，不让附件阻断整轮对话。
             return AssetParseResultEntity.builder().parseStatus("failed")
                     .errorSummary(safeError(e)).build();
         }
     }
 
+    /** 提取 PDF 可见文本；超过页数上限直接拒绝。 */
     private String extractPdf(byte[] bytes) throws Exception {
         try (PDDocument document = Loader.loadPDF(bytes)) {
             if (document.getNumberOfPages() > MAX_PDF_PAGES) {
@@ -64,6 +71,7 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
         }
     }
 
+    /** 提取 DOCX 正文段落；表格等复杂结构不在聊天附件轻解析范围内。 */
     private String extractDocx(byte[] bytes) throws Exception {
         try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes))) {
             String text = document.getParagraphs().stream().map(XWPFParagraph::getText)
@@ -72,6 +80,7 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
         }
     }
 
+    /** 将非空文本标记为可注入；空内容仍保留原始资产。 */
     private AssetParseResultEntity ready(String text) {
         if (text == null || text.isBlank()) {
             return AssetParseResultEntity.builder().parseStatus("unsupported")
@@ -80,12 +89,14 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
         return AssetParseResultEntity.builder().parseStatus("ready").extractedText(text).build();
     }
 
+    /** 清除 NUL 并硬截断，保证下游提示词输入有界。 */
     private String truncate(String value) {
         if (value == null) return null;
         String normalized = value.replace('\0', ' ').trim();
         return normalized.length() <= MAX_EXTRACTED_CHARS ? normalized : normalized.substring(0, MAX_EXTRACTED_CHARS);
     }
 
+    /** 压平并截断异常消息，避免日志换行或超长内容进入接口响应。 */
     private String safeError(Exception error) {
         String message = error.getMessage();
         String value = message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
@@ -93,11 +104,13 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
         return value.length() <= MAX_ERROR_CHARS ? value : value.substring(0, MAX_ERROR_CHARS);
     }
 
+    /** 判断扩展名是否属于只保存、不注入的图片格式。 */
     private boolean isImageExtension(String extension) {
         return extension.equals("png") || extension.equals("jpg") || extension.equals("jpeg")
                 || extension.equals("gif") || extension.equals("webp") || extension.equals("bmp");
     }
 
+    /** 仅取最后一个点后的扩展名并统一为小写。 */
     private String extension(String fileName) {
         if (fileName == null) return "";
         int dot = fileName.lastIndexOf('.');
