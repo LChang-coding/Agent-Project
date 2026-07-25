@@ -338,6 +338,8 @@ public record DocumentIr(String schemaVersion,
 
     /**
      * 内容块类型。
+     * <p>依次覆盖标题、层级标题、正文、列表、引用、图注、页眉页脚、脚注、页码、水印、
+     * 表格、公式、代码、图像、图像文本和无法归类内容。</p>
      */
     public enum BlockType {
         TITLE, HEADING, PARAGRAPH, LIST_ITEM, QUOTE, CAPTION, HEADER, FOOTER, FOOTNOTE,
@@ -346,6 +348,8 @@ public record DocumentIr(String schemaVersion,
 
     /**
      * 清洗、风险和质量标记。
+     * <p>标记只追加不覆盖原文，用于追踪 Unicode 规范化、控制字符、断词、重复页眉页脚、
+     * 重复块、语言偏差、敏感内容、提示词注入、OCR、替换字符、表格结构和抑制决策。</p>
      */
     public enum Flag {
         UNICODE_NORMALIZED,
@@ -364,6 +368,7 @@ public record DocumentIr(String schemaVersion,
         SUPPRESSED
     }
 
+    /** 校验并返回 IR 必填文本。 */
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + "不能为空");

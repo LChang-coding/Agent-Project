@@ -57,8 +57,11 @@ public interface RagDocumentParserPort {
 
     /** OCR执行策略。 */
     enum OcrMode {
+        /** 禁止 OCR，仅接受原生可提取文本。 */
         DISABLED,
+        /** 解析器按页面文本质量决定是否 OCR。 */
         AUTO,
+        /** 无论是否存在文本层都执行 OCR。 */
         FORCED
     }
 
@@ -89,6 +92,7 @@ public interface RagDocumentParserPort {
                     null, "", List.of(), false);
         }
 
+        /** 将旧版 Markdown/章节结果提升为最小可追溯 IR。 */
         private static DocumentIr legacyIr(String markdown, List<ParsedSection> sections,
                                            int pageCount, String parserVersion) {
             List<DocumentIr.Block> blocks = new ArrayList<>();
@@ -125,6 +129,7 @@ public interface RagDocumentParserPort {
         }
     }
 
+    /** 校验端口命令与结果的必填文本。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

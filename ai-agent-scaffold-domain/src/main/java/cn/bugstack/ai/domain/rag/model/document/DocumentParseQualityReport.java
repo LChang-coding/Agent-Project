@@ -45,11 +45,13 @@ public record DocumentParseQualityReport(double coverage,
 
     /**
      * 质量问题严重度。
+     * <p>INFO 仅留痕，WARNING 允许入库但需展示，ERROR 会阻止自动激活。</p>
      */
     public enum Severity {
         INFO, WARNING, ERROR
     }
 
+    /** 校验并返回零到一的质量分数。 */
     private static double score(double value, String field) {
         if (!Double.isFinite(value) || value < 0 || value > 1) {
             throw new IllegalArgumentException(field + "必须位于0到1之间");
