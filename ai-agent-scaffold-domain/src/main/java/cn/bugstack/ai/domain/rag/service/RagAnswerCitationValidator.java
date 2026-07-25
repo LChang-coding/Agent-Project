@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 @Service
 public class RagAnswerCitationValidator {
 
+    /** 只承认平台生成的固定格式引用 ID，避免宽松文本匹配。 */
     private static final Pattern CITATION_PATTERN = Pattern.compile(
             "(?<![A-Za-z0-9_])cite_[0-9a-f]{24}(?![A-Za-z0-9_])");
 
@@ -44,6 +45,7 @@ public class RagAnswerCitationValidator {
                 used.stream().map(allowed::get).toList());
     }
 
+    /** 按回答出现顺序提取并去重引用 ID。 */
     private Set<String> extract(String answer) {
         Set<String> result = new LinkedHashSet<>();
         Matcher matcher = CITATION_PATTERN.matcher(answer == null ? "" : answer);
@@ -51,6 +53,7 @@ public class RagAnswerCitationValidator {
         return result;
     }
 
+    /** 非白名单引用优先判错，其次区分无 RAG、未使用和有效使用。 */
     private RagAnswerCitationValidation.Status status(Map<String, ?> allowed, List<String> used,
                                                        List<String> invalid) {
         if (!invalid.isEmpty()) return RagAnswerCitationValidation.Status.INVALID_CITATIONS;

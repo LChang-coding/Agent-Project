@@ -24,12 +24,17 @@ import java.util.UUID;
 @Service
 public class RagDocumentDeletionService {
 
+    /** 删除任务默认最多执行三次，超过后进入死信等待人工恢复。 */
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
 
+    /** 查询并推进文档、版本与摄取任务状态。 */
     private final IRagRepository repository;
+    /** 原子登记文档墓碑、版本墓碑、删除任务和 Outbox。 */
     private final RagDocumentDeletionRegistrationPort registrationPort;
+    /** 所有外部删除入口必须经过租户管理员授权。 */
     private final RagKnowledgeBaseAuthorizationService authorizationService;
 
+    /** 注入仓储、原子登记端口和授权服务。 */
     public RagDocumentDeletionService(IRagRepository repository,
                                       RagDocumentDeletionRegistrationPort registrationPort,
                                       RagKnowledgeBaseAuthorizationService authorizationService) {
@@ -71,6 +76,7 @@ public class RagDocumentDeletionService {
         return ensureDeletion(tenantId, knowledgeBaseId, document, document.revision());
     }
 
+    /** 以稳定幂等键登记删除屏障，禁止文档进入删除态却没有任务。 */
     private RagIngestJobEntity ensureDeletion(String tenantId, String knowledgeBaseId,
                                                RagDocumentEntity document, long expectedRevision) {
 
@@ -106,6 +112,7 @@ public class RagDocumentDeletionService {
         return repository.findIngestJob(tenantId, task.jobId()).orElse(task);
     }
 
+    /** 返回进行中或已完成任务；失败和死信任务以 CAS 方式重新排队。 */
     private RagIngestJobEntity resumeOrReturn(String tenantId, RagDocumentEntity document,
                                                RagIngestJobEntity existing) {
         if (existing.operation() != RagIngestOperation.DELETE
@@ -135,6 +142,7 @@ public class RagDocumentDeletionService {
         return repository.findIngestJob(tenantId, existing.jobId()).orElse(requeued);
     }
 
+    /** 优先使用活动版本承载删除任务，无活动版本时使用首个历史版本。 */
     private RagDocumentVersionEntity resolveTaskVersion(RagDocumentEntity document,
                                                          List<RagDocumentVersionEntity> versions) {
         if (document.activeVersionId() != null) {
@@ -145,14 +153,17 @@ public class RagDocumentDeletionService {
         return versions.get(0);
     }
 
+    /** 删除幂等键只绑定租户和逻辑文档，覆盖该文档全部版本。 */
     private String deletionTaskKey(String tenantId, String documentId) {
         return sha256("delete\n" + tenantId + "\n" + documentId);
     }
 
+    /** 生成带业务前缀的不可猜测标识。 */
     private String id(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
 
+    /** 生成跨进程稳定的删除任务键。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -162,6 +173,7 @@ public class RagDocumentDeletionService {
         }
     }
 
+    /** 在仓储查询前拒绝空业务标识。 */
     private String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new AppException("RAG_PARAM_INVALID", field + "不能为空");

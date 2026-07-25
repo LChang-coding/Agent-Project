@@ -42,6 +42,7 @@ public final class RagKnowledgeBaseAuthorizationService {
         }
     }
 
+    /** 统一识别缺失的可信身份字段。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

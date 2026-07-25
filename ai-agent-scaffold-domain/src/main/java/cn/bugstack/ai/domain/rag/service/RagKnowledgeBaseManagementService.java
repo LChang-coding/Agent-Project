@@ -21,13 +21,17 @@ import java.util.UUID;
 @Service
 public class RagKnowledgeBaseManagementService {
 
+    /** 首期 Embedding 模型和管理字段的固定边界。 */
     private static final int DEFAULT_EMBEDDING_DIMENSION = 768;
     private static final int MAX_NAME_LENGTH = 128;
     private static final int MAX_DESCRIPTION_LENGTH = 512;
 
+    /** 持久化知识库并执行同租户名称检查。 */
     private final IRagRepository repository;
+    /** 管理操作统一从可信身份校验租户角色。 */
     private final RagKnowledgeBaseAuthorizationService authorizationService;
 
+    /** 注入 RAG 仓储和授权服务。 */
     public RagKnowledgeBaseManagementService(IRagRepository repository,
                                              RagKnowledgeBaseAuthorizationService authorizationService) {
         this.repository = repository;
@@ -94,6 +98,7 @@ public class RagKnowledgeBaseManagementService {
         return updated;
     }
 
+    /** 去除首尾空白并限制知识库展示名长度。 */
     private String normalizeName(String value) {
         if (value == null || value.isBlank()) {
             throw new AppException("RAG_KNOWLEDGE_BASE_NAME_INVALID", "知识库名称不能为空");
@@ -105,6 +110,7 @@ public class RagKnowledgeBaseManagementService {
         return normalized;
     }
 
+    /** 对非法 ID 返回不存在，避免暴露标识校验细节。 */
     private String requireId(String value) {
         if (value == null || value.isBlank() || value.length() > 64) {
             throw new AppException("RAG_KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在");
@@ -112,6 +118,7 @@ public class RagKnowledgeBaseManagementService {
         return value.trim();
     }
 
+    /** 空描述落为 null，其余描述只做首尾清理和长度限制。 */
     private String normalizeDescription(String value) {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim();
@@ -121,6 +128,7 @@ public class RagKnowledgeBaseManagementService {
         return normalized;
     }
 
+    /** 用租户摘要隔离 Qdrant 别名，同时保留知识库可追踪性。 */
     private String collectionAlias(String tenantId, String knowledgeBaseId) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -131,10 +139,12 @@ public class RagKnowledgeBaseManagementService {
         }
     }
 
+    /** 统一同名或并发插入冲突响应。 */
     private AppException conflict() {
         return new AppException("RAG_KNOWLEDGE_BASE_CONFLICT", "当前租户已存在同名知识库，请更换名称后重试");
     }
 
+    /** CAS 失败要求客户端刷新后重试。 */
     private AppException revisionConflict() {
         return new AppException("RAG_KNOWLEDGE_BASE_REVISION_CONFLICT", "知识库已被其他操作更新，请刷新后重试");
     }

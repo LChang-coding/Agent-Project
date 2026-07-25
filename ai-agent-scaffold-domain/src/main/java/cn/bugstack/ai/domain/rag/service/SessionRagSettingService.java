@@ -32,11 +32,16 @@ import java.util.stream.Collectors;
 @Service
 public class SessionRagSettingService {
 
+    /** 手动模式限制单会话选择数量，避免运行快照和上下文无界增长。 */
     private static final int MAX_SELECTED_BINDINGS = 32;
+    /** 会话域负责访问控制、加锁和策略 revision 推进。 */
     private final SessionDomain sessionDomain;
+    /** 查询目标绑定、知识库和检索策略的实时状态。 */
     private final IRagRepository ragRepository;
+    /** 单独持久化会话手动选择，避免污染目标级绑定。 */
     private final ISessionRagSelectionRepository selectionRepository;
 
+    /** 注入会话域、RAG 仓储和会话选择仓储。 */
     public SessionRagSettingService(SessionDomain sessionDomain, IRagRepository ragRepository,
                                     ISessionRagSelectionRepository selectionRepository) {
         this.sessionDomain = sessionDomain;
@@ -110,6 +115,7 @@ public class SessionRagSettingService {
         return setting;
     }
 
+    /** 汇总会话模式、有效绑定、当前选择和配置可用性。 */
     private SessionRagSettingEntity toSetting(ChatSessionEntity session) {
         RagBindingTargetType targetType = targetType(session);
         SessionRagMode mode = SessionRagMode.resolve(session.getRagMode(), session.getRagEnabled());
@@ -134,6 +140,7 @@ public class SessionRagSettingService {
                 targetType, session.getAgentId(), selected, summaries);
     }
 
+    /** 兼容旧布尔开关，但拒绝它与新三态模式互相冲突。 */
     private SessionRagMode resolveRequestedMode(String requestedMode, Boolean legacyEnabled) {
         if ((requestedMode == null || requestedMode.isBlank()) && legacyEnabled == null) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG模式或开关不能为空");
@@ -154,6 +161,7 @@ public class SessionRagSettingService {
         return mode;
     }
 
+    /** 手动模式要求非空、去重、限量且全部属于当前有效绑定。 */
     private List<String> validateSelections(SessionRagMode mode, List<String> requested,
                                             List<RagAgentBindingEntity> eligible) {
         List<String> values = requested == null ? List.of() : requested.stream()
@@ -182,6 +190,7 @@ public class SessionRagSettingService {
         return List.copyOf(unique);
     }
 
+    /** 会话来源决定绑定目标类型；普通会话按 Agent 处理。 */
     private RagBindingTargetType targetType(ChatSessionEntity session) {
         return "workflow".equalsIgnoreCase(session.getSourceType())
                 ? RagBindingTargetType.WORKFLOW : RagBindingTargetType.AGENT;
@@ -211,6 +220,7 @@ public class SessionRagSettingService {
                 .toList();
     }
 
+    /** 一条同时通过绑定、知识库生命周期和策略存在性校验的候选。 */
     private record EligibleBinding(RagAgentBindingEntity binding,
                                    RagKnowledgeBaseEntity knowledgeBase,
                                    RagRetrievalProfileEntity profile) {

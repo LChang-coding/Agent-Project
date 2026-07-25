@@ -31,14 +31,21 @@ import java.util.UUID;
 @Service
 public class RagDocumentUploadService {
 
+    /** 摄取失败默认最多自动尝试三次。 */
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
+    /** 查询知识库和既有幂等任务。 */
     private final IRagRepository repository;
+    /** 原子登记文档、版本、任务与 Outbox。 */
     private final RagUploadRegistrationPort registrationPort;
+    /** 原文件先落对象存储，再登记数据库状态。 */
     private final ObjectStorageService objectStorageService;
+    /** 上传文件的格式与安全边界策略。 */
     private final RagUploadFilePolicy filePolicy = new RagUploadFilePolicy();
+    /** 上传仅允许知识库所属租户管理员发起。 */
     private final RagKnowledgeBaseAuthorizationService authorizationService =
             new RagKnowledgeBaseAuthorizationService();
 
+    /** 注入仓储、原子登记端口和对象存储。 */
     public RagDocumentUploadService(IRagRepository repository,
                                     RagUploadRegistrationPort registrationPort,
                                     ObjectStorageService objectStorageService) {
@@ -105,12 +112,14 @@ public class RagDocumentUploadService {
         }
     }
 
+    /** 将已有幂等任务映射成上传响应，不重复创建文档。 */
     private RagDocumentUploadResult existingResult(RagIngestJobEntity job, RagValidatedUploadFile file,
                                                     boolean deduplicated) {
         return new RagDocumentUploadResult(job.documentId(), job.versionId(), job.jobId(), file.safeFileName(),
                 file.sizeBytes(), job.status().name().toLowerCase(java.util.Locale.ROOT), deduplicated);
     }
 
+    /** 数据库未受理时删除先上传的对象；清理失败必须显式告警。 */
     private void compensate(ObjectStorageResultEntity stored) {
         try {
             objectStorageService.deleteObject(stored.getBucket(), stored.getObjectKey());
@@ -120,6 +129,7 @@ public class RagDocumentUploadService {
         }
     }
 
+    /** 租户、知识库和内容哈希共同生成摄取幂等键。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -129,6 +139,7 @@ public class RagDocumentUploadService {
         }
     }
 
+    /** 生成带业务前缀的不可猜测标识。 */
     private String id(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }

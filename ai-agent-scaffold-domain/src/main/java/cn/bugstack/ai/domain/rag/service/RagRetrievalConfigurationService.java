@@ -19,12 +19,17 @@ import java.util.UUID;
 @Service
 public class RagRetrievalConfigurationService {
 
+    /** 管理字段长度上限，防止策略和绑定标识无界增长。 */
     private static final int MAX_NAME_LENGTH = 128;
     private static final int MAX_TARGET_ID_LENGTH = 64;
+    /** 持久化策略、知识库与绑定。 */
     private final IRagRepository repository;
+    /** 策略和绑定配置仅允许租户管理员维护。 */
     private final RagKnowledgeBaseAuthorizationService authorization;
+    /** 绑定写库前核对 Agent/Workflow 的真实可运行状态。 */
     private final RagBindingTargetAuthorizationService targetAuthorization;
 
+    /** 注入配置仓储、租户授权和目标授权服务。 */
     public RagRetrievalConfigurationService(IRagRepository repository,
                                             RagKnowledgeBaseAuthorizationService authorization,
                                             RagBindingTargetAuthorizationService targetAuthorization) {
@@ -33,6 +38,7 @@ public class RagRetrievalConfigurationService {
         this.targetAuthorization = targetAuthorization;
     }
 
+    /** 创建一份通过领域实体完整校验的检索策略。 */
     @Transactional(rollbackFor = Exception.class)
     public RagRetrievalProfileEntity createProfile(String tenantId, String userId, String roleCode,
                                                     ProfileValues values) {
@@ -45,6 +51,7 @@ public class RagRetrievalConfigurationService {
         return profile;
     }
 
+    /** 以 revision CAS 更新策略，避免覆盖并发管理员修改。 */
     @Transactional(rollbackFor = Exception.class)
     public RagRetrievalProfileEntity updateProfile(String tenantId, String userId, String roleCode,
                                                     String profileId, long expectedRevision,
@@ -63,11 +70,13 @@ public class RagRetrievalConfigurationService {
         return updated;
     }
 
+    /** 列出租户全部检索策略。 */
     public List<RagRetrievalProfileEntity> listProfiles(String tenantId, String userId, String roleCode) {
         authorization.requireTenantAdministrator(tenantId, userId, roleCode);
         return repository.listRetrievalProfiles(tenantId);
     }
 
+    /** 绑定可运行目标、可搜索知识库与同租户检索策略。 */
     @Transactional(rollbackFor = Exception.class)
     public RagAgentBindingEntity createBinding(String tenantId, String userId, String roleCode,
                                                BindingValues values) {
@@ -104,11 +113,13 @@ public class RagRetrievalConfigurationService {
         return binding;
     }
 
+    /** 列出租户全部目标绑定。 */
     public List<RagAgentBindingEntity> listBindings(String tenantId, String userId, String roleCode) {
         authorization.requireTenantAdministrator(tenantId, userId, roleCode);
         return repository.listBindings(tenantId);
     }
 
+    /** 以 revision CAS 删除绑定。 */
     @Transactional(rollbackFor = Exception.class)
     public void deleteBinding(String tenantId, String userId, String roleCode,
                               String bindingId, long expectedRevision) {
@@ -122,6 +133,7 @@ public class RagRetrievalConfigurationService {
         }
     }
 
+    /** 将请求值映射为领域实体，并把参数错误转换为稳定业务错误。 */
     private RagRetrievalProfileEntity toProfile(String tenantId, String profileId, long revision,
                                                 ProfileValues values) {
         if (values == null) throw new AppException("RAG_PROFILE_INVALID", "检索策略参数不能为空");
@@ -140,17 +152,20 @@ public class RagRetrievalConfigurationService {
         }
     }
 
+    /** 统一校验并清理外部传入的业务 ID。 */
     private String requireId(String value, String code, String name) {
         if (value == null || value.isBlank()) throw new AppException(code, name + "不能为空");
         return value.trim();
     }
 
+    /** 检索策略的完整可配置参数。 */
     public record ProfileValues(String name, RagRetrievalMode mode, RagFusionStrategy fusionStrategy,
                                 BigDecimal denseWeight, BigDecimal sparseWeight, int denseTopK, int sparseTopK,
                                 int fusionTopK, boolean rerankEnabled, int rerankTopK, int finalTopK,
                                 int neighborWindow, int maxContextTokens, BigDecimal scoreThreshold,
                                 boolean queryRewriteEnabled, boolean deduplicateEnabled) { }
 
+    /** 目标、知识库、策略和上下文预算的绑定请求。 */
     public record BindingValues(RagBindingTargetType targetType, String targetId, String knowledgeBaseId,
                                 String profileId, boolean required, int maxTokens, int priority) { }
 }

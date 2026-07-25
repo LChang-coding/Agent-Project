@@ -11,11 +11,15 @@ import org.springframework.stereotype.Service;
 @Service
 public final class RagBindingTargetAuthorizationService {
 
+    /** 工作流只有已发布状态才允许绑定。 */
     private static final String PUBLISHED = "published";
 
+    /** Agent 可用性包含平台静态注册与租户启用状态。 */
     private final AgentAvailabilityService agentAvailabilityService;
+    /** 工作流仓储用于核对租户归属和发布版本。 */
     private final IWorkflowRepository workflowRepository;
 
+    /** 注入 Agent 与工作流两类目标的可信查询入口。 */
     public RagBindingTargetAuthorizationService(AgentAvailabilityService agentAvailabilityService,
                                                 IWorkflowRepository workflowRepository) {
         this.agentAvailabilityService = agentAvailabilityService;
@@ -35,6 +39,7 @@ public final class RagBindingTargetAuthorizationService {
         throw new AppException("RAG_BINDING_TARGET_INVALID", "绑定目标类型不受支持");
     }
 
+    /** Agent 必须由平台注册且在当前租户启用。 */
     private void requireAgent(String tenantId, String agentId) {
         if (!agentAvailabilityService.isStaticAgent(agentId)) {
             throw notFound();
@@ -44,6 +49,7 @@ public final class RagBindingTargetAuthorizationService {
         }
     }
 
+    /** 工作流必须属于当前租户且至少发布过一个版本。 */
     private void requireWorkflow(String tenantId, String workflowId) {
         WorkflowEntity workflow = workflowRepository.queryWorkflow(tenantId, workflowId);
         if (workflow == null || !tenantId.equals(workflow.getTenantId())) {
@@ -55,10 +61,12 @@ public final class RagBindingTargetAuthorizationService {
         }
     }
 
+    /** 用统一不存在语义隐藏跨租户目标。 */
     private AppException notFound() {
         return new AppException("RAG_BINDING_TARGET_NOT_FOUND", "绑定目标不存在或不属于当前租户");
     }
 
+    /** 目标存在但当前不能运行时返回明确状态。 */
     private AppException unavailable() {
         return new AppException("RAG_BINDING_TARGET_UNAVAILABLE", "绑定目标当前不可运行");
     }

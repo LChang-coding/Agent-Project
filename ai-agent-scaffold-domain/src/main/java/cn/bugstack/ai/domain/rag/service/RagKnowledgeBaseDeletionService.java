@@ -18,12 +18,17 @@ import java.util.UUID;
 /** 管理员受理、查询和恢复不可取消的知识库级联删除。 */
 @Service
 public class RagKnowledgeBaseDeletionService {
+    /** 知识库级联删除比单文档删除允许更多恢复次数。 */
     private static final int MAX_ATTEMPTS = 5;
 
+    /** 查询知识库和待级联文档。 */
     private final IRagRepository repository;
+    /** 原子登记知识库删除屏障与任务账本。 */
     private final RagKnowledgeBaseDeletionRepository deletionRepository;
+    /** 所有请求和查询都要求租户管理员权限。 */
     private final RagKnowledgeBaseAuthorizationService authorizationService;
 
+    /** 注入 RAG 仓储、删除任务仓储和授权服务。 */
     public RagKnowledgeBaseDeletionService(IRagRepository repository,
                                             RagKnowledgeBaseDeletionRepository deletionRepository,
                                             RagKnowledgeBaseAuthorizationService authorizationService) {
@@ -32,6 +37,7 @@ public class RagKnowledgeBaseDeletionService {
         this.authorizationService = authorizationService;
     }
 
+    /** 以知识库 revision 为 CAS 门禁受理不可取消的级联删除。 */
     public RagKnowledgeBaseDeleteTaskEntity requestDeletion(String tenantId, String userId,
                                                               String roleCode, String knowledgeBaseId,
                                                               long expectedRevision) {
@@ -66,6 +72,7 @@ public class RagKnowledgeBaseDeletionService {
         return deletionRepository.findByTaskId(tenantId, task.taskId()).orElse(task);
     }
 
+    /** 查询任务前先由任务反查知识库并复核管理权限。 */
     public RagKnowledgeBaseDeleteTaskEntity requireTask(String tenantId, String userId,
                                                           String roleCode, String taskId) {
         RagKnowledgeBaseDeleteTaskEntity task = deletionRepository.findByTaskId(
@@ -84,6 +91,7 @@ public class RagKnowledgeBaseDeletionService {
                 .orElseThrow(() -> new AppException("RAG_KB_DELETE_TASK_NOT_FOUND", "知识库删除任务不存在"));
     }
 
+    /** 只有知识库仍处于删除屏障内才允许任务重新排队。 */
     public RagKnowledgeBaseDeleteTaskEntity retry(String tenantId, String userId,
                                                     String roleCode, String taskId) {
         RagKnowledgeBaseDeleteTaskEntity current = requireTask(
@@ -101,6 +109,7 @@ public class RagKnowledgeBaseDeletionService {
         return deletionRepository.findByTaskId(tenantId, taskId).orElse(requeued);
     }
 
+    /** 在可信租户内读取知识库并执行管理员授权。 */
     private RagKnowledgeBaseEntity requireManageable(String tenantId, String userId,
                                                        String roleCode, String knowledgeBaseId) {
         RagKnowledgeBaseEntity knowledgeBase = repository.findKnowledgeBase(
@@ -110,10 +119,12 @@ public class RagKnowledgeBaseDeletionService {
         return knowledgeBase;
     }
 
+    /** 生成带业务前缀的不可猜测任务 ID。 */
     private String id(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
 
+    /** 生成同一租户知识库唯一的删除幂等键。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -123,6 +134,7 @@ public class RagKnowledgeBaseDeletionService {
         }
     }
 
+    /** 在仓储访问前拒绝空业务标识。 */
     private String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new AppException("RAG_PARAM_INVALID", field + "不能为空");

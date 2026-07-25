@@ -20,11 +20,16 @@ import cn.bugstack.ai.types.exception.AppException;
 /** 解析并按可信会话范围读取最终回答引用元数据。 */
 @Service
 public class RagAnswerCitationMetadataService {
+    /** 只解析当前已知结构，避免把任意消息元数据误当引用。 */
     private static final String SCHEMA = "rag-citations/v1";
+    /** 会话域提供消息真实性和用户访问校验。 */
     private final SessionDomain sessionDomain;
+    /** 负责版本化引用快照的 JSON 反序列化。 */
     private final ObjectMapper objectMapper;
+    /** 实时复核知识库、文档、版本和分块生命周期。 */
     private final IRagRepository ragRepository;
 
+    /** 注入可信消息源、序列化器与 RAG 仓储。 */
     public RagAnswerCitationMetadataService(SessionDomain sessionDomain, ObjectMapper objectMapper,
                                             IRagRepository ragRepository) {
         this.sessionDomain = sessionDomain;
@@ -104,6 +109,7 @@ public class RagAnswerCitationMetadataService {
                 reference.documentVersion(), reference.pageNumber(), reference.headingPath(), excerpt);
     }
 
+    /** 对不存在、越权和版本漂移统一返回不可用，避免泄露资源存在性。 */
     private AppException unavailable() {
         return new AppException("RAG_CITATION_UNAVAILABLE", "引用不存在、已失效或无权访问");
     }

@@ -22,16 +22,21 @@ import java.util.List;
 @Service
 public class RagDocumentManagementService {
 
+    /** 统一读取和 CAS 更新 RAG 聚合。 */
     private final IRagRepository repository;
+    /** 管理入口要求当前用户具备租户管理员权限。 */
     private final RagKnowledgeBaseAuthorizationService authorizationService;
+    /** 可注入时钟保证取消状态测试可复现。 */
     private final Clock clock;
 
+    /** 生产环境使用 UTC 时钟。 */
     @Autowired
     public RagDocumentManagementService(IRagRepository repository,
                                         RagKnowledgeBaseAuthorizationService authorizationService) {
         this(repository, authorizationService, Clock.systemUTC());
     }
 
+    /** 测试入口允许注入固定时钟。 */
     RagDocumentManagementService(IRagRepository repository,
                                  RagKnowledgeBaseAuthorizationService authorizationService,
                                  Clock clock) {
@@ -121,6 +126,7 @@ public class RagDocumentManagementService {
         return repository.findIngestJob(tenantId, taskId).orElse(requeued);
     }
 
+    /** 删除任务只在文档墓碑仍为 DELETING 时重新排队。 */
     private RagIngestJobEntity retryDelete(String tenantId, RagIngestJobEntity current) {
         RagDocumentEntity document = requireDocument(tenantId, current.documentId());
         if (!current.knowledgeBaseId().equals(document.knowledgeBaseId())
@@ -132,6 +138,7 @@ public class RagDocumentManagementService {
         return repository.findIngestJob(tenantId, current.jobId()).orElse(requeued);
     }
 
+    /** 重试前核对任务、文档和版本属于同一代际与资源范围。 */
     private void requireRetryScope(RagIngestJobEntity task, RagDocumentVersionEntity version,
                                    RagDocumentEntity document) {
         if (!task.knowledgeBaseId().equals(version.knowledgeBaseId())
@@ -144,6 +151,7 @@ public class RagDocumentManagementService {
         }
     }
 
+    /** 修复任务已取消但文档或版本尚未同步终态的历史中间态。 */
     private RagIngestJobEntity reconcileUnclaimedCancellation(String tenantId, RagIngestJobEntity current) {
         if (current.lease() != null) return current;
         RagDocumentVersionEntity version = requireVersion(tenantId, current.versionId());
@@ -156,16 +164,19 @@ public class RagDocumentManagementService {
         return repository.findIngestJob(tenantId, current.jobId()).orElse(current);
     }
 
+    /** 在可信租户范围内读取文档版本。 */
     private RagDocumentVersionEntity requireVersion(String tenantId, String versionId) {
         return repository.findDocumentVersion(tenantId, versionId)
                 .orElseThrow(() -> new AppException("RAG_DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在或无权访问"));
     }
 
+    /** 在可信租户范围内读取逻辑文档。 */
     private RagDocumentEntity requireDocument(String tenantId, String documentId) {
         return repository.findDocument(tenantId, documentId)
                 .orElseThrow(() -> new AppException("RAG_DOCUMENT_NOT_FOUND", "文档不存在或无权访问"));
     }
 
+    /** 读取知识库后执行管理员和租户归属校验。 */
     private RagKnowledgeBaseEntity requireManageable(String tenantId, String userId, String roleCode,
                                                        String knowledgeBaseId) {
         RagKnowledgeBaseEntity knowledgeBase = repository.findKnowledgeBase(requireText(tenantId, "tenantId"),
@@ -175,12 +186,14 @@ public class RagDocumentManagementService {
         return knowledgeBase;
     }
 
+    /** CAS 必须且只能更新一行，否则要求调用方刷新状态。 */
     private void requireUpdated(int changed) {
         if (changed != 1) {
             throw new AppException("RAG_INGEST_CONCURRENT_UPDATE", "摄取任务已变化，请刷新后重试");
         }
     }
 
+    /** 在查询前拒绝空标识，避免仓储层出现宽范围条件。 */
     private String requireText(String value, String field) {
         if (value == null || value.isBlank()) throw new AppException("RAG_PARAM_INVALID", field + "不能为空");
         return value;
