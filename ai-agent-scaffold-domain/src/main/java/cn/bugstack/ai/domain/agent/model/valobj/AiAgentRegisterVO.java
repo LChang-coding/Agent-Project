@@ -16,9 +16,7 @@ import org.springframework.ai.chat.model.ChatModel;
 @NoArgsConstructor
 public class AiAgentRegisterVO {
 
-    /**
-     * 智能体名称
-     */
+    /** Runner 应用名。 */
     private String appName;
 
     /**
@@ -36,9 +34,7 @@ public class AiAgentRegisterVO {
      */
     private String agentDesc;
 
-    /**
-     * 智能体执行对象
-     */
+    /** 已完成装配的 ADK 执行器。 */
     private InMemoryRunner runner;
 
     /**

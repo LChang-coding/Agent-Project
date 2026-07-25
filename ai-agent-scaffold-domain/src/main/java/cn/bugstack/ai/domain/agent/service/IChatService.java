@@ -8,11 +8,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
 
-/**
- * 对话接口
- *
- * 2025/12/17 08:13
- */
+/** Agent 与工作流会话、消息和运行流的领域入口。 */
 public interface IChatService {
 
     /**

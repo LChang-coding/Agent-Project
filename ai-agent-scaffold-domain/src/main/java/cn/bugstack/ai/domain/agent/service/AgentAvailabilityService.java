@@ -22,7 +22,9 @@ import java.util.stream.Collectors;
 @Service
 public class AgentAvailabilityService {
 
+    /** 保存租户级启停覆盖，不复制静态 Agent 配置。 */
     private final IAgentTenantOverrideRepository repository;
+    /** 静态配置是 Agent 身份和元数据事实源。 */
     private final AiAgentAutoConfigProperties properties;
 
     /** 创建可用性服务；参数是覆盖仓储和静态配置；返回服务实例。 */
@@ -81,12 +83,14 @@ public class AgentAvailabilityService {
         return staticAgents().stream().anyMatch(agent -> agentId != null && agentId.equals(agent.getAgentId()));
     }
 
+    /** 从全部配置表提取标识完整的静态 Agent。 */
     private List<AiAgentConfigTableVO.Agent> staticAgents() {
         if (properties.getTables() == null) return List.of();
         return properties.getTables().values().stream().map(AiAgentConfigTableVO::getAgent)
                 .filter(agent -> agent != null && agent.getAgentId() != null).toList();
     }
 
+    /** 合并静态元数据与租户覆盖状态。 */
     private AgentConfigStatusEntity status(AiAgentConfigTableVO.Agent agent, AgentTenantOverrideEntity override) {
         boolean enabled = override == null || !"disabled".equalsIgnoreCase(override.getStatus());
         return AgentConfigStatusEntity.builder().agentId(agent.getAgentId()).agentName(agent.getAgentName())
@@ -95,12 +99,14 @@ public class AgentAvailabilityService {
                 .disabledAt(override == null ? null : override.getDisabledAt()).build();
     }
 
+    /** 将 enabled 兼容值归一为 active。 */
     private String normalizeStatus(String value) {
         if ("active".equalsIgnoreCase(value) || "enabled".equalsIgnoreCase(value)) return "active";
         if ("disabled".equalsIgnoreCase(value)) return "disabled";
         throw new AppException("AGENT_STATUS_INVALID", "智能体状态只允许 active 或 disabled");
     }
 
+    /** 启停操作只允许可信 owner 或 admin。 */
     private void requireAdmin(String tenantId, String userId, String roleCode) {
         requireTenant(tenantId);
         if (userId == null || userId.isBlank() || !("owner".equalsIgnoreCase(roleCode) || "admin".equalsIgnoreCase(roleCode))) {
@@ -108,10 +114,12 @@ public class AgentAvailabilityService {
         }
     }
 
+    /** 静态 Agent 的租户状态查询必须有可信租户。 */
     private void requireTenant(String tenantId) {
         if (tenantId == null || tenantId.isBlank()) throw new AppException("TENANT_CONTEXT_MISSING", "缺少可信租户身份");
     }
 
+    /** 管理原因去除首尾空白并限制为 256 字符。 */
     private String safeReason(String reason) {
         if (reason == null) return null;
         String value = reason.trim();

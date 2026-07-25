@@ -7,5 +7,6 @@ package cn.bugstack.ai.domain.agent.adapter.repository;
  */
 public interface IPlatformRepository {
 
+    /** 探测平台数据库仓储是否可用。 */
     boolean available();
 }
