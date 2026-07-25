@@ -22,21 +22,17 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 执行节点
- *
- * 2025/12/29 16:09
- */
+/** 将选定根 Agent 与必要插件封装为 Runner，并按 agentId 发布运行体。 */
 @Slf4j
 @Service
 public class RunnerNode extends AbstractArmorySupport {
 
+    /** 延迟读取可选上下文插件，避免装配层强依赖其基础设施实现。 */
     private final ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider;
+    /** 延迟读取工具执行守卫；存在时必须自动附加。 */
     private final ObjectProvider<ToolExecutionGuardPlugin> toolExecutionGuardPluginProvider;
 
-    /**
-     * 创建 Runner 装配节点；参数是上下文插件延迟提供器；返回节点实例。
-     */
+    /** 注入可选插件提供器，不在构造阶段触发插件初始化。 */
     public RunnerNode(ObjectProvider<ContextInjectionPlugin> contextInjectionPluginProvider,
                       ObjectProvider<ToolExecutionGuardPlugin> toolExecutionGuardPluginProvider) {
         this.contextInjectionPluginProvider = contextInjectionPluginProvider;
@@ -53,6 +49,7 @@ public class RunnerNode extends AbstractArmorySupport {
         String agentName = agent.getAgentName();
         String agentDesc = agent.getAgentDesc();
 
+        // Runner 配置只引用已经放入 agentGroup 的根 Agent。
         InMemoryRunner runner = getRunner(dynamicContext, aiAgentConfigTableVO, appName);
 
         AiAgentRegisterVO aiAgentRegisterVO = AiAgentRegisterVO.builder()
@@ -64,13 +61,14 @@ public class RunnerNode extends AbstractArmorySupport {
                 .chatModel(dynamicContext.getChatModel())
                 .build();
 
-        // 注册到 Spring 容器
+        // agentId 是 ChatService 查找运行体的稳定注册键；重装配会替换旧单例。
         registerBean(agentId, AiAgentRegisterVO.class, aiAgentRegisterVO);
 
         return aiAgentRegisterVO;
     }
 
     @NotNull
+    /** 解析根 Agent 和显式插件，并强制补齐上下文与工具安全插件。 */
     private  InMemoryRunner getRunner(DefaultArmoryFactory.DynamicContext dynamicContext, AiAgentConfigTableVO aiAgentConfigTableVO, String appName) {
         AiAgentConfigTableVO.Module.Runner runnerConfig = aiAgentConfigTableVO.getModule().getRunner();
 
@@ -80,8 +78,10 @@ public class RunnerNode extends AbstractArmorySupport {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), ResponseCode.ILLEGAL_PARAMETER.getInfo());
         }
 
+        // agentName 必须与原子或组合 Agent 的配置名称一致。
         BaseAgent baseAgent = dynamicContext.getAgentGroup().get(agentName);
 
+        // 显式插件按配置顺序从 Spring 容器解析。
         List<BasePlugin> plugins;
         List<String> pluginNameList = runnerConfig.getPluginNameList();
         if (null != pluginNameList && !pluginNameList.isEmpty()) {
@@ -99,9 +99,7 @@ public class RunnerNode extends AbstractArmorySupport {
         return new InMemoryRunner(baseAgent, appName, plugins);
     }
 
-    /**
-     * 自动附加上下文插件；参数是插件列表；无返回值。
-     */
+    /** 自动补齐上下文注入插件，并按插件名去重。 */
     private void appendContextPlugin(List<BasePlugin> plugins) {
         ContextInjectionPlugin contextInjectionPlugin = contextInjectionPluginProvider.getIfAvailable();
         if (contextInjectionPlugin == null) {
@@ -114,9 +112,7 @@ public class RunnerNode extends AbstractArmorySupport {
         }
     }
 
-    /**
-     * 自动附加工具执行守卫插件；参数是插件列表；无返回值。
-     */
+    /** 自动补齐工具前置取消门禁，并按插件名去重。 */
     private void appendToolExecutionGuardPlugin(List<BasePlugin> plugins) {
         ToolExecutionGuardPlugin plugin = toolExecutionGuardPluginProvider.getIfAvailable();
         if (plugin == null) {
@@ -131,6 +127,7 @@ public class RunnerNode extends AbstractArmorySupport {
 
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
+        // Runner 是责任链终点，doApply 的返回值直接交给调用者。
         return defaultStrategyHandler;
     }
 

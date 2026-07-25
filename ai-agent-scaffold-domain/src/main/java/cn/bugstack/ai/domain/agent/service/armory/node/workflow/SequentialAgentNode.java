@@ -16,10 +16,12 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
 
+/** 将当前组合配置构造成按声明顺序执行的 ADK 顺序 Agent。 */
 @Slf4j
 @Service("sequentialAgentNode")
 public class SequentialAgentNode extends AbstractArmorySupport {
 
+    /** 历史保留字段；实际路由统一回到 AgentWorkflowNode。 */
     @Resource
     private RunnerNode runnerNode;
 
@@ -29,6 +31,7 @@ public class SequentialAgentNode extends AbstractArmorySupport {
 
         AiAgentConfigTableVO.Module.AgentWorkflow currentAgentWorkflow = dynamicContext.getCurrentAgentWorkflow();
 
+        // queryAgentList 保持配置顺序，顺序 Agent 据此决定执行次序。
         List<String> subAgentNames = currentAgentWorkflow.getSubAgents();
         List<BaseAgent> subAgents = dynamicContext.queryAgentList(subAgentNames);
 
@@ -39,6 +42,7 @@ public class SequentialAgentNode extends AbstractArmorySupport {
                         .subAgents(subAgents)
                         .build();
 
+        // 保存组合结果，供更高层组合或 Runner 继续引用。
         dynamicContext.getAgentGroup().put(currentAgentWorkflow.getName(), sequentialAgent);
 
         return router(requestParameter, dynamicContext);
@@ -46,6 +50,7 @@ public class SequentialAgentNode extends AbstractArmorySupport {
 
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
+        // 回环继续装配下一条组合配置。
         return getBean("agentWorkflowNode");
     }
 

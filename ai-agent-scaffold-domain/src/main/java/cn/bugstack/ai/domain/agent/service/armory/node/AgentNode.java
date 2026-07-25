@@ -19,11 +19,14 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
 
+/** 把原子 Agent 配置转换为 ADK LlmAgent，并放入本次装配的名称索引。 */
 @Slf4j
 @Service
 public class AgentNode extends AbstractArmorySupport {
+    /** 原子 Agent 全部构造后进入组合 Agent 装配循环。 */
     @Resource
     private AgentWorkflowNode agentWorkflowNode;
+    /** 所有 LlmAgent 共享受运行身份保护的工具入口。 */
     @Resource
     private GatewayToolset gatewayToolset;
 
@@ -35,6 +38,7 @@ public class AgentNode extends AbstractArmorySupport {
         List<AiAgentConfigTableVO.Module.Agent> agents = aiAgentConfigTableVO.getModule().getAgents();
 
         for (AiAgentConfigTableVO.Module.Agent agentConfig : agents) {
+            // 节点未声明模型时复用默认模型；显式模型只替换模型代码，不替换 API 端点。
             String agentModelName = isBlank(agentConfig.getModel()) ? dynamicContext.getChatModelName() : agentConfig.getModel();
             ChatModel chatModel = buildAgentChatModel(dynamicContext, agentConfig, agentModelName);
             LlmAgent llmAgent = LlmAgent.builder()
@@ -46,6 +50,7 @@ public class AgentNode extends AbstractArmorySupport {
                     .tools(gatewayToolset)
                     .build();
 
+            // 配置名称是后续工作流 subAgents 和 Runner agentName 的唯一引用键。
             dynamicContext.getAgentGroup().put(agentConfig.getName(), llmAgent);
         }
 
@@ -57,9 +62,7 @@ public class AgentNode extends AbstractArmorySupport {
         return agentWorkflowNode;
     }
 
-    /**
-     * 构建节点模型；参数是装配上下文、节点配置和模型名称；返回节点专属 ChatModel。
-     */
+    /** 显式模型创建独立 ChatModel；未显式配置时复用默认实例和连接池。 */
     private ChatModel buildAgentChatModel(DefaultArmoryFactory.DynamicContext dynamicContext,
                                           AiAgentConfigTableVO.Module.Agent agentConfig,
                                           String agentModelName) throws Exception {
@@ -76,9 +79,7 @@ public class AgentNode extends AbstractArmorySupport {
                 .build();
     }
 
-    /**
-     * 判断字符串为空；参数是字符串；返回是否为空。
-     */
+    /** 将 null 与纯空白统一视为未配置。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

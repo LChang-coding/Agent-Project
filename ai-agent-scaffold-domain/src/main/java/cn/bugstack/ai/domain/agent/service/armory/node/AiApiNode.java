@@ -17,24 +17,27 @@ import org.springframework.web.client.RestClient;
 
 import javax.annotation.Resource;
 
+/** 将配置表中的 OpenAI 兼容端点构造成后续模型共享的 API 客户端。 */
 @Slf4j
 @Service
 public class  AiApiNode extends AbstractArmorySupport {
+    /** API 客户端完成后进入默认聊天模型装配。 */
     @Resource
     private ChatModelNode chatModelNode;
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         log.info("Ai Agent 装配操作 - AiApiNode");
-        //总的来说，这个节点的职责就是根据智能体配置表中的AI API配置，构建一个OpenAiApi对象，并将其放入上下文中，以供后续节点使用。最后通过router方法继续路由到下一个节点。
+        // 每张配置表只声明一个基础 API，节点级模型可共享连接配置。
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         AiAgentConfigTableVO.Module.AiApi aiApiConfig = aiAgentConfigTableVO.getModule().getAiApi();
 
-        // DeepSeek 默认启用思考模式，需禁用避免 reasoning_content 错误
+        // 对聊天补全请求显式关闭思考字段，避免兼容端点返回框架无法消费的 reasoning_content。
         ObjectMapper objectMapper = new ObjectMapper();
         RestClient.Builder restClientBuilder = RestClient.builder()
             .requestInterceptor((request, body, execution) -> {
                 String path = request.getURI().getPath();
                 if (body != null && body.length > 0 && path != null && path.contains("/chat/completions")) {
+                    // 只重写 JSON 聊天请求；嵌入请求和空请求体保持原样。
                     try {
                         JsonNode rootNode = objectMapper.readTree(body);
                         ObjectNode thinking = objectMapper.createObjectNode();
@@ -42,12 +45,14 @@ public class  AiApiNode extends AbstractArmorySupport {
                         ((ObjectNode) rootNode).set("thinking", thinking);
                         body = objectMapper.writeValueAsBytes(rootNode);
                     } catch (Exception e) {
+                        // 重写失败不阻断原始请求，兼容不接受该扩展字段的供应商。
                         log.warn("请求体添加 thinking 参数失败", e);
                     }
                 }
                 return execution.execute(request, body);
             });
 
+        // 未配置路径时使用 OpenAI 兼容默认值。
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(aiApiConfig.getBaseUrl())
                 .apiKey(aiApiConfig.getApiKey())
@@ -56,6 +61,7 @@ public class  AiApiNode extends AbstractArmorySupport {
                 .restClientBuilder(restClientBuilder)
                 .build();
 
+        // 后续节点只能从本次 DynamicContext 取得该客户端。
         dynamicContext.setOpenAiApi(openAiApi);
 
         return router(requestParameter, dynamicContext);
@@ -65,7 +71,7 @@ public class  AiApiNode extends AbstractArmorySupport {
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
 
-        // 如果不需要下一个节点了，可以配置 defaultStrategyHandler
+        // API 配置完成后必须创建默认 ChatModel。
         return chatModelNode;
     }
 

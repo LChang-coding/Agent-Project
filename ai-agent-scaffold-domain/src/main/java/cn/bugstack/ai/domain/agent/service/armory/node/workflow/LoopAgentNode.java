@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/** 将当前组合配置构造成 ADK 有限循环 Agent。 */
 @Slf4j
 @Service("loopAgentNode")
 public class LoopAgentNode extends AbstractArmorySupport {
@@ -24,6 +25,7 @@ public class LoopAgentNode extends AbstractArmorySupport {
 
         AiAgentConfigTableVO.Module.AgentWorkflow currentAgentWorkflow = dynamicContext.getCurrentAgentWorkflow();
 
+        // 子 Agent 只能引用本配置表前面已经装配的名称。
         List<String> subAgentNames = currentAgentWorkflow.getSubAgents();
         List<BaseAgent> subAgents = dynamicContext.queryAgentList(subAgentNames);
 
@@ -35,6 +37,7 @@ public class LoopAgentNode extends AbstractArmorySupport {
                         .maxIterations(currentAgentWorkflow.getMaxIterations())
                         .build();
 
+        // 组合 Agent 回写同一名称索引，可继续作为更高层工作流的子 Agent。
         dynamicContext.getAgentGroup().put(currentAgentWorkflow.getName(), loopAgent);
 
         return router(requestParameter, dynamicContext);
@@ -42,6 +45,7 @@ public class LoopAgentNode extends AbstractArmorySupport {
 
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
+        // 回到调度节点读取下一条组合配置，而不是直接结束装配。
         return getBean("agentWorkflowNode");
     }
 
