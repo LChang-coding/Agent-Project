@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.net.URL;
 import java.time.Duration;
 
+/** 连接远端 MCP SSE 服务并同步发现其工具。 */
 @Slf4j
 @Service
 public class SSEToolMcpCreateService implements TooMcpCreateService {
@@ -23,13 +24,12 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
     public ToolCallback[] buildToolCallback(AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp) throws Exception {
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters sseConfig = toolMcp.getSse();
 
-        // http://appbuilder.baidu.com/v2/ai_search/mcp/sse?api_key=bce-v3/ALTAK-JFZXXLpfxhAutDQvJ32Ei/4492c1879b8c2f0df4612ef5b4a52df1c1fba9f7
-
         String originalBaseUri = sseConfig.getBaseUri();
         String baseUri = originalBaseUri;
         String sseEndpoint = sseConfig.getSseEndpoint();
 
         if (StringUtils.isBlank(sseEndpoint)) {
+            // 兼容把完整 SSE URL 填入 baseUri 的旧配置，拆成主机基址和端点路径。
             URL url = new URL(originalBaseUri);
 
             String protocol = url.getProtocol();
@@ -46,6 +46,7 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
             baseUri = baseUrl;
         }
 
+        // 仍未解析到路径时使用 MCP SSE 常规端点。
         sseEndpoint = StringUtils.isBlank(sseEndpoint) ? "/sse" : sseEndpoint;
 
         HttpClientSseClientTransport sseClientTransport = HttpClientSseClientTransport
@@ -53,6 +54,7 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
                 .sseEndpoint(sseEndpoint)
                 .build();
 
+        // 初始化在装配期同步完成；连接失败阻止发布不可用 Agent。
         McpSyncClient mcpSyncClient = McpClient
                 .sync(sseClientTransport)
                 .requestTimeout(Duration.ofMillis(sseConfig.getRequestTimeout())).build();
@@ -60,6 +62,7 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
 
         log.info("tool sse mcp initialize {}", initialize);
 
+        // 回调持有已初始化客户端，后续工具调用复用同一连接。
         return SyncMcpToolCallbackProvider.builder()
                 .mcpClients(mcpSyncClient).build()
                 .getToolCallbacks();

@@ -21,20 +21,17 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 
-/**
- * ADK 上下文注入插件。
- * <p>在每次模型调用前读取业务会话切面，并追加为系统指令。</p>
- */
+/** 每次模型调用前从数据库 Context Manager 组装历史、附件、上游输出与 RAG。 */
 @Slf4j
 @Service("contextInjectionPlugin")
 public class ContextInjectionPlugin extends BasePlugin {
 
+    /** 按运行快照和可见序号组装上下文。 */
     private final ConversationMemoryService conversationMemoryService;
+    /** 暂存本次模型实际注入的 RAG 证据，供最终回答引用校验。 */
     private final RagInvocationEvidenceStore evidenceStore;
 
-    /**
-     * 创建上下文注入插件；参数是会话记忆服务；返回插件实例。
-     */
+    /** 固定插件名，Runner 依此去重自动附加。 */
     public ContextInjectionPlugin(ConversationMemoryService conversationMemoryService,
                                   RagInvocationEvidenceStore evidenceStore) {
         super("contextInjectionPlugin");
@@ -42,12 +39,11 @@ public class ContextInjectionPlugin extends BasePlugin {
         this.evidenceStore = evidenceStore;
     }
 
-    /**
-     * 模型调用前注入上下文；参数是回调上下文和请求构造器；返回空表示继续调用模型。
-     */
+    /** 在模型调用前追加系统指令；返回空表示不短路模型。 */
     @Override
     public Maybe<LlmResponse> beforeModelCallback(CallbackContext callbackContext, LlmRequest.Builder llmRequest) {
         long startedAt = System.currentTimeMillis();
+        // 所有身份和切面均来自 ChatService 注入的可信 state。
         Map<String, Object> state = callbackContext.state();
         String tenantId = stringValue(state.get(ToolRuntimeContextKeys.TENANT_ID));
         String userId = defaultString(stringValue(state.get(ToolRuntimeContextKeys.USER_ID)), callbackContext.userId());
@@ -58,6 +54,7 @@ public class ContextInjectionPlugin extends BasePlugin {
         AiLog.info(AiLog.chat().contextStarted(tenantId, userId, sessionId, runId, ragEnabled)
                 .field(AiLogFields.TRACE_ID, traceId));
         try {
+            // Context Manager 统一决定历史、压缩摘要、附件、上游输出和 RAG 的预算。
             ContextAssemblyResult result = conversationMemoryService.assemble(ContextAssembleRequest.builder()
                     .tenantId(tenantId)
                     .userId(userId)
@@ -74,9 +71,11 @@ public class ContextInjectionPlugin extends BasePlugin {
                     .runId(runId)
                     .build());
             if (result.getInstruction() != null && !result.getInstruction().isBlank()) {
+                // 作为系统指令追加，不与原始用户 Content 混写。
                 llmRequest.appendInstructions(List.of(result.getInstruction()));
             }
             if (result.getRagEvidence() != null && !result.getRagEvidence().isEmpty()) {
+                // 工作流节点使用显式 evidenceInvocationId，普通 Agent 使用 ADK invocationId。
                 evidenceStore.record(tenantId, userId, sessionId, runId,
                         defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)),
                                 callbackContext.invocationId()),
@@ -91,6 +90,7 @@ public class ContextInjectionPlugin extends BasePlugin {
             AiLog.error(AiLog.chat().contextFailed(tenantId, userId, sessionId, runId, ragEnabled,
                     System.currentTimeMillis() - startedAt, e).field(AiLogFields.TRACE_ID, traceId));
             if (mustFailClosed(e)) {
+                // 必需知识库不可用或检索越权时禁止无 RAG 继续回答。
                 throw (RuntimeException) e;
             }
             log.warn("上下文注入失败 traceId:{} invocationId:{} sessionId:{}",
@@ -99,6 +99,7 @@ public class ContextInjectionPlugin extends BasePlugin {
         }
     }
 
+    /** 仅必需 RAG 和范围违规失败关闭；普通上下文故障允许模型无注入继续。 */
     private boolean mustFailClosed(Exception exception) {
         if (!(exception instanceof AppException appException) || appException.getCode() == null) {
             return false;
@@ -107,6 +108,7 @@ public class ContextInjectionPlugin extends BasePlugin {
                 || appException.getCode().contains("SCOPE_VIOLATION");
     }
 
+    /** 将 state 中类型值安全解析为受支持的绑定类型。 */
     private RagBindingTargetType enumValue(Object value) {
         if (value == null) return null;
         try {
@@ -116,6 +118,7 @@ public class ContextInjectionPlugin extends BasePlugin {
         }
     }
 
+    /** 优先取调用 state 中 traceId，缺失时回退当前线程链路。 */
     private String extractTraceId(CallbackContext callbackContext) {
         if (callbackContext == null || callbackContext.state() == null) {
             return TraceContext.getTraceId();
@@ -123,10 +126,12 @@ public class ContextInjectionPlugin extends BasePlugin {
         return defaultString(stringValue(callbackContext.state().get(ToolRuntimeContextKeys.TRACE_ID)), TraceContext.getTraceId());
     }
 
+    /** 将可选状态值规范为字符串。 */
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
     }
 
+    /** 将数值或数字字符串转为可见消息序号；非法值视为缺失。 */
     private Integer integerValue(Object value) {
         if (value == null) {
             return null;
@@ -141,6 +146,7 @@ public class ContextInjectionPlugin extends BasePlugin {
         }
     }
 
+    /** 只保留非空绑定 ID，拒绝非列表输入。 */
     private List<String> stringList(Object value) {
         if (!(value instanceof List<?> values)) {
             return List.of();
@@ -149,6 +155,7 @@ public class ContextInjectionPlugin extends BasePlugin {
                 .map(String::valueOf).filter(item -> !item.isBlank()).toList();
     }
 
+    /** 首选非空主值，否则使用可信回退值。 */
     private String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
     }

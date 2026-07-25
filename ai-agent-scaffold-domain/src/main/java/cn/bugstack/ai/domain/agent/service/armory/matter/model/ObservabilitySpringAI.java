@@ -21,16 +21,19 @@ import reactor.core.Disposable;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Spring AI adapter that preserves token usage/model metadata inside ADK LlmResponse.
- */
+/** Spring AI 到 ADK 的模型适配器；保留供应商模型版本和 Token 元数据。 */
 public class ObservabilitySpringAI extends SpringAI {
 
+    /** 同步模型调用入口。 */
     private final ChatModel chatModel;
+    /** 模型同时实现流式接口时使用；否则流式请求明确失败。 */
     private final StreamingChatModel streamingChatModel;
+    /** 负责 ADK 请求/响应与 Spring AI 对象互转。 */
     private final MessageConverter messageConverter;
+    /** 供应商未返回模型名时的最后回退值。 */
     private final String configuredModelName;
 
+    /** 固化模型能力和配置模型名，不在每次调用重新判断类型。 */
     public ObservabilitySpringAI(ChatModel chatModel, String configuredModelName) {
         super(chatModel, configuredModelName);
         this.chatModel = chatModel;
@@ -45,6 +48,7 @@ public class ObservabilitySpringAI extends SpringAI {
 
     @Override
     public Flowable<LlmResponse> generateContent(LlmRequest llmRequest, boolean streaming) {
+        // 调用方明确决定同步或流式，不做隐式能力降级。
         if (streaming) {
             return generateStreamingContent(llmRequest);
         }
@@ -54,11 +58,14 @@ public class ObservabilitySpringAI extends SpringAI {
 
     @Override
     public BaseLlmConnection connect(LlmRequest llmRequest) {
+        // 双向连接语义沿用 ADK 原生实现。
         return super.connect(llmRequest);
     }
 
+    /** 执行一次同步模型调用，并把观测元数据写回 ADK 响应。 */
     private Flowable<LlmResponse> generateContent(LlmRequest llmRequest) {
         try {
+            // 先清除线程残留，再进行任何可能抛错的转换或调用。
             ModelObservabilityContext.clear();
             Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
             ChatResponse chatResponse = chatModel.call(prompt);
@@ -69,6 +76,7 @@ public class ObservabilitySpringAI extends SpringAI {
         }
     }
 
+    /** 把 Reactor 流桥接为支持取消的 RxJava 流，并累计完整 ADK 响应。 */
     private Flowable<LlmResponse> generateStreamingContent(LlmRequest llmRequest) {
         if (streamingChatModel == null) {
             return Flowable.error(new IllegalStateException("StreamingChatModel is not configured"));
@@ -82,6 +90,7 @@ public class ObservabilitySpringAI extends SpringAI {
 
             Disposable disposable = streamingChatModel.stream(prompt)
                     .map(chatResponse -> {
+                        // 每个分片先聚合内容，再附加该分片可获得的最新元数据。
                         LlmResponse partial = messageConverter.toLlmResponse(chatResponse, true);
                         LlmResponse aggregated = aggregator.processStreamingResponse(partial);
                         LlmResponse enriched = enrich(aggregated, chatResponse, llmRequest);
@@ -92,6 +101,7 @@ public class ObservabilitySpringAI extends SpringAI {
                             emitter::onNext,
                             emitter::onError,
                             () -> {
+                                // 聚合器终态可能丢失最后分片元数据，显式复制回来。
                                 if (!aggregator.isEmpty()) {
                                     emitter.onNext(copyTerminalMetadata(aggregator.getFinalResponse(), latestResponse.get()));
                                 }
@@ -99,10 +109,12 @@ public class ObservabilitySpringAI extends SpringAI {
                             }
                     );
 
+            // 下游取消立即停止供应商流。
             emitter.setCancellable(disposable::dispose);
         }, BackpressureStrategy.BUFFER);
     }
 
+    /** 将最新分片的模型、Token 和终态字段复制到聚合终帧。 */
     private LlmResponse copyTerminalMetadata(LlmResponse terminal, LlmResponse latest) {
         if (latest == null) {
             return terminal;
@@ -117,6 +129,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return builder.build();
     }
 
+    /** 提取供应商观测字段，同时写入 ADK 响应和线程桥接快照。 */
     private LlmResponse enrich(LlmResponse llmResponse, ChatResponse chatResponse, LlmRequest llmRequest) {
         LlmResponse.Builder builder = llmResponse.toBuilder();
 
@@ -135,6 +148,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return builder.build();
     }
 
+    /** 模型名优先取供应商响应，其次请求显式模型，最后取装配配置。 */
     private String extractModelVersion(ChatResponse chatResponse, LlmRequest llmRequest) {
         ChatResponseMetadata metadata = chatResponse == null ? null : chatResponse.getMetadata();
 
@@ -149,6 +163,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return configuredModelName;
     }
 
+    /** 将 Spring AI Usage 标准化为 ADK 用量对象；全部缺失时不伪造零值。 */
     private GenerateContentResponseUsageMetadata extractUsageMetadata(ChatResponse chatResponse) {
         ChatResponseMetadata metadata = chatResponse == null ? null : chatResponse.getMetadata();
         Usage usage = metadata == null ? null : metadata.getUsage();
@@ -190,6 +205,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return builder.build();
     }
 
+    /** 兼容不同供应商/版本对推理 Token 的两种对象层级。 */
     private Integer extractThoughtsTokens(Object nativeUsage) {
         Integer direct = invokeIntegerMethod(nativeUsage, "reasoningTokens", "thoughtsTokenCount");
         if (direct != null) {
@@ -200,6 +216,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return invokeIntegerMethod(completionTokenDetails, "reasoningTokens");
     }
 
+    /** 兼容不同供应商/版本对工具提示 Token 的两种对象层级。 */
     private Integer extractToolUsePromptTokens(Object nativeUsage) {
         Integer direct = invokeIntegerMethod(nativeUsage, "toolUsePromptTokens", "toolUsePromptTokenCount");
         if (direct != null) {
@@ -210,6 +227,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return invokeIntegerMethod(promptTokenDetails, "toolUsePromptTokens", "toolUsePromptTokenCount");
     }
 
+    /** 依次尝试候选方法名，只接受数值返回值。 */
     private Integer invokeIntegerMethod(Object target, String... methodNames) {
         for (String methodName : methodNames) {
             Object value = invokeObjectMethod(target, methodName);
@@ -221,6 +239,7 @@ public class ObservabilitySpringAI extends SpringAI {
         return null;
     }
 
+    /** 反射读取可选原生用量字段；版本不兼容时返回 null 而非中断模型响应。 */
     private Object invokeObjectMethod(Object target, String methodName) {
         if (target == null || methodName == null || methodName.isBlank()) {
             return null;
