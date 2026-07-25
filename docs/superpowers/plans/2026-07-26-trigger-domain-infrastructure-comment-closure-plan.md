@@ -175,3 +175,45 @@
 - 零上下文 diff 审计未发现新增可执行语句。
 - 再次执行 `mvn -pl ai-agent-scaffold-trigger -am -DskipTests compile`，结果 `BUILD SUCCESS`。
 - 下一批处理 `SessionController`、`SessionShareController`、`AuthController`、`WorkflowController`、`ToolController`、`AgentServiceController` 及三个包说明，完成触发器层整体闭环。
+
+### 2026-07-26：触发器层第三批执行计划
+
+范围：
+
+- `SessionController`
+- `SessionShareController`
+- `AuthController`
+- `WorkflowController`
+- `ToolController`
+- `AgentServiceController`
+- `trigger/http`、`trigger/job`、`trigger/listener` 的包说明
+
+本批重点：
+
+- 会话创建、数据库历史读取、删除和 RAG 会话选择。
+- 分享快照、工具权限差异提醒、导入和下载边界。
+- 认证 Cookie/JWT、租户上下文与敏感信息响应边界。
+- 工作流草稿、发布、运行和版本选择。
+- ToolGateway 管理面与实际调用面的职责区分。
+- Agent 普通/SSE 对话、附件绑定、runId/traceId 返回、取消监听及错误事件。
+
+门禁：
+
+- 审计 6 个大型控制器的全部方法契约和复杂分支。
+- 三个包说明准确描述适配器边界。
+- 编译与触发器相关测试通过后，追加操作记录并中文提交。
+
+### 2026-07-26：触发器层第三批操作记录
+
+- 已完成 6 个大型控制器和 3 个包说明的注释审计与补齐。
+- `AgentServiceController` 已明确：
+  - `message` 经 `ChatService` 保存后进入普通 ADK Agent 或工作流 DAG。
+  - 同步链如何汇总 Event/文本，SSE 链如何依次返回 trace/session/run/message/citation_validation。
+  - run 创建与取消句柄注册的竞态封闭、附件ID传递和最终引用快照读取时机。
+- `SessionController`、`SessionShareController` 已补足游标分页、数据库历史、RAG 会话快照、引用原文、分享快照、工具权限预检和独立导入语义。
+- `AuthController`、`WorkflowController`、`ToolController` 已明确认证领域边界、工作流图转换边界，以及 Tool 管理面与 ToolGateway 运行面的区分。
+- 注释覆盖统计：触发器层 23 个 Java 文件均有文件/类说明；20 个实现类的每个声明方法均有对应 Javadoc，复杂分支另有原因注释。
+- 执行 `mvn -pl ai-agent-scaffold-trigger -am -DskipTests clean compile`，23 个触发器源文件及上游模块从干净目录重新编译成功。
+- 首次运行 28 个相关测试时，Java 25 超出 Byte Buddy 1.15.11 官方支持范围，18 个 Mockito inline mock 在测试初始化阶段报错；根因不是代码失败。
+- 使用 `-Dnet.bytebuddy.experimental=true` 适配当前 Java 25 后重新执行相同 28 个测试：`Tests run: 28, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。
+- 触发器层阶段完成。下一阶段进入领域层，先按包和类复杂度建立小批次覆盖清单。

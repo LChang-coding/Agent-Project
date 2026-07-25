@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
- *
- * 2026/1/20 08:23
+ * Agent 与数据库工作流的会话创建、同步对话和 SSE 对话入口。
+ * <p>控制器负责协议分流和事件输出；消息持久化、上下文、RAG、工具和 DAG 执行全部交给领域服务。</p>
  */
 @Slf4j
 @RestController
@@ -47,6 +47,7 @@ public class AgentServiceController implements IAgentService {
     @Resource
     private RagAnswerCitationMetadataService citationMetadataService;
 
+    /** 查询当前租户可用的静态 Agent 配置。 */
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
     @Override
     public Response<List<AiAgentConfigResponseDTO>> queryAiAgentConfigList() {
@@ -84,10 +85,15 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
+    /**
+     * 创建 Agent 或工作流会话。
+     * <p>存在 workflowId 时绑定工作流版本，否则按 agentId 创建普通 Agent 会话。</p>
+     */
     @RequestMapping(value = "create_session", method = RequestMethod.POST)
     @Override
     public Response<CreateSessionResponseDTO> createSession(@RequestBody CreateSessionRequestDTO requestDTO) {
         try {
+            // 优先使用 JWT 用户，request.userId 仅保留给旧兼容调用。
             String userId = trustedUserId(requestDTO.getUserId());
             log.info("创建会话 agentId:{} workflowId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getWorkflowId(), userId);
             String sessionId = hasWorkflow(requestDTO)
@@ -117,6 +123,7 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
+    /** 兼容旧 GET 调用并复用 POST 创建逻辑。 */
     @RequestMapping(value = "create_session", method = RequestMethod.GET)
     public Response<CreateSessionResponseDTO> createSession(@RequestParam("agentId") String agentId, @RequestParam("userId") String userId) {
         CreateSessionRequestDTO requestDTO = new CreateSessionRequestDTO();
@@ -125,6 +132,10 @@ public class AgentServiceController implements IAgentService {
         return createSession(requestDTO);
     }
 
+    /**
+     * 执行一次同步对话并等待完整最终结果。
+     * <p>工作流消费文本结果，普通 Agent 消费 ADK Event；两者都通过 runId 关联取消、用量和引用。</p>
+     */
     @RequestMapping(value = "chat", method = RequestMethod.POST)
     @Override
     public Response<ChatResponseDTO> chat(@RequestBody ChatRequestDTO requestDTO) {
@@ -133,6 +144,7 @@ public class AgentServiceController implements IAgentService {
             log.info("智能体对话 agentId:{} workflowId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getWorkflowId(), userId);
             String sessionId = requestDTO.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
+                // 未提供会话时先建立服务端会话，后续消息和运行都以该 sessionId 隔离。
                 sessionId = hasWorkflow(requestDTO)
                         ? chatService.createWorkflowSession(requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(), userId)
                         : chatService.createSession(requestDTO.getAgentId(), userId);
@@ -142,6 +154,7 @@ public class AgentServiceController implements IAgentService {
             List<String> messages;
             boolean workflowRequest = hasWorkflow(requestDTO);
             if (workflowRequest) {
+                // ChatService 保存 message 后将其作为 DAG 输入，附件ID也在领域层校验并绑定。
                 RunStreamEntity<String> workflowRun = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
                         userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
@@ -149,6 +162,7 @@ public class AgentServiceController implements IAgentService {
                 runStream = workflowRun;
                 messages = workflowRun.getStream().toList().blockingGet();
             } else {
+                // 普通 Agent 由 ChatService 创建 Run，再把 message 交给 ADK Runner 分析。
                 RunStreamEntity<Event> agentRun = chatService.startMessageStream(requestDTO.getAgentId(), userId,
                         sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(), requestDTO.getAttachmentIds());
                 runStream = agentRun;
@@ -161,6 +175,7 @@ public class AgentServiceController implements IAgentService {
             responseDTO.setRunId(runStream.getRun().getRunId());
             responseDTO.setRunStatus("completed");
             responseDTO.setContextRevision(runStream.getRun().getCurrentContextRevision());
+            // 最终回答提交后再读取引用快照，确保响应引用与数据库消息一致。
             applyCitationSnapshot(responseDTO, citationMetadataService.queryRunAnswer(
                     TenantContextHolder.getTenantId(), userId, sessionId, runStream.getRun().getRunId()));
 
@@ -184,10 +199,15 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
+    /**
+     * 创建 SSE 对话流。
+     * <p>先发送 trace/session/run 元数据，再发送 message 增量和引用终态；客户端可立即使用 runId 取消。</p>
+     */
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Override
     public ResponseBodyEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
+        // Trace 必须在任何业务事件前确定并返回，用户才能据此查询完整链路日志。
         String traceId = TraceContext.ensureTraceId();
         try {
             sendTraceMetadata(emitter, traceId);
@@ -208,6 +228,7 @@ public class AgentServiceController implements IAgentService {
             AtomicBoolean interruptRequested = new AtomicBoolean(false);
             String runId = null;
             if (hasWorkflow(requestDTO)) {
+                // 创建 Run 后先注册取消句柄，再订阅执行流，封闭立即取消的竞态窗口。
                 RunStreamEntity<String> runStream = chatService.startWorkflowMessageTextStream(
                         requestDTO.getWorkflowId(), requestDTO.getWorkflowVersion(), requestDTO.getModelCode(),
                         userId, sessionId, requestDTO.getMessage(), requestDTO.getRequestedRunId(),
@@ -354,6 +375,7 @@ public class AgentServiceController implements IAgentService {
         completeSseWithCitation(emitter, tenantId, userId, sessionId, runId, TraceContext.ensureTraceId());
     }
 
+    /** 查询最终回答引用快照，发送唯一引用终态事件后关闭 SSE。 */
     private void completeSseWithCitation(SseEmitter emitter, String tenantId, String userId,
                                          String sessionId, String runId, String traceId) {
         try {
@@ -370,6 +392,7 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
+    /** 把持久化引用快照附加到同步聊天响应。 */
     private void applyCitationSnapshot(ChatResponseDTO response,
                                        RagAnswerCitationMetadataService.AnswerSnapshot snapshot) {
         if (snapshot == null) return;
@@ -377,6 +400,7 @@ public class AgentServiceController implements IAgentService {
         response.setCitationValidation(toCitationDTO(snapshot.validation()));
     }
 
+    /** 将领域引用校验结果转换为 API DTO。 */
     private RagCitationValidationDTO toCitationDTO(RagAnswerCitationValidation value) {
         return RagCitationValidationDTO.builder().status(value.status().name())
                 .retrievalIds(value.retrievalIds()).allowedCitationIds(value.allowedCitationIds())
@@ -412,6 +436,7 @@ public class AgentServiceController implements IAgentService {
         completeSseWithError(emitter, error, TraceContext.ensureTraceId());
     }
 
+    /** 将异常安全编码为 SSE error 事件，并始终返回 traceId。 */
     private void completeSseWithError(SseEmitter emitter, Throwable error, String traceId) {
         String code = ResponseCode.UN_ERROR.getCode();
         String message = ResponseCode.UN_ERROR.getInfo();
@@ -473,6 +498,10 @@ public class AgentServiceController implements IAgentService {
         return merged.toString();
     }
 
+    /**
+     * 读取可信用户身份。
+     * <p>已认证请求使用 JWT 用户；仅在认证上下文缺失时兼容旧接口传入的 userId。</p>
+     */
     private String trustedUserId(String requestUserId) {
         String userId = TenantContextHolder.getUserId();
         return userId == null || userId.isBlank() ? requestUserId : userId;

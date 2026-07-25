@@ -34,6 +34,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 
+/**
+ * 注册、登录、令牌刷新和个人资料管理入口。
+ * <p>密码校验、令牌签发和租户成员关系由认证领域服务处理；控制器不得记录密码或完整令牌。</p>
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth/")
@@ -50,6 +54,7 @@ public class AuthController implements IAuthApiService {
     @Override
     public Response<RegisterResponseDTO> register(@RequestBody RegisterRequestDTO requestDTO) {
         try {
+            // Web DTO 只转换为领域命令，密码哈希和租户初始化必须在同一领域事务中完成。
             RegisterCommandEntity command = new RegisterCommandEntity();
             command.setTenantName(requestDTO.getTenantName());
             command.setUsername(requestDTO.getUsername());
@@ -111,6 +116,7 @@ public class AuthController implements IAuthApiService {
     @Override
     public Response<LoginResponseDTO> login(@RequestBody LoginRequestDTO requestDTO) {
         try {
+            // 控制器不自行比较密码，统一交给认证服务执行凭据校验和令牌签发。
             LoginCommandEntity command = new LoginCommandEntity();
             command.setUsername(requestDTO.getUsername());
             command.setPassword(requestDTO.getPassword());

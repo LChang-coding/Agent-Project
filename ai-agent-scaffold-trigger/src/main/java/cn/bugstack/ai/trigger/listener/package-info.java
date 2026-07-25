@@ -1,5 +1,5 @@
 /**
- * 监听服务；在单体服务中，解耦流程。类似MQ的使用，如Spring的Event，Guava的事件总线都可以。如果使用了 Redis 那么也可以有发布/订阅使用。
- * Guava：https://bugstack.cn/md/road-map/guava.html
+ * 异步消息消费适配器。
+ * <p>负责恢复租户与 Trace 上下文、回查数据库任务账本并调用领域服务，消费线程结束前必须清理请求级上下文。</p>
  */
 package cn.bugstack.ai.trigger.listener;

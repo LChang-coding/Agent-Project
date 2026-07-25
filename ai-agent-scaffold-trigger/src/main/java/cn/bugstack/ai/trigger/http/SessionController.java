@@ -55,7 +55,10 @@ public class SessionController {
     private final SessionRagSettingService ragSettingService;
 
     /**
-     * 创建会话接口；参数是会话领域服务；返回接口实例。
+     * @param sessionDomain 会话和有效消息查询服务
+     * @param lifecycleService 会话软删除服务
+     * @param citationMetadataService RAG 引用解析服务
+     * @param ragSettingService 会话 RAG 模式和绑定选择服务
      */
     public SessionController(SessionDomain sessionDomain, SessionLifecycleService lifecycleService,
                              RagAnswerCitationMetadataService citationMetadataService,
@@ -67,7 +70,11 @@ public class SessionController {
     }
 
     /**
-     * 查询当前用户会话；参数是可选游标和数量；返回数据库会话摘要。
+     * 游标分页查询数据库中的当前用户会话。
+     *
+     * @param cursor 上一页末尾会话时间和ID的编码
+     * @param limit 页大小
+     * @return 会话摘要、下一游标和是否还有数据
      */
     @GetMapping
     public Response<SessionListResponseDTO> list(@RequestParam(required = false) String cursor,
@@ -75,6 +82,7 @@ public class SessionController {
         try {
             int pageSize = normalizeLimit(limit);
             SessionCursor decoded = decodeCursor(cursor);
+            // 多取一条判断后续页，避免对高增长会话表执行 count。
             List<ChatSessionEntity> rows = sessionDomain.querySessions(TenantContextHolder.getTenantId(),
                     requireUserId(), decoded.time(), decoded.sessionId(), pageSize + 1);
             boolean hasMore = rows.size() > pageSize;
@@ -91,7 +99,12 @@ public class SessionController {
     }
 
     /**
-     * 查询会话有效消息；参数是会话、前序号和数量；返回按时间正序的消息页。
+     * 查询会话有效消息。
+     *
+     * @param sessionId 会话ID
+     * @param beforeSequence 可选上界序号
+     * @param limit 页大小
+     * @return 按时间正序返回的数据库消息页
      */
     @GetMapping("/{sessionId}/messages")
     public Response<SessionMessagePageResponseDTO> messages(@PathVariable String sessionId,
@@ -118,7 +131,10 @@ public class SessionController {
     }
 
     /**
-     * 软删除会话；参数是会话ID；返回删除时的上下文版本。
+     * 软删除会话并停止它继续参与对话。
+     *
+     * @param sessionId 会话ID
+     * @return 删除时间和删除时上下文版本
      */
     @DeleteMapping("/{sessionId}")
     public Response<SessionDeleteResponseDTO> delete(@PathVariable String sessionId) {
@@ -133,7 +149,7 @@ public class SessionController {
         }
     }
 
-    /** 查询会话RAG设置及当前目标是否已有知识库绑定。 */
+    /** 查询会话 RAG 模式、手动选择和当前目标可用绑定。 */
     @GetMapping("/{sessionId}/rag-setting")
     public Response<SessionRagSettingResponseDTO> ragSetting(@PathVariable String sessionId) {
         try {
@@ -147,7 +163,10 @@ public class SessionController {
         }
     }
 
-    /** 更新会话RAG设置；运行中的Run仍使用创建时快照。 */
+    /**
+     * 更新会话 RAG 设置。
+     * <p>只影响后续新运行；已经创建的 Run 继续使用自身保存的 RAG 快照。</p>
+     */
     @PatchMapping("/{sessionId}/rag-setting")
     public Response<SessionRagSettingResponseDTO> updateRagSetting(@PathVariable String sessionId,
                                                                     @RequestBody SessionRagSettingRequestDTO request) {
@@ -166,7 +185,7 @@ public class SessionController {
         }
     }
 
-    /** 查询一条回答引用的当前可见正文。 */
+    /** 查询一条回答引用当前仍可见的原文；失效文档不会绕过权限重新暴露。 */
     @GetMapping("/{sessionId}/messages/{messageId}/citations/{citationId}")
     public Response<RagCitationSourceDTO> citation(@PathVariable String sessionId,
                                                    @PathVariable String messageId,
@@ -186,6 +205,7 @@ public class SessionController {
         }
     }
 
+    /** 将会话事实转换为列表摘要。 */
     private SessionSummaryResponseDTO toSummary(ChatSessionEntity session) {
         return SessionSummaryResponseDTO.builder().sessionId(session.getSessionId()).agentId(session.getAgentId())
                 .agentName(session.getAgentName()).appName(session.getAppName()).title(session.getTitle())
@@ -195,6 +215,7 @@ public class SessionController {
                 .contextRevision(session.getContextRevision()).build();
     }
 
+    /** 根据模式和绑定可用性生成用户可执行的 RAG 状态说明。 */
     private SessionRagSettingResponseDTO toRagSetting(SessionRagSettingEntity setting) {
         String message;
         if ("OFF".equals(setting.mode().name())) {
@@ -220,6 +241,7 @@ public class SessionController {
                 setting.selectedBindingIds(), eligibleBindings, message);
     }
 
+    /** 转换消息并解析随最终回答保存的引用校验快照。 */
     private SessionMessageResponseDTO toMessage(ChatMessageEntity message) {
         return SessionMessageResponseDTO.builder().messageId(message.getMessageId()).runId(message.getRunId())
                 .traceId(message.getTraceId())
@@ -228,6 +250,7 @@ public class SessionController {
                 .createTime(message.getCreateTime()).citationValidation(toCitationDTO(citationMetadataService.parse(message))).build();
     }
 
+    /** 将领域引用校验结果转换为前端可展示的引用清单。 */
     private RagCitationValidationDTO toCitationDTO(RagAnswerCitationValidation value) {
         if (value == null) return null;
         return RagCitationValidationDTO.builder().status(value.status().name())
@@ -242,6 +265,7 @@ public class SessionController {
                 .build();
     }
 
+    /** 将页大小限制在公开接口允许范围内。 */
     private int normalizeLimit(int limit) {
         if (limit < 1 || limit > MAX_LIMIT) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "limit 必须在 1 到 100 之间");
@@ -249,6 +273,7 @@ public class SessionController {
         return limit == 0 ? DEFAULT_LIMIT : limit;
     }
 
+    /** 读取可信用户身份，认证上下文失效时拒绝所有会话访问。 */
     private String requireUserId() {
         String userId = TenantContextHolder.getUserId();
         if (userId == null || userId.isBlank()) {
@@ -257,11 +282,13 @@ public class SessionController {
         return userId;
     }
 
+    /** 将稳定排序键编码为不透明 URL 安全游标。 */
     private String encodeCursor(ChatSessionEntity session) {
         String raw = session.getLastMessageTime() + "|" + session.getSessionId();
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** 解码并校验客户端游标，禁止畸形值进入数据库条件。 */
     private SessionCursor decodeCursor(String cursor) {
         if (cursor == null || cursor.isBlank()) {
             return new SessionCursor(null, null);
@@ -278,18 +305,22 @@ public class SessionController {
         }
     }
 
+    /** 构造统一成功响应。 */
     private <T> Response<T> success(T data) {
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo()).data(data).build();
     }
 
+    /** 保留领域业务错误码。 */
     private <T> Response<T> fail(AppException e) {
         return Response.<T>builder().code(e.getCode()).info(e.getInfo()).build();
     }
 
+    /** 将未知异常收敛为统一系统错误。 */
     private <T> Response<T> systemFail() {
         return Response.<T>builder().code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
     }
 
+    /** 会话分页使用最后消息时间和会话ID组成稳定复合游标。 */
     private record SessionCursor(LocalDateTime time, String sessionId) {
     }
 }

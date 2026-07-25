@@ -41,8 +41,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 工具发布控制器。
- * <p>负责 Skill/MCP 发布、测试、目录查询和调用日志查询的 HTTP 入口。</p>
+ * Skill/MCP 管理面、工具目录和调用日志入口。
+ * <p>发布管理交给领域服务；Agent 运行时的真实工具调用仍必须经过 GatewayToolset 和 ToolGateway。</p>
  */
 @Slf4j
 @RestController
@@ -60,6 +60,7 @@ public class ToolController implements IToolApiService {
     @PostMapping("/skills/packages")
     public Response<SkillPackageUploadResponseDTO> uploadSkillPackage(@RequestParam("file") MultipartFile file) {
         try {
+            // 上传内容先作为受控资产登记，Skill 解析和发布不会直接信任文件名或 MIME 类型。
             SkillPackageUploadResultEntity result = toolPublishService.uploadSkillPackage(SkillPackageUploadCommandEntity.builder()
                     .context(currentContext())
                     .fileName(file.getOriginalFilename())

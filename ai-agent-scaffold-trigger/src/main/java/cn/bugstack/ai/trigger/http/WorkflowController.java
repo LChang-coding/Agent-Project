@@ -38,7 +38,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 工作流接口控制器。
+ * 数据库工作流草稿、发布、删除和画布查询入口。
+ * <p>这里只做 DTO/领域图转换；图校验、版本不可变性、运行冲突和权限规则由工作流领域服务处理。</p>
  */
 @Slf4j
 @RestController

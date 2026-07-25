@@ -28,7 +28,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 会话分享与复制导入接口。
+ * 会话快照分享、下载、工具权限预检和复制导入入口。
+ * <p>分享接收者获得独立会话副本，不继承来源用户身份、工具授权和正在运行的任务。</p>
  */
 @Slf4j
 @RestController
@@ -37,16 +38,18 @@ public class SessionShareController {
 
     private final SessionShareService shareService;
 
+    /** @param shareService 会话分享快照和导入领域服务 */
     public SessionShareController(SessionShareService shareService) {
         this.shareService = shareService;
     }
 
     /**
-     * 创建分享；参数是来源会话和生命周期；返回一次性分享链接。
+     * 为本人会话创建限时、限下载次数的分享。
      */
     @PostMapping
     public Response<SessionShareResponseDTO> create(@RequestBody CreateSessionShareRequestDTO request) {
         try {
+            // 领域服务冻结有效消息和工具依赖，后续来源会话变化不污染已生成快照。
             SessionShareResultEntity result = shareService.create(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), request.getSessionId(), request.getValidHours(),
                     request.getMaxDownloads());
@@ -60,7 +63,7 @@ public class SessionShareController {
     }
 
     /**
-     * 预览分享；参数是原分享令牌；返回标题、数量和有效期。
+     * 预览分享元数据并按接收者权限计算工具可用性。
      */
     @GetMapping("/{token}/preview")
     public Response<SessionShareResponseDTO> preview(@PathVariable String token) {
@@ -76,7 +79,8 @@ public class SessionShareController {
     }
 
     /**
-     * 下载分享文件；参数是原分享令牌；返回服务端校验后的 JSON 附件。
+     * 下载服务端校验后的 JSON 快照。
+     * <p>原始 token 由领域服务校验有效期、撤销状态和下载次数，控制器不直接读取对象存储。</p>
      */
     @GetMapping("/{token}/download")
     public ResponseEntity<byte[]> download(@PathVariable String token) {
@@ -89,7 +93,8 @@ public class SessionShareController {
     }
 
     /**
-     * 复制导入分享；参数是原分享令牌；返回接收者独立会话。
+     * 把分享快照复制为当前用户的独立会话。
+     * <p>缺失或无权工具必须显式确认风险，不能通过导入继承来源用户权限。</p>
      */
     @PostMapping("/{token}/import")
     public Response<SessionShareResponseDTO> importCopy(@PathVariable String token,
@@ -108,7 +113,7 @@ public class SessionShareController {
     }
 
     /**
-     * 撤销本人分享；参数是分享ID；返回空成功响应。
+     * 撤销本人创建的分享；已导入副本不受影响。
      */
     @PostMapping("/{shareId}/revoke")
     public Response<Void> revoke(@PathVariable String shareId) {
@@ -125,6 +130,7 @@ public class SessionShareController {
         }
     }
 
+    /** 组合分享状态、可选快照消息、工具依赖和接收者权限预检结果。 */
     private SessionShareResponseDTO toResponse(SessionShareResultEntity result, String token) {
         List<SessionShareResponseDTO.Message> messages = result.getMessages() == null ? null
                 : result.getMessages().stream().map(this::toMessage).toList();
@@ -153,31 +159,37 @@ public class SessionShareController {
                 .messages(messages).build();
     }
 
+    /** 转换快照记录的工具版本依赖。 */
     private SessionShareResponseDTO.ToolDependency toToolDependency(SessionToolDependencyEntity item) {
         return SessionShareResponseDTO.ToolDependency.builder().toolType(item.getToolType()).toolId(item.getToolId())
                 .toolName(item.getToolName()).version(item.getVersion()).source(item.getSource()).build();
     }
 
+    /** 转换接收者对单个工具的可用、缺失或拒绝状态。 */
     private SessionShareResponseDTO.ToolAccess toToolAccess(SessionToolAccessEntity item) {
         return SessionShareResponseDTO.ToolAccess.builder().toolType(item.getToolType()).toolId(item.getToolId())
                 .toolName(item.getToolName()).version(item.getVersion()).source(item.getSource())
                 .access(item.getAccess()).reason(item.getReason()).build();
     }
 
+    /** 转换分享快照中的有效消息。 */
     private SessionShareResponseDTO.Message toMessage(ChatMessageEntity message) {
         return SessionShareResponseDTO.Message.builder().id(message.getMessageId()).role(message.getRole())
                 .contentType(message.getContentType()).content(message.getContent()).sequenceNo(message.getSequenceNo())
                 .createdAt(message.getCreateTime()).build();
     }
 
+    /** 构造统一成功响应。 */
     private <T> Response<T> success(T data) {
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo()).data(data).build();
     }
 
+    /** 将分享领域异常映射为稳定错误码。 */
     private <T> Response<T> fail(AppException e) {
         return Response.<T>builder().code(e.getCode()).info(e.getInfo()).build();
     }
 
+    /** 隐藏快照存储和解析异常的技术细节。 */
     private <T> Response<T> systemFail() {
         return Response.<T>builder().code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
     }
