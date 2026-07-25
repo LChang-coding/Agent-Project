@@ -26,7 +26,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 定时任务管理接口，只接受当前 JWT 所代表的执行身份。
+ * 租户定时任务配置和执行记录入口。
+ * <p>只接受当前 JWT 所代表的执行身份；Cron 落表、到期认领和实际 Agent 调用由领域调度链处理。</p>
  */
 @Slf4j
 @RestController
@@ -37,12 +38,17 @@ public class ScheduleController {
     private final ScheduleConfigurationService service;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 创建定时配置。
+     * <p>主动清空客户端 configId，防止创建接口被利用为覆盖更新。</p>
+     */
     @PostMapping
     public Response<ScheduleResponseDTO> create(@RequestBody ScheduleSaveRequestDTO request) {
         request.setConfigId(null);
         return save(request);
     }
 
+    /** 使用路径中的 configId 更新现有定时配置。 */
     @PutMapping("/{configId}")
     public Response<ScheduleResponseDTO> update(@PathVariable String configId,
                                                 @RequestBody ScheduleSaveRequestDTO request) {
@@ -50,6 +56,7 @@ public class ScheduleController {
         return save(request);
     }
 
+    /** 查询当前用户在租户内拥有的定时配置。 */
     @GetMapping
     public Response<List<ScheduleResponseDTO>> list() {
         try {
@@ -63,19 +70,26 @@ public class ScheduleController {
         }
     }
 
+    /** 启用定时配置，后续对账会重新生成待执行任务。 */
     @PostMapping("/{configId}/enable")
     public Response<ScheduleResponseDTO> enable(@PathVariable String configId) {
         return setEnabled(configId, true);
     }
 
+    /** 禁用定时配置，阻止后续任务继续被调度。 */
     @PostMapping("/{configId}/disable")
     public Response<ScheduleResponseDTO> disable(@PathVariable String configId) {
         return setEnabled(configId, false);
     }
 
+    /**
+     * 立即触发一次配置。
+     * <p>接口只登记即时任务，不在 HTTP 线程中直接运行 Agent。</p>
+     */
     @PostMapping("/{configId}/trigger")
     public Response<Void> trigger(@PathVariable String configId) {
         try {
+            // 领域服务校验配置归属，并使用数据库幂等键创建即时任务。
             service.triggerNow(TenantContextHolder.getTenantId(), TenantContextHolder.getUserId(), configId);
             return success(null);
         } catch (AppException e) {
@@ -86,11 +100,13 @@ public class ScheduleController {
         }
     }
 
+    /** 将人工重试映射为同一条即时触发链，避免复制任务创建逻辑。 */
     @PostMapping("/{configId}/retry")
     public Response<Void> retry(@PathVariable String configId) {
         return trigger(configId);
     }
 
+    /** 查询配置近期执行记录，用 traceId 关联具体 Agent 链路。 */
     @GetMapping("/{configId}/executions")
     public Response<List<ScheduleExecutionResponseDTO>> executions(@PathVariable String configId,
                                                                    @RequestParam(defaultValue = "50") int limit) {
@@ -105,6 +121,7 @@ public class ScheduleController {
         }
     }
 
+    /** 预览 Cron 的下一组执行时间，不保存任何配置。 */
     @GetMapping("/cron-preview")
     public Response<List<LocalDateTime>> preview(@RequestParam String cron,
                                                  @RequestParam(defaultValue = "Asia/Shanghai") String timezone,
@@ -119,9 +136,14 @@ public class ScheduleController {
         }
     }
 
+    /**
+     * 把 Web 请求转换为调度领域配置并统一执行创建或更新。
+     */
     private Response<ScheduleResponseDTO> save(ScheduleSaveRequestDTO request) {
         try {
+            // 任务载荷以 JSON 保存，为后续扩展参数保留向后兼容空间。
             String payload = objectMapper.createObjectNode().put("message", request.getMessage()).toString();
+            // runAs 身份固定为当前 JWT 用户，禁止浏览器指定更高权限执行身份。
             ScheduleConfigEntity result = service.save(ScheduleConfigEntity.builder()
                     .tenantId(TenantContextHolder.getTenantId()).ownerUserId(TenantContextHolder.getUserId())
                     .runAsUserId(TenantContextHolder.getUserId()).runAsRoleCode(TenantContextHolder.getRoleCode())
@@ -139,6 +161,7 @@ public class ScheduleController {
         }
     }
 
+    /** 切换配置状态并返回数据库最终版本。 */
     private Response<ScheduleResponseDTO> setEnabled(String configId, boolean enabled) {
         try {
             return success(toResponse(service.setEnabled(TenantContextHolder.getTenantId(),
@@ -151,6 +174,7 @@ public class ScheduleController {
         }
     }
 
+    /** 将调度配置领域实体转换为前端可编辑结构。 */
     private ScheduleResponseDTO toResponse(ScheduleConfigEntity entity) {
         return ScheduleResponseDTO.builder().configId(entity.getConfigId()).agentId(entity.getAgentId())
                 .agentName(entity.getAgentName()).message(readMessage(entity.getTaskPayload()))
@@ -160,6 +184,7 @@ public class ScheduleController {
                 .createTime(entity.getCreateTime()).updateTime(entity.getUpdateTime()).build();
     }
 
+    /** 将执行账本转换为可观测历史记录。 */
     private ScheduleExecutionResponseDTO toExecution(ScheduleExecutionEntity entity) {
         return ScheduleExecutionResponseDTO.builder().executionId(entity.getExecutionId()).traceId(entity.getTraceId())
                 .plannedTime(entity.getPlannedTime()).attemptNo(entity.getAttemptNo()).status(entity.getStatus())
@@ -167,6 +192,10 @@ public class ScheduleController {
                 .errorMessage(entity.getErrorMessage()).build();
     }
 
+    /**
+     * 从兼容 JSON 载荷中读取用户消息。
+     * <p>旧数据损坏时返回空文本，避免只读列表因单条历史载荷失败。</p>
+     */
     private String readMessage(String payload) {
         try {
             return objectMapper.readTree(payload).path("message").asText("");
@@ -175,14 +204,17 @@ public class ScheduleController {
         }
     }
 
+    /** 构造统一成功响应。 */
     private <T> Response<T> success(T data) {
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo()).data(data).build();
     }
 
+    /** 将领域异常映射为稳定业务错误。 */
     private <T> Response<T> fail(AppException e) {
         return Response.<T>builder().code(e.getCode()).info(e.getInfo()).build();
     }
 
+    /** 将未分类异常收敛为统一系统错误。 */
     private <T> Response<T> systemFail() {
         return Response.<T>builder().code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
     }

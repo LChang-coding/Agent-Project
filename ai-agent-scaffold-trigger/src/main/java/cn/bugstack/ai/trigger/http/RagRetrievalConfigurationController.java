@@ -28,17 +28,27 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 
-/** 租户管理员 RAG 检索策略和运行目标绑定接口。 */
+/**
+ * 租户级 RAG 检索策略与运行目标绑定入口。
+ * <p>控制器只负责协议归一化；管理员权限、知识库归属和版本冲突由领域服务校验。</p>
+ */
 @RestController
 @RequestMapping("/api/v1/rag")
 public class RagRetrievalConfigurationController {
 
     private final RagRetrievalConfigurationService service;
 
+    /** @param service RAG 检索配置领域服务 */
     public RagRetrievalConfigurationController(RagRetrievalConfigurationService service) {
         this.service = service;
     }
 
+    /**
+     * 创建一套可复用的检索参数组合。
+     *
+     * @param request Dense/Sparse、融合、重排和上下文预算参数
+     * @return 已持久化的检索策略及版本
+     */
     @PostMapping("/retrieval-profiles")
     public Response<RagRetrievalProfileResponseDTO> createProfile(
             @RequestBody(required = false) RagRetrievalProfileRequestDTO request) {
@@ -49,10 +59,18 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /**
+     * 以乐观锁更新检索策略。
+     *
+     * @param profileId 检索策略ID
+     * @param request 新参数和期望版本
+     * @return 更新后的策略
+     */
     @PutMapping("/retrieval-profiles/{profileId}")
     public Response<RagRetrievalProfileResponseDTO> updateProfile(@PathVariable String profileId,
             @RequestBody(required = false) RagRetrievalProfileRequestDTO request) {
         try {
+            // 检索策略可能被多个管理员同时编辑，缺少版本时禁止覆盖。
             if (request == null || request.getExpectedRevision() == null) {
                 throw new AppException("RAG_PROFILE_REVISION_REQUIRED", "更新检索策略必须携带expectedRevision");
             }
@@ -63,6 +81,7 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /** 查询当前租户可管理的检索策略。 */
     @GetMapping("/retrieval-profiles")
     public Response<List<RagRetrievalProfileResponseDTO>> listProfiles() {
         try {
@@ -72,11 +91,18 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /**
+     * 将知识库和检索策略绑定到 Agent、工作流或工作流节点。
+     *
+     * @param request 运行目标、知识库、策略、优先级及上下文预算
+     * @return 新绑定及版本
+     */
     @PostMapping("/bindings")
     public Response<RagBindingResponseDTO> createBinding(
             @RequestBody(required = false) RagBindingCreateRequestDTO request) {
         try {
             if (request == null) throw new AppException("RAG_BINDING_INVALID", "绑定参数不能为空");
+            // 在触发器边界完成枚举和可空数值归一化，领域层接收强类型参数。
             RagRetrievalConfigurationService.BindingValues values = new RagRetrievalConfigurationService.BindingValues(
                     enumValue(RagBindingTargetType.class, request.getTargetType(), "RAG_BINDING_TARGET_INVALID"),
                     request.getTargetId(), request.getKnowledgeBaseId(), request.getProfileId(),
@@ -88,6 +114,7 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /** 查询当前租户的全部运行目标绑定。 */
     @GetMapping("/bindings")
     public Response<List<RagBindingResponseDTO>> listBindings() {
         try {
@@ -97,6 +124,13 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /**
+     * 以乐观锁删除运行目标绑定。
+     *
+     * @param bindingId 绑定ID
+     * @param expectedRevision 客户端读取到的绑定版本
+     * @return 删除成功标志
+     */
     @DeleteMapping("/bindings/{bindingId}")
     public Response<Boolean> deleteBinding(@PathVariable String bindingId,
                                            @RequestParam(value = "expectedRevision", required = false)
@@ -112,6 +146,7 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /** 将 Profile 请求归一化为领域值对象，并为可选能力填充稳定默认值。 */
     private RagRetrievalConfigurationService.ProfileValues values(RagRetrievalProfileRequestDTO request) {
         if (request == null) throw new AppException("RAG_PROFILE_INVALID", "检索策略参数不能为空");
         return new RagRetrievalConfigurationService.ProfileValues(request.getName(),
@@ -126,6 +161,7 @@ public class RagRetrievalConfigurationController {
                 !Boolean.FALSE.equals(request.getDeduplicateEnabled()));
     }
 
+    /** 将检索策略领域实体转换为公开响应。 */
     private RagRetrievalProfileResponseDTO toProfile(RagRetrievalProfileEntity value) {
         return RagRetrievalProfileResponseDTO.builder().profileId(value.profileId()).name(value.name())
                 .mode(value.mode().name().toLowerCase()).fusionStrategy(value.fusionStrategy().name().toLowerCase())
@@ -137,6 +173,7 @@ public class RagRetrievalConfigurationController {
                 .deduplicateEnabled(value.deduplicateEnabled()).revision(value.revision()).build();
     }
 
+    /** 将运行目标绑定转换为公开响应。 */
     private RagBindingResponseDTO toBinding(RagAgentBindingEntity value) {
         return RagBindingResponseDTO.builder().bindingId(value.bindingId())
                 .targetType(value.targetType().name().toLowerCase()).targetId(value.targetId())
@@ -145,6 +182,7 @@ public class RagRetrievalConfigurationController {
                 .revision(value.revision()).build();
     }
 
+    /** 严格解析外部枚举，拒绝空值和未知值进入领域层。 */
     private <E extends Enum<E>> E enumValue(Class<E> type, String value, String code) {
         if (value == null || value.isBlank()) throw new AppException(code, "枚举参数不能为空");
         try {
@@ -154,17 +192,28 @@ public class RagRetrievalConfigurationController {
         }
     }
 
+    /** 可选整数未提供时归一化为零，由领域服务判断零值是否有效。 */
     private int integer(Integer value) { return value == null ? 0 : value; }
+
+    /** 可选权重未提供时归一化为零，避免领域值对象携带 null。 */
     private BigDecimal decimal(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
+
+    /** 读取可信租户身份。 */
     private String tenant() { return TenantContextHolder.getTenantId(); }
+
+    /** 读取可信用户身份。 */
     private String user() { return TenantContextHolder.getUserId(); }
+
+    /** 读取可信租户角色。 */
     private String role() { return TenantContextHolder.getRoleCode(); }
 
+    /** 构造统一成功响应。 */
     private <T> Response<T> success(T data) {
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo())
                 .data(data).build();
     }
 
+    /** 保留领域业务错误码。 */
     private <T> Response<T> failure(AppException exception) {
         return Response.<T>builder().code(exception.getCode()).info(exception.getInfo()).build();
     }

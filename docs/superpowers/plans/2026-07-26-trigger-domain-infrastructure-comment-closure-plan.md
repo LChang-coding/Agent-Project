@@ -142,3 +142,36 @@
 - 执行 `mvn -pl ai-agent-scaffold-trigger -am -DskipTests compile`，结果 `BUILD SUCCESS`。
 - Maven 仍报告 `ai-agent-scaffold-api` 的 `parent.relativePath` 指向不同 groupId，以及旧版 resources plugin 不识别 `propertiesEncoding`；这是既有构建告警，本批未修改。
 - 下一批处理剩余 HTTP 控制器中的 RAG 配置/文档、资产、会话洞察和定时任务入口。
+
+### 2026-07-26：触发器层第二批执行计划
+
+范围：
+
+- `RagRetrievalConfigurationController`
+- `RagDocumentController`
+- `AssetController`
+- `SessionInsightController`
+- `ScheduleController`
+
+本批重点：
+
+- 说明 RAG Profile、绑定和会话选择的权限与乐观锁边界。
+- 说明文档上传、摄取任务、取消和重试的异步语义。
+- 说明附件元数据与对象存储访问边界。
+- 说明会话统计只读取数据库事实，不从浏览器缓存推断。
+- 说明调度配置、任务和执行记录的协议映射。
+
+门禁与第一批相同：只改注释、模块编译通过、diff 不混入业务逻辑和无关文件。
+
+### 2026-07-26：触发器层第二批操作记录
+
+- 已完成 `RagRetrievalConfigurationController`、`RagDocumentController`、`AssetController`、`SessionInsightController`、`ScheduleController` 的语义注释。
+- 已明确：
+  - 检索策略和绑定的强类型转换、管理员权限与乐观锁边界。
+  - Multipart 暂存文件生命周期、JWT 身份注入、异步摄取/删除/取消/重试语义。
+  - 资产归属先校验后下载、游标分页多取一条和 MIME 降级策略。
+  - 上下文与 Token 统计来自服务端账本，不使用浏览器估值。
+  - 手动触发只登记任务，Agent 不在 HTTP 线程执行；调度执行身份固定为当前 JWT 用户。
+- 零上下文 diff 审计未发现新增可执行语句。
+- 再次执行 `mvn -pl ai-agent-scaffold-trigger -am -DskipTests compile`，结果 `BUILD SUCCESS`。
+- 下一批处理 `SessionController`、`SessionShareController`、`AuthController`、`WorkflowController`、`ToolController`、`AgentServiceController` 及三个包说明，完成触发器层整体闭环。
