@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+SKILL_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ASSETS="$SKILL_ROOT/assets/bin"
+VERSION=$(tr -d '\r\n' < "$ASSETS/VERSION")
+
+case "$(uname -s)" in
+  Darwin) os=darwin ;;
+  Linux) os=linux ;;
+  *) printf 'grafana-log: 不支持的操作系统: %s\n' "$(uname -s)" >&2; exit 2 ;;
+esac
+
+case "$(uname -m)" in
+  x86_64|amd64) arch=amd64 ;;
+  arm64|aarch64) arch=arm64 ;;
+  *) printf 'grafana-log: 不支持的处理器架构: %s\n' "$(uname -m)" >&2; exit 2 ;;
+esac
+
+archive="grafana-log-$os-$arch.gz"
+expected=$(awk -v file="$archive" '$2 == file {print $1}' "$ASSETS/SHA256SUMS")
+if [ -z "$expected" ]; then
+  printf 'grafana-log: 构建清单缺少 %s\n' "$archive" >&2
+  exit 2
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual=$(sha256sum "$ASSETS/$archive" | awk '{print $1}')
+else
+  actual=$(shasum -a 256 "$ASSETS/$archive" | awk '{print $1}')
+fi
+if [ "$actual" != "$expected" ]; then
+  printf 'grafana-log: Skill 二进制校验失败\n' >&2
+  exit 2
+fi
+
+cache_root=${XDG_CACHE_HOME:-"$HOME/.cache"}
+cache_dir="$cache_root/grafana-log-inspector/$VERSION-$(printf '%s' "$expected" | cut -c1-16)"
+binary="$cache_dir/grafana-log"
+if [ ! -x "$binary" ]; then
+  mkdir -p "$cache_dir"
+  temporary="$cache_dir/.grafana-log.$$"
+  trap 'rm -f "$temporary"' EXIT HUP INT TERM
+  gzip -dc "$ASSETS/$archive" > "$temporary"
+  chmod 700 "$temporary"
+  mv -f "$temporary" "$binary"
+  trap - EXIT HUP INT TERM
+fi
+
+exec "$binary" "$@"

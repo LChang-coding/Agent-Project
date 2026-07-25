@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grafana 日志诊断"
+  short_description: "查询并分析远端 Grafana/Loki 业务链路日志"
+  default_prompt: "Use $grafana-log-inspector to query and diagnose a remote business trace."
