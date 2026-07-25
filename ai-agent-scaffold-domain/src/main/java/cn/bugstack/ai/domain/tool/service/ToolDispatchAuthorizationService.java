@@ -23,20 +23,22 @@ import java.util.UUID;
 @Service
 public class ToolDispatchAuthorizationService {
 
+    /** 在工具副作用前锁定并校验权威运行。 */
     private final RunControlService runControlService;
+    /** 原子领取幂等键并完成调用日志。 */
     private final IToolRepository toolRepository;
 
+    /** 注入运行控制和工具审计仓储。 */
     public ToolDispatchAuthorizationService(RunControlService runControlService, IToolRepository toolRepository) {
         this.runControlService = runControlService;
         this.toolRepository = toolRepository;
     }
 
-    /**
-     * 领取工具分发权；参数是工具、调用上下文和输入 JSON；返回幂等领取结果。
-     */
+    /** 同一短事务内先授权运行，再以幂等键领取唯一外部执行权。 */
     @Transactional(rollbackFor = Exception.class)
     public ToolDispatchClaimEntity claim(ToolCatalogEntity tool, ToolInvokeContextEntity context, String inputJson) {
         if (!blank(context.getRunId())) {
+            // 行锁确定取消与工具副作用的先后顺序，并校验上下文 revision。
             runControlService.authorizeToolDispatch(context.getTenantId(), context.getUserId(), context.getRunId(),
                     context.getContextRevision());
         }
@@ -50,6 +52,7 @@ public class ToolDispatchAuthorizationService {
                 .traceId(context.getTraceId()).inputJson(inputJson).status(ToolStatus.STARTED)
                 .startedAt(LocalDateTime.now()).build();
         if (toolRepository.claimToolCallLog(log) == 1) {
+            // 唯一索引插入成功者才允许继续外部调用。
             return ToolDispatchClaimEntity.builder().claimed(true).callLog(log).build();
         }
         ToolCallLogEntity existing = toolRepository.queryToolCallLogByIdempotencyKey(idempotencyKey);
@@ -71,6 +74,7 @@ public class ToolDispatchAuthorizationService {
         }
     }
 
+    /** 优先使用运行+函数调用生成稳定键；缺少二者的独立调用退化为随机键。 */
     private String buildIdempotencyKey(ToolCatalogEntity tool, ToolInvokeContextEntity context) {
         if (!blank(context.getRunId()) && !blank(context.getFunctionCallId())) {
             String source = context.getTenantId() + ':' + context.getUserId() + ':' + context.getRunId() + ':'

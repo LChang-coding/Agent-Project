@@ -16,21 +16,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * MCP 协议客户端支持组件。
- * <p>负责复用 initialize、tools/list、tools/call 和结果转换流程，并按传输类型选择客户端工厂。</p>
- */
+/** 标准 MCP 统一入口；每次操作创建客户端并在完成后关闭。 */
 @Component
 public class McpProtocolClientSupport {
 
+    /** 防止远程结果无限占用模型上下文。 */
     private static final int MAX_RESULT_LENGTH = 16_000;
 
+    /** 按小写传输类型索引唯一工厂。 */
     private final Map<String, McpTransportClientFactory> factories;
+    /** 序列化工具 schema、结构化结果与参数。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * 创建 MCP 协议客户端支持组件；参数是传输客户端工厂列表；返回组件实例。
-     */
+    /** 启动时构建 SSE/Stdio 工厂索引。 */
     public McpProtocolClientSupport(List<McpTransportClientFactory> factories) {
         this.factories = new LinkedHashMap<>();
         for (McpTransportClientFactory factory : factories) {
@@ -50,12 +48,11 @@ public class McpProtocolClientSupport {
         factory(configuration).validate(configuration);
     }
 
-    /**
-     * 拉取 MCP 工具 Schema；参数是 MCP 版本；返回 tools/list 快照 JSON。
-     */
+    /** initialize 后执行 listTools，并返回可冻结到版本的 schema 快照。 */
     public String listToolsSchema(McpVersionEntity version) {
         McpConnectionConfigEntity configuration = fromVersion(version);
         try (McpSyncClient client = factory(configuration).create(configuration)) {
+            // 连接或子进程只覆盖本次协议操作。
             client.initialize();
             McpSchema.ListToolsResult toolsResult = client.listTools();
             Map<String, Object> schema = new LinkedHashMap<>();
@@ -71,9 +68,7 @@ public class McpProtocolClientSupport {
         }
     }
 
-    /**
-     * 调用 MCP 工具；参数是工具目录、远程工具名和参数；返回远程结果文本。
-     */
+    /** initialize 后调用指定远程工具，并将 MCP 错误标志转换为领域异常。 */
     public String callTool(ToolCatalogEntity tool, String toolName, Map<String, Object> arguments) {
         if (toolName == null || toolName.isBlank()) {
             throw new AppException("TOOL_MCP_TOOL_NAME_EMPTY", "MCP 调用必须提供 toolName");
@@ -104,9 +99,7 @@ public class McpProtocolClientSupport {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 读取传输客户端工厂；参数是连接配置；返回匹配工厂。
-     */
+    /** 按冻结传输类型选择工厂；未知类型失败关闭。 */
     private McpTransportClientFactory factory(McpConnectionConfigEntity configuration) {
         String transportType = configuration == null || configuration.getTransportType() == null
                 ? "" : configuration.getTransportType().toLowerCase();
@@ -149,9 +142,7 @@ public class McpProtocolClientSupport {
                 .build();
     }
 
-    /**
-     * 渲染 MCP 调用结果；参数是调用结果；返回文本。
-     */
+    /** 拼接结构化和文本内容；无可识别内容时使用协议对象文本。 */
     private String renderResult(McpSchema.CallToolResult result) {
         List<String> parts = new ArrayList<>();
         if (result.structuredContent() != null) {

@@ -40,19 +40,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * 工具发布领域服务。
- */
+/** 管理 Skill/MCP 的草稿、不可变版本、测试、发布和停用生命周期。 */
 @Service
 public class ToolPublishService implements IToolPublishService {
 
+    /** 上传入口总包大小上限；包内条目另由 SkillPackageReader 限制。 */
     private static final int MAX_SKILL_PACKAGE_BYTES = 20 * 1024 * 1024;
+    /** 未显式指定时的首版版本号。 */
     private static final String DEFAULT_VERSION = "1.0.0";
+    /** Skill 包固定存放对象存储。 */
     private static final String SOURCE_TYPE_OSS = "oss";
 
+    /** 持久化定义、版本、资产和调用目录。 */
     private final IToolRepository toolRepository;
+    /** 保存和读取原始 Skill ZIP。 */
     private final ObjectStorageService objectStorageService;
+    /** 验证 MCP 配置并发现远程工具 schema。 */
     private final McpProtocolClientSupport mcpProtocolClientSupport;
+    /** 在发布前验证 ZIP 和 SKILL.md。 */
     private final SkillPackageReader skillPackageReader;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -68,14 +73,13 @@ public class ToolPublishService implements IToolPublishService {
         this.skillPackageReader = skillPackageReader;
     }
 
-    /**
-     * 上传 Skill 包；参数是上传命令；返回包资产信息。
-     */
+    /** 校验 ZIP 后写对象存储并登记资产；尚不创建 Skill 定义。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SkillPackageUploadResultEntity uploadSkillPackage(SkillPackageUploadCommandEntity command) {
         ToolUserContextEntity context = requireContext(command == null ? null : command.getContext());
         checkSkillPackage(command);
+        // 对象键包含租户和随机目录，阻止不同上传同名覆盖。
         String objectKey = "tenants/" + context.getTenantId() + "/skills/packages/" + UUID.randomUUID() + "/" + safeFileName(command.getFileName());
         ObjectStorageResultEntity storageResult = objectStorageService.putObject(ObjectStorageCommandEntity.builder()
                 .bucket(objectStorageService.skillBucket())
@@ -95,9 +99,7 @@ public class ToolPublishService implements IToolPublishService {
         return result;
     }
 
-    /**
-     * 创建 Skill 草稿；参数是创建命令；返回 Skill 定义。
-     */
+    /** 从已登记资产同时创建定义和首个草稿版本。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SkillDefinitionEntity createSkill(SkillCreateCommandEntity command) {
@@ -108,6 +110,7 @@ public class ToolPublishService implements IToolPublishService {
         String version = defaultString(command.getVersion(), DEFAULT_VERSION);
         String versionId = "skill_ver_" + UUID.randomUUID();
         String skillCode = safeToolName(defaultString(command.getSkillCode(), command.getSkillName()));
+        // 再次读取并解析资产，防止仅凭上传登记创建无效版本。
         byte[] skillBytes = objectStorageService.getObject(asset.getBucket(), asset.getObjectKey());
         fillSha256IfMissing(asset, skillBytes);
         String skillMd = skillPackageReader.readSkillMd(skillBytes);
@@ -145,9 +148,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.querySkillDefinition(skillId);
     }
 
-    /**
-     * 创建 Skill 新版本；参数是版本命令；返回 Skill 定义。
-     */
+    /** 创建不可变草稿版本并只推进 currentVersion，不影响 publishedVersion。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SkillDefinitionEntity createSkillVersion(SkillVersionCreateCommandEntity command) {
@@ -183,9 +184,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.querySkillDefinition(skill.getSkillId());
     }
 
-    /**
-     * 发布 Skill；参数是用户上下文、Skill ID 和版本；返回 Skill 定义。
-     */
+    /** 激活指定版本并原子推进定义的发布指针。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SkillDefinitionEntity publishSkill(ToolUserContextEntity context, String skillId, String version) {
@@ -205,9 +204,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.querySkillDefinition(skillId);
     }
 
-    /**
-     * 禁用 Skill；参数是用户上下文和 Skill ID；返回 Skill 定义。
-     */
+    /** 停用定义使其退出运行目录；历史版本和调用审计保留。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SkillDefinitionEntity disableSkill(ToolUserContextEntity context, String skillId) {
@@ -228,9 +225,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.querySkillDefinitions(context.getTenantId(), context.getUserId(), defaultString(scope, "available"));
     }
 
-    /**
-     * 创建 MCP 草稿；参数是创建命令；返回 MCP 定义。
-     */
+    /** 校验传输配置后同时创建 MCP 定义与首个未测试版本。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public McpDefinitionEntity createMcp(McpCreateCommandEntity command) {
@@ -278,9 +273,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.queryMcpDefinition(mcpId);
     }
 
-    /**
-     * 测试 MCP；参数是用户上下文和 MCP ID；返回 MCP 定义。
-     */
+    /** 对 currentVersion 建连并保存工具 schema；失败状态同样持久化。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public McpDefinitionEntity testMcp(ToolUserContextEntity context, String mcpId) {
@@ -289,6 +282,7 @@ public class ToolPublishService implements IToolPublishService {
         assertOwnerOrTenantAdmin(context, mcp.getOwnerUserId(), mcp.getVisibility());
         McpVersionEntity version = requireMcpVersion(mcpId, mcp.getCurrentVersion());
         try {
+            // 标准 MCP 返回完整工具 schema；旧 HTTP 只保存连通性快照。
             String schema = testRemoteMcp(version);
             String testMessage = mcpTestMessage(version, schema);
             version.setToolSchemaJson(schema);
@@ -297,6 +291,7 @@ public class ToolPublishService implements IToolPublishService {
             mcp.setTestStatus(ToolStatus.SUCCESS);
             mcp.setTestMessage(testMessage);
         } catch (Exception e) {
+            // 测试失败是领域结果，不回滚为“未测试”。
             version.setTestStatus(ToolStatus.FAILED);
             version.setTestMessage(e.getMessage());
             mcp.setTestStatus(ToolStatus.FAILED);
@@ -318,9 +313,7 @@ public class ToolPublishService implements IToolPublishService {
         return "连接成功";
     }
 
-    /**
-     * 发布 MCP；参数是用户上下文、MCP ID 和版本；返回 MCP 定义。
-     */
+    /** 只有测试成功的版本可激活并进入运行目录。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public McpDefinitionEntity publishMcp(ToolUserContextEntity context, String mcpId, String version) {
@@ -383,9 +376,7 @@ public class ToolPublishService implements IToolPublishService {
         return toolRepository.queryToolCallLogs(context.getTenantId(), context.getUserId(), sessionId);
     }
 
-    /**
-     * 校验 Skill 包；参数是上传命令；无返回值。
-     */
+    /** 先检查总大小，再完整解析 SKILL.md 验证包结构。 */
     private void checkSkillPackage(SkillPackageUploadCommandEntity command) {
         if (command == null || command.getBytes() == null || command.getBytes().length == 0) {
             throw new AppException("TOOL_SKILL_PACKAGE_EMPTY", "Skill 包不能为空");
@@ -451,9 +442,7 @@ public class ToolPublishService implements IToolPublishService {
         return mcpVersion;
     }
 
-    /**
-     * 规范化可见范围；参数是可见范围和用户上下文；返回可用范围。
-     */
+    /** 默认私有；租户公开只能由 owner/admin 创建。 */
     private String normalizeVisibility(String visibility, ToolUserContextEntity context) {
         String value = defaultString(visibility, ToolVisibility.PRIVATE);
         if (ToolVisibility.TENANT_PUBLIC.equals(value) && !isTenantAdmin(context)) {
@@ -465,9 +454,7 @@ public class ToolPublishService implements IToolPublishService {
         return value;
     }
 
-    /**
-     * 校验 MCP 传输类型；参数是用户上下文和传输类型；无返回值。
-     */
+    /** SSE/HTTP 可远程配置；能启动本机进程的 Stdio/local 只允许管理员。 */
     private void checkMcpTransport(ToolUserContextEntity context, String transportType) {
         if (transportType == null || transportType.isBlank()) {
             throw new AppException("TOOL_MCP_TRANSPORT_INVALID", "MCP 传输类型不能为空");
@@ -497,9 +484,7 @@ public class ToolPublishService implements IToolPublishService {
         }
     }
 
-    /**
-     * 校验操作权限；参数是上下文、拥有者和可见范围；无返回值。
-     */
+    /** 私有工具允许所有者或管理员；租户公共工具只允许管理员。 */
     private void assertOwnerOrTenantAdmin(ToolUserContextEntity context, String ownerUserId, String visibility) {
         boolean owner = context.getUserId() != null && context.getUserId().equals(ownerUserId);
         if (!owner && !isTenantAdmin(context)) {
@@ -549,9 +534,7 @@ public class ToolPublishService implements IToolPublishService {
         }
     }
 
-    /**
-     * 解析 Skill 元信息；参数是 SKILL.md 文本；返回元信息。
-     */
+    /** 只提取 Markdown front matter 的一级键值，不解释正文指令。 */
     private Map<String, Object> skillManifest(String skillMd) {
         Map<String, Object> manifest = new LinkedHashMap<>();
         if (skillMd == null || !skillMd.startsWith("---")) {
@@ -570,9 +553,7 @@ public class ToolPublishService implements IToolPublishService {
         return manifest;
     }
 
-    /**
-     * 测试远程 MCP；参数是 MCP 版本；返回工具 Schema 快照。
-     */
+    /** SSE/Stdio 执行标准 initialize/listTools；旧 HTTP 只做 GET 探活。 */
     private String testRemoteMcp(McpVersionEntity version) throws Exception {
         if (!"stdio".equalsIgnoreCase(version.getTransportType())
                 && (version.getEndpoint() == null || version.getEndpoint().isBlank())) {

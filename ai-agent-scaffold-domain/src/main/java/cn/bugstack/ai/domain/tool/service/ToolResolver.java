@@ -15,6 +15,7 @@ import java.util.List;
 @Service
 public class ToolResolver {
 
+    /** 权限过滤在仓储查询中与租户范围同时执行。 */
     private final IToolRepository toolRepository;
 
     /**
@@ -24,9 +25,7 @@ public class ToolResolver {
         this.toolRepository = toolRepository;
     }
 
-    /**
-     * 查询可用工具；参数是用户上下文；返回当前用户有权限使用的工具列表。
-     */
+    /** 身份不完整时失败关闭；完整时只查询已发布且可见的目录。 */
     public List<ToolCatalogEntity> resolve(ToolUserContextEntity context) {
         if (context == null || blank(context.getTenantId()) || blank(context.getUserId())) {
             throw new AppException("TOOL_CONTEXT_INVALID", "工具运行身份不完整");

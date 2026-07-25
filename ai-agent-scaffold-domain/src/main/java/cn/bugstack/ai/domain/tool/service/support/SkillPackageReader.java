@@ -13,16 +13,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-/**
- * Skill ZIP 有界读取器。
- * <p>统一限制 entry 数量和单个文件的展开字节，避免异常压缩包占用过多内存。</p>
- */
+/** 在条目数、单条大小和 UTF-8 边界内读取唯一 SKILL.md。 */
 @Component
 public class SkillPackageReader {
 
+    /** 统一对外错误码，隐藏 ZIP 底层实现异常。 */
     private static final String INVALID_CODE = "TOOL_SKILL_PACKAGE_INVALID";
+    /** 流式解压缓冲区大小。 */
     private static final int BUFFER_SIZE = 8192;
 
+    /** 启动配置提供解压资源上限。 */
     private final SkillPackageProperties properties;
 
     /** 创建 Skill 包读取器；参数是解压边界；返回读取器实例。 */
@@ -30,7 +30,7 @@ public class SkillPackageReader {
         this.properties = properties;
     }
 
-    /** 读取 Skill 包内的 SKILL.md；参数是 ZIP 字节；返回 UTF-8 文本。 */
+    /** 校验 ZIP 签名和资源上限，只读取首个 SKILL.md。 */
     public String readSkillMd(byte[] bytes) {
         validateLimits();
         if (!hasZipSignature(bytes)) {
@@ -46,6 +46,7 @@ public class SkillPackageReader {
                     throw invalid("Skill 包文件数超过上限 " + properties.getMaxEntries());
                 }
                 if (entry.isDirectory() || !entry.getName().endsWith("SKILL.md") || skillBytes != null) {
+                    // 目录、非目标文件和第二个 SKILL.md 均不展开到内存。
                     continue;
                 }
                 if (entry.getSize() > properties.getMaxEntryBytes()) {
@@ -64,6 +65,7 @@ public class SkillPackageReader {
         return decodeUtf8(skillBytes);
     }
 
+    /** 流式读取单条目，超过展开上限立即终止。 */
     private byte[] readEntry(ZipInputStream input) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream(
                 Math.min(BUFFER_SIZE, properties.getMaxEntryBytes()));
@@ -80,6 +82,7 @@ public class SkillPackageReader {
         return output.toByteArray();
     }
 
+    /** 严格 UTF-8 解码，非法字节拒绝而非替换。 */
     private String decodeUtf8(byte[] bytes) {
         try {
             return StandardCharsets.UTF_8.newDecoder()
@@ -91,12 +94,14 @@ public class SkillPackageReader {
         }
     }
 
+    /** 配置错误在处理用户文件前暴露。 */
     private void validateLimits() {
         if (properties == null || properties.getMaxEntries() <= 0 || properties.getMaxEntryBytes() <= 0) {
             throw new IllegalStateException("Skill 包解压边界配置不合法");
         }
     }
 
+    /** 接受普通 ZIP 和空 ZIP 的标准 PK 签名。 */
     private boolean hasZipSignature(byte[] bytes) {
         return bytes != null && bytes.length >= 4 && bytes[0] == 'P' && bytes[1] == 'K'
                 && ((bytes[2] == 3 && bytes[3] == 4) || (bytes[2] == 5 && bytes[3] == 6));

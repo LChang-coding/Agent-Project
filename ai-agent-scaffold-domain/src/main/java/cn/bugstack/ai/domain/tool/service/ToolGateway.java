@@ -25,20 +25,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 工具调用网关。
- * <p>负责统一接收 ADK 工具调用，转发到 Skill/MCP 运行时，并写入审计日志和可观测日志。</p>
- */
+/** 工具副作用唯一出口：先授权和幂等领取，再路由 Skill/MCP，并闭环审计。 */
 @Service
 public class ToolGateway {
 
+    /** 限制返回模型的正文，避免工具结果撑爆上下文。 */
     private static final int MAX_RESULT_LENGTH = 16_000;
 
+    /** 读取已发布 Skill 包。 */
     private final ObjectStorageService objectStorageService;
+    /** 执行标准 SSE/Stdio MCP 协议。 */
     private final McpProtocolClientSupport mcpProtocolClientSupport;
+    /** 锁定运行并领取唯一外部执行权。 */
     private final ToolDispatchAuthorizationService dispatchAuthorizationService;
+    /** 安全读取 Skill 包中的 SKILL.md。 */
     private final SkillPackageReader skillPackageReader;
+    /** 只序列化工具输入、输出和 MCP 参数。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** 兼容旧式直连 HTTP MCP；标准 SSE/Stdio 不使用它。 */
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     /**
@@ -53,9 +57,7 @@ public class ToolGateway {
         this.skillPackageReader = skillPackageReader;
     }
 
-    /**
-     * 调用工具；参数是工具目录、入参和调用上下文；返回给模型的工具结果。
-     */
+    /** 先领取执行权；只有 claimed=true 的请求才能产生外部副作用。 */
     public Map<String, Object> invoke(ToolCatalogEntity tool, Map<String, Object> input, ToolInvokeContextEntity context) {
         checkInvoke(tool, context);
         long begin = System.currentTimeMillis();
@@ -78,6 +80,7 @@ public class ToolGateway {
             throw exception;
         }
         if (!claim.isClaimed()) {
+            // 重试只重放持久化结果，started 未知态也绝不二次执行。
             AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
                     context.getTraceId(), "dispatch_authorize", "命中既有工具调用，不重复产生外部消耗",
@@ -98,6 +101,7 @@ public class ToolGateway {
                     context.getTraceId(), "runtime_route",
                     ToolType.SKILL.equals(tool.getToolType()) ? "路由到Skill运行时" : "路由到MCP运行时",
                     "completed", 0L));
+            // 此处是通过授权和幂等门禁后唯一的真实工具执行点。
             String output = dispatch(tool, input);
             long costMs = System.currentTimeMillis() - begin;
             dispatchAuthorizationService.finish(callLog, toJson(Map.of("result", output)),
@@ -107,6 +111,7 @@ public class ToolGateway {
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs));
             return Map.of("success", true, "result", output);
         } catch (Exception e) {
+            // 工具异常转换为模型结果，并尽力将 started 审计推进为 failed。
             long costMs = System.currentTimeMillis() - begin;
             finishFailedSafely(callLog, e, costMs);
             AiLog.error(AiLog.tool().callFailed(context.getTenantId(), context.getUserId(), context.getSessionId(),
@@ -116,9 +121,7 @@ public class ToolGateway {
         }
     }
 
-    /**
-     * 读取重复调用的持久化结果；参数是既有日志；返回模型可消费结果。
-     */
+    /** success/failed 重放终态；started 返回未知，禁止猜测后再次执行。 */
     private Map<String, Object> duplicateResult(ToolCallLogEntity log) {
         if (ToolStatus.SUCCESS.equals(log.getStatus()) && log.getOutputJson() != null) {
             try {
@@ -138,9 +141,7 @@ public class ToolGateway {
                 "replayed", true);
     }
 
-    /**
-     * 尽力记录工具失败结果；参数是 started 日志、异常和耗时；无返回值。
-     */
+    /** 审计更新失败只记录二次错误，不覆盖原始工具异常。 */
     private void finishFailedSafely(ToolCallLogEntity log, Exception error, long costMs) {
         try {
             dispatchAuthorizationService.finish(log, null, ToolStatus.FAILED,
@@ -165,9 +166,7 @@ public class ToolGateway {
         throw new AppException("TOOL_TYPE_UNSUPPORTED", "工具类型不支持：" + tool.getToolType());
     }
 
-    /**
-     * 调用 Skill；参数是工具目录和入参；返回 Skill 指令包内容。
-     */
+    /** Skill 调用读取已发布包并返回指令文本，不执行包内任意代码。 */
     private String invokeSkill(ToolCatalogEntity tool, Map<String, Object> input) {
         byte[] bytes = objectStorageService.getObject(tool.getBucket(), tool.getObjectKey());
         String skillMd = skillPackageReader.readSkillMd(bytes);
@@ -182,9 +181,7 @@ public class ToolGateway {
         return truncate(result.toString());
     }
 
-    /**
-     * 调用远程 MCP；参数是工具目录和入参；返回远程响应文本。
-     */
+    /** SSE/Stdio 走标准 MCP；http 保留旧式 JSON POST 兼容路径。 */
     private String invokeMcp(ToolCatalogEntity tool, Map<String, Object> input) {
         String transportType = tool.getTransportType() == null ? "" : tool.getTransportType().toLowerCase();
         if (!"http".equals(transportType) && !"sse".equals(transportType) && !"stdio".equals(transportType)) {
@@ -194,6 +191,7 @@ public class ToolGateway {
             throw new AppException("TOOL_MCP_ENDPOINT_EMPTY", "MCP endpoint 不能为空");
         }
         if ("sse".equals(transportType) || "stdio".equals(transportType)) {
+            // 标准协议调用前解析并校验远程具体工具名。
             McpCallCommand command = parseMcpCallCommand(tool, input);
             return mcpProtocolClientSupport.callTool(tool, command.toolName(), command.arguments());
         }
@@ -216,9 +214,7 @@ public class ToolGateway {
         }
     }
 
-    /**
-     * 解析 MCP 调用命令；参数是工具目录和模型入参；返回远程工具名与参数。
-     */
+    /** 接受兼容工具名字段；仅单工具 schema 可省略 toolName。 */
     private McpCallCommand parseMcpCallCommand(ToolCatalogEntity tool, Map<String, Object> input) {
         Map<String, Object> arguments = parseMcpArguments(input);
         String toolName = firstText(input.get("toolName"), input.get("mcpToolName"), input.get("name"),
@@ -233,9 +229,7 @@ public class ToolGateway {
         return new McpCallCommand(toolName, arguments);
     }
 
-    /**
-     * 解析 MCP 参数；参数是模型入参；返回远程工具参数。
-     */
+    /** argumentsJson 可为对象或 JSON 字符串；缺失时使用去除路由字段后的剩余参数。 */
     private Map<String, Object> parseMcpArguments(Map<String, Object> input) {
         Object argumentsJson = input.get("argumentsJson");
         if (argumentsJson instanceof Map<?, ?> map) {
@@ -289,9 +283,7 @@ public class ToolGateway {
         return null;
     }
 
-    /**
-     * 校验调用参数；参数是工具和上下文；无返回值。
-     */
+    /** 工具标识或可信租户/用户缺失时，在领取执行权前失败关闭。 */
     private void checkInvoke(ToolCatalogEntity tool, ToolInvokeContextEntity context) {
         if (tool == null || tool.getToolId() == null || tool.getToolId().isBlank()) {
             throw new AppException("TOOL_NOT_FOUND", "工具不存在");
@@ -301,9 +293,7 @@ public class ToolGateway {
         }
     }
 
-    /**
-     * 转 JSON；参数是对象；返回 JSON 字符串。
-     */
+    /** 审计序列化失败退化为空对象，不影响门禁本身。 */
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? new LinkedHashMap<>() : value);

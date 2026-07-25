@@ -20,23 +20,24 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * ADK 网关工具包装器。
- * <p>负责把工具目录中的 Skill/MCP 包装成 ADK 可识别的函数工具。</p>
- */
+/** 将一个已授权目录项包装成 ADK 函数；真实副作用统一委托 ToolGateway。 */
 public class GatewayAdkTool extends BaseTool {
 
+    /** 只用于解析已发布 MCP schema，不承载运行状态。 */
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    /** 防止工具描述挤占模型上下文。 */
     private static final int MAX_DESCRIPTION_LENGTH = 2_000;
 
+    /** 本轮解析出的冻结工具目录项。 */
     private final ToolCatalogEntity tool;
+    /** 授权、幂等和外部调用的唯一入口。 */
     private final ToolGateway toolGateway;
+    /** ADK 上下文缺字段时的本轮可信回退值。 */
     private final ToolInvokeContextEntity fallbackContext;
+    /** 构造时冻结的模型函数 schema。 */
     private final FunctionDeclaration declaration;
 
-    /**
-     * 创建 ADK 工具；参数是工具目录和工具网关；返回工具实例。
-     */
+    /** 冻结名称、描述、参数 schema 和审计元数据。 */
     public GatewayAdkTool(ToolCatalogEntity tool, ToolGateway toolGateway, ToolInvokeContextEntity fallbackContext) {
         super(toolName(tool), toolDescription(tool));
         this.tool = tool;
@@ -58,9 +59,7 @@ public class GatewayAdkTool extends BaseTool {
         return Optional.of(declaration);
     }
 
-    /**
-     * 执行工具；参数是模型传入参数和 ADK 工具上下文；返回工具结果 Map。
-     */
+    /** 仅复制模型参数并重建可信上下文；身份不完整时不进入 ToolGateway。 */
     @Override
     public Single<Map<String, Object>> runAsync(Map<String, Object> args, ToolContext toolContext) {
         Map<String, Object> input = args == null ? new LinkedHashMap<>() : new LinkedHashMap<>(args);
@@ -71,9 +70,7 @@ public class GatewayAdkTool extends BaseTool {
         return Single.fromCallable(() -> toolGateway.invoke(tool, input, context));
     }
 
-    /**
-     * 构建调用上下文；参数是 ADK 工具上下文；返回工具网关上下文。
-     */
+    /** ADK state 优先于 fallback；模型 args 从不参与身份构造。 */
     private ToolInvokeContextEntity invokeContext(ToolContext toolContext) {
         if (toolContext == null) {
             return copyFallbackContext();
@@ -92,9 +89,7 @@ public class GatewayAdkTool extends BaseTool {
                 .build();
     }
 
-    /**
-     * 复制兜底上下文；无参数；返回工具调用上下文。
-     */
+    /** 无 ADK ToolContext 时复制隔离对象，避免调用方修改共享回退实例。 */
     private ToolInvokeContextEntity copyFallbackContext() {
         return ToolInvokeContextEntity.builder()
                 .tenantId(fallbackContext.getTenantId())
@@ -120,9 +115,7 @@ public class GatewayAdkTool extends BaseTool {
                 .build();
     }
 
-    /**
-     * 构建入参 Schema；参数是工具目录；返回 JSON Schema。
-     */
+    /** Skill 只收任务文本；MCP 强制要求远程工具名和 JSON 参数。 */
     private static Schema parameterSchema(ToolCatalogEntity tool) {
         Map<String, Schema> properties = new LinkedHashMap<>();
         if (ToolType.SKILL.equals(tool.getToolType())) {
@@ -150,9 +143,7 @@ public class GatewayAdkTool extends BaseTool {
                 .build();
     }
 
-    /**
-     * 生成工具函数名；参数是工具目录；返回 ADK 可用函数名。
-     */
+    /** 规范为 ADK 合法且不超过 64 字符的稳定函数名。 */
     private static String toolName(ToolCatalogEntity tool) {
         String prefix = ToolType.MCP.equals(tool.getToolType()) ? "mcp_" : "skill_";
         String raw = defaultString(tool.getToolCode(), tool.getToolId());
@@ -163,9 +154,7 @@ public class GatewayAdkTool extends BaseTool {
         return value.length() > 64 ? value.substring(0, 64) : value;
     }
 
-    /**
-     * 生成工具描述；参数是工具目录；返回模型可读描述。
-     */
+    /** 描述中附带已发布 MCP 工具清单，但限制总长度。 */
     private static String toolDescription(ToolCatalogEntity tool) {
         String typeName = ToolType.MCP.equals(tool.getToolType()) ? "MCP" : "Skill";
         String description = typeName + "：" + defaultString(tool.getToolName(), tool.getToolId()) + "。"

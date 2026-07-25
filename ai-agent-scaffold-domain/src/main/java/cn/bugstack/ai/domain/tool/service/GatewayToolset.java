@@ -14,14 +14,13 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 
-/**
- * ADK 网关工具集。
- * <p>负责在每轮模型调用前动态查询当前用户有权限的工具，并包装成 ADK 工具。</p>
- */
+/** 每轮模型调用前按可信租户和用户动态解析可用工具。 */
 @Component
 public class GatewayToolset implements BaseToolset {
 
+    /** 只返回当前用户有权调用的已发布目录项。 */
     private final ToolResolver toolResolver;
+    /** 所有目录项共享的执行入口。 */
     private final ToolGateway toolGateway;
 
     /**
@@ -32,11 +31,10 @@ public class GatewayToolset implements BaseToolset {
         this.toolGateway = toolGateway;
     }
 
-    /**
-     * 获取本轮可用工具；参数是 ADK 只读上下文；返回工具流。
-     */
+    /** 从只读 state 构造身份与运行回退上下文，再逐项包装为 ADK 工具。 */
     @Override
     public Flowable<BaseTool> getTools(ReadonlyContext readonlyContext) {
+        // tenantId 必须来自 ChatService state；userId 可回退 ADK 认证用户。
         ToolUserContextEntity context = ToolUserContextEntity.builder()
                 .tenantId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TENANT_ID)))
                 .userId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.USER_ID)), readonlyContext.userId()))
@@ -52,13 +50,12 @@ public class GatewayToolset implements BaseToolset {
                 .contextRevision(longValue(readonlyContext.state().get(ToolRuntimeContextKeys.CONTEXT_REVISION)))
                 .traceId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TRACE_ID)), TraceContext.currentOrNewTraceId()))
                 .build();
+        // 每轮重新查询，发布、停用和权限变化无需重装配 Agent。
         List<ToolCatalogEntity> tools = toolResolver.resolve(context);
         return Flowable.fromIterable(tools).map(tool -> new GatewayAdkTool(tool, toolGateway, fallbackContext));
     }
 
-    /**
-     * 关闭工具集；无参数；无返回值。
-     */
+    /** 包装器不持有连接；MCP 客户端由单次调用创建并关闭。 */
     @Override
     public void close() {
         // 当前工具集不持有长连接，暂不需要释放资源。
