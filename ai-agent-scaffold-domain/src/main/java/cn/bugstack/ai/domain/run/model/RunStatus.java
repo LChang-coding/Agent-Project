@@ -4,16 +4,27 @@ package cn.bugstack.ai.domain.run.model;
  * 会话运行状态。
  */
 public enum RunStatus {
+    /** 引导预建但尚未启动。 */
     CREATED,
+    /** 模型或工作流正在执行。 */
     RUNNING,
+    /** 等待上下文压缩完成。 */
     WAITING_COMPACTION,
+    /** 模型已请求工具、尚未完成调用。 */
     WAITING_TOOL,
+    /** 已收到引导，正在失效旧运行副作用。 */
     STEER_REQUESTED,
+    /** 已收到取消，等待收敛关联状态。 */
     CANCEL_REQUESTED,
+    /** 正在执行取消清理。 */
     CANCELLING,
+    /** 已由引导创建的后继运行替代。 */
     SUPERSEDED,
+    /** 取消清理完成。 */
     CANCELLED,
+    /** 正常完成。 */
     COMPLETED,
+    /** 不可恢复失败。 */
     FAILED;
 
     /**

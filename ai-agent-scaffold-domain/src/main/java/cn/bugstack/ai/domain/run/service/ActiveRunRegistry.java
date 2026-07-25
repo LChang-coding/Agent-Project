@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ActiveRunRegistry {
 
+    /** 仅保存本 JVM 中可立即取消的订阅句柄。 */
     private final ConcurrentHashMap<String, Runnable> interrupters = new ConcurrentHashMap<>();
 
     /**
@@ -35,6 +36,7 @@ public class ActiveRunRegistry {
      * 中断本机运行；参数是运行ID；返回是否找到活动运行。
      */
     public boolean interrupt(String runId) {
+        // 先移除再执行，保证并发取消最多触发一次中断动作。
         Runnable interrupter = runId == null ? null : interrupters.remove(runId);
         if (interrupter == null) {
             return false;

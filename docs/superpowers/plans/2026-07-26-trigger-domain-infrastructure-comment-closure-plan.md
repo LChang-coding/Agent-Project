@@ -260,3 +260,41 @@
 - 执行 `mvn -pl ai-agent-scaffold-domain -am -DskipTests clean compile`，281 个领域层源文件干净编译成功。
 - 使用 Java 25 兼容参数运行 `CronScheduleSupportTest`、`ScheduleDispatcherTest`、`ScheduleReconcilerTest`、`SessionShareServiceTest`：共 12 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。
 - 测试中的一次 `InterruptedException` 警告由 `ScheduleDispatcherTest` 主动中断 Worker 验证关闭语义产生，断言通过，不是产品异常。
+
+### 2026-07-26：领域层第二批执行计划（运行控制与会话）
+
+范围：
+
+- `domain/run` 下 10 个 Java 文件。
+- `domain/session` 下 7 个 Java 文件。
+
+本批重点：
+
+- 运行控制：解释 run 状态机、取消/引导的版本推进、活动运行互斥、工具调用前门禁、快照缓存与数据库事实的关系。
+- 会话领域：解释会话所有权、数据库历史游标、消息序号、无效消息过滤、删除会话前的关联资源清理，以及工作流会话身份。
+- 跨域一致性：明确“运行被取消”如何阻止后续工具副作用，以及被取消消息为何不能进入会话历史、上下文压缩和分享快照。
+
+门禁：
+
+- 17 个文件逐一审计类职责、字段语义、方法契约和状态分支。
+- diff 中只允许注释和计划记录，不得改变运行状态机或查询条件。
+- 领域层干净编译通过，并运行现有 run/session 相关测试。
+- 追加真实操作记录后中文本地提交。
+
+### 2026-07-26：领域层第二批操作记录（运行控制与会话）
+
+- 已逐一审计 `domain/run` 10 个文件和 `domain/session` 7 个文件，并补齐缺失的类、字段、私有方法及关键状态分支注释。
+- 运行控制已明确：
+  - run 的 `CREATED` 到终态状态语义、乐观锁版本和上下文版本各自解决的问题。
+  - 引导会先失效旧运行消息和上下文派生状态，再创建继承同一 trace 与固化 RAG 策略的后继运行。
+  - 取消会在同一事务链中失效消息、撤销压缩派生状态、推进上下文版本、取消运行中用量，再于提交后中断本机流。
+  - 工具回调前先检查取消、再按阈值压缩、压缩后要求模型重推；真正外发工具前锁数据库进行最终授权。
+  - 极短 TTL 快照只服务无副作用高频检查，外部工具副作用绝不依赖缓存；事务提交后才失效快照。
+- 会话领域已明确：
+  - 会话是所有权、运行目标、RAG 策略和上下文版本的聚合根。
+  - 锁会话后分配消息序号，保证并发消息顺序唯一；所有历史、分享和上下文查询统一只读有效消息。
+  - 删除会话前先取消全部活动运行，再撤销上下文派生状态和分享授权，最后软删除会话。
+  - RAG 策略通过版本条件更新，防止多标签页或并发请求静默覆盖。
+- 零上下文 diff 审计确认本批未新增或修改可执行语句；本批路径 `git diff --check` 通过。
+- 执行 `mvn -pl ai-agent-scaffold-domain -am -DskipTests clean compile`，281 个领域层源文件干净编译成功。
+- 使用 Java 25 兼容参数运行 `RunStateSnapshotCacheTest`、`RunControlServiceTest`、`RunExecutionGateTest`、`SessionControllerTest`、`SessionDomainTest`、`SessionLifecycleServiceTest`：共 25 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。

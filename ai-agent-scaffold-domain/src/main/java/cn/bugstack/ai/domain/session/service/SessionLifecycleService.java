@@ -43,10 +43,12 @@ public class SessionLifecycleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public long delete(String tenantId, String userId, String sessionId) {
+        // 固定锁序先锁会话，阻止删除期间创建新运行或追加消息。
         ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, null);
         List<ChatRunEntity> runs = runControlService.queryExecutableBySession(session.getTenantId(),
                 session.getUserId(), session.getSessionId());
         for (ChatRunEntity run : runs) {
+            // 每个可执行 run 必须先完成取消闭环，不能只软删会话掩盖后台副作用。
             ChatRunEntity cancelled = runControlService.cancel(session.getTenantId(), session.getUserId(),
                     run.getRunId(), DELETE_REASON);
             if (cancelled.getStatus() != RunStatus.CANCELLED && cancelled.getStatus() != RunStatus.SUPERSEDED) {
@@ -55,6 +57,7 @@ public class SessionLifecycleService {
         }
         long revision = sessionDomain.incrementContextRevision(session.getTenantId(), session.getUserId(),
                 session.getSessionId());
+        // 删除前撤销上下文派生状态和分享授权，保证旧链接及摘要不可继续使用。
         contextInvalidationService.invalidateSession(session.getTenantId(), session.getUserId(),
                 session.getSessionId(), DELETE_REASON);
         shareRepository.revokeBySession(session.getTenantId(), session.getUserId(), session.getSessionId());

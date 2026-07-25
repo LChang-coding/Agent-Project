@@ -11,6 +11,8 @@ import lombok.Data;
 @Builder
 public class RunMessageBindingEntity {
 
+    /** 完成消息绑定后的最新运行快照。 */
     private ChatRunEntity run;
+    /** 本次新建且已绑定的用户消息。 */
     private ChatMessageEntity message;
 }

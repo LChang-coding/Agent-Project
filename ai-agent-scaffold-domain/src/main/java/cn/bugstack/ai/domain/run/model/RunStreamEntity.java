@@ -13,6 +13,8 @@ import lombok.Data;
 @Builder
 public class RunStreamEntity<T> {
 
+    /** 流开始前已经持久化的运行身份。 */
     private ChatRunEntity run;
+    /** 与该运行绑定、可被取消的事件流。 */
     private Flowable<T> stream;
 }

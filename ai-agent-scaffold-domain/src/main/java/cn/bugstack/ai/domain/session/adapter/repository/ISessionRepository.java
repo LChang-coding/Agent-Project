@@ -6,6 +6,10 @@ import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 会话与消息持久化端口。
+ * <p>所有查询和更新都必须携带可信租户、用户及会话复合范围。</p>
+ */
 public interface ISessionRepository {
 
     /**

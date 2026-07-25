@@ -18,6 +18,10 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.List;
 
+/**
+ * 会话聚合领域服务。
+ * <p>集中维护会话所有权、消息顺序、有效性和上下文/RAG版本。</p>
+ */
 @Service
 public class SessionDomain {
 
@@ -61,6 +65,7 @@ public class SessionDomain {
                 .lastMessageTime(now)
                 .contextRevision(0L)
                 .build();
+        // 新会话默认关闭 RAG，并从零版本开始，避免继承客户端或浏览器缓存状态。
         sessionRepository.insertSession(session);
         AiLog.info(AiLog.chat().sessionCreated(session.getTenantId(), session.getUserId(), session.getSessionId(),
                 session.getAgentId(), session.getAgentName(), session.getAppName()));
@@ -167,6 +172,7 @@ public class SessionDomain {
     private ChatMessageEntity appendMessage(AppendMessageCommandEntity command) {
         checkMessageCommand(command);
         String tenantId = blankToNull(command.getTenantId());
+        // 锁住会话后读取最大序号，保证并发消息不会获得相同 sequenceNo。
         ChatSessionEntity session = sessionRepository.lockSession(tenantId, command.getUserId(), command.getSessionId());
         if (session == null) {
             AiLog.error(AiLog.chat().sessionRejected(tenantId, command.getUserId(), command.getSessionId(), null,
@@ -191,6 +197,7 @@ public class SessionDomain {
                 .traceId(command.getTraceId())
                 .metadata(command.getMetadata())
                 .build();
+        // 消息与最后活跃时间在调用方事务中共同提交。
         sessionRepository.insertMessage(message);
         sessionRepository.updateLastMessageTime(session.getTenantId(), session.getUserId(), session.getSessionId(), now);
         AiLog.info(AiLog.chat().messageSaved(message.getTenantId(), message.getUserId(), message.getSessionId(),
@@ -237,6 +244,7 @@ public class SessionDomain {
      * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
      */
     public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
+        // 所有上下文、分享和历史读取统一排除被取消或引导失效的消息。
         assertSessionAccess(tenantId, userId, sessionId, null);
         return sessionRepository.queryValidMessages(blankToNull(tenantId), userId, sessionId);
     }
@@ -305,6 +313,7 @@ public class SessionDomain {
         ChatSessionEntity session = lockSessionAccess(tenantId, userId, sessionId, null);
         long currentRevision = session.getRagRevision() == null ? 0L : session.getRagRevision();
         if (expectedRevision != null && expectedRevision != currentRevision) {
+            // 前端携带版本时拒绝覆盖他人或另一标签页刚完成的设置。
             throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置已更新，请刷新后重试");
         }
         if (sessionRepository.updateRagPolicy(session.getTenantId(), session.getUserId(),

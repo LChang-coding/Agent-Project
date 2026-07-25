@@ -65,6 +65,7 @@ public class RunControlService {
                 assetService, new RunStateSnapshotCache(), null);
     }
 
+    /** 注入可控快照缓存的领域测试构造器。 */
     RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                       ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                       ModelUsageService modelUsageService, AssetService assetService,
@@ -73,6 +74,7 @@ public class RunControlService {
                 assetService, runStateSnapshots, null);
     }
 
+    /** 汇总全部依赖的内部构造器，生产与测试最终都进入此处。 */
     RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                       ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                       ModelUsageService modelUsageService, AssetService assetService,
@@ -93,6 +95,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity start(String tenantId, String userId, String sessionId, String sourceType,
                                String sourceId, String requestedRunId, String predecessorRunId) {
+        // 先锁会话再创建 run，保证创建时的上下文与 RAG 策略快照一致。
         ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, sourceId);
         SessionRagRunSnapshotEntity ragSnapshot = resolveRagSnapshot(session);
         long revision = session.getContextRevision() == null ? 0L : session.getContextRevision();
@@ -133,6 +136,7 @@ public class RunControlService {
         }
         validateRequestedRunId(requestedRunId);
         ChatRunEntity existing = runRepository.query(tenantId, userId, requestedRunId);
+        // 客户端重试只能恢复引导预建的 CREATED 运行，不能复用任意旧 run。
         return existing == null
                 ? start(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId, null)
                 : resumePrepared(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId);
@@ -179,6 +183,7 @@ public class RunControlService {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
         if (!blank(run.getSuccessorRunId())) {
+            // 相同指令的重试返回既有后继；不同指令必须显式冲突，不能分叉同一旧运行。
             ChatRunEntity existing = require(run.getTenantId(), run.getUserId(), run.getSuccessorRunId());
             if (!normalizedInstruction.equals(existing.getSteerInstruction())) {
                 throw new AppException("RUN_STEER_CONFLICT", "当前运行已存在不同的引导后继");
@@ -194,6 +199,7 @@ public class RunControlService {
             throw new AppException("RUN_CONCURRENT_MODIFICATION", "引导过程中运行状态已变化");
         }
         int version = run.getVersion() + 1;
+        // 旧运行产生的全部消息先失效，再让压缩与引用派生数据同步回滚。
         List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId);
         sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId, "用户引导替代");
@@ -217,6 +223,7 @@ public class RunControlService {
                 .predecessorRunId(runId).steerInstruction(normalizedInstruction)
                 .startedAt(null)
                 .build();
+        // 后继继承本轮固化的 RAG 策略与 traceId，避免引导中途配置漂移或链路断裂。
         runRepository.insert(successor);
         if (runRepository.bindSuccessor(run.getTenantId(), run.getUserId(), runId, successor.getRunId(),
                 normalizedInstruction, version) != 1) {
@@ -235,6 +242,7 @@ public class RunControlService {
         return successor;
     }
 
+    /** 将会话 RAG 配置冻结为本轮不可变快照；旧单测装配安全降级为空绑定。 */
     private SessionRagRunSnapshotEntity resolveRagSnapshot(ChatSessionEntity session) {
         if (sessionRagSettingService != null) {
             return sessionRagSettingService.resolveRunSnapshot(session);
@@ -277,6 +285,7 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
                                                       String content, String traceId, List<String> attachmentIds) {
+        // 统一锁顺序为会话后运行，避免取消、删除和消息写入之间形成死锁。
         ChatRunEntity run = lockExecutableWithSessionFirst(tenantId, userId, runId);
         ChatMessageEntity message = sessionDomain.appendUserMessage(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId, content, traceId);
@@ -306,6 +315,7 @@ public class RunControlService {
                                                            String content, String traceId, String metadata) {
         ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
+            // 取消或引导已抢先落库时，不再保存迟到的助手消息。
             return null;
         }
         ChatMessageEntity message = blank(content) ? null : sessionDomain.appendAssistantMessage(run.getTenantId(),
@@ -330,6 +340,7 @@ public class RunControlService {
                                                        String content, String traceId, String reason) {
         ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
+            // 终态运行不接收迟到错误消息，避免被取消消息重新污染上下文。
             return null;
         }
         ChatMessageEntity message = sessionDomain.appendAssistantMessage(run.getTenantId(), run.getUserId(),
@@ -361,6 +372,7 @@ public class RunControlService {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
         if (run.getStatus().terminal()) {
+            // 取消接口幂等：终态不再重复失效消息或推进上下文版本。
             return run;
         }
         LocalDateTime now = LocalDateTime.now();
@@ -369,6 +381,7 @@ public class RunControlService {
             return require(run.getTenantId(), run.getUserId(), runId);
         }
         int version = run.getVersion() + 1;
+        // 取消必须同时撤销消息、压缩派生状态和模型用量中的运行中记录。
         List<ChatMessageEntity> runMessages = sessionDomain.queryRunMessages(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId);
         sessionDomain.invalidateRunMessages(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
@@ -427,6 +440,7 @@ public class RunControlService {
         return require(run.getTenantId(), run.getUserId(), runId);
     }
 
+    /** 计算运行开始至当前的非负耗时。 */
     private long elapsed(ChatRunEntity run) {
         if (run == null || run.getStartedAt() == null) {
             return 0L;
@@ -457,6 +471,7 @@ public class RunControlService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity authorizeToolDispatch(String tenantId, String userId, String runId, Long expectedRevision) {
+        // 外部副作用前必须直接锁数据库，不能依赖最多两百毫秒的只读快照。
         ChatRunEntity run = runRepository.lock(tenantId, userId, runId);
         if (run == null) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
@@ -514,15 +529,18 @@ public class RunControlService {
                 || status == RunStatus.STEER_REQUESTED;
     }
 
+    /** 从极短 TTL 快照读取无副作用状态检查所需字段。 */
     private RunStateSnapshotCache.Snapshot readSnapshot(String tenantId, String userId, String runId) {
         return runStateSnapshots.get(tenantId, userId, runId,
                 () -> runRepository.query(tenantId, userId, runId));
     }
 
+    /** 判断可选字符串是否缺失。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }
 
+    /** 使用客户端合法幂等键，未提供时由服务端生成。 */
     private String normalizeRequestedRunId(String requestedRunId) {
         if (blank(requestedRunId)) {
             return "run_" + UUID.randomUUID();
@@ -531,16 +549,19 @@ public class RunControlService {
         return requestedRunId;
     }
 
+    /** 限制运行标识字符集和长度，避免持久化与日志注入。 */
     private void validateRequestedRunId(String requestedRunId) {
         if (requestedRunId.length() > 64 || !requestedRunId.matches("[A-Za-z0-9_-]+")) {
             throw new AppException("RUN_ID_INVALID", "运行ID格式不合法");
         }
     }
 
+    /** 对可空作用域字段执行安全相等比较。 */
     private boolean equals(String left, String right) {
         return left == null ? right == null : left.equals(right);
     }
 
+    /** 清理并限制引导指令，防止空引导和无界提示词。 */
     private String normalizeInstruction(String instruction) {
         if (instruction == null || instruction.isBlank()) {
             throw new AppException("RUN_STEER_INSTRUCTION_EMPTY", "引导指令不能为空");
@@ -552,6 +573,7 @@ public class RunControlService {
         return normalized;
     }
 
+    /** 按统一锁序取得运行，并要求其仍可产生业务动作。 */
     private ChatRunEntity lockExecutableWithSessionFirst(String tenantId, String userId, String runId) {
         ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
         if (!run.getStatus().executable()) {
@@ -560,6 +582,7 @@ public class RunControlService {
         return run;
     }
 
+    /** 先锁所属会话再锁运行，并在两次读取间复核归属未漂移。 */
     private ChatRunEntity lockWithSessionFirst(String tenantId, String userId, String runId) {
         ChatRunEntity scope = runRepository.query(tenantId, userId, runId);
         if (scope == null) {
@@ -576,6 +599,7 @@ public class RunControlService {
         return run;
     }
 
+    /** 事务提交后再失效快照，避免回滚事务把缓存中的旧事实提前删除。 */
     private void invalidateSnapshotAfterCommit(String tenantId, String userId, String runId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             runStateSnapshots.invalidate(tenantId, userId, runId);
@@ -589,6 +613,7 @@ public class RunControlService {
         });
     }
 
+    /** 终态提交后移除本机中断句柄。 */
     private void removeAfterCommit(String runId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             activeRunRegistry.remove(runId);
@@ -602,6 +627,7 @@ public class RunControlService {
         });
     }
 
+    /** 取消或引导提交后才中断本机流，确保观察者能读到持久化终态。 */
     private void interruptAfterCommit(String runId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             activeRunRegistry.interrupt(runId);
