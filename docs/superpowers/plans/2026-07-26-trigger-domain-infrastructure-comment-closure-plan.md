@@ -109,3 +109,36 @@
 - 已记录初始脏工作区：运行日志、对象存储目录、既有 RAG 文档、设计文档、Skill 等均为用户已有或运行产生内容，本目标禁止暂存和提交这些文件。
 - 已确认 `plan-orchestrate` 仅用于生成外部编排提示词，不适用于当前直接修改代码；后续使用本计划和本地验收门禁推进。
 - 下一步生成触发器层逐文件清单，按 HTTP、Job、Listener 三批补齐注释。
+
+### 2026-07-26：触发器层第一批执行计划
+
+范围：
+
+- `trigger/job` 下 3 个实现类和包说明。
+- `trigger/listener/ContextCompactionConsumer` 和包说明。
+- 小型 HTTP 入口：`AgentConfigController`、`RunControlController`、`RagKnowledgeBaseController`、`RagKnowledgeBaseDeletionController`、`RagRetrievalDebugController`。
+
+本批重点：
+
+- 说明 XXL-JOB 与本地兜底调度的互斥和触发边界。
+- 说明 Kafka 压缩消费者的主消息、重试、死信和幂等处理语义。
+- 说明控制器如何从可信上下文取得身份，以及为何只做协议转换、不承载领域规则。
+- 补齐所有业务方法契约，并为关键参数转换、状态判断和异常后果增加短注释。
+
+本批门禁：
+
+- 只产生注释和计划文档修改，不改变可执行语句。
+- `ai-agent-scaffold-trigger` 编译通过。
+- 通过 diff 审计确认没有混入日志和现有无关文件。
+
+### 2026-07-26：触发器层第一批操作记录
+
+- 已完成 9 个实现类的语义注释：
+  - 调度：`ScheduleLocalFallback`、`ScheduleXxlJobHandler`、`XxlJobConfiguration`。
+  - 消费：`ContextCompactionConsumer`。
+  - HTTP：`AgentConfigController`、`RunControlController`、`RagKnowledgeBaseController`、`RagKnowledgeBaseDeletionController`、`RagRetrievalDebugController`。
+- 注释已经覆盖调度唤醒与业务账本边界、Kafka CAS 认领与线程上下文清理、JWT 身份来源、乐观锁、防误删、运行取消/引导、RAG 调试 Trace 关联和 DTO 转换边界。
+- 使用零上下文 diff 审计新增行，除注释和计划记录外没有新增可执行语句。
+- 执行 `mvn -pl ai-agent-scaffold-trigger -am -DskipTests compile`，结果 `BUILD SUCCESS`。
+- Maven 仍报告 `ai-agent-scaffold-api` 的 `parent.relativePath` 指向不同 groupId，以及旧版 resources plugin 不识别 `propertiesEncoding`；这是既有构建告警，本批未修改。
+- 下一批处理剩余 HTTP 控制器中的 RAG 配置/文档、资产、会话洞察和定时任务入口。

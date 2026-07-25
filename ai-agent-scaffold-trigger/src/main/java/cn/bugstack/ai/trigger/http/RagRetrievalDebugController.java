@@ -17,22 +17,36 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Locale;
 
-/** 租户管理员 RAG 调试接口。 */
+/**
+ * RAG 检索链路调试入口。
+ * <p>面向租户管理员返回候选、阶段耗时和降级原因；实际检索策略和权限过滤由领域服务执行。</p>
+ */
 @RestController
 @RequestMapping("/api/v1/rag/retrieval-debug")
 public class RagRetrievalDebugController {
 
     private final RagRetrievalDebugService service;
 
+    /**
+     * @param service RAG 调试检索领域服务
+     */
     public RagRetrievalDebugController(RagRetrievalDebugService service) {
         this.service = service;
     }
 
+    /**
+     * 使用指定 Agent 或工作流绑定执行一次可观测检索。
+     *
+     * @param request 运行目标、测试问题和上下文 Token 预算
+     * @return 引用、候选轨迹、降级信息和逐阶段耗时
+     */
     @PostMapping
     public Response<RagRetrievalDebugResponseDTO> debug(
             @RequestBody(required = false) RagRetrievalDebugRequestDTO request) {
         try {
+            // 空请求不能确定租户内运行目标，必须在进入昂贵的模型调用前拒绝。
             if (request == null) throw new AppException("RAG_DEBUG_REQUEST_INVALID", "调试请求不能为空");
+            // traceId 与 HTTP 链路保持一致，便于从调试响应反查完整检索日志。
             RagRetrievalResult result = service.debug(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(),
                     targetType(request.getTargetType()), request.getTargetId(), request.getQuery(),
@@ -45,6 +59,9 @@ public class RagRetrievalDebugController {
         }
     }
 
+    /**
+     * 将外部字符串严格转换为受支持的绑定目标枚举。
+     */
     private RagBindingTargetType targetType(String value) {
         if (value == null || value.isBlank()) throw new AppException("RAG_DEBUG_TARGET_INVALID", "目标类型不能为空");
         try {
@@ -54,7 +71,9 @@ public class RagRetrievalDebugController {
         }
     }
 
+    /** 将完整领域检索结果转换为调试响应。 */
     private RagRetrievalDebugResponseDTO toResponse(RagRetrievalResult result) {
+        // 指标单独展开，避免把领域对象直接暴露为外部协议。
         RagRetrievalResult.Metrics metrics = result.metrics();
         return RagRetrievalDebugResponseDTO.builder().retrievalId(result.retrievalId())
                 .estimatedTokenCount(result.estimatedTokenCount()).degraded(result.degraded())
@@ -74,6 +93,7 @@ public class RagRetrievalDebugController {
                 .diagnostics(toDiagnostics(result.diagnostics())).build();
     }
 
+    /** 转换最终进入上下文的引用，并保留各检索阶段得分。 */
     private RagRetrievalDebugResponseDTO.Citation toCitation(RagRetrievalResult.Citation value) {
         return RagRetrievalDebugResponseDTO.Citation.builder().citationId(value.citationId()).rank(value.rank())
                 .knowledgeBaseId(value.knowledgeBaseId()).documentId(value.documentId())
@@ -85,6 +105,7 @@ public class RagRetrievalDebugController {
                 .metadata(value.metadata()).build();
     }
 
+    /** 转换候选诊断汇总，供前端展示截断和采样边界。 */
     private RagRetrievalDebugResponseDTO.Diagnostics toDiagnostics(RagRetrievalResult.Diagnostics value) {
         return RagRetrievalDebugResponseDTO.Diagnostics.builder().enabled(value.enabled())
                 .truncated(value.truncated()).capturedCount(value.capturedCount())
@@ -92,6 +113,7 @@ public class RagRetrievalDebugController {
                 .candidates(value.candidates().stream().map(this::toCandidate).toList()).build();
     }
 
+    /** 转换单个候选在融合、重排和淘汰阶段的轨迹。 */
     private RagRetrievalDebugResponseDTO.Candidate toCandidate(RagRetrievalResult.CandidateTrace value) {
         return RagRetrievalDebugResponseDTO.Candidate.builder().bindingId(value.bindingId())
                 .profileId(value.profileId()).stage(value.stage()).rank(value.rank())
@@ -103,6 +125,7 @@ public class RagRetrievalDebugController {
                 .outcome(value.outcome()).build();
     }
 
+    /** 构造统一成功响应。 */
     private <T> Response<T> success(T data) {
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo())
                 .data(data).build();
