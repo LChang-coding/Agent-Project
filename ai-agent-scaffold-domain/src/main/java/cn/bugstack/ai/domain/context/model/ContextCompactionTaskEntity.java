@@ -34,6 +34,7 @@ public class ContextCompactionTaskEntity {
      * 转为 Kafka 命令；无参数；返回异步压缩通知。
      */
     public ContextCompactionCommand toCommand() {
-        return new ContextCompactionCommand(taskId, tenantId, userId, sessionId, fromSequence, toSequence, expectedMemoryVersion, policyVersion);
+        return new ContextCompactionCommand(taskId, tenantId, userId, sessionId, fromSequence, toSequence,
+                expectedMemoryVersion, policyVersion, traceId);
     }
 }

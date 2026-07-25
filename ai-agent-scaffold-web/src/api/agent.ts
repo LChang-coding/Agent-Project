@@ -1,4 +1,4 @@
-import { getAccessToken, refreshAccessToken, request } from '@/api/http';
+import { getAccessToken, refreshAccessToken, request, requestWithTrace, resolveTraceId } from '@/api/http';
 import type {
   AgentConfigItem,
   AgentMutationResponse,
@@ -71,12 +71,13 @@ export async function createChatSession(payload: CreateSessionRequest) {
  * 发送非流式聊天；参数是聊天请求和可选中断信号；返回完整回复。
  */
 export async function sendChatMessage(payload: ChatRequest, signal?: AbortSignal) {
-  return request<ChatResponse>({
+  const result = await requestWithTrace<ChatResponse>({
     url: '/v1/chat',
     method: 'POST',
     data: payload,
     signal,
   });
+  return { ...result.data, traceId: result.traceId };
 }
 
 /**
@@ -121,6 +122,10 @@ async function postStream(payload: ChatRequest, handlers: StreamHandlers, canRef
     body: JSON.stringify(payload),
     signal: handlers.signal,
   });
+  const responseTraceId = resolveTraceId(response.headers);
+  if (responseTraceId) {
+    handlers.onTrace?.(responseTraceId);
+  }
 
   if (response.status === 401 && canRefresh) {
     await refreshAccessToken();
@@ -196,9 +201,24 @@ function handleSseBlock(block: string, handlers: StreamHandlers) {
     handlers.onSession?.(data);
     return;
   }
+  if (eventName === 'trace') {
+    try {
+      const payload = JSON.parse(data) as { traceId?: string };
+      if (payload.traceId) {
+        handlers.onTrace?.(payload.traceId);
+      }
+    } catch {
+      handlers.onTrace?.(data);
+    }
+    return;
+  }
   if (eventName === 'run') {
     try {
-      handlers.onRun?.(JSON.parse(data) as RunStreamEvent);
+      const run = JSON.parse(data) as RunStreamEvent;
+      if (run.traceId) {
+        handlers.onTrace?.(run.traceId);
+      }
+      handlers.onRun?.(run);
     } catch {
       const message = '运行信息解析失败';
       handlers.onError?.(message);
@@ -209,7 +229,10 @@ function handleSseBlock(block: string, handlers: StreamHandlers) {
   if (eventName === 'error') {
     let message = data;
     try {
-      const payload = JSON.parse(data) as { message?: string; code?: string };
+      const payload = JSON.parse(data) as { message?: string; code?: string; traceId?: string };
+      if (payload.traceId) {
+        handlers.onTrace?.(payload.traceId);
+      }
       message = payload.message || payload.code || '流式请求失败';
     } catch {
       // 兼容服务端纯文本错误事件。

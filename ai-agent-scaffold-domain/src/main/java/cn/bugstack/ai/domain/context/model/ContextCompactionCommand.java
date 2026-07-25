@@ -11,5 +11,6 @@ public record ContextCompactionCommand(String taskId,
                                        Integer fromSequence,
                                        Integer toSequence,
                                        Integer expectedMemoryVersion,
-                                       String policyVersion) {
+                                       String policyVersion,
+                                       String traceId) {
 }

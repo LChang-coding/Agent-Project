@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class SessionMessageResponseDTO {
     private String messageId;
     private String runId;
+    private String traceId;
     private String role;
     private String contentType;
     private String content;

@@ -1,6 +1,7 @@
 export interface ApiResponse<T> {
   code: string;
   info: string;
+  traceId?: string;
   data?: T;
 }
 
@@ -117,6 +118,7 @@ export interface ChatResponse {
   runId: string;
   runStatus: string;
   contextRevision: number;
+  traceId?: string;
 }
 
 export interface ChatMessage {
@@ -124,6 +126,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: string;
+  traceId?: string;
   status?: 'sending' | 'streaming' | 'done' | 'error' | 'canceled' | 'superseded';
 }
 
@@ -170,6 +173,7 @@ export interface SessionMessagePage {
   items: Array<{
     messageId: string;
     runId?: string;
+    traceId?: string;
     role: 'user' | 'assistant' | 'system';
     contentType: string;
     content: string;
@@ -221,6 +225,7 @@ export interface SessionRagSettingUpdate {
 }
 
 export interface StreamHandlers {
+  onTrace?: (traceId: string) => void;
   onSession?: (sessionId: string) => void;
   onRun?: (run: RunStreamEvent) => void;
   onChunk?: (content: string) => void;
@@ -232,6 +237,7 @@ export interface RunStreamEvent {
   runId: string;
   status: string;
   contextRevision: number;
+  traceId?: string;
 }
 
 export interface RunControlResponse {

@@ -5,6 +5,7 @@ import cn.bugstack.ai.types.context.LoginUser;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
+import cn.bugstack.ai.types.observability.TraceContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
@@ -131,6 +132,7 @@ public class AuthFilter extends OncePerRequestFilter {
         Response<Void> body = Response.<Void>builder()
                 .code(ResponseCode.AUTH_UNAUTHORIZED.getCode())
                 .info(ResponseCode.AUTH_UNAUTHORIZED.getInfo())
+                .traceId(TraceContext.ensureTraceId())
                 .build();
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }

@@ -21,12 +21,14 @@ interface RetryRequestConfig extends InternalAxiosRequestConfig {
 export class ApiError extends Error {
   code: string;
   info: string;
+  traceId: string;
 
-  constructor(code: string, info: string) {
+  constructor(code: string, info: string, traceId = '') {
     super(info);
     this.name = 'ApiError';
     this.code = code;
     this.info = info;
+    this.traceId = traceId;
   }
 }
 
@@ -121,12 +123,48 @@ httpClient.interceptors.response.use(
 );
 
 export async function request<T>(config: AxiosRequestConfig) {
+  return (await requestWithTrace<T>(config)).data;
+}
+
+export interface TracedResult<T> {
+  data: T;
+  traceId: string;
+}
+
+export function resolveTraceId(headers?: unknown, body?: ApiResponse<unknown>) {
+  let headerTraceId = '';
+  if (headers && typeof headers === 'object') {
+    const record = headers as Record<string, unknown>;
+    if (typeof record.get === 'function') {
+      const value = (record.get as (name: string) => unknown)('x-trace-id');
+      headerTraceId = typeof value === 'string' ? value : '';
+    }
+    if (!headerTraceId) {
+      const value = record['x-trace-id'] || record['X-Trace-Id'];
+      headerTraceId = typeof value === 'string' ? value : '';
+    }
+  }
+  return headerTraceId || body?.traceId || '';
+}
+
+export function traceIdOfError(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.traceId;
+  }
+  if (axios.isAxiosError<ApiResponse<unknown>>(error)) {
+    return resolveTraceId(error.response?.headers, error.response?.data);
+  }
+  return '';
+}
+
+export async function requestWithTrace<T>(config: AxiosRequestConfig): Promise<TracedResult<T>> {
   const response = await httpClient.request<ApiResponse<T>>(config);
   const body = response.data;
+  const traceId = resolveTraceId(response.headers, body);
   if (body.code !== SUCCESS_CODE) {
-    throw new ApiError(body.code, body.info || '请求失败');
+    throw new ApiError(body.code, body.info || '请求失败', traceId);
   }
-  return body.data as T;
+  return { data: body.data as T, traceId };
 }
 
 export async function refreshAccessToken() {
@@ -145,7 +183,7 @@ export async function refreshAccessToken() {
       const body = response.data;
       if (body.code !== SUCCESS_CODE || !body.data) {
         clearAuthStorage();
-        throw new ApiError(body.code, body.info || '令牌续期失败');
+        throw new ApiError(body.code, body.info || '令牌续期失败', resolveTraceId(response.headers, body));
       }
       saveAuthTokens(body.data);
       return body.data;

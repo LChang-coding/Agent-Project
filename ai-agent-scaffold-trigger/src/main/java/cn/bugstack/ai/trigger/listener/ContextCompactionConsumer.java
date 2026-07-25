@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.context.model.ContextPolicyProperties;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
+import cn.bugstack.ai.types.observability.TraceContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -105,6 +106,9 @@ public class ContextCompactionConsumer {
     }
 
     private void bindTenantContext(ContextCompactionCommand command) {
+        TraceContext.setTraceId(command.traceId() == null || command.traceId().isBlank()
+                ? TraceContext.newTraceId()
+                : command.traceId());
         TenantContextHolder.set(TenantContext.builder()
                 .tenantId(command.tenantId())
                 .userId(command.userId())
@@ -113,6 +117,7 @@ public class ContextCompactionConsumer {
 
     private void clearContext() {
         TenantContextHolder.clear();
+        TraceContext.clear();
         MDC.clear();
     }
 }

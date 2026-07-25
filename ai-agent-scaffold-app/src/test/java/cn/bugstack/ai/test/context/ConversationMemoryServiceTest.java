@@ -192,6 +192,7 @@ public class ConversationMemoryServiceTest {
         Assert.assertEquals(Integer.valueOf(1), command.fromSequence());
         Assert.assertEquals(Integer.valueOf(3), command.toSequence());
         Assert.assertEquals(Integer.valueOf(0), command.expectedMemoryVersion());
+        Assert.assertEquals("trace_1", command.traceId());
     }
 
     /** 校验竞争任务完成等待；验证指数退避期间仍能及时识别成功。 */

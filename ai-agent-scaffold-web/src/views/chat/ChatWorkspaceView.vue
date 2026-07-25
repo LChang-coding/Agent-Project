@@ -122,6 +122,12 @@
             <button type="button" class="button button--soft" @click="copyShareLink">复制链接</button>
             <button type="button" class="icon-button" aria-label="关闭分享提示" @click="shareLink = ''">关闭</button>
           </div>
+          <div v-if="chatStore.lastTraceId" class="trace-result" :title="chatStore.lastTraceId">
+            <span>链路 {{ compactTraceId(chatStore.lastTraceId) }}</span>
+            <button type="button" class="button button--soft" @click="copyTraceId(chatStore.lastTraceId)">
+              复制 Trace ID
+            </button>
+          </div>
           <div :class="['rag-state', `rag-state--${ragStateTone}`]" :title="chatStore.ragMessage">
             <span aria-hidden="true">{{ chatStore.ragMode === 'AUTO' ? 'A' : chatStore.ragMode === 'MANUAL' ? 'M' : '—' }}</span>
             <strong>{{ chatStore.ragMessage }}</strong>
@@ -171,6 +177,16 @@
                 <span v-if="message.status === 'error'" class="mini-badge mini-badge--red">失败</span>
                 <span v-if="message.status === 'canceled'" class="mini-badge mini-badge--red">已取消</span>
                 <span v-if="message.status === 'superseded'" class="mini-badge">已被引导替代</span>
+                <button
+                  v-if="message.traceId"
+                  type="button"
+                  class="message-trace"
+                  :title="message.traceId"
+                  :aria-label="`复制消息链路号 ${message.traceId}`"
+                  @click="copyTraceId(message.traceId)"
+                >
+                  {{ compactTraceId(message.traceId) }}
+                </button>
               </div>
               <p>{{ message.content || '...' }}</p>
             </article>
@@ -998,6 +1014,22 @@ async function copyShareLink() {
   }
 }
 
+/** 复制请求链路号；参数是完整链路号；失败时给出可见反馈。 */
+async function copyTraceId(traceId: string) {
+  if (!traceId) return;
+  try {
+    await navigator.clipboard.writeText(traceId);
+    windowFeedback.value = `已复制链路号 ${compactTraceId(traceId)}`;
+  } catch {
+    chatStore.errorMessage = `浏览器未授权访问剪贴板，请手动复制链路号：${traceId}`;
+  }
+}
+
+/** 紧凑显示链路号；参数是完整链路号；保留首尾便于人工核对。 */
+function compactTraceId(traceId: string) {
+  return traceId.length > 20 ? `${traceId.slice(0, 8)}…${traceId.slice(-8)}` : traceId;
+}
+
 /**
  * 查看前一段已加载消息，或在最早窗口按需请求一页历史；保持首条可见消息锚点。
  */
@@ -1246,6 +1278,26 @@ function formatOptionalTokens(value?: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trace-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 5px 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.trace-result .button {
+  min-height: 26px;
+  padding: 3px 9px;
+  font-family: inherit;
+  font-size: 11px;
 }
 
 .rag-state {
@@ -1844,6 +1896,24 @@ function formatOptionalTokens(value?: number) {
   opacity: 0.68;
   font-size: 11px;
   font-weight: 850;
+}
+
+.message-trace {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.8;
+}
+
+.message-trace:hover,
+.message-trace:focus-visible {
+  opacity: 1;
+  outline: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 1px;
 }
 
 .message p {

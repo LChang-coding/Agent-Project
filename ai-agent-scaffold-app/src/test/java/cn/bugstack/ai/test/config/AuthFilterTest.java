@@ -5,6 +5,7 @@ import cn.bugstack.ai.config.security.JwtProperties;
 import cn.bugstack.ai.config.security.JwtTokenService;
 import cn.bugstack.ai.types.context.LoginUser;
 import cn.bugstack.ai.types.context.TenantContextHolder;
+import cn.bugstack.ai.types.observability.TraceContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import org.junit.After;
@@ -43,6 +44,7 @@ public class AuthFilterTest {
     public void clearContext() {
         SecurityContextHolder.clearContext();
         TenantContextHolder.clear();
+        TraceContext.clear();
     }
 
     @Test
@@ -50,6 +52,7 @@ public class AuthFilterTest {
         MockHttpServletRequest request = request("not-a-jwt");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicBoolean invoked = new AtomicBoolean();
+        TraceContext.setTraceId("trace-auth-failure");
 
         authFilter.doFilter(request, response, (ignoredRequest, ignoredResponse) -> invoked.set(true));
 
@@ -57,6 +60,7 @@ public class AuthFilterTest {
         assertFalse(invoked.get());
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         assertNull(TenantContextHolder.get());
+        assertTrue(response.getContentAsString().contains("\"traceId\":\"trace-auth-failure\""));
     }
 
     @Test

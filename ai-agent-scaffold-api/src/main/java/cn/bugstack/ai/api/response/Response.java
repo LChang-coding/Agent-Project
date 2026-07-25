@@ -17,6 +17,7 @@ public class Response<T> implements Serializable {
 
     private String code;
     private String info;
+    private String traceId;
     private T data;
 
 }

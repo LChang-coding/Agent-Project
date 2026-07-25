@@ -2,6 +2,7 @@ package cn.bugstack.ai.config.security;
 
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.types.enums.ResponseCode;
+import cn.bugstack.ai.types.observability.TraceContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.DispatcherType;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -47,6 +48,7 @@ public class SecurityConfig {
                     Response<Void> body = Response.<Void>builder()
                             .code(ResponseCode.AUTH_UNAUTHORIZED.getCode())
                             .info(ResponseCode.AUTH_UNAUTHORIZED.getInfo())
+                            .traceId(TraceContext.ensureTraceId())
                             .build();
                     response.getWriter().write(objectMapper.writeValueAsString(body));
                 }))

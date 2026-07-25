@@ -6,6 +6,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.http.HttpHeaders;
 
 public class TraceIdFilterTest {
 
@@ -22,6 +23,9 @@ public class TraceIdFilterTest {
 
         Assert.assertEquals("trace-from-client", traceIdInRequest[0]);
         Assert.assertEquals("trace-from-client", response.getHeader(TraceContext.TRACE_ID_HEADER));
+        Assert.assertEquals("trace-from-client", request.getAttribute(TraceContext.TRACE_ID_REQUEST_ATTRIBUTE));
+        Assert.assertEquals(TraceContext.TRACE_ID_HEADER,
+                response.getHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS));
         Assert.assertNull(TraceContext.getTraceId());
     }
 

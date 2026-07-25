@@ -222,6 +222,7 @@ public class SessionController {
 
     private SessionMessageResponseDTO toMessage(ChatMessageEntity message) {
         return SessionMessageResponseDTO.builder().messageId(message.getMessageId()).runId(message.getRunId())
+                .traceId(message.getTraceId())
                 .role(message.getRole()).contentType(message.getContentType()).content(message.getContent())
                 .estimatedTokenCount(message.getEstimatedTokenCount()).sequenceNo(message.getSequenceNo())
                 .createTime(message.getCreateTime()).citationValidation(toCitationDTO(citationMetadataService.parse(message))).build();

@@ -8,6 +8,7 @@ import {
   sendChatMessageStream,
   steerChatRun,
 } from '@/api/agent';
+import { traceIdOfError } from '@/api/http';
 import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import {
   deleteChatSession,
@@ -45,6 +46,8 @@ interface ActiveChatRequest {
   sessionId: string;
   runId: string;
   assistantMessageId: string;
+  userMessageId: string;
+  traceId: string;
   sessionTitle: string;
   controller: AbortController;
   typewriter?: TypewriterController;
@@ -82,6 +85,7 @@ interface ChatState {
   currentRunId: string;
   contextRevision: number;
   lastSettledRunId: string;
+  lastTraceId: string;
   insightRefreshVersion: number;
   errorMessage: string;
   loadingSessions: boolean;
@@ -123,6 +127,7 @@ export const useChatStore = defineStore('chat', {
     currentRunId: '',
     contextRevision: 0,
     lastSettledRunId: '',
+    lastTraceId: '',
     insightRefreshVersion: 0,
     errorMessage: '',
     loadingSessions: false,
@@ -188,6 +193,7 @@ export const useChatStore = defineStore('chat', {
       this.activeAgentId = agentId;
       this.sessionId = '';
       this.messages = [];
+      this.lastTraceId = '';
       this.resetRagSettingState();
       this.resetMessageHistoryState();
       this.errorMessage = '';
@@ -206,6 +212,7 @@ export const useChatStore = defineStore('chat', {
       }
       this.sessionId = '';
       this.messages = [];
+      this.lastTraceId = '';
       this.resetRagSettingState();
       this.resetMessageHistoryState();
       this.errorMessage = '';
@@ -220,6 +227,7 @@ export const useChatStore = defineStore('chat', {
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
       this.messages = [];
+      this.lastTraceId = '';
       this.resetRagSettingState();
       this.resetMessageHistoryState();
       this.saveCurrentSession('新会话');
@@ -257,6 +265,7 @@ export const useChatStore = defineStore('chat', {
       this.ragSaving = false;
       this.ragMessage = this.ragEnabled ? '正在检查知识库绑定…' : 'RAG已关闭。';
       this.messages = [];
+      this.lastTraceId = '';
       this.resetMessageHistoryState(false);
       await Promise.all([this.reloadSessionMessages(sessionId), this.loadRagSetting(sessionId)]);
     },
@@ -278,6 +287,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         this.messages = page.items.map(toChatMessage);
+        this.lastTraceId = [...this.messages].reverse().find((message) => message.traceId)?.traceId || '';
         this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
         this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         this.errorMessage = '';
@@ -415,6 +425,8 @@ export const useChatStore = defineStore('chat', {
         sessionId: this.sessionId,
         runId: effectiveRunId,
         assistantMessageId,
+        userMessageId: userMessage.id,
+        traceId: '',
         sessionTitle: userMessage.content,
         controller,
         cancelRequested: false,
@@ -441,6 +453,9 @@ export const useChatStore = defineStore('chat', {
           await sendChatMessageStream(
             this.buildChatPayload(auth.userId, userMessage.content, undefined, effectiveRunId, effectiveAttachmentIds),
             {
+              onTrace: (traceId) => {
+                this.bindTrace(request, traceId);
+              },
               onSession: (sessionId) => {
                 if (!this.isRequestCurrent(request) || request.cancelRequested) {
                   return;
@@ -491,6 +506,7 @@ export const useChatStore = defineStore('chat', {
         }
         request.sessionId = response.sessionId;
         request.runId = response.runId;
+        this.bindTrace(request, response.traceId || '');
         this.currentRunId = response.runId;
         this.contextRevision = response.contextRevision;
         this.sessionId = response.sessionId;
@@ -498,6 +514,7 @@ export const useChatStore = defineStore('chat', {
         this.updateMessageStatus(assistantMessageId, 'done');
         this.saveCurrentSession(userMessage.content);
       } catch (error) {
+        this.bindTrace(request, traceIdOfError(error));
         if (isAbortError(error) || request.cancelRequested || !this.isRequestCurrent(request)) {
           return;
         }
@@ -684,7 +701,27 @@ export const useChatStore = defineStore('chat', {
       request.runId = run.runId;
       this.currentRunId = run.runId;
       this.contextRevision = run.contextRevision;
+      this.bindTrace(request, run.traceId || '');
       request.resolveRunReady();
+    },
+
+    /**
+     * 绑定请求链路号；参数是当前请求和链路号；同步到本轮消息及顶部状态。
+     */
+    bindTrace(request: ActiveChatRequest, traceId: string) {
+      if (!traceId || !this.isRequestCurrent(request)) {
+        return;
+      }
+      request.traceId = traceId;
+      this.lastTraceId = traceId;
+      const userMessage = this.messages.find((message) => message.id === request.userMessageId);
+      const assistantMessage = this.messages.find((message) => message.id === request.assistantMessageId);
+      if (userMessage) {
+        userMessage.traceId = traceId;
+      }
+      if (assistantMessage) {
+        assistantMessage.traceId = traceId;
+      }
     },
 
     /**
@@ -1021,6 +1058,7 @@ function toChatMessage(message: SessionMessagePage['items'][number]): ChatMessag
     content: message.content,
     createdAt: message.createTime,
     status: 'done',
+    traceId: message.traceId,
   };
 }
 

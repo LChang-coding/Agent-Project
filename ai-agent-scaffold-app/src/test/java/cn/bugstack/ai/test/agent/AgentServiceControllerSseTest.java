@@ -14,6 +14,8 @@ import io.reactivex.rxjava3.disposables.Disposable;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -28,11 +30,25 @@ public class AgentServiceControllerSseTest {
         CapturingEmitter emitter = new CapturingEmitter();
 
         ReflectionTestUtils.invokeMethod(controller, "completeSseWithError", emitter,
-                new AppException("ASSET_BIND_DENIED", "附件已用于其他消息"));
+                new AppException("ASSET_BIND_DENIED", "附件已用于其他消息"), "trace-sse-error");
 
         Assert.assertTrue(emitter.sent);
         Assert.assertTrue(emitter.completed);
         Assert.assertFalse(emitter.completedWithError);
+        Assert.assertTrue(emitter.data.stream().anyMatch(item -> item instanceof Map<?, ?> map
+                && "trace-sse-error".equals(map.get("traceId"))
+                && "ASSET_BIND_DENIED".equals(map.get("code"))));
+    }
+
+    @Test
+    public void shouldSendTraceMetadataBeforeBusinessEvents() {
+        AgentServiceController controller = new AgentServiceController();
+        CapturingEmitter emitter = new CapturingEmitter();
+
+        ReflectionTestUtils.invokeMethod(controller, "sendTraceMetadata", emitter, "trace-sse-first");
+
+        Assert.assertTrue(emitter.data.stream().anyMatch(item -> item instanceof Map<?, ?> map
+                && "trace-sse-first".equals(map.get("traceId"))));
     }
 
     @Test
@@ -89,10 +105,12 @@ public class AgentServiceControllerSseTest {
         private boolean sent;
         private boolean completed;
         private boolean completedWithError;
+        private final List<Object> data = new ArrayList<>();
 
         @Override
         public void send(SseEventBuilder builder) throws IOException {
             sent = true;
+            builder.build().forEach(item -> data.add(item.getData()));
         }
 
         @Override

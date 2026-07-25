@@ -14,6 +14,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.TraceContext;
 import io.reactivex.rxjava3.disposables.Disposable;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -187,7 +188,9 @@ public class AgentServiceController implements IAgentService {
     @Override
     public ResponseBodyEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
+        String traceId = TraceContext.ensureTraceId();
         try {
+            sendTraceMetadata(emitter, traceId);
             String userId = trustedUserId(requestDTO.getUserId());
             log.info("流式对话已受理 agentId:{} workflowId:{} modelCode:{} userId:{} sessionId:{} messageLength:{} attachmentCount:{}",
                     requestDTO.getAgentId(), requestDTO.getWorkflowId(), requestDTO.getModelCode(), userId,
@@ -214,11 +217,12 @@ public class AgentServiceController implements IAgentService {
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
-                        "contextRevision", runStream.getRun().getCurrentContextRevision())));
+                        "contextRevision", runStream.getRun().getCurrentContextRevision(),
+                        "traceId", traceId)));
                 if (!interruptRequested.get()) {
                     attachDisposable(disposableRef, interruptRequested,
                             subscribeWorkflowTextStream(runStream.getStream(), emitter, disposableRef,
-                                    TenantContextHolder.getTenantId(), userId, sessionId, runId));
+                                    TenantContextHolder.getTenantId(), userId, sessionId, runId, traceId));
                 }
             } else {
                 RunStreamEntity<Event> runStream = chatService.startMessageStream(requestDTO.getAgentId(), userId,
@@ -228,16 +232,17 @@ public class AgentServiceController implements IAgentService {
                 emitter.send(SseEmitter.event().name("run").data(java.util.Map.of(
                         "runId", runId,
                         "status", runStream.getRun().getStatus().name().toLowerCase(),
-                        "contextRevision", runStream.getRun().getCurrentContextRevision())));
+                        "contextRevision", runStream.getRun().getCurrentContextRevision(),
+                        "traceId", traceId)));
                 if (!interruptRequested.get()) {
                     attachDisposable(disposableRef, interruptRequested,
                             subscribeAgentEventStream(runStream.getStream(), emitter, disposableRef,
-                                    TenantContextHolder.getTenantId(), userId, sessionId, runId));
+                                    TenantContextHolder.getTenantId(), userId, sessionId, runId, traceId));
                 }
             }
         } catch (Exception e) {
             log.error("流式对话失败", e);
-            completeSseWithError(emitter, e);
+            completeSseWithError(emitter, e, traceId);
         }
         return emitter;
     }
@@ -301,11 +306,12 @@ public class AgentServiceController implements IAgentService {
     private Disposable subscribeWorkflowTextStream(Flowable<String> stream,
                                                     SseEmitter emitter,
                                                     AtomicReference<Disposable> disposableRef,
-                                                    String tenantId, String userId, String sessionId, String runId) {
+                                                    String tenantId, String userId, String sessionId, String runId,
+                                                    String traceId) {
         return stream.subscribe(
                 content -> sendMessage(emitter, disposableRef, content),
-                error -> completeSseWithError(emitter, error),
-                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId)
+                error -> completeSseWithError(emitter, error, traceId),
+                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId, traceId)
         );
     }
 
@@ -332,18 +338,24 @@ public class AgentServiceController implements IAgentService {
     private Disposable subscribeAgentEventStream(Flowable<Event> stream,
                                                   SseEmitter emitter,
                                                   AtomicReference<Disposable> disposableRef,
-                                                  String tenantId, String userId, String sessionId, String runId) {
+                                                  String tenantId, String userId, String sessionId, String runId,
+                                                  String traceId) {
         AtomicReference<String> lastContentRef = new AtomicReference<>("");
         return stream.subscribe(
                 event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
-                error -> completeSseWithError(emitter, error),
-                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId)
+                error -> completeSseWithError(emitter, error, traceId),
+                () -> completeSseWithCitation(emitter, tenantId, userId, sessionId, runId, traceId)
         );
     }
 
     /** 在业务事务已提交后发送唯一引用终态事件。 */
     private void completeSseWithCitation(SseEmitter emitter, String tenantId, String userId,
                                          String sessionId, String runId) {
+        completeSseWithCitation(emitter, tenantId, userId, sessionId, runId, TraceContext.ensureTraceId());
+    }
+
+    private void completeSseWithCitation(SseEmitter emitter, String tenantId, String userId,
+                                         String sessionId, String runId, String traceId) {
         try {
             RagAnswerCitationMetadataService.AnswerSnapshot snapshot = citationMetadataService.queryRunAnswer(
                     tenantId, userId, sessionId, runId);
@@ -354,7 +366,7 @@ public class AgentServiceController implements IAgentService {
             }
             emitter.complete();
         } catch (Exception exception) {
-            completeSseWithError(emitter, exception);
+            completeSseWithError(emitter, exception, traceId);
         }
     }
 
@@ -397,6 +409,10 @@ public class AgentServiceController implements IAgentService {
      * 将流式业务异常编码成合法 SSE error 事件；参数是响应和异常；无返回值。
      */
     private void completeSseWithError(SseEmitter emitter, Throwable error) {
+        completeSseWithError(emitter, error, TraceContext.ensureTraceId());
+    }
+
+    private void completeSseWithError(SseEmitter emitter, Throwable error, String traceId) {
         String code = ResponseCode.UN_ERROR.getCode();
         String message = ResponseCode.UN_ERROR.getInfo();
         if (error instanceof AppException appException) {
@@ -405,13 +421,22 @@ public class AgentServiceController implements IAgentService {
         }
         String safeMessage = message == null || message.isBlank() ? ResponseCode.UN_ERROR.getInfo() : message;
         try {
-            // 使用纯文本数据，保证 SSE 已提交后不再经过普通 JSON Response 转换器。
-            emitter.send(SseEmitter.event().name("error").data(safeMessage));
+            emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
+                    "code", code,
+                    "message", safeMessage,
+                    "traceId", traceId)));
         } catch (Exception sendError) {
             log.debug("SSE 错误事件发送失败 code:{}", code, sendError);
         } finally {
             emitter.complete();
         }
+    }
+
+    /**
+     * 在业务事件之前发送本次请求的链路标识；参数是 SSE 和链路标识；无返回值。
+     */
+    private void sendTraceMetadata(SseEmitter emitter, String traceId) throws java.io.IOException {
+        emitter.send(SseEmitter.event().name("trace").data(java.util.Map.of("traceId", traceId)));
     }
 
     /**

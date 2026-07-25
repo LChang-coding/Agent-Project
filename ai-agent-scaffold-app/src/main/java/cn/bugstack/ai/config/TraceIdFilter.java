@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -25,12 +26,14 @@ public class TraceIdFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String traceId = TraceContext.normalizeOrNew(request.getHeader(TraceContext.TRACE_ID_HEADER));
+        request.setAttribute(TraceContext.TRACE_ID_REQUEST_ATTRIBUTE, traceId);
 
         long start = System.currentTimeMillis();
         Throwable failure = null;
         try {
             TraceContext.setTraceId(traceId);
             response.setHeader(TraceContext.TRACE_ID_HEADER, traceId);
+            response.addHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, TraceContext.TRACE_ID_HEADER);
             filterChain.doFilter(request, response);
         } catch (ServletException | IOException | RuntimeException | Error ex) {
             failure = ex;
