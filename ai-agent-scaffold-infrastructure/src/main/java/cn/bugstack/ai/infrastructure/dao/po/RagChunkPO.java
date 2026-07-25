@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 文档版本中可检索分块的正文、结构位置和向量映射。 */
 @Data
 @Builder
 @AllArgsConstructor
@@ -38,10 +39,13 @@ public class RagChunkPO extends BasePO {
      */
     private String documentId;
 
+    /** 来源文档的人类可见版本号。 */
     private Integer documentVersion;
 
+    /** 来源不可变文档版本 ID。 */
     private String versionId;
 
+    /** 来源索引代次。 */
     private Long generation;
 
     /**
@@ -54,20 +58,28 @@ public class RagChunkPO extends BasePO {
      */
     private Integer chunkIndex;
 
+    /** 层级分块的父块 ID。 */
     private String parentChunkId;
 
+    /** 同文档前一分块 ID。 */
     private String previousChunkId;
 
+    /** 同文档后一分块 ID。 */
     private String nextChunkId;
 
+    /** 标题层级组成的结构路径。 */
     private String sectionPath;
 
+    /** 分块起始页。 */
     private Integer pageFrom;
 
+    /** 分块结束页。 */
     private Integer pageTo;
 
+    /** 规范化全文中的起始字符偏移。 */
     private Integer charStart;
 
+    /** 规范化全文中的结束字符偏移。 */
     private Integer charEnd;
 
     /**
@@ -75,6 +87,7 @@ public class RagChunkPO extends BasePO {
      */
     private String content;
 
+    /** 分块正文摘要，用于幂等和证据核验。 */
     private String contentHash;
 
     /**
@@ -87,6 +100,7 @@ public class RagChunkPO extends BasePO {
      */
     private String embeddingId;
 
+    /** Qdrant 点 ID；与业务 chunkId 分离。 */
     private String vectorPointId;
 
     /**
@@ -94,6 +108,7 @@ public class RagChunkPO extends BasePO {
      */
     private String status;
 
+    /** 行级乐观并发修订号。 */
     private Long revision;
 
     /**

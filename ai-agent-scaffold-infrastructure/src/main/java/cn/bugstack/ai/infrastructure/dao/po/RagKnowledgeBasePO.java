@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+/** 租户知识库定义、向量集合别名和当前索引代次。 */
 @Data
 @Builder
 @AllArgsConstructor
@@ -48,14 +49,19 @@ public class RagKnowledgeBasePO extends BasePO {
      */
     private String embeddingModel;
 
+    /** 向量集合固定维度。 */
     private Integer embeddingDimension;
 
+    /** 指向当前物理集合的稳定 Qdrant 别名。 */
     private String collectionAlias;
 
+    /** 知识库当前激活代次。 */
     private Long currentGeneration;
 
+    /** 知识库默认检索策略 ID。 */
     private String retrievalProfileId;
 
+    /** 聚合根乐观并发修订号。 */
     private Long revision;
 
     /**

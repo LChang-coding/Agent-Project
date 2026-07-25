@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RagIngestCandidatePO {
+    /** 候选任务所属租户；领取时必须回带。 */
     private String tenantId;
+    /** 候选摄取任务 ID；不是完整任务快照。 */
     private String jobId;
 }

@@ -8,6 +8,8 @@ import lombok.Data;
  */
 @Data
 public class RagOutboxCandidatePO {
+    /** 待发布事件 ID。 */
     private String eventId;
+    /** 事件所属租户；领取时必须回带。 */
     private String tenantId;
 }
