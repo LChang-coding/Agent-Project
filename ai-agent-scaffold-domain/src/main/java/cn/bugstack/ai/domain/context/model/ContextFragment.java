@@ -8,11 +8,16 @@ import lombok.Getter;
 @Getter
 public final class ContextFragment {
 
+    /** 片段类别与预算优先级。 */
     private final ContextFragmentType type;
+    /** 完整候选文本。 */
     private final String content;
+    /** 此类别允许占用的 Token 上限。 */
     private final int maxTokens;
+    /** RAG 类别专属的引用证据。 */
     private final RagContextEvidence ragEvidence;
 
+    /** 仅允许工厂方法创建经过约束校验的不可变片段。 */
     private ContextFragment(ContextFragmentType type, String content, int maxTokens, RagContextEvidence ragEvidence) {
         this.type = type;
         this.content = content;

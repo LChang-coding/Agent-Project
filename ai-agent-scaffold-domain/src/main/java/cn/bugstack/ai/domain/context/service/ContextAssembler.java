@@ -13,6 +13,7 @@ import java.util.List;
  */
 public class ContextAssembler {
 
+    /** 统一测量候选片段和总预算。 */
     private final TokenCounter tokenCounter;
 
     /**
@@ -34,11 +35,13 @@ public class ContextAssembler {
         }
         int remaining = budget.availableTokens();
         List<ContextFragment> result = new ArrayList<>();
+        // 优先级排序保证长期记忆和最近对话先于可重新检索的 RAG。
         List<ContextFragment> candidates = fragments.stream()
                 .sorted(Comparator.comparingInt((ContextFragment fragment) -> fragment.getType().getPriority()).reversed())
                 .toList();
         for (ContextFragment fragment : candidates) {
             int tokens = tokenCounter.estimate(fragment.getContent());
+            // 结构化片段只整段保留或整段丢弃，禁止字符截断破坏引用和摘要结构。
             if (tokens <= fragment.getMaxTokens() && tokens <= remaining) {
                 result.add(fragment);
                 remaining -= tokens;

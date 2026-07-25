@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * 上下文片段贡献接口。
- * <p>RAG 后续实现该接口即可参与上下文组装。</p>
+ * <p>附件与 RAG 实现该接口，并由统一预算组装器决定是否注入。</p>
  */
 public interface ContextContributor {
 

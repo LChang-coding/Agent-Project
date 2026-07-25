@@ -22,13 +22,21 @@ import org.springframework.stereotype.Service;
 @Service
 public class ContextInsightService {
 
+    /** 校验会话所有权并读取版本。 */
     private final SessionDomain sessionDomain;
+    /** 按生产口径预览上下文。 */
     private final ConversationMemoryService memoryService;
+    /** 读取最近压缩状态。 */
     private final IContextCompactionTaskRepository taskRepository;
+    /** 汇总工具调用事实。 */
     private final IToolRepository toolRepository;
+    /** 提供模型窗口和各类预算。 */
     private final ContextPolicyProperties properties;
+    /** 提供实际 Agent 系统指令。 */
     private final AiAgentAutoConfigProperties agentProperties;
+    /** 统计当前窗口可见附件。 */
     private final IAssetRepository assetRepository;
+    /** 估算系统指令 Token。 */
     private final CharacterTokenCounter tokenCounter = new CharacterTokenCounter();
 
     /**
@@ -57,6 +65,7 @@ public class ContextInsightService {
         ContextAssemblyResult assembly = memoryService.preview(ContextAssembleRequest.builder()
                 .tenantId(session.getTenantId()).userId(session.getUserId()).sessionId(session.getSessionId())
                 .visibleThroughSequence(visibleThrough).build());
+        // 复用生产组装链读取真实数据库与缓存事实，不接受前端上报估值。
         int systemTokens = systemTokens(session);
         int effectiveTokens = systemTokens + safe(assembly.getEstimatedTokenCount());
         int window = properties.getModelWindowTokens();
@@ -82,6 +91,7 @@ public class ContextInsightService {
                 .trimReason(assembly.getTrimReason()).build();
     }
 
+    /** 从当前会话实际应用配置中估算系统指令 Token。 */
     private int systemTokens(ChatSessionEntity session) {
         if (agentProperties.getTables() == null) {
             return 0;
@@ -93,10 +103,12 @@ public class ContextInsightService {
                 .filter(value -> value != null && !value.isBlank()).mapToInt(tokenCounter::estimate).sum();
     }
 
+    /** 将可空 Token 统计归一为零。 */
     private int safe(Integer value) {
         return value == null ? 0 : value;
     }
 
+    /** 将数据库长整型计数安全收敛为前端整型。 */
     private int safeCount(Long value) {
         if (value == null || value <= 0) {
             return 0;

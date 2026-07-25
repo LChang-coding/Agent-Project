@@ -19,8 +19,11 @@ import java.util.List;
 @Service
 public class ContextInvalidationService {
 
+    /** 废弃未完成或重叠压缩任务。 */
     private final IContextCompactionTaskRepository taskRepository;
+    /** 作废污染摘要并恢复安全祖先。 */
     private final IConversationMemoryRepository memoryRepository;
+    /** 提交后清除可重建上下文缓存。 */
     private final IContextCacheRepository cacheRepository;
 
     /**
@@ -41,6 +44,7 @@ public class ContextInvalidationService {
     public void invalidateRun(String tenantId, String userId, String sessionId, String runId,
                               List<ChatMessageEntity> runMessages, String reason) {
         if (runMessages == null || runMessages.isEmpty()) {
+            // 即使尚未落消息，也按 runId 废弃其未完成任务并清缓存。
             taskRepository.staleOverlapping(tenantId, userId, sessionId, runId,
                     Integer.MAX_VALUE, Integer.MIN_VALUE, reason);
             evictAfterCommit(tenantId, userId, sessionId);
@@ -51,6 +55,7 @@ public class ContextInvalidationService {
         int maxSequence = runMessages.stream().map(ChatMessageEntity::getSequenceNo).filter(value -> value != null)
                 .max(Comparator.naturalOrder()).orElse(Integer.MIN_VALUE);
         if (minSequence != Integer.MAX_VALUE) {
+            // 已完成摘要只要覆盖任一失效消息就必须作废，并恢复不越过该序号的祖先摘要。
             taskRepository.staleOverlapping(tenantId, userId, sessionId, runId, minSequence, maxSequence, reason);
             memoryRepository.invalidateCoveringAndRestore(tenantId, userId, sessionId, minSequence);
         }
@@ -67,6 +72,7 @@ public class ContextInvalidationService {
         evictAfterCommit(tenantId, userId, sessionId);
     }
 
+    /** 在事务提交后清理可重建缓存，回滚时保留原可见事实。 */
     private void evictAfterCommit(String tenantId, String userId, String sessionId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             cacheRepository.evictSession(tenantId, userId, sessionId);

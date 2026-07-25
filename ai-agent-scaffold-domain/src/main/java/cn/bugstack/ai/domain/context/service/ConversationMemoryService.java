@@ -59,28 +59,50 @@ import java.util.Objects;
 @Service
 public class ConversationMemoryService {
 
+    /** 数据库中唯一可注入的摘要状态。 */
     private static final String STATUS_ACTIVE = "active";
+    /** 结构化摘要正文键。 */
     private static final String KEY_SUMMARY = "conversationSummary";
+    /** 已确认决策数组键。 */
     private static final String KEY_DECISIONS = "confirmedDecisions";
+    /** 持续约束数组键。 */
     private static final String KEY_CONSTRAINTS = "constraints";
+    /** 未完成事项数组键。 */
     private static final String KEY_OPEN_ITEMS = "openItems";
+    /** 关键实体数组键。 */
     private static final String KEY_ENTITIES = "keyEntities";
+    /** 服务端覆盖范围元数据键。 */
     private static final String KEY_SOURCE_RANGE = "sourceRange";
+    /** 等待其他消费者压缩时的初始轮询间隔。 */
     private static final long COMPACTION_WAIT_INITIAL_INTERVAL_MS = 50L;
+    /** 压缩等待轮询间隔上限。 */
     private static final long COMPACTION_WAIT_MAX_INTERVAL_MS = 1_000L;
 
+    /** 长期摘要的数据库真相源。 */
     private final IConversationMemoryRepository memoryRepository;
+    /** 压缩任务的持久化执行账本。 */
     private final IContextCompactionTaskRepository taskRepository;
+    /** 只返回有效消息的数据库历史端口。 */
     private final IContextHistoryRepository historyRepository;
+    /** 可丢弃、可重建的摘要与短期窗口缓存。 */
     private final IContextCacheRepository cacheRepository;
+    /** 压缩任务即时通知端口。 */
     private final ContextCompactionPublisher publisher;
+    /** 调用模型生成摘要的适配端口。 */
     private final ContextCompressionPort compressionPort;
+    /** 附件、RAG 等外部上下文贡献方。 */
     private final List<ContextContributor> contributors;
+    /** 当前模型窗口与压缩策略。 */
     private final ContextPolicyProperties properties;
+    /** 上下文预算使用的统一估算器。 */
     private final TokenCounter tokenCounter;
+    /** 结构化摘要 JSON 校验器。 */
     private final ObjectMapper objectMapper;
+    /** 会话所有权、锁和版本操作入口。 */
     private final SessionDomain sessionDomain;
+    /** 按会话 Agent 获取真实模型的延迟依赖。 */
     private final ObjectProvider<DefaultArmoryFactory> defaultArmoryFactoryProvider;
+    /** 将模型调用外置、仅包裹激活阶段的事务依赖。 */
     private final ObjectProvider<PlatformTransactionManager> transactionManagerProvider;
 
     /**
@@ -127,8 +149,10 @@ public class ConversationMemoryService {
         return assembleInternal(request, true);
     }
 
+    /** 按同一口径组装生产上下文或只读预览，预览不写任何缓存。 */
     private ContextAssemblyResult assembleInternal(ContextAssembleRequest request, boolean readOnly) {
         if (ragRequested(request) && (!properties.isEnabled() || properties.getRagTokens() < 1)) {
+            // 会话要求 RAG 时禁止静默退化为普通聊天。
             throw new AppException("RAG_REQUIRED_CONTEXT_DISABLED",
                     "会话已开启RAG，但Context Manager或RAG上下文预算未启用");
         }
@@ -141,6 +165,7 @@ public class ConversationMemoryService {
                 ? memoryRepository.queryActive(request.getTenantId(), request.getUserId(), request.getSessionId())
                 : queryActiveSnapshot(request.getTenantId(), request.getUserId(), request.getSessionId());
         int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
+        // 只读取摘要覆盖点之后且本次调用可见的有效数据库消息。
         int visibleThrough = request.getVisibleThroughSequence() == null ? coveredToSequence : request.getVisibleThroughSequence();
         List<ChatMessageEntity> messages = visibleThrough > coveredToSequence
                 ? (readOnly ? historyRepository.queryMessages(request.getTenantId(), request.getUserId(),
@@ -175,6 +200,7 @@ public class ConversationMemoryService {
                 .ragQuery(request.getRagQuery())
                 .runId(request.getRunId()).build();
         for (ContextContributor contributor : contributors) {
+            // 附件和 RAG 通过贡献端口加入候选集，最终仍受统一总预算裁决。
             List<ContextContribution> contributions = contributor.contribute(contributorRequest, properties);
             if (contributions == null) {
                 continue;
@@ -199,6 +225,7 @@ public class ConversationMemoryService {
         boolean historySelected = selected.stream().anyMatch(fragment -> fragment.getType() == ContextFragmentType.RECENT_CONVERSATION);
         boolean recentWindowTrimmed = messages.size() > recentMessages.size();
         boolean totalBudgetTrimmed = !recentMessages.isEmpty() && !historySelected;
+        // 观测结果区分“短期类别预算裁剪”和“模型总窗口裁剪”。
         boolean trimmed = recentWindowTrimmed || totalBudgetTrimmed;
         log.info("上下文组装完成 tenantId:{} userId:{} sessionId:{} visibleThrough:{} memoryVersion:{} injectedTokens:{} trimmed:{}",
                 request.getTenantId(), request.getUserId(), request.getSessionId(), visibleThrough,
@@ -227,6 +254,7 @@ public class ConversationMemoryService {
                 && !isBlank(request.getRagTargetId()) && !isBlank(request.getRagQuery());
     }
 
+    /** 汇总某类实际入选片段的 Token 数。 */
     private int selectedTokens(List<ContextFragment> fragments, ContextFragmentType type) {
         return fragments.stream().filter(fragment -> fragment.getType() == type)
                 .mapToInt(fragment -> tokenCounter.estimate(fragment.getContent())).sum();
@@ -263,6 +291,7 @@ public class ConversationMemoryService {
         int uncoveredTokens = historyRepository.sumEstimatedTokens(assistantMessage.getTenantId(), assistantMessage.getUserId(),
                 assistantMessage.getSessionId(), coveredToSequence, assistantMessage.getSequenceNo());
         if (uncoveredTokens < properties.getCompactionMinUncoveredTokens()) {
+            // 发送完成后仅当未覆盖窗口越过阈值才异步创建压缩任务。
             return;
         }
 
@@ -289,6 +318,7 @@ public class ConversationMemoryService {
                 .traceId(assistantMessage.getTraceId())
                 .build());
         if (task != null && (task.getStatus() == ContextCompactionTaskStatus.PENDING || task.getStatus() == ContextCompactionTaskStatus.RETRYING)) {
+            // MySQL 账本先落地，Kafka 只负责通知；重复通知由任务状态与 claim 消解。
             publisher.publish(task.toCommand());
             log.info("上下文压缩任务已创建 tenantId:{} userId:{} sessionId:{} taskId:{} range:{}-{} uncoveredTokens:{}",
                     task.getTenantId(), task.getUserId(), task.getSessionId(), task.getTaskId(),
@@ -321,6 +351,7 @@ public class ConversationMemoryService {
         int activeVersion = ConversationMemorySnapshotEntity.versionOf(active);
         if (activeVersion != safe(task.getExpectedMemoryVersion())) {
             if (ConversationMemorySnapshotEntity.coveredSequenceOf(active) >= safe(task.getToSequence())) {
+                // 另一任务已覆盖同一范围，当前任务可幂等完成而不再调用模型。
                 taskRepository.complete(taskId);
                 return;
             }
@@ -335,12 +366,14 @@ public class ConversationMemoryService {
         }
         long currentRevision = sessionRevision(task.getTenantId(), task.getUserId(), task.getSessionId());
         if (task.getBaseContextRevision() != null && task.getBaseContextRevision() != currentRevision) {
+            // 取消或引导会推进版本，旧任务即使已领取也不得继续提交。
             throw new IllegalStateException("上下文版本已变化，压缩结果禁止激活");
         }
         String attachmentContext = attachmentContext(task.getTenantId(), task.getUserId(), task.getSessionId(),
                 safe(task.getFromSequence()) - 1, task.getToSequence());
         String currentHash = coverageHash(messages, task.getFromSequence(), task.getToSequence(), attachmentContext);
         if (!isBlank(task.getCoverageHash()) && !task.getCoverageHash().equals(currentHash)) {
+            // 有效消息或附件发生变化时禁止用旧输入摘要覆盖新事实。
             throw new IllegalStateException("有效消息集合已变化，压缩结果禁止激活");
         }
 
@@ -348,6 +381,7 @@ public class ConversationMemoryService {
         String prompt = buildCompressionPrompt(active, messages, attachmentContext, task);
         String json = normalizeSummaryJson(compressionPort.compress(chatModel, prompt), task);
         ContextCompactionTaskEntity latestTask = taskRepository.queryByTaskId(taskId);
+        // 模型调用结束后再次核对状态与栅栏，封闭调用期间发生的取消竞态。
         if (latestTask == null || latestTask.getStatus() == ContextCompactionTaskStatus.STALE
                 || latestTask.getStatus() == ContextCompactionTaskStatus.CANCEL_REQUESTED
                 || !Objects.equals(latestTask.getFencingToken(), task.getFencingToken())) {
@@ -382,6 +416,7 @@ public class ConversationMemoryService {
         return snapshot;
     }
 
+    /** 在摘要 CAS、任务完成和上下文版本推进的同一事务内最终验真并激活。 */
     private ConversationMemorySnapshotEntity activateCompactionInTransaction(String taskId,
                                                                                ContextCompactionTaskEntity task,
                                                                                String json,
@@ -409,6 +444,7 @@ public class ConversationMemoryService {
         String lockedHash = coverageHash(effectiveMessages, task.getFromSequence(), task.getToSequence(),
                 lockedAttachmentContext);
         if (!expectedHash.equals(lockedHash)) {
+            // 会话锁内重算覆盖指纹，防止激活检查与写入之间消息被取消。
             throw new IllegalStateException("压缩激活前有效消息集合已变化");
         }
         ConversationMemorySnapshotEntity active = memoryRepository.queryActive(task.getTenantId(), task.getUserId(),
@@ -427,6 +463,7 @@ public class ConversationMemoryService {
         if (!memoryRepository.activate(task.getTenantId(), task.getUserId(), task.getSessionId(), activeVersion, snapshot)) {
             throw new IllegalStateException("上下文摘要 CAS 激活失败");
         }
+        // 任务终态与摘要激活必须原子提交，否则回滚摘要避免出现无账本结果。
         if (taskRepository.complete(taskId) != 1) {
             throw new IllegalStateException("压缩任务状态已变化，摘要激活回滚");
         }
@@ -501,12 +538,15 @@ public class ConversationMemoryService {
             throw new IllegalStateException("工具调用前无法创建上下文压缩任务");
         }
         if (taskRepository.claim(task.getTaskId())) {
+            // 当前线程抢到任务时同步完成，工具参数必须等待新摘要激活。
             compactTask(task.getTaskId());
             return true;
         }
+        // 已被其他消费者领取时等待同一幂等任务终态，不能并行重复压缩。
         return waitForCompaction(task.getTaskId(), revision, 5_000L);
     }
 
+    /** 以指数退避等待同一压缩任务完成，失败、取消或超时均阻断工具。 */
     private boolean waitForCompaction(String taskId, long baseRevision, long timeoutMs) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         long waitIntervalMs = COMPACTION_WAIT_INITIAL_INTERVAL_MS;
@@ -535,6 +575,7 @@ public class ConversationMemoryService {
         throw new IllegalStateException("工具调用前上下文压缩超时");
     }
 
+    /** 先读可重建缓存，未命中时回源数据库并回填。 */
     private ConversationMemorySnapshotEntity queryActiveSnapshot(String tenantId, String userId, String sessionId) {
         ConversationMemorySnapshotEntity cached = cacheRepository.queryActiveSnapshot(tenantId, userId, sessionId);
         if (cached != null) {
@@ -568,6 +609,7 @@ public class ConversationMemoryService {
         });
     }
 
+    /** 先读短期窗口缓存，未命中时从有效历史回源并预热。 */
     private List<ChatMessageEntity> queryMessages(String tenantId, String userId, String sessionId,
                                                   Integer fromSequenceExclusive, Integer toSequenceInclusive) {
         List<ChatMessageEntity> cached = cacheRepository.queryRecentMessages(tenantId, userId, sessionId,
@@ -581,6 +623,7 @@ public class ConversationMemoryService {
         return messages;
     }
 
+    /** 从最新消息向前选择一个完整、连续的短期窗口。 */
     private List<ChatMessageEntity> selectRecentMessages(List<ChatMessageEntity> messages, int tokenBudget) {
         if (messages == null || messages.isEmpty() || tokenBudget <= 0) {
             return List.of();
@@ -591,6 +634,7 @@ public class ConversationMemoryService {
             ChatMessageEntity message = messages.get(index);
             int tokens = messageTokens(message);
             if (!selected.isEmpty() && used + tokens > tokenBudget) {
+                // 至少保留最新一条完整消息；其余超预算时在消息边界停止。
                 break;
             }
             selected.add(message);
@@ -603,6 +647,7 @@ public class ConversationMemoryService {
         return selected;
     }
 
+    /** 从尾部保留指定 Token，返回本次可安全压缩的最大序号。 */
     private int calculateCompactionToSequence(List<ChatMessageEntity> messages, int retainTokenBudget) {
         if (messages == null || messages.isEmpty()) {
             return 0;
@@ -620,6 +665,7 @@ public class ConversationMemoryService {
         return Math.max(0, toSequence);
     }
 
+    /** 优先使用入库估值，历史缺失时回退字符估算。 */
     private int messageTokens(ChatMessageEntity message) {
         if (message == null) {
             return 0;
@@ -630,11 +676,13 @@ public class ConversationMemoryService {
         return tokenCounter.estimate(message.getContent());
     }
 
+    /** 读取会话当前上下文版本作为压缩基线。 */
     private long sessionRevision(String tenantId, String userId, String sessionId) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);
         return session.getContextRevision() == null ? 0L : session.getContextRevision();
     }
 
+    /** 对范围内消息身份、有效性、正文及附件计算不可逆覆盖指纹。 */
     private String coverageHash(List<ChatMessageEntity> messages, Integer fromSequence, Integer toSequence,
                                 String attachmentContext) {
         StringBuilder raw = new StringBuilder();
@@ -657,6 +705,7 @@ public class ConversationMemoryService {
         }
     }
 
+    /** 用明确边界标签拼接入选片段，降低上下文与当前指令混淆。 */
     private String renderInstruction(List<ContextFragment> fragments) {
         if (fragments == null || fragments.isEmpty()) {
             return "";
@@ -671,12 +720,14 @@ public class ConversationMemoryService {
         return String.join("\n", lines);
     }
 
+    /** 渲染带版本和覆盖点的长期摘要。 */
     private String renderLongTermMemory(ConversationMemorySnapshotEntity snapshot) {
         return "<long_term_memory memoryVersion=\"" + snapshot.getMemoryVersion()
                 + "\" coveredToSequence=\"" + snapshot.getCoveredToSequence() + "\">\n"
                 + snapshot.getContent() + "\n</long_term_memory>";
     }
 
+    /** 按序渲染最近有效消息，并显式标注角色与序号。 */
     private String renderRecentMessages(List<ChatMessageEntity> messages) {
         List<String> lines = new ArrayList<>();
         lines.add("<recent_messages>");
@@ -688,10 +739,12 @@ public class ConversationMemoryService {
         return String.join("\n", lines);
     }
 
+    /** 将工作流上游输出包在独立边界内。 */
     private String renderUpstreamOutput(String upstreamOutput) {
         return "<workflow_upstream>\n" + upstreamOutput + "\n</workflow_upstream>";
     }
 
+    /** 将贡献片段类别映射到策略中的单类预算。 */
     private int maxTokensFor(ContextFragmentType type) {
         if (type == ContextFragmentType.LONG_TERM_MEMORY) {
             return properties.getLongTermMemoryTokens();
@@ -708,6 +761,7 @@ public class ConversationMemoryService {
         return properties.getRagTokens();
     }
 
+    /** 构造只允许结构化 JSON 的增量摘要提示词。 */
     private String buildCompressionPrompt(ConversationMemorySnapshotEntity active,
                                           List<ChatMessageEntity> messages,
                                           String attachmentContext,
@@ -751,6 +805,7 @@ public class ConversationMemoryService {
         return String.join("\n", values);
     }
 
+    /** 校验模型 JSON 并用服务端可信范围覆盖模型自报 sourceRange。 */
     private String normalizeSummaryJson(String raw, ContextCompactionTaskEntity task) {
         try {
             String cleaned = stripCodeFence(raw);
@@ -775,6 +830,7 @@ public class ConversationMemoryService {
         }
     }
 
+    /** 要求摘要中的核心字段为非空文本。 */
     private void requireText(ObjectNode node, String key) {
         JsonNode value = node.get(key);
         if (value == null || !value.isTextual() || value.asText().isBlank()) {
@@ -782,6 +838,7 @@ public class ConversationMemoryService {
         }
     }
 
+    /** 将缺失或错误类型的可选列表收敛为空数组。 */
     private void ensureArray(ObjectNode node, String key) {
         JsonNode value = node.get(key);
         if (value == null || !value.isArray()) {
@@ -790,6 +847,7 @@ public class ConversationMemoryService {
         }
     }
 
+    /** 从会话真实运行 Agent 解析压缩模型，不接受消息或任务自报模型。 */
     private ChatModel resolveChatModel(ContextCompactionTaskEntity task) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(task.getTenantId(), task.getUserId(), task.getSessionId(), null);
         DefaultArmoryFactory defaultArmoryFactory = defaultArmoryFactoryProvider == null ? null : defaultArmoryFactoryProvider.getIfAvailable();
@@ -823,6 +881,7 @@ public class ConversationMemoryService {
         }
     }
 
+    /** 返回上下文管理关闭或身份不完整时的零值结果。 */
     private ContextAssemblyResult emptyResult() {
         return ContextAssemblyResult.builder()
                 .instruction("")
@@ -834,6 +893,7 @@ public class ConversationMemoryService {
                 .build();
     }
 
+    /** 去除模型偶发添加的 Markdown 代码围栏。 */
     private String stripCodeFence(String raw) {
         if (raw == null) {
             return "";
@@ -846,14 +906,17 @@ public class ConversationMemoryService {
         return value.trim();
     }
 
+    /** 规范化消息角色用于提示词标签。 */
     private String safeRole(String role) {
         return isBlank(role) ? "unknown" : role.toLowerCase(Locale.ROOT);
     }
 
+    /** 将可空整数归一为零。 */
     private int safe(Integer value) {
         return value == null ? 0 : value;
     }
 
+    /** 判断可选字符串是否缺失。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

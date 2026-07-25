@@ -18,6 +18,7 @@ public class CharacterTokenCounter implements TokenCounter {
         int other = 0;
         for (int index = 0; index < text.length(); index++) {
             char value = text.charAt(index);
+            // 中文按一字符一 Token 保守估计，其他文本按常见四字符一 Token。
             if (value >= 0x4E00 && value <= 0x9FFF) {
                 cjk++;
             } else {

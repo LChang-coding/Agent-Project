@@ -3,6 +3,13 @@ package cn.bugstack.ai.domain.context.model;
 /**
  * 上下文可注入预算。
  * <p>所有字段均以 token 为单位。</p>
+ *
+ * @param availableTokens 模型窗口扣除输出预留和安全余量后的总预算
+ * @param longTermMemoryTokens 长期摘要上限
+ * @param recentConversationTokens 最近对话上限
+ * @param attachmentTokens 附件文本上限
+ * @param upstreamTokens 工作流上游输出上限
+ * @param ragTokens RAG 证据上限
  */
 public record ContextBudget(int availableTokens,
                             int longTermMemoryTokens,
