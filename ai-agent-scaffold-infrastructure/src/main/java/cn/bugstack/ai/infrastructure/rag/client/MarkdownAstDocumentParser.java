@@ -92,6 +92,7 @@ final class MarkdownAstDocumentParser {
                 parserOutput, warnings, false);
     }
 
+    /** 按 AST 节点类型保留标题、列表、代码、引用和表格语义。 */
     private void appendTopLevel(Node node, String source, String documentId, List<String> headings,
                                 List<DocumentIr.Block> blocks, int[] order) {
         if (node instanceof Heading heading) {
@@ -173,6 +174,7 @@ final class MarkdownAstDocumentParser {
         return Map.copyOf(result);
     }
 
+    /** 对 HTML、图片等未完全结构化内容显式告警，不静默丢弃。 */
     private List<String> syntaxWarnings(String markdown, Node root) {
         Set<String> warnings = new LinkedHashSet<>();
         if (markdown.lines().anyMatch(line -> line.matches("^\\[\\^[^]]+]:.*"))) {
@@ -206,6 +208,7 @@ final class MarkdownAstDocumentParser {
         return DocumentIr.BlockType.PARAGRAPH;
     }
 
+    /** 将 GFM 表格恢复为行列结构及表头标记。 */
     private DocumentIr.Table table(TableBlock tableBlock) {
         List<DocumentIr.TableRow> rows = new ArrayList<>();
         int rowIndex = 0;

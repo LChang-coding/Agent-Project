@@ -135,6 +135,7 @@ final class DoclingJsonDocumentIrMapper {
         }
     }
 
+    /** 保留表格单元格、行列跨度和 provenance，禁止只压成纯文本。 */
     private void readTables(JsonNode values, List<BlockDraft> result, Set<String> warnings) {
         if (values == null || !values.isArray()) return;
         int tableOrder = 100_000;
@@ -178,6 +179,7 @@ final class DoclingJsonDocumentIrMapper {
         }
     }
 
+    /** 图片只记录可追溯说明与位置，未做视觉理解时显式告警。 */
     private void readPictures(JsonNode values, List<BlockDraft> result, Set<String> warnings) {
         if (values == null || !values.isArray()) return;
         int order = 200_000;
@@ -281,6 +283,7 @@ final class DoclingJsonDocumentIrMapper {
         }
     }
 
+    /** 用文档身份、顺序和内容生成稳定块 ID，重跑结果可对比。 */
     private String stableId(String documentId, int index, BlockDraft draft) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(

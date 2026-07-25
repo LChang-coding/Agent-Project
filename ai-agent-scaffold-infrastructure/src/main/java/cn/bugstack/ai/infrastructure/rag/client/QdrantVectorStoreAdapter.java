@@ -38,6 +38,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     static final String DENSE_VECTOR = "dense";
     static final String SPARSE_VECTOR = "sparse";
     static final int DENSE_DIMENSION = 768;
+    /** 只把预定义标量字段带回领域层，拒绝任意 payload 注入。 */
     private static final Set<String> TRUSTED_PAYLOAD_FIELDS = Set.of(
             "tenant_id", "kb_id", "document_id", "version_id", "generation", "chunk_id", "point_id");
 
@@ -45,6 +46,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Semaphore concurrency;
+    /** 本进程已验证集合 schema 的快速路径；不替代首次服务端检查。 */
     private volatile boolean collectionReady;
 
     @Autowired
@@ -79,6 +81,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    /** 批量写入前校验租户、版本、向量和 payload。 */
     public void upsert(String tenantId, String versionId, List<VectorPoint> points) {
         requireText(tenantId, "tenantId");
         requireText(versionId, "versionId");
@@ -96,6 +99,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    /** 以 tenantId + versionId 服务端过滤器删除，禁止跨租户清理。 */
     public void deleteVersion(String tenantId, String versionId) {
         requireText(tenantId, "tenantId");
         requireText(versionId, "versionId");
@@ -163,6 +167,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    /** 多路查询始终附带租户、知识库和 generation 过滤器。 */
     public List<VectorSearchHit> search(String tenantId, VectorSearchCommand command) {
         requireText(tenantId, "tenantId");
         if (command == null || command.topK() > properties.getQdrant().getMaxSearchTopK()) {
@@ -276,6 +281,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return node;
     }
 
+    /** 构造租户硬过滤，并把每个知识库限定到活动 generation。 */
     private ObjectNode scopedFilter(String tenantId, Set<KnowledgeBaseScope> scopes) {
         ObjectNode filter = objectMapper.createObjectNode();
         ArrayNode must = filter.putArray("must");
@@ -317,6 +323,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return condition;
     }
 
+    /** 校验命中 payload 的租户和业务身份后才映射领域结果。 */
     private List<VectorSearchHit> readHits(String tenantId, VectorSearchCommand command, JsonNode response) {
         JsonNode rows = response.path("result").path("points");
         if (!rows.isArray() || rows.size() > command.topK()) throw responseInvalid("检索结果数量非法");
@@ -354,6 +361,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return Map.copyOf(values);
     }
 
+    /** 在总 deadline 内执行带瞬态重试的 Qdrant JSON 协议。 */
     private JsonResponse exchange(String method, String path, String query, JsonNode body, boolean allowNotFound) {
         RagProperties.Qdrant config = properties.getQdrant();
         try {
@@ -465,6 +473,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 拒绝维度不符与非有限数值，防止坏向量入库或查询。 */
     private void validateDense(List<Float> vector, boolean optional) {
         if (optional && (vector == null || vector.isEmpty())) return;
         if (vector == null || vector.size() != DENSE_DIMENSION || vector.stream().anyMatch(
@@ -482,6 +491,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 将业务点 ID 稳定映射为 Qdrant UUID，不改变业务身份。 */
     private String qdrantPointId(String businessPointId) {
         try {
             return UUID.fromString(businessPointId).toString();

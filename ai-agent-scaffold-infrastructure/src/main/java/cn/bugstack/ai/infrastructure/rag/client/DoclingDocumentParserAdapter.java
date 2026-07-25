@@ -91,6 +91,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
      * @return 规范化 Markdown 和章节信息
      */
     @Override
+    /** 按 MIME 路由本地 Markdown/DOCX 或 Docling，并统一输出 Canonical IR。 */
     public ParsedDocument parse(ParseCommand command) {
         if (command == null) {
             throw new AppException("RAG_DOCUMENT_COMMAND_INVALID", "文档解析命令不能为空");
@@ -130,6 +131,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return markdownParser.parse(command, markdown);
     }
 
+    /** 以受限 multipart 调用 Docling，优先映射结构化 JSON，Markdown 仅作展示/兜底。 */
     private ParsedDocument parseWithDocling(ParseCommand command, Path path, String mimeType) {
         RagProperties.Docling config = properties.getDocling();
         TeiEmbeddingAdapter.requireApiKey(config.getApiKey());
@@ -215,6 +217,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 .build();
     }
 
+    /** 仅对网络错误和 5xx 做一次重试，保留尝试次数和墙钟耗时。 */
     private TransportResponse sendWithOneRetry(HttpRequest request)
             throws IOException, InterruptedException {
         long started = System.nanoTime();
@@ -284,6 +287,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return URI.create(base.toString().replaceAll("/+$", "") + "/" + path);
     }
 
+    /** 只读取 Worker 控制工作区内的普通文件，并限制大小和符号链接。 */
     private Path validateControlledFile(ParseCommand command) {
         Path path = command.contentPath().toAbsolutePath().normalize();
         try {
@@ -328,6 +332,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 严格 UTF-8 有界读取 Markdown，拒绝替换字符掩盖坏编码。 */
     private String readUtf8Bounded(Path path, long maxBytes) {
         int maxChars = safeReadLimit(maxBytes);
         var decoder = StandardCharsets.UTF_8.newDecoder()
@@ -432,6 +437,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 从 Docling provenance 恢复页码与标题路径；不猜测缺失页码。 */
     private PageMetadata pageMetadata(JsonNode jsonContent, int maxPages) {
         if (jsonContent == null || jsonContent.isNull() || jsonContent.isMissingNode()) {
             return PageMetadata.empty();

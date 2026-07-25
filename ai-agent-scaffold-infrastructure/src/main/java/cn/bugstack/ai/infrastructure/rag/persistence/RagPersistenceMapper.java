@@ -38,8 +38,10 @@ import java.time.ZoneOffset;
 @RequiredArgsConstructor
 public class RagPersistenceMapper {
 
+    /** 稳定枚举、JSON、checkpoint 与元数据编码器。 */
     private final RagPersistenceCodec codec;
 
+    /** 知识库 PO/领域对象双向映射。 */
     public RagKnowledgeBaseEntity toKnowledgeBase(RagKnowledgeBasePO po) {
         if (po == null) return null;
         return new RagKnowledgeBaseEntity(po.getTenantId(), po.getOwnerUserId(), po.getKnowledgeBaseId(),
@@ -59,6 +61,7 @@ public class RagPersistenceMapper {
                 .revision(entity.revision()).status(codec.databaseValue(entity.status())).build();
     }
 
+    /** 文档聚合根 PO/领域对象映射。 */
     public RagDocumentEntity toDocument(RagDocumentPO po) {
         if (po == null) return null;
         return new RagDocumentEntity(po.getTenantId(), po.getOwnerUserId(), readVisibility(po.getVisibility()),
@@ -78,6 +81,7 @@ public class RagPersistenceMapper {
                 .revision(entity.revision()).build();
     }
 
+    /** 不可变文档版本 PO/领域对象映射。 */
     public RagDocumentVersionEntity toDocumentVersion(RagDocumentVersionPO po) {
         if (po == null) return null;
         return new RagDocumentVersionEntity(po.getTenantId(), po.getKnowledgeBaseId(), po.getDocumentId(),
@@ -107,6 +111,7 @@ public class RagPersistenceMapper {
                 .status(codec.databaseValue(entity.status())).rowVersion(entity.revision()).build();
     }
 
+    /** 分块结构、位置和向量身份映射。 */
     public RagChunkEntity toChunk(RagChunkPO po) {
         if (po == null) return null;
         return new RagChunkEntity(po.getTenantId(), po.getOwnerUserId(), readVisibility(po.getVisibility()),
@@ -132,6 +137,7 @@ public class RagPersistenceMapper {
                 .revision(1L).metadata(codec.writeMetadata(entity.metadata())).build();
     }
 
+    /** 恢复摄取任务状态机、租约和 checkpoint。 */
     public RagIngestJobEntity toIngestJob(RagIngestTaskPO po) {
         if (po == null) return null;
         RagLease lease = readLease(po.getLeaseOwner(), po.getLeaseUntil());
@@ -162,6 +168,7 @@ public class RagPersistenceMapper {
                 .errorCode(entity.errorCode()).errorMessage(entity.errorMessage()).traceId(entity.traceId()).build();
     }
 
+    /** 恢复检索策略并严格校验布尔标记。 */
     public RagRetrievalProfileEntity toRetrievalProfile(RagRetrievalProfilePO po) {
         if (po == null) return null;
         boolean denseEnabled = enabled(po.getDenseEnabled(), "Dense开关");
@@ -194,6 +201,7 @@ public class RagPersistenceMapper {
                 .revision(entity.revision()).status("active").build();
     }
 
+    /** 恢复 Agent/Workflow 到知识库的绑定。 */
     public RagAgentBindingEntity toAgentBinding(RagAgentBindingPO po) {
         if (po == null) return null;
         return new RagAgentBindingEntity(po.getTenantId(), po.getBindingId(),
@@ -252,6 +260,7 @@ public class RagPersistenceMapper {
         return new RagLease(leaseOwner, toInstant(leaseUntil));
     }
 
+    /** 数据库布尔值只接受 0/1，拒绝脏值静默转真。 */
     private boolean enabled(Integer value, String fieldName) {
         if (value == null || value != 0 && value != 1) {
             throw new IllegalStateException(fieldName + "不是0或1");

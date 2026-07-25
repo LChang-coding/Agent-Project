@@ -1031,3 +1031,41 @@
 - 对 22 个文件执行剥离注释源码比对，可执行源码差异为 0；每个文件均包含中文职责或关键分支说明；`git diff --check` 通过。
 - 基建层干净编译成功，130 个源文件编译通过。
 - 指定集合中实际运行 RAG 仓储/删除登记/知识库删除、调度协调/派发、工作流生命周期、分享、认证和记忆服务 9 个测试类：共 55 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。
+
+### 2026-07-26：基建层第六批执行计划（RAG 客户端、持久化辅助与 Worker）
+
+范围：
+
+- `infrastructure/rag` 全部 20 个 Java 文件。
+
+本批重点：
+
+- 明确 Docling/本地解析、TEI Embedding/Rerank 和 Qdrant 请求协议、超时、响应校验与瞬态/永久错误分类。
+- 明确 Word、Markdown、Docling JSON 到结构化 IR 的保真边界与降级路径。
+- 明确 outbox 领取发布、Worker 调度、摄取阶段、checkpoint、心跳、取消屏障和 generation 隔离。
+- 明确知识库级联删除的步骤顺序、幂等清理和失败恢复。
+- 明确持久化 codec/mapper 只做稳定格式转换，检索审计不允许反向影响在线结果。
+
+门禁：
+
+- 20 个文件逐方法、外部调用和关键失败分支审计，只允许注释变化。
+- 执行剥离注释源码比对、格式检查、基建层干净编译和 RAG 协议/Worker/持久化测试。
+- 追加真实操作记录后中文本地提交。
+
+### 2026-07-26：基建层第六批操作记录（RAG 客户端、持久化辅助与 Worker）
+
+- 已逐一审计 `infrastructure/rag` 全部 20 个 Java 文件；15 个文件补强外部协议、阶段和失败语义，5 个配置/codec/工作区文件原有注释已覆盖实现。
+- 外部协议已明确：
+  - TEI Embedding/Rerank 在单次总 deadline 内分批调用，只重试连接、超时和瞬态 HTTP 状态；响应体、文本长度、索引、向量数量/维度及 NaN/Infinity 均有硬门禁。
+  - Qdrant 首次使用严格校验 named Dense/Sparse schema；所有查询与删除都在服务端带 tenantId、知识库 generation 或 versionId 过滤，返回 payload 只接受可信标量字段。
+  - Docling 调用使用受控文件、有界 multipart、有限重试和严格响应解析；Markdown/DOCX 本地解析保留 AST/OOXML 的标题、列表、代码、表格、页眉页脚和 provenance。
+- Worker 副作用已明确：
+  - Kafka 与数据库扫描都只负责提交候选；必须先领取数据库租约才能下载、解析、写向量或删除对象。
+  - 每个外部副作用前重读取消状态、leaseOwner 与 fencing token；checkpoint 支持安全续跑，generation 隔离旧 Worker。
+  - 激活前核对数据库分块与向量点快照；取消/失败只清理目标 generation，不触碰既有活动版本。
+  - Canonical IR、normalized Markdown、原始解析输出、质量报告和分块 manifest 全部留痕。
+- outbox 明确 Broker ACK 后才写 `published`；失败按尝试次数进入 retry/dead，过期围栏不能覆盖新持有者状态。
+- PersistenceMapper 对 0/1 布尔、枚举、租约和 checkpoint 严格转换；检索审计事务失败不会反向改变已产生的在线检索结果。
+- 对 20 个文件执行剥离注释源码比对，可执行源码差异为 0；每个文件均包含中文职责或关键失败说明；`git diff --check` 通过。
+- 基建层干净编译成功，130 个源文件编译通过。
+- 运行 Docling 协议、预处理链路、TEI 协议、Qdrant、outbox、持久化映射/codec、检索审计、摄取 Worker 和知识库删除 10 个测试类：共 84 个测试，失败 0、错误 0、跳过 0，`BUILD SUCCESS`。

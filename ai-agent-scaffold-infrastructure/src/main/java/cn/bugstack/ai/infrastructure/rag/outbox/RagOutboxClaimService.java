@@ -15,10 +15,12 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RagOutboxClaimService {
 
+    /** outbox 状态事实源。 */
     private final IRagOutboxDao outboxDao;
 
     /** 按租户和事件原子领取，并在同一短事务内读回新栅栏。 */
     @Transactional(rollbackFor = Exception.class)
+    /** 按 tenantId + eventId 原子领取，并回读新 fencing token。 */
     public Optional<RagOutboxPO> claim(RagOutboxCandidatePO candidate, String leaseOwner,
                                        LocalDateTime now, LocalDateTime leaseUntil) {
         if (candidate == null || blank(candidate.getTenantId()) || blank(candidate.getEventId())) {

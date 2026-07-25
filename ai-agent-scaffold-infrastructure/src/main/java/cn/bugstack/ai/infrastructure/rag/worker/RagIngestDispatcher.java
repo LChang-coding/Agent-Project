@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @ConditionalOnProperty(prefix = "ai.rag.worker", name = "enabled", havingValue = "true")
 public class RagIngestDispatcher {
 
+    /** 到期扫描、执行器和配置；inFlight 只防本进程重复提交。 */
     private final IRagRepository repository;
     private final RagIngestWorker worker;
     private final RagProperties properties;
@@ -59,6 +60,7 @@ public class RagIngestDispatcher {
     @KafkaListener(topics = "${ai.rag.kafka.topic:rag.ingest.request.v1}",
             groupId = "${ai.rag.kafka.group-id:ai-agent-rag-ingest}",
             autoStartup = "${ai.rag.kafka.listener-enabled:false}")
+    /** 校验 Kafka 负载后只提交 tenantId + jobId，任务状态以数据库为准。 */
     public void consume(String payload) {
         try {
             JsonNode root = objectMapper.readTree(payload);
@@ -80,6 +82,7 @@ public class RagIngestDispatcher {
 
     /** 补偿 Kafka 重复/丢失、应用重启、到期重试和过期租约。 */
     @Scheduled(fixedDelayString = "${ai.rag.worker.poll-delay-ms:2000}")
+    /** Kafka 丢失或停用时的数据库兜底扫描。 */
     public void scanDueTasks() {
         if (closed.get()) return;
         for (RagIngestJobCandidate candidate : repository.listDueIngestJobCandidates(
@@ -88,6 +91,7 @@ public class RagIngestDispatcher {
         }
     }
 
+    /** 有界线程池拒绝过载；同任务在本进程最多一个执行。 */
     public boolean submit(String tenantId, String jobId) {
         if (closed.get()) return false;
         String key = tenantId + ":" + jobId;

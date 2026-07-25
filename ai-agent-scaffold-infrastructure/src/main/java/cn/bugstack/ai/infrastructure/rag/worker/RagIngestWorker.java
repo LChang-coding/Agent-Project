@@ -72,6 +72,7 @@ public class RagIngestWorker {
 
     private static final long MAX_DOCUMENT_BYTES = 50L * 1024 * 1024;
 
+    /** 状态事实源与外部副作用端口。 */
     private final IRagRepository repository;
     private final ObjectStorageService objectStorageService;
     private final RagDocumentParserPort parser;
@@ -127,6 +128,7 @@ public class RagIngestWorker {
     }
 
     /** 尝试领取并执行一个任务；重复唤醒领取失败时安全返回 false。 */
+    /** 先领取数据库租约，再按 operation 执行；未领取绝不产生外部副作用。 */
     public boolean execute(String tenantId, String jobId, String leaseOwner) {
         Instant now = clock.instant();
         Optional<RagIngestJobEntity> current = repository.findIngestJob(tenantId, jobId);
@@ -169,6 +171,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 下载、预处理、分块、向量化、核验、激活的摄取主链。 */
     private void ingest(RagIngestJobEntity claimed, String leaseOwner, LeaseHeartbeat heartbeat) {
         if (claimed.operation() != RagIngestOperation.INGEST) {
             throw new AppException("RAG_INGEST_OPERATION_UNSUPPORTED",
@@ -198,6 +201,7 @@ public class RagIngestWorker {
      * 精确核验索引快照并执行可重入激活。
      * <p>任务已经推进到VERIFYING后发生进程退出时，重试只重复校验和CAS激活，不重新解析、分块或写向量。</p>
      */
+    /** 向量数量与数据库分块一致后才允许切换活动 generation。 */
     private void verifyAndActivate(RagIngestJobEntity initial, List<RagChunkEntity> children,
                                    String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity job = barrier(initial.tenantId(), initial.jobId(), leaseOwner,
@@ -231,6 +235,7 @@ public class RagIngestWorker {
         activate(job, leaseOwner, heartbeat);
     }
 
+    /** 删除按向量、分块、解析产物、原文件和墓碑顺序推进 checkpoint。 */
     private void deleteDocument(RagIngestJobEntity claimed, String leaseOwner, LeaseHeartbeat heartbeat) {
         DeleteScope scope = loadDeleteScope(claimed);
         RagIngestJobEntity job = barrier(claimed.tenantId(), claimed.jobId(), leaseOwner,
@@ -377,6 +382,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 有 checkpoint 时恢复既有分块，否则从 Canonical IR 清洗、质检并重建。 */
     private List<RagChunkEntity> loadOrCreateChunks(RagIngestJobEntity initial, Scope scope,
                                                      String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity job = initial;
@@ -463,6 +469,7 @@ public class RagIngestWorker {
         return children;
     }
 
+    /** 每批 Embedding/Qdrant 写入后保存 checkpoint，支持租约失效后的安全续跑。 */
     private RagIngestJobEntity indexBatches(RagIngestJobEntity initial, List<RagChunkEntity> children,
                                              String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity job = initial;
@@ -549,6 +556,7 @@ public class RagIngestWorker {
                 job.versionId(), job.checkpoint().totalChunks(), elapsedFromLease(job)));
     }
 
+    /** 取消屏障后只清理本 generation 产物，不触碰已有活动版本。 */
     private void cleanupCancelled(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity current = cancellationBarrier(job.tenantId(), job.jobId(), leaseOwner,
                 job.fencingToken(), heartbeat);
@@ -581,6 +589,7 @@ public class RagIngestWorker {
                 elapsedNanos(cleanupStarted), 1, 1);
     }
 
+    /** 分类瞬态/永久错误；终态失败先清理目标代次再闭合账本。 */
     private void handleFailure(String tenantId, String jobId, String leaseOwner, long fence, Exception error) {
         RagIngestErrorClassifier.Failure failure = errorClassifier.classify(error);
         Optional<RagIngestJobEntity> latestOptional = repository.findIngestJob(tenantId, jobId);
@@ -659,6 +668,7 @@ public class RagIngestWorker {
         repository.deleteChunks(job.tenantId(), job.versionId());
     }
 
+    /** 每个外部副作用前重读任务并校验租约、围栏和取消状态。 */
     private RagIngestJobEntity barrier(String tenantId, String jobId, String leaseOwner, long fence,
                                        LeaseHeartbeat heartbeat, boolean renew) {
         if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "摄取任务租约已丢失");
@@ -793,6 +803,7 @@ public class RagIngestWorker {
         return primary;
     }
 
+    /** 清洗后执行结构质量门禁；低质量 PDF 可触发强制 OCR 重跑。 */
     private PreprocessedDocument cleanAndEvaluate(RagIngestJobEntity job,
                                                   RagDocumentParserPort.ParsedDocument parsed) {
         long cleanStarted = System.nanoTime();
@@ -910,6 +921,7 @@ public class RagIngestWorker {
                 source.parsedObjectKey(), source.parsedContentHash(), source.parsedSizeBytes());
     }
 
+    /** 保存 Canonical IR、normalized.md、parser output 和质量报告以便追责复现。 */
     private ArtifactBundle persistPreprocessingArtifacts(RagIngestJobEntity job,
                                                          PreprocessedDocument value,
                                                          RagIngestWorkspace workspace) {
@@ -1048,6 +1060,7 @@ public class RagIngestWorker {
                 properties.getWorker().getRetryBaseDelayMs() * multiplier));
     }
 
+    /** 独立调度心跳；续租失败后标记 lost，使后续屏障立即停止。 */
     private LeaseHeartbeat startHeartbeat(RagIngestJobEntity job, String leaseOwner) {
         LeaseHeartbeat heartbeat = new LeaseHeartbeat();
         long interval = properties.getWorker().getHeartbeatIntervalMs();

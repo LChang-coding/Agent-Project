@@ -33,8 +33,10 @@ import java.util.function.DoubleSupplier;
 @ConditionalOnProperty(prefix = "ai.rag.outbox", name = "enabled", havingValue = "true")
 public class RagOutboxPublisher {
 
+    /** 持久化错误摘要硬上限，避免异常链撑大数据库。 */
     private static final int MAX_ERROR_LENGTH = 1000;
 
+    /** 扫描、领取、Kafka 发布和重试配置。 */
     private final IRagOutboxDao outboxDao;
     private final RagOutboxClaimService claimService;
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -67,6 +69,7 @@ public class RagOutboxPublisher {
 
     /** 扫描并发布一批到期事件。 */
     @Scheduled(fixedDelayString = "${ai.rag.outbox.poll-delay-ms:1000}")
+    /** 扫描最小候选并逐条领取发布；候选本身不授予发布权。 */
     public void publishDueBatch() {
         RagProperties.Outbox config = properties.getOutbox();
         if (config == null || !config.isEnabled()) return;
@@ -77,6 +80,7 @@ public class RagOutboxPublisher {
         }
     }
 
+    /** Broker 确认后才写 published；围栏失效则拒绝覆盖新持有者状态。 */
     private void publishCandidate(RagOutboxCandidatePO candidate, RagProperties.Outbox config) {
         LocalDateTime claimTime = now();
         long claimStarted = System.nanoTime();
@@ -125,6 +129,7 @@ public class RagOutboxPublisher {
         }
     }
 
+    /** 按尝试次数选择 retry/dead，并写入抖动退避时间。 */
     private void recordFailure(RagOutboxPO event, Throwable error, RagProperties.Outbox config) {
         LocalDateTime failedAt = now();
         String safeError = sanitize(error);

@@ -25,6 +25,7 @@ import java.util.Map;
 @Repository
 public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
 
+    /** 检索摘要与最终引用分别入库。 */
     private final IRagRetrievalRecordDao recordDao;
     private final IRagRetrievalCitationDao citationDao;
     private final RagProperties properties;
@@ -42,6 +43,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 审计失败回滚本次摘要和引用，但不得改变已生成在线结果。 */
     public void record(RagRetrievalAuditCommand command) {
         RagRetrievalResult result = command.result();
         RagRetrievalResult.Metrics metrics = result == null ? null : result.metrics();
@@ -79,6 +81,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
         }
     }
 
+    /** 将最终引用快照映射为可独立追查的证据行。 */
     private RagRetrievalCitationPO citation(RagRetrievalAuditCommand command,
                                             RagRetrievalResult.Citation value) {
         return RagRetrievalCitationPO.builder().tenantId(command.tenantId())
@@ -94,6 +97,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
                 .metadata(json(value.metadata())).build();
     }
 
+    /** 保存各阶段耗时与候选数，不把指标混入业务正文。 */
     private Map<String, Object> stageMetrics(RagRetrievalResult result) {
         if (result == null) return Map.of();
         return Map.of("degraded", result.degraded(), "degradationReasons", result.degradationReasons(),
@@ -117,6 +121,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
         return value ? 1 : 0;
     }
 
+    /** JSON 编码失败时抛出，禁止写入不可解析审计记录。 */
     private String json(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? Map.of() : value);

@@ -26,7 +26,9 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class TeiEmbeddingAdapter implements EmbeddingPort {
 
+    /** 限制远端响应体，避免异常服务耗尽堆内存。 */
     private static final long MAX_RESPONSE_BYTES = 8L * 1024 * 1024;
+    /** 配置、JSON、HTTP 与本地并发门禁。 */
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -46,6 +48,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
     }
 
     @Override
+    /** 在总 deadline 内分批调用 TEI；只重试瞬态状态并校验结果。 */
     public EmbeddingResult embed(EmbeddingCommand command) {
         RagProperties.Embedding config = properties.getEmbedding();
         if (command.inputs().size() > config.getBatchSize()) {
@@ -103,6 +106,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         }
     }
 
+    /** 每次尝试使用剩余预算作为超时，响应体受硬上限保护。 */
     private RawResponse send(byte[] requestBody, long deadlineNanos, RagProperties.Embedding config)
             throws Exception {
         Duration remaining = remaining(deadlineNanos);
@@ -122,6 +126,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         }
     }
 
+    /** 指数退避不能跨越本次调用总 deadline。 */
     private void backoff(int retryIndex, long deadlineNanos, RagProperties.Embedding config)
             throws InterruptedException {
         long multiplier = 1L << Math.min(retryIndex, 30);
@@ -151,6 +156,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         return status == 429 || status == 502 || status == 503 || status == 504;
     }
 
+    /** 拒绝数量、维度不符以及 NaN/Infinity，避免污染向量库。 */
     private void validate(List<List<Float>> vectors, int expectedCount, int dimensions) {
         if (vectors == null || vectors.size() != expectedCount || vectors.stream().anyMatch(vector ->
                 vector == null || vector.size() != dimensions || vector.stream().anyMatch(value ->
@@ -159,6 +165,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         }
     }
 
+    /** 按模型约定区分 query 与 passage 前缀。 */
     private String prefix(EmbeddingInputType type, String input) {
         return (type == EmbeddingInputType.QUERY ? "query: " : "passage: ") + input.trim();
     }

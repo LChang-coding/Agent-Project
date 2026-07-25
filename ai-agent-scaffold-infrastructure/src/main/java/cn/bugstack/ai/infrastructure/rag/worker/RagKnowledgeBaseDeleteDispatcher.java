@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Component
 @ConditionalOnProperty(prefix = "ai.rag.worker", name = "enabled", havingValue = "true")
 public class RagKnowledgeBaseDeleteDispatcher {
+    /** 数据库到期扫描与有界本地执行器。 */
     private final RagKnowledgeBaseDeletionRepository repository;
     private final RagKnowledgeBaseDeleteCoordinator coordinator;
     private final RagProperties properties;
@@ -44,6 +45,7 @@ public class RagKnowledgeBaseDeleteDispatcher {
     }
 
     @Scheduled(fixedDelayString = "${ai.rag.worker.poll-delay-ms:2000}")
+    /** 扫描只提交候选；每个候选仍由协调器原子领取。 */
     public void scanDueTasks() {
         if (closed.get()) return;
         repository.listDueCandidates(clock.instant(), properties.getWorker().getScanBatchSize())

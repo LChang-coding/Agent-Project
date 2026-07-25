@@ -52,6 +52,7 @@ public class RagKnowledgeBaseDeleteCoordinator {
         this.clock = clock;
     }
 
+    /** 领取级联任务后执行；未取得租约不调用任何删除逻辑。 */
     public boolean execute(String tenantId, String taskId, String leaseOwner) {
         Instant now = clock.instant();
         RagKnowledgeBaseDeleteTaskEntity current = deletionRepository.findByTaskId(tenantId, taskId)
@@ -68,6 +69,7 @@ public class RagKnowledgeBaseDeleteCoordinator {
         return true;
     }
 
+    /** 先逐文档登记/等待删除，再验证全库收口并关闭知识库。 */
     private void process(RagKnowledgeBaseDeleteTaskEntity claimed, String leaseOwner) {
         RagKnowledgeBaseDeleteTaskEntity task = barrier(claimed, leaseOwner);
         if (task.checkpoint().stage() == RagKnowledgeBaseDeleteStage.RECEIVED) {
@@ -119,6 +121,7 @@ public class RagKnowledgeBaseDeleteCoordinator {
                 RagKnowledgeBaseDeleteStage.VERIFYING, documents.size(), completed, null));
     }
 
+    /** 每个阶段前续租并重读任务，防止过期 Worker 继续清理。 */
     private RagKnowledgeBaseDeleteTaskEntity barrier(RagKnowledgeBaseDeleteTaskEntity expected,
                                                        String leaseOwner) {
         Instant now = clock.instant();
@@ -152,6 +155,7 @@ public class RagKnowledgeBaseDeleteCoordinator {
         }
     }
 
+    /** 瞬态错误安排重试，永久错误写终态；两者都保留 checkpoint。 */
     private void handleFailure(String tenantId, String taskId, String leaseOwner,
                                long fence, Exception error) {
         RagKnowledgeBaseDeleteTaskEntity latest = deletionRepository.findByTaskId(tenantId, taskId)

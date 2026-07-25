@@ -26,6 +26,7 @@ import java.util.concurrent.Semaphore;
 @Component
 public class TeiRerankerAdapter implements RerankerPort {
 
+    /** 限制响应体以及送入模型的查询、候选文本长度。 */
     private static final long MAX_RESPONSE_BYTES = 4L * 1024 * 1024;
     private static final int MAX_QUERY_CHARS = 4096;
     private static final int MAX_CANDIDATE_CHARS = 16000;
@@ -48,6 +49,7 @@ public class TeiRerankerAdapter implements RerankerPort {
     }
 
     @Override
+    /** 分批重排并恢复全局索引；任一批协议异常都拒绝半结果。 */
     public RerankResult rerank(RerankCommand command) {
         RagProperties.Reranker config = properties.getReranker();
         if (command.candidates().size() > config.getBatchSize()) {
@@ -82,6 +84,7 @@ public class TeiRerankerAdapter implements RerankerPort {
         }
     }
 
+    /** 仅对超时、连接错误和瞬态 HTTP 状态重试。 */
     private List<IndexedScore> requestBatchWithRetry(String query, List<Candidate> candidates, int offset,
                                                      long deadlineNanos, RagProperties.Reranker config)
             throws Exception {
@@ -133,6 +136,7 @@ public class TeiRerankerAdapter implements RerankerPort {
                 TeiEmbeddingAdapter.readBounded(response.body(), MAX_RESPONSE_BYTES));
     }
 
+    /** 校验 TEI 返回索引唯一且位于当前批次范围内。 */
     private List<IndexedScore> parseScores(byte[] body, int candidateCount, int offset) {
         List<TeiScore> values;
         try {
@@ -178,6 +182,7 @@ public class TeiRerankerAdapter implements RerankerPort {
         Thread.sleep(desiredNanos / 1_000_000L, (int) (desiredNanos % 1_000_000L));
     }
 
+    /** 按得分降序还原原候选，不覆盖其他召回通道证据。 */
     private List<ScoredCandidate> toCandidates(RerankCommand command, List<IndexedScore> scores) {
         if (scores.size() != command.candidates().size()) {
             throw new AppException("RAG_RERANK_RESPONSE_INVALID", "Reranker 返回候选数量不足");

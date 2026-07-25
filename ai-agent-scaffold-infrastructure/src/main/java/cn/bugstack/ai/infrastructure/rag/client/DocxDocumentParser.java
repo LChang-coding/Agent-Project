@@ -131,6 +131,7 @@ final class DocxDocumentParser {
                 headingPath, null, order[0]++, offset, flags));
     }
 
+    /** 保留表格行列、合并关系和标题路径，不以制表符替代结构。 */
     private void appendTable(XWPFTable table, String location, List<String> headingPath,
                              List<DocumentIr.Block> blocks, int[] order, int[] offset,
                              Set<String> warnings) {
@@ -221,6 +222,7 @@ final class DocxDocumentParser {
         return result.isEmpty() ? paragraph.getText() : result.toString();
     }
 
+    /** 检查外部关系、宏式内容和 OOXML 特性，记录无法保真的风险。 */
     private void inspectPackage(XWPFDocument document, Set<String> warnings,
                                 Map<String, String> metadata) throws Exception {
         OPCPackage pkg = document.getPackage();
@@ -278,6 +280,7 @@ final class DocxDocumentParser {
         }
     }
 
+    /** 基于 OOXML 位置、阅读顺序和正文生成可重放块 ID。 */
     private String stableId(String location, int order, String text) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(
