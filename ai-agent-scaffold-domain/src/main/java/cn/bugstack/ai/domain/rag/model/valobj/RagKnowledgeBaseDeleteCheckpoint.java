@@ -19,6 +19,7 @@ public record RagKnowledgeBaseDeleteCheckpoint(RagKnowledgeBaseDeleteStage stage
         }
     }
 
+    /** 以知识库当前文档总数创建初始删除检查点。 */
     public static RagKnowledgeBaseDeleteCheckpoint initial(int totalDocuments) {
         return new RagKnowledgeBaseDeleteCheckpoint(RagKnowledgeBaseDeleteStage.RECEIVED,
                 totalDocuments, 0, null);

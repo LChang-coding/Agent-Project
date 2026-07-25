@@ -1,6 +1,10 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
-/** 经过索引验证后的文档版本原子激活参数。 */
+/**
+ * 经过索引验证后的文档版本原子激活参数。
+ * <p>同时携带知识库 generation、三个聚合 revision、解析统计、不可变解析产物位置、解析器与
+ * IR/质量/Tokenizer 版本，仓储只能在全部条件一致时原子切换可见版本。</p>
+ */
 public record RagIndexActivation(String knowledgeBaseId,
                                  String documentId,
                                  String versionId,
@@ -77,12 +81,14 @@ public record RagIndexActivation(String knowledgeBaseId,
         }
     }
 
+    /** 校验索引激活所需资源标识与摘要。 */
     private static void requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + "不能为空");
         }
     }
 
+    /** 判断可选解析产物位置是否已填写。 */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }

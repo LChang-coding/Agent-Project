@@ -42,6 +42,7 @@ public record RagDocumentEntity(String tenantId,
         }
     }
 
+    /** 校验逻辑文档必填身份和文件事实。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

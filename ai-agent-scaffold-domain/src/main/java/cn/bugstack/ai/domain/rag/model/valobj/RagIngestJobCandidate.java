@@ -11,6 +11,7 @@ public record RagIngestJobCandidate(String tenantId, String jobId) {
         requireText(jobId, "jobId");
     }
 
+    /** 校验全局候选只包含可回查任务的最小身份。 */
     private static void requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + "不能为空");

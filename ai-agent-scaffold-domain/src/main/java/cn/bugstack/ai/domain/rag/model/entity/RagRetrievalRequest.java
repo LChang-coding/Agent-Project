@@ -48,6 +48,7 @@ public record RagRetrievalRequest(String tenantId,
         }
     }
 
+    /** 校验检索身份、目标和真实用户问题。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

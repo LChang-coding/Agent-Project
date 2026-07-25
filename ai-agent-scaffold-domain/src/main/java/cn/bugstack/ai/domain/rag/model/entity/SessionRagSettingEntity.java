@@ -7,6 +7,8 @@ import java.util.List;
 
 /**
  * 会话级RAG设置及其绑定可用性。
+ * <p>mode/revision 是持久化策略事实；selectedBindingIds 只在 MANUAL 模式生效；
+ * eligibleBindings 用于前端选择但不能代替运行创建时的冻结快照。</p>
  */
 public record SessionRagSettingEntity(String sessionId,
                                       boolean enabled,

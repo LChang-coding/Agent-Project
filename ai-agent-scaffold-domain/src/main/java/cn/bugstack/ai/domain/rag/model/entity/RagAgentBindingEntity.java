@@ -27,6 +27,7 @@ public record RagAgentBindingEntity(String tenantId,
         }
     }
 
+    /** 校验绑定身份和引用资源的必填文本。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

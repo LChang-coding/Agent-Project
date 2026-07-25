@@ -22,6 +22,7 @@ public record SessionRagRunSnapshotEntity(SessionRagMode mode,
         // 兼容历史Run可能只有布尔快照；新生产Run由服务层保证启用时绑定非空。
     }
 
+    /** 返回本轮运行是否必须执行 RAG。 */
     public boolean enabled() {
         return mode != SessionRagMode.OFF;
     }

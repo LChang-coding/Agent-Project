@@ -56,6 +56,7 @@ public record RagRetrievalProfileEntity(String tenantId,
         }
     }
 
+    /** 校验检索配置身份和名称。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

@@ -72,6 +72,7 @@ public record RagIngestCheckpoint(RagIngestStage stage,
                 && parsedContentHash.equals(target.parsedContentHash);
     }
 
+    /** 判断解析产物事实是否已经建立。 */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }

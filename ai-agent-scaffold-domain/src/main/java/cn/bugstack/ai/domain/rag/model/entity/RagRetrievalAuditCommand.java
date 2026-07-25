@@ -39,6 +39,7 @@ public record RagRetrievalAuditCommand(String retrievalId,
         requestSnapshot = requestSnapshot == null ? Map.of() : Map.copyOf(requestSnapshot);
     }
 
+    /** 校验审计关联身份和状态文本。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + "不能为空");
     }

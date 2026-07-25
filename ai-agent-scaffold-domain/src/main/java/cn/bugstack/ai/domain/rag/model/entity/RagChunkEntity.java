@@ -44,6 +44,7 @@ public record RagChunkEntity(String tenantId,
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }
 
+    /** 校验分块身份、正文与摘要的必填文本。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

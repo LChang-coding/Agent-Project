@@ -31,6 +31,7 @@ public record RagKnowledgeBaseEntity(String tenantId,
         }
     }
 
+    /** 校验知识库身份与名称。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");

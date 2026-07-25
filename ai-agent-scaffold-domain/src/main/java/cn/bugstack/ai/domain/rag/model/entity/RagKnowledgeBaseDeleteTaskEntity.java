@@ -9,7 +9,11 @@ import cn.bugstack.ai.types.exception.AppException;
 import java.time.Duration;
 import java.time.Instant;
 
-/** 可租约接管、可从文档检查点恢复的知识库级联删除任务。 */
+/**
+ * 可租约接管、可从文档检查点恢复的知识库级联删除任务。
+ * <p>checkpoint 保存子文档总数和完成数；WAITING 主动让出租约等待子任务，revision 与 fencing token
+ * 分别保护数据库更新和跨实例副作用。</p>
+ */
 public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                                                String knowledgeBaseId,
                                                String requestedByUserId,
@@ -51,6 +55,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
         }
     }
 
+    /** 创建尚未领取、从接收阶段开始的知识库删除任务。 */
     public static RagKnowledgeBaseDeleteTaskEntity pending(String tenantId, String knowledgeBaseId,
                                                             String requestedByUserId,
                                                             String taskId, String taskKey,
@@ -62,6 +67,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 null, null, 0, 0, null, null);
     }
 
+    /** 领取到期任务或接管过期租约，并要求栅栏单调递增。 */
     public RagKnowledgeBaseDeleteTaskEntity claim(String owner, long newFence, Instant now,
                                                    Duration leaseDuration) {
         if (now == null || leaseDuration == null || leaseDuration.isZero() || leaseDuration.isNegative()) {
@@ -84,6 +90,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 newFence, null, null);
     }
 
+    /** 在有效租约内单调推进级联删除检查点。 */
     public RagKnowledgeBaseDeleteTaskEntity advance(String owner, long expectedFence, Instant now,
                                                      RagKnowledgeBaseDeleteCheckpoint target) {
         assertClaim(owner, expectedFence, now);
@@ -96,6 +103,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
         return copy(status, target, attemptCount, null, lease, fencingToken, null, null);
     }
 
+    /** 仅在验证阶段完成且子文档全部清理后进入终态。 */
     public RagKnowledgeBaseDeleteTaskEntity complete(String owner, long expectedFence, Instant now) {
         assertClaim(owner, expectedFence, now);
         if (checkpoint.stage() != RagKnowledgeBaseDeleteStage.VERIFYING
@@ -108,7 +116,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 attemptCount, null, null, fencingToken, null, null);
     }
 
-    /** 子文档删除仍在进行时释放租约，不消耗失败尝试次数。 */
+    /** 子文档仍在删除时释放租约并等待下次轮询，不消耗失败尝试次数。 */
     public RagKnowledgeBaseDeleteTaskEntity waitForChild(String owner, long expectedFence, Instant now,
                                                           Instant nextPollAt,
                                                           RagKnowledgeBaseDeleteCheckpoint target) {
@@ -123,6 +131,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 nextPollAt, null, fencingToken, null, null);
     }
 
+    /** 记录删除失败；有剩余尝试时重试，否则进入 DEAD。 */
     public RagKnowledgeBaseDeleteTaskEntity fail(String owner, long expectedFence, Instant now,
                                                  boolean retryable, Instant retryAt,
                                                  String code, String message) {
@@ -139,6 +148,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 null, fencingToken, normalize(code, 64), normalize(message, 1000));
     }
 
+    /** 将失败或耗尽任务重新排队，同时保留幂等检查点。 */
     public RagKnowledgeBaseDeleteTaskEntity requeue() {
         if (status != RagKnowledgeBaseDeleteStatus.FAILED && status != RagKnowledgeBaseDeleteStatus.DEAD) {
             throw error("RAG_KB_DELETE_REQUEUE_STATE_INVALID", "知识库删除任务当前不能重新排队");
@@ -147,6 +157,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 null, null, fencingToken, null, null);
     }
 
+    /** 校验调用方仍持有未过期租约和当前栅栏。 */
     public void assertClaim(String owner, long expectedFence, Instant now) {
         if (status != RagKnowledgeBaseDeleteStatus.RUNNING || lease == null
                 || !lease.owner().equals(owner) || fencingToken != expectedFence
@@ -155,6 +166,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
         }
     }
 
+    /** 复制稳定身份和检查点，并为状态迁移递增 revision。 */
     private RagKnowledgeBaseDeleteTaskEntity copy(RagKnowledgeBaseDeleteStatus targetStatus,
                                                    RagKnowledgeBaseDeleteCheckpoint targetCheckpoint,
                                                    int targetAttempts, Instant targetRetryAt,
@@ -166,17 +178,20 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                 targetLease, targetFence, revision + 1, targetErrorCode, targetErrorMessage);
     }
 
+    /** 校验删除任务必填文本。 */
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + "不能为空");
         return value;
     }
 
+    /** 规范化并截断错误信息。 */
     private String normalize(String value, int max) {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim().replaceAll("[\\r\\n\\t ]+", " ");
         return normalized.length() <= max ? normalized : normalized.substring(0, max);
     }
 
+    /** 构造稳定错误码的删除领域异常。 */
     private AppException error(String code, String message) {
         return new AppException(code, message);
     }

@@ -71,6 +71,7 @@ public record RagDocumentVersionEntity(String tenantId,
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }
 
+    /** 校验不可变文档版本的必填身份与对象位置。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");
@@ -138,6 +139,7 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.DELETED, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
+    /** 复制不可变版本身份，并为每次状态迁移递增 revision。 */
     private RagDocumentVersionEntity copy(RagDocumentVersionStatus targetStatus, String parserRevision,
                                           String chunkerRevision, String embeddingRevision) {
         return new RagDocumentVersionEntity(tenantId, knowledgeBaseId, documentId, versionId, versionNumber,

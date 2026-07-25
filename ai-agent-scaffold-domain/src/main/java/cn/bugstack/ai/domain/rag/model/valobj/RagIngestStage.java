@@ -2,6 +2,8 @@ package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
  * 文档摄取流水线阶段。
+ * <p>摄取依次经过接收、解析、切块、向量化、索引、验证和完成；删除使用独立的向量、
+ * 分块、源文件清理阶段。</p>
  */
 public enum RagIngestStage {
     RECEIVED,

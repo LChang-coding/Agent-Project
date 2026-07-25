@@ -9,9 +9,11 @@ import java.util.List;
 /** RAG原件与解析产物的服务端对象键范围契约。 */
 public final class RagObjectStorageScope {
 
+    /** 禁止实例化纯对象键规范工具。 */
     private RagObjectStorageScope() {
     }
 
+    /** 构造租户、知识库、文档和不可变版本共同限定的对象前缀。 */
     public static String versionPrefix(String tenantId, String knowledgeBaseId,
                                        String documentId, String versionId) {
         return "tenants/" + shortHash(tenantId) + "/rag/" + shortHash(knowledgeBaseId)
@@ -19,6 +21,7 @@ public final class RagObjectStorageScope {
                 + requireSegment(versionId, "versionId") + "/";
     }
 
+    /** 构造版本原始上传文件的对象键。 */
     public static String sourceObjectKey(String tenantId, String knowledgeBaseId,
                                          String documentId, String versionId, String fileName) {
         return versionPrefix(tenantId, knowledgeBaseId, documentId, versionId)
@@ -76,6 +79,7 @@ public final class RagObjectStorageScope {
                 chunkManifestObjectKey(tenantId, knowledgeBaseId, documentId, versionId));
     }
 
+    /** 校验对象键位于可信版本前缀内且不含空段或路径穿越。 */
     public static boolean containsVersionObject(String objectKey, String tenantId, String knowledgeBaseId,
                                                 String documentId, String versionId) {
         String prefix = versionPrefix(tenantId, knowledgeBaseId, documentId, versionId);
@@ -87,6 +91,7 @@ public final class RagObjectStorageScope {
         return true;
     }
 
+    /** 生成不暴露原始长标识的稳定短路径段。 */
     private static String shortHash(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -96,6 +101,7 @@ public final class RagObjectStorageScope {
         }
     }
 
+    /** 校验并返回对象键必需的路径语义段。 */
     private static String requireSegment(String value, String field) {
         if (value == null || value.isBlank() || ".".equals(value) || "..".equals(value)
                 || value.contains("/") || value.contains("\\")) {

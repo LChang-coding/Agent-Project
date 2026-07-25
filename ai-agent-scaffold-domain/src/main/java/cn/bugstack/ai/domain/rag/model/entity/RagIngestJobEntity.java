@@ -13,6 +13,8 @@ import java.time.Instant;
 
 /**
  * 可租约领取、可取消并受 fencing token 保护的摄取任务。
+ * <p>任务身份与 generation 创建后不变；checkpoint 记录可恢复进度，revision 保护数据库条件更新，
+ * lease 负责故障接管，fencing token 负责拒绝旧 Worker 的外部副作用和最终提交。</p>
  */
 public record RagIngestJobEntity(String tenantId,
                                  String knowledgeBaseId,
@@ -279,6 +281,7 @@ public record RagIngestJobEntity(String tenantId,
         assertFence(leaseOwner, expectedFencingToken, now, true);
     }
 
+    /** 校验调用方仍持有同一租约和单调栅栏，可选要求租约未过期。 */
     private void assertFence(String leaseOwner, long expectedFencingToken, Instant now, boolean requireActiveLease) {
         if (now == null) {
             throw new IllegalArgumentException("租约校验时间不能为空");
@@ -291,6 +294,7 @@ public record RagIngestJobEntity(String tenantId,
         }
     }
 
+    /** 复制全部不变身份，并为每次状态迁移递增 revision。 */
     private RagIngestJobEntity copy(RagIngestJobStatus targetStatus, RagIngestCheckpoint targetCheckpoint,
                                     int targetAttempts, Instant targetRetryAt, RagLease targetLease,
                                     long targetFencingToken, String targetCancelReason,
@@ -301,6 +305,7 @@ public record RagIngestJobEntity(String tenantId,
                 targetFencingToken, revision + 1, targetCancelReason, targetErrorCode, targetErrorMessage, traceId);
     }
 
+    /** 删除流水线仅允许原地幂等或按向量、分块、源文件顺序推进。 */
     private boolean validDeleteTransition(RagIngestStage current, RagIngestStage target) {
         return current == target
                 || current == RagIngestStage.RECEIVED && target == RagIngestStage.DELETING_VECTORS
@@ -308,12 +313,14 @@ public record RagIngestJobEntity(String tenantId,
                 || current == RagIngestStage.DELETING_CHUNKS && target == RagIngestStage.DELETING_SOURCE;
     }
 
+    /** 校验租约起点和正时长。 */
     private static void requireTime(Instant now, Duration duration) {
         if (now == null || duration == null || duration.isZero() || duration.isNegative()) {
             throw new IllegalArgumentException("租约时间参数非法");
         }
     }
 
+    /** 校验摄取任务必填身份文本。 */
     private static String requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");
@@ -321,23 +328,28 @@ public record RagIngestJobEntity(String tenantId,
         return value;
     }
 
+    /** 规范化管理员取消原因并限制持久化长度。 */
     private static String normalizeReason(String value) {
         return value == null || value.isBlank() ? "管理员取消摄取任务" : trim(value, 512);
     }
 
+    /** 规范化外部故障码并限制持久化长度。 */
     private static String normalizeCode(String value) {
         return value == null || value.isBlank() ? "RAG_INGEST_FAILED" : trim(value, 128);
     }
 
+    /** 规范化可读错误并限制持久化长度。 */
     private static String normalizeMessage(String value) {
         return value == null || value.isBlank() ? "摄取任务执行失败" : trim(value, 512);
     }
 
+    /** 去除首尾空白并按数据库上限截断。 */
     private static String trim(String value, int maxLength) {
         String normalized = value.trim();
         return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
     }
 
+    /** 构造带稳定业务错误码的领域异常。 */
     private static AppException domainError(String code, String message) {
         return new AppException(code, message);
     }

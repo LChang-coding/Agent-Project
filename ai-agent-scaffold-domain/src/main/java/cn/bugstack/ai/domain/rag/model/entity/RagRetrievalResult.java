@@ -15,6 +15,7 @@ public record RagRetrievalResult(String retrievalId,
                                  Metrics metrics,
                                  Diagnostics diagnostics) {
 
+    /** 兼容不携带候选诊断的生产结果构造。 */
     public RagRetrievalResult(String retrievalId, List<Citation> citations, int estimatedTokenCount,
                               boolean degraded, List<String> degradationReasons, Metrics metrics) {
         this(retrievalId, citations, estimatedTokenCount, degraded, degradationReasons, metrics,
@@ -31,11 +32,13 @@ public record RagRetrievalResult(String retrievalId,
         }
     }
 
+    /** 创建仅含总耗时的空命中结果。 */
     public static RagRetrievalResult empty(String retrievalId, long totalMs) {
         return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
                 new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs));
     }
 
+    /** 创建包含配置解析耗时的空命中结果。 */
     public static RagRetrievalResult empty(String retrievalId, long totalMs, long configurationMs) {
         return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
                 new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs,
@@ -117,6 +120,7 @@ public record RagRetrievalResult(String retrievalId,
                           long assemblyMs,
                           long auditMs,
                           long serviceMs) {
+        /** 兼容未拆分配置、水合、组装和审计耗时的旧指标构造。 */
         public Metrics(int denseCandidateCount, int sparseCandidateCount, int fusionCandidateCount,
                        int rerankCandidateCount, long embeddingMs, long denseMs, long sparseMs,
                        long fusionMs, long rerankMs, long totalMs) {
@@ -144,6 +148,7 @@ public record RagRetrievalResult(String retrievalId,
                 throw new IllegalArgumentException("RAG诊断参数非法");
             }
         }
+        /** 返回生产默认关闭的零候选诊断。 */
         public static Diagnostics empty() { return new Diagnostics(false, false, 0, 0, List.of()); }
     }
 
@@ -172,6 +177,7 @@ public record RagRetrievalResult(String retrievalId,
         }
     }
 
+    /** 校验检索结果中的必填公开标识。 */
     private static void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + "不能为空");
