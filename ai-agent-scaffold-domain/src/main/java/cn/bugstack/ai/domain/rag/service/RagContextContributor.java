@@ -17,12 +17,15 @@ import java.util.List;
 @Service
 public class RagContextContributor implements ContextContributor {
 
+    /** 复用生产检索主链路，避免上下文组装另造检索口径。 */
     private final RagRetrievalService retrievalService;
 
+    /** 注入在线检索编排服务。 */
     public RagContextContributor(RagRetrievalService retrievalService) {
         this.retrievalService = retrievalService;
     }
 
+    /** 仅在 RAG 预算和可信运行目标完整时贡献一个 RAG 上下文片段。 */
     @Override
     public List<ContextContribution> contribute(ContextAssembleRequest request,
                                                 ContextPolicyProperties properties) {
@@ -42,6 +45,7 @@ public class RagContextContributor implements ContextContributor {
                 .ragEvidence(toEvidence(result)).build());
     }
 
+    /** 将实际引用压缩为模型调用期间的可信证据白名单。 */
     private RagContextEvidence toEvidence(RagRetrievalResult result) {
         return new RagContextEvidence(result.retrievalId(), result.citations().stream()
                 .map(citation -> new RagContextEvidence.CitationReference(citation.citationId(),
@@ -51,6 +55,7 @@ public class RagContextContributor implements ContextContributor {
                 .toList());
     }
 
+    /** 用无指令权 XML 包装外部资料并保留引用 ID。 */
     private String render(RagRetrievalResult result) {
         List<String> lines = new ArrayList<>();
         lines.add("<rag_context retrieval_id=\"" + escape(result.retrievalId()) + "\" trust=\"untrusted_reference\">");
@@ -67,12 +72,14 @@ public class RagContextContributor implements ContextContributor {
         return String.join("\n", lines);
     }
 
+    /** 转义 XML 元字符，阻止文档正文逃逸资料边界。 */
     private String escape(String value) {
         if (value == null) return "";
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
+    /** 统一识别缺失的运行输入。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }

@@ -11,10 +11,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class RagRetrievalDebugService {
 
+    /** 检查调试目标在当前租户确有绑定。 */
     private final IRagRepository repository;
+    /** 调试接口只开放给租户管理员。 */
     private final RagKnowledgeBaseAuthorizationService authorization;
+    /** 调试和聊天共用同一在线检索实现。 */
     private final RagRetrievalService retrievalService;
 
+    /** 注入绑定仓储、授权和检索服务。 */
     public RagRetrievalDebugService(IRagRepository repository,
                                     RagKnowledgeBaseAuthorizationService authorization,
                                     RagRetrievalService retrievalService) {
@@ -23,6 +27,7 @@ public class RagRetrievalDebugService {
         this.retrievalService = retrievalService;
     }
 
+    /** 校验管理员、目标、问题和预算后开启诊断候选轨迹。 */
     public RagRetrievalResult debug(String tenantId, String userId, String roleCode,
                                     RagBindingTargetType targetType, String targetId, String query,
                                     int maxContextTokens, String traceId) {

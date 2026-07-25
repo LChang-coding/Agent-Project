@@ -51,19 +51,28 @@ import java.util.stream.Collectors;
 @Service
 public class RagRetrievalService {
 
+    /** 查询长度、RRF 常数、绑定数量和数据库批量水位的硬边界。 */
     private static final int MAX_QUERY_CHARS = 4096;
     private static final int RRF_K = 60;
     private static final int MAX_BINDINGS = 32;
     private static final int DOCUMENT_LOAD_BATCH_SIZE = 500;
 
+    /** 读取绑定、策略、知识库、文档和分块的业务事实。 */
     private final IRagRepository repository;
+    /** 生成 Dense 查询向量。 */
     private final EmbeddingPort embeddingPort;
+    /** 生成确定性 Sparse 查询特征。 */
     private final SparseEncoderPort sparseEncoderPort;
+    /** 在知识库代际范围内执行 Dense/Sparse 召回。 */
     private final VectorStorePort vectorStorePort;
+    /** 对融合候选执行语义重排。 */
     private final RerankerPort rerankerPort;
+    /** 持久化不含正文的检索审计快照。 */
     private final RagRetrievalAuditPort auditPort;
+    /** 统一估算最终上下文 Token 占用。 */
     private final TokenCounter tokenCounter;
 
+    /** 生产构造器使用平台默认字符 Token 估算器。 */
     @Autowired
     public RagRetrievalService(IRagRepository repository,
                                EmbeddingPort embeddingPort,
@@ -75,6 +84,7 @@ public class RagRetrievalService {
                 new CharacterTokenCounter());
     }
 
+    /** 测试构造器允许注入确定性的 Token 计数器。 */
     RagRetrievalService(IRagRepository repository,
                         EmbeddingPort embeddingPort,
                         SparseEncoderPort sparseEncoderPort,
@@ -151,6 +161,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 串联绑定解析、双路召回、融合、重排、扩展和引用预算。 */
     private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
                                                 long started, AuditState audit) {
         Aggregate aggregate = new Aggregate(request.diagnosticsEnabled());
@@ -289,6 +300,7 @@ public class RagRetrievalService {
                 aggregate.degradationReasons, metrics, aggregate.diagnostics.result());
     }
 
+    /** 审计写入失败只降级主结果，不反向掩盖成功检索。 */
     private boolean recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
                                 String status, RuntimeException exception, AuditState state) {
         try {
@@ -309,6 +321,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 返回包含真实阶段耗时和诊断信息的非降级空结果。 */
     private RagRetrievalResult emptyResult(String retrievalId, long started, Aggregate aggregate) {
         return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
                 new RagRetrievalResult.Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -316,6 +329,7 @@ public class RagRetrievalService {
                         aggregate.assemblyMs, 0, 0), aggregate.diagnostics.result());
     }
 
+    /** 外部能力失败若影响必需绑定则立即失败，否则允许移除可选绑定。 */
     private void failIfRequired(List<ResolvedBinding> bindings, RagRetrievalMode unaffectedMode,
                                 RuntimeException exception) {
         boolean requiredAffected = bindings.stream().anyMatch(value -> value.binding().required()
@@ -323,6 +337,7 @@ public class RagRetrievalService {
         if (requiredAffected) throw exception;
     }
 
+    /** 将绑定解析为可搜索、代际有效、策略存在且当前用户可见的执行单元。 */
     private List<ResolvedBinding> resolveBindings(RagRetrievalRequest request,
                                                    List<RagAgentBindingEntity> bindings) {
         List<ResolvedBinding> result = new ArrayList<>();
@@ -363,6 +378,7 @@ public class RagRetrievalService {
         return result;
     }
 
+    /** 在单个绑定范围内执行召回、融合、业务回表、去重和可选重排。 */
     private List<RankedChunk> retrieveBinding(RagRetrievalRequest request,
                                               String retrievalId,
                                               String query,
@@ -503,6 +519,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 按策略合并 Dense/Sparse 命中，再执行阈值和融合 TopK。 */
     private List<ScoredHit> fuse(RagRetrievalProfileEntity profile,
                                  List<VectorStorePort.VectorSearchHit> denseHits,
                                  List<VectorStorePort.VectorSearchHit> sparseHits) {
@@ -524,6 +541,7 @@ public class RagRetrievalService {
         return List.copyOf(result);
     }
 
+    /** 复核文档活动快照，扩展邻居，并同时执行全局与绑定 Token 预算。 */
     private List<RagRetrievalResult.Citation> assembleCitations(RagRetrievalRequest request,
                                                                  String retrievalId,
                                                                  List<RankedChunk> ranked,
@@ -596,6 +614,7 @@ public class RagRetrievalService {
         return List.copyOf(citations);
     }
 
+    /** 分批回表加载引用文档，并拒绝仓储返回重复业务 ID。 */
     private Map<String, RagDocumentEntity> loadDocuments(String tenantId, List<RankedChunk> ranked,
                                                           Aggregate aggregate) {
         List<String> documentIds = ranked.stream().map(value -> value.chunk().documentId()).distinct().toList();
@@ -615,6 +634,7 @@ public class RagRetrievalService {
         return documents;
     }
 
+    /** 从主命中扩展父块和指定深度相邻块，最终按原文顺序排列。 */
     private List<RagChunkEntity> expandContext(String tenantId, RankedChunk value, Aggregate aggregate) {
         int window = value.resolved().profile().neighborWindow();
         LinkedHashMap<String, RagChunkEntity> chunks = new LinkedHashMap<>();
@@ -641,12 +661,14 @@ public class RagRetrievalService {
         return chunks.values().stream().sorted(Comparator.comparingInt(RagChunkEntity::chunkIndex)).toList();
     }
 
+    /** 批量回表分块并累计水合耗时。 */
     private List<RagChunkEntity> loadChunks(String tenantId, List<String> chunkIds, Aggregate aggregate) {
         Timed<List<RagChunkEntity>> loaded = timed(() -> repository.listChunksByIds(tenantId, chunkIds));
         aggregate.hydrationMs += loaded.elapsedMs();
         return loaded.value();
     }
 
+    /** 提取非空的前后相邻分块 ID。 */
     private Set<String> neighborIds(RagChunkEntity chunk) {
         Set<String> ids = new LinkedHashSet<>();
         if (hasText(chunk.previousChunkId())) ids.add(chunk.previousChunkId());
@@ -654,6 +676,7 @@ public class RagRetrievalService {
         return ids;
     }
 
+    /** 核对向量命中与数据库分块属于同一知识库代际、文档和版本。 */
     private void validateChunkScope(ResolvedBinding resolved, VectorStorePort.VectorSearchHit hit,
                                     RagChunkEntity chunk) {
         if (chunk == null || !resolved.knowledgeBase().knowledgeBaseId().equals(chunk.knowledgeBaseId())
@@ -664,6 +687,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 识别删除并发窗口内尚留向量、但业务分块已清理的合法墓碑命中。 */
     private boolean isLegitimateDeletingHit(String tenantId, ResolvedBinding resolved,
                                              VectorStorePort.VectorSearchHit hit,
                                              Map<String, Optional<RagDocumentEntity>> documents) {
@@ -688,6 +712,7 @@ public class RagRetrievalService {
         return isTombstonedVersion(tenantId, document, hit.versionId(), hit.generation());
     }
 
+    /** 父块和邻居不得越出租户、知识库、文档、版本或代际。 */
     private void validateRelatedScope(RagChunkEntity main, RagChunkEntity related) {
         if (!main.tenantId().equals(related.tenantId()) || !main.knowledgeBaseId().equals(related.knowledgeBaseId())
                 || !main.documentId().equals(related.documentId()) || !main.versionId().equals(related.versionId())
@@ -696,6 +721,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 引用文档必须仍指向命中分块所在的活动版本和代际。 */
     private void validateDocumentScope(RankedChunk value, RagDocumentEntity document) {
         RagChunkEntity chunk = value.chunk();
         if (!document.status().searchable() || !chunk.knowledgeBaseId().equals(document.knowledgeBaseId())
@@ -705,6 +731,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 删除态命中只能属于删除前的活动索引快照。 */
     private void validateDeletingDocumentScope(RankedChunk value, RagDocumentEntity document) {
         RagChunkEntity chunk = value.chunk();
         if (!chunk.knowledgeBaseId().equals(document.knowledgeBaseId())
@@ -715,6 +742,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 确认命中版本已进入删除或已删除墓碑状态。 */
     private boolean isTombstonedVersion(String tenantId, RagDocumentEntity document,
                                          String versionId, long generation) {
         Optional<RagDocumentVersionEntity> version = repository.findDocumentVersion(tenantId, versionId);
@@ -727,6 +755,7 @@ public class RagRetrievalService {
                 || version.get().status() == RagDocumentVersionStatus.DELETED);
     }
 
+    /** 同一 chunkId 的 Dense 与 Sparse 命中必须指向完全相同的资源范围。 */
     private void validateSameHitScope(VectorStorePort.VectorSearchHit left,
                                       VectorStorePort.VectorSearchHit right) {
         if (!left.knowledgeBaseId().equals(right.knowledgeBaseId())
@@ -736,10 +765,12 @@ public class RagRetrievalService {
         }
     }
 
+    /** 跨绑定重复 chunkId 保留最终排序更优的候选。 */
     private RankedChunk better(RankedChunk left, RankedChunk right) {
         return RANKING.compare(left, right) <= 0 ? left : right;
     }
 
+    /** 压缩 Unicode 空白并执行查询长度上限。 */
     private String normalizeQuery(String query) {
         String normalized = query.strip().replaceAll("[\\p{Z}\\s]+", " ");
         if (normalized.isBlank() || normalized.length() > MAX_QUERY_CHARS) {
@@ -748,12 +779,14 @@ public class RagRetrievalService {
         return normalized;
     }
 
+    /** 引用 ID 绑定本次检索、租户、版本、分块与最终排名。 */
     private String citationId(String retrievalId, RagChunkEntity chunk, int rank) {
         return "cite_" + sha256(retrievalId + "|" + chunk.tenantId() + "|" + chunk.versionId()
                 + "|" + chunk.chunkId() + "|" + rank)
                 .substring(0, 24);
     }
 
+    /** 使用 JVM 必备 SHA-256 生成稳定摘要。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -763,6 +796,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 范围违规属于安全错误，任何可选绑定都不得吞掉。 */
     private boolean isScopeViolation(RuntimeException exception) {
         return exception instanceof AppException appException && appException.getCode() != null
                 && appException.getCode().contains("SCOPE");
@@ -829,51 +863,64 @@ public class RagRetrievalService {
                 .field("degraded", true));
     }
 
+    /** 将阶段异常压缩为稳定业务错误码。 */
     private String errorCode(RuntimeException exception) {
         return exception instanceof AppException appException && appException.getCode() != null
                 ? appException.getCode() : "RAG_STAGE_FAILED";
     }
 
+    /** 判断可选标识是否可用。 */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 
+    /** 使用单调时钟计算非负阶段耗时。 */
     private static long elapsedMs(long startedNanos) {
         return Math.max(0L, (System.nanoTime() - startedNanos) / 1_000_000L);
     }
 
+    /** 执行动作并携带真实耗时返回。 */
     private static <T> Timed<T> timed(Supplier<T> action) {
         long started = System.nanoTime();
         T value = action.get();
         return new Timed<>(value, elapsedMs(started));
     }
 
+    /** 融合候选先按分数降序，再以 chunkId 保证同分顺序稳定。 */
     private static final Comparator<ScoredHit> SCORED_HIT_ORDER = Comparator
             .comparingDouble(ScoredHit::fusionScore).reversed()
             .thenComparing(value -> value.hit().chunkId());
+    /** 最终候选优先重排分，其次绑定优先级和稳定 chunkId。 */
     private static final Comparator<RankedChunk> RANKING = Comparator
             .comparingDouble((RankedChunk value) -> value.rerankScore() == null
                     ? value.fusionScore() : value.rerankScore()).reversed()
             .thenComparingInt(value -> value.resolved().binding().priority())
             .thenComparing(value -> value.chunk().chunkId());
 
+    /** 已通过生命周期、策略和可见性校验的执行绑定。 */
     private record ResolvedBinding(RagAgentBindingEntity binding, RagKnowledgeBaseEntity knowledgeBase,
                                    RagRetrievalProfileEntity profile) { }
 
+    /** 保留双路原始分与统一融合分的向量命中。 */
     private record ScoredHit(VectorStorePort.VectorSearchHit hit, Double denseScore, Double sparseScore,
                              double fusionScore) { }
 
+    /** 回表并通过范围校验的业务候选。 */
     private record RankedChunk(ResolvedBinding resolved, RagChunkEntity chunk, Double denseScore,
                                Double sparseScore, double fusionScore, Double rerankScore) {
+        /** 生成携带重排分的新候选，保留召回阶段分数。 */
         private RankedChunk withRerank(double score) {
             return new RankedChunk(resolved, chunk, denseScore, sparseScore, fusionScore, score);
         }
     }
 
+    /** 外部或仓储调用结果及其耗时。 */
     private record Timed<T>(T value, long elapsedMs) {
+        /** 表示未执行阶段的零耗时占位。 */
         private static <T> Timed<T> empty(T value) { return new Timed<>(value, 0); }
     }
 
+    /** 汇总阶段指标、降级原因和可选诊断轨迹。 */
     private static final class Aggregate {
         private int denseCandidates;
         private int sparseCandidates;
@@ -892,20 +939,25 @@ public class RagRetrievalService {
         private final List<String> degradationReasons = new ArrayList<>();
         private final DiagnosticsCollector diagnostics;
 
+        /** 按请求开关决定是否采集候选级诊断。 */
         private Aggregate(boolean diagnosticsEnabled) {
             this.diagnostics = new DiagnosticsCollector(diagnosticsEnabled);
         }
     }
 
+    /** 有界采集候选在各阶段的去留轨迹，不保存正文。 */
     private static final class DiagnosticsCollector {
+        /** 候选数量与标题长度上限防止调试响应无界增长。 */
         private static final int MAX_CAPTURED = 2_048;
         private static final int MAX_HEADING_PATH_CHARS = 1_024;
         private final boolean enabled;
         private final List<RagRetrievalResult.CandidateTrace> candidates = new ArrayList<>();
         private boolean truncated;
 
+        /** 构造启用或空操作诊断器。 */
         private DiagnosticsCollector(boolean enabled) { this.enabled = enabled; }
 
+        /** 记录向量库返回的原始 Dense 或 Sparse 排名。 */
         private void captureRaw(ResolvedBinding resolved, String stage,
                                 List<VectorStorePort.VectorSearchHit> hits, boolean dense) {
             if (!enabled) return;
@@ -919,6 +971,7 @@ public class RagRetrievalService {
             }
         }
 
+        /** 记录通过融合阈值与 TopK 的候选。 */
         private void captureFused(ResolvedBinding resolved, String stage, List<ScoredHit> values) {
             if (!enabled) return;
             for (int index = 0; index < values.size(); index++) {
@@ -926,6 +979,7 @@ public class RagRetrievalService {
             }
         }
 
+        /** 将向量候选转换为不含正文的诊断记录。 */
         private void capture(ResolvedBinding resolved, String stage, int rank, ScoredHit value,
                              Double rerankScore, String outcome) {
             if (!enabled) return;
@@ -937,11 +991,13 @@ public class RagRetrievalService {
                     value.fusionScore(), rerankScore, outcome));
         }
 
+        /** 批量记录业务候选的阶段排名。 */
         private void captureRanked(String stage, List<RankedChunk> values, String outcome) {
             if (!enabled) return;
             for (int index = 0; index < values.size(); index++) capture(values.get(index), stage, index + 1, outcome);
         }
 
+        /** 记录一个回表候选的分数与去留原因。 */
         private void capture(RankedChunk value, String stage, int rank, String outcome) {
             if (!enabled) return;
             RagChunkEntity chunk = value.chunk();
@@ -952,6 +1008,7 @@ public class RagRetrievalService {
                     value.fusionScore(), value.rerankScore(), outcome));
         }
 
+        /** 超过上限后只标记截断，不再增长内存。 */
         private void add(RagRetrievalResult.CandidateTrace value) {
             if (candidates.size() >= MAX_CAPTURED) {
                 truncated = true;
@@ -960,11 +1017,13 @@ public class RagRetrievalService {
             candidates.add(value);
         }
 
+        /** 截断异常长标题路径，诊断不承担正文传输。 */
         private String safeHeadingPath(String value) {
             if (value == null || value.length() <= MAX_HEADING_PATH_CHARS) return value;
             return value.substring(0, MAX_HEADING_PATH_CHARS);
         }
 
+        /** 冻结诊断快照；未启用时返回标准空值。 */
         private RagRetrievalResult.Diagnostics result() {
             if (!enabled) return RagRetrievalResult.Diagnostics.empty();
             return new RagRetrievalResult.Diagnostics(true, truncated, candidates.size(), MAX_CAPTURED,
@@ -972,6 +1031,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 聚合不含正文的配置与执行审计状态。 */
     private final class AuditState {
         private List<String> profileIds = List.of();
         private long profileRevision;
@@ -983,6 +1043,7 @@ public class RagRetrievalService {
         private int executedBindingCount;
         private int mergedCandidateCount;
 
+        /** 从实际解析成功的绑定提取策略版本和能力开关。 */
         private void capture(List<ResolvedBinding> bindings) {
             resolvedBindingCount = bindings.size();
             profileIds = bindings.stream().map(value -> value.profile().profileId()).distinct().sorted().toList();
@@ -992,17 +1053,23 @@ public class RagRetrievalService {
             rerankEnabled = bindings.stream().anyMatch(value -> value.profile().rerankEnabled());
         }
 
+        /** 返回目标配置的候选绑定数。 */
         private int candidateBindingCount() { return candidateBindingCount; }
+        /** 返回通过生命周期和权限解析的绑定数。 */
         private int resolvedBindingCount() { return resolvedBindingCount; }
+        /** 返回实际进入召回循环的绑定数。 */
         private int executedBindingCount() { return executedBindingCount; }
+        /** 返回跨绑定去重后的候选数。 */
         private int mergedCandidateCount() { return mergedCandidateCount; }
 
+        /** 单策略直接记录 ID，多策略记录排序后摘要。 */
         private String profileId() {
             if (profileIds.isEmpty()) return "none";
             if (profileIds.size() == 1) return profileIds.get(0);
             return "multi_" + sha256(String.join("|", profileIds)).substring(0, 24);
         }
 
+        /** 生成不含查询正文和候选正文的审计配置快照。 */
         private Map<String, Object> snapshot(RagRetrievalRequest request) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("targetType", request.targetType().name().toLowerCase());
@@ -1016,6 +1083,7 @@ public class RagRetrievalService {
         }
     }
 
+    /** 聚合同一 chunkId 的双路分数和排名，再冻结为统一分数。 */
     private static final class MutableScore {
         private final VectorStorePort.VectorSearchHit hit;
         private Double denseScore;
@@ -1023,10 +1091,14 @@ public class RagRetrievalService {
         private int denseRank;
         private int sparseRank;
 
+        /** 以首次命中的资源范围作为聚合基准。 */
         private MutableScore(VectorStorePort.VectorSearchHit hit) { this.hit = hit; }
+        /** 记录 Dense 原始分与排名。 */
         private MutableScore dense(double score, int rank) { denseScore = score; denseRank = rank; return this; }
+        /** 记录 Sparse 原始分与排名。 */
         private MutableScore sparse(double score, int rank) { sparseScore = score; sparseRank = rank; return this; }
 
+        /** 按单路、RRF 或加权策略计算零到一融合分。 */
         private ScoredHit freeze(RagRetrievalProfileEntity profile) {
             double denseWeight = decimal(profile.denseWeight());
             double sparseWeight = decimal(profile.sparseWeight());
@@ -1048,10 +1120,13 @@ public class RagRetrievalService {
             return new ScoredHit(hit, denseScore, sparseScore, Math.max(0D, Math.min(1D, score)));
         }
 
+        /** 空权重按零处理。 */
         private static double decimal(BigDecimal value) { return value == null ? 0D : value.doubleValue(); }
+        /** 将余弦相似度从负一到一映射到零到一。 */
         private static double normalizeDense(Double value) {
             return value == null ? 0D : Math.max(0D, Math.min(1D, (value + 1D) / 2D));
         }
+        /** 将非负 Sparse 分数压缩到零到一。 */
         private static double normalizePositive(Double value) {
             if (value == null || value <= 0D) return 0D;
             return value / (1D + value);
