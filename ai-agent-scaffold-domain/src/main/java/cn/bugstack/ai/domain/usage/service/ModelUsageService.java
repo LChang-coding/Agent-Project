@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ModelUsageService {
 
+    /** 用量终态与聚合查询仓储。 */
     private final IModelUsageRepository repository;
 
     /**
@@ -76,6 +77,7 @@ public class ModelUsageService {
         return repository.cancelRunning(tenantId, userId, sessionId, runId, reason);
     }
 
+    /** 将无记录和空聚合列统一转换为零值。 */
     private ModelUsageSummaryEntity defaultSummary(ModelUsageSummaryEntity value) {
         return ModelUsageSummaryEntity.builder()
                 .callCount(value == null ? 0L : safe(value.getCallCount()))
@@ -91,18 +93,22 @@ public class ModelUsageService {
                 .build();
     }
 
+    /** 空 Integer Token 按零处理。 */
     private int safe(Integer value) {
         return value == null ? 0 : value;
     }
 
+    /** 空 Long 聚合值按零处理。 */
     private long safe(Long value) {
         return value == null ? 0L : value;
     }
 
+    /** Token 只允许空值或非负值。 */
     private boolean negative(Integer value) {
         return value != null && value < 0;
     }
 
+    /** 判断调用身份字段是否缺失。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }

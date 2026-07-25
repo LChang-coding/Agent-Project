@@ -23,20 +23,25 @@ import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/** 认证领域服务；密码和刷新令牌只以单向哈希持久化。 */
 @Service
 public class AuthService implements IAuthService {
 
+    /** 注册用户的默认角色、可登录状态和令牌类型常量。 */
     private static final String ROLE_OWNER = "owner";
     private static final String STATUS_ACTIVE = "active";
     private static final String TOKEN_TYPE_BEARER = "Bearer";
 
     @Resource
+    /** 读写账号、成员关系和刷新令牌。 */
     private IAuthRepository authRepository;
 
     @Resource
+    /** 哈希并恒定时间比对密码和刷新令牌。 */
     private PasswordEncoder passwordEncoder;
 
     @Resource
+    /** 签发并验证 Access/Refresh JWT。 */
     private IJwtTokenService jwtTokenService;
 
     /**

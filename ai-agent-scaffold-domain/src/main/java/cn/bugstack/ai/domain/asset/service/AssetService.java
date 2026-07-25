@@ -27,13 +27,18 @@ import java.util.UUID;
 @Service
 public class AssetService {
 
+    /** 单文件、单消息附件数和展示文件名的硬上限。 */
     public static final long MAX_FILE_BYTES = 20L * 1024 * 1024;
     public static final int MAX_ATTACHMENTS_PER_MESSAGE = 10;
     private static final int MAX_FILE_NAME_LENGTH = 255;
 
+    /** 持久化资产引用并执行所有者范围查询。 */
     private final IAssetRepository repository;
+    /** 在上传阶段提取受限文本。 */
     private final AssetTextExtractor textExtractor;
+    /** 保存、下载和补偿删除原始对象。 */
     private final ObjectStorageService storageService;
+    /** 复核附件声明的会话归属。 */
     private final SessionDomain sessionDomain;
 
     /** 创建资产服务；参数是资产依赖端口；返回服务实例。 */
@@ -144,6 +149,7 @@ public class AssetService {
         }
     }
 
+    /** 清理、去空并按首次出现顺序去重附件 ID。 */
     private List<String> normalizeIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();
@@ -153,6 +159,7 @@ public class AssetService {
                         java.util.stream.Collectors.toCollection(LinkedHashSet::new), List::copyOf));
     }
 
+    /** 上传必须具备可信用户、文件名和非空受限字节。 */
     private void validateUpload(AssetUploadCommandEntity command) {
         if (command == null || isBlank(command.getOwnerUserId()) || command.getBytes() == null
                 || command.getBytes().length == 0 || isBlank(command.getFileName())) {
@@ -163,12 +170,14 @@ public class AssetService {
         }
     }
 
+    /** 所有资产操作必须来自可信用户身份。 */
     private void requireIdentity(String ownerUserId) {
         if (isBlank(ownerUserId)) {
             throw new AppException("AUTH_CONTEXT_MISSING", "缺少可信用户身份");
         }
     }
 
+    /** 移除路径与 NUL，并从尾部保留扩展名附近的 255 字符。 */
     private String safeFileName(String fileName) {
         String normalized = fileName.replace('\0', '_').replace('\\', '/');
         int slash = normalized.lastIndexOf('/');
@@ -177,6 +186,7 @@ public class AssetService {
         return value.length() <= MAX_FILE_NAME_LENGTH ? value : value.substring(value.length() - MAX_FILE_NAME_LENGTH);
     }
 
+    /** 以租户、用户和内容哈希生成可去重的安全对象键。 */
     private String objectKey(String tenantId, String userId, String hash, String fileName) {
         String tenantSegment = isBlank(tenantId) ? "personal" : tenantId.replaceAll("[^a-zA-Z0-9_-]", "_");
         String userSegment = userId.replaceAll("[^a-zA-Z0-9_-]", "_");
@@ -185,6 +195,7 @@ public class AssetService {
                 + (extension.isEmpty() ? "" : "." + extension);
     }
 
+    /** 结合 MIME 与扩展名生成前端展示类型。 */
     private String assetType(String fileName, String mimeType) {
         String mime = defaultMime(mimeType).toLowerCase(Locale.ROOT);
         if (mime.startsWith("image/")) return "image";
@@ -194,16 +205,19 @@ public class AssetService {
         return "file";
     }
 
+    /** 提取只含小写字母和数字的安全扩展名。 */
     private String extension(String fileName) {
         String safe = safeFileName(fileName);
         int dot = safe.lastIndexOf('.');
         return dot < 0 || dot == safe.length() - 1 ? "" : safe.substring(dot + 1).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
 
+    /** MIME 缺失时使用通用二进制类型。 */
     private String defaultMime(String mimeType) {
         return isBlank(mimeType) ? "application/octet-stream" : mimeType.trim();
     }
 
+    /** 为同一用户内容复用生成稳定摘要。 */
     private String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
@@ -212,10 +226,12 @@ public class AssetService {
         }
     }
 
+    /** 将可选空字符串统一落为 null。 */
     private String blankToNull(String value) {
         return isBlank(value) ? null : value;
     }
 
+    /** 判断文本是否缺失。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

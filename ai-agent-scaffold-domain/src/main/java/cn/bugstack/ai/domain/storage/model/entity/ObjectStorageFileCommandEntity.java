@@ -16,9 +16,14 @@ import java.nio.file.Path;
 @AllArgsConstructor
 public class ObjectStorageFileCommandEntity {
 
+    /** 目标存储桶。 */
     private String bucket;
+    /** 目标对象键。 */
     private String objectKey;
+    /** 受控暂存文件路径。 */
     private Path sourcePath;
+    /** 调用方已知且必须匹配的文件长度。 */
     private long sizeBytes;
+    /** 对象内容类型。 */
     private String contentType;
 }

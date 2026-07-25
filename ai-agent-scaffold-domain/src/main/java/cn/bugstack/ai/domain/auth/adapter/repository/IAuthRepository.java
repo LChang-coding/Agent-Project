@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.auth.model.entity.UserProfileEntity;
 
 import java.time.LocalDateTime;
 
+/** 认证账号、租户成员关系和刷新令牌的持久化契约。 */
 public interface IAuthRepository {
 
     /**

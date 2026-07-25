@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.auth.model.entity.TokenResultEntity;
 import cn.bugstack.ai.domain.auth.model.entity.UpdateProfileCommandEntity;
 import cn.bugstack.ai.domain.auth.model.entity.UserProfileEntity;
 
+/** 注册、登录、令牌轮换和当前用户维护用例。 */
 public interface IAuthService {
 
     /**

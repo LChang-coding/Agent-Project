@@ -2,6 +2,7 @@ package cn.bugstack.ai.domain.auth.service;
 
 import cn.bugstack.ai.types.context.LoginUser;
 
+/** Access/Refresh JWT 的签发、解析和有效期契约。 */
 public interface IJwtTokenService {
 
     /**

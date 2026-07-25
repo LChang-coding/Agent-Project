@@ -22,6 +22,7 @@ import java.util.Set;
 @Service
 public class AssetContextContributor implements ContextContributor {
 
+    /** 仓储已统一过滤失效消息、未就绪和越权附件。 */
     private final IAssetRepository repository;
 
     /** 创建附件贡献器；参数是资产仓储；返回贡献器实例。 */
@@ -80,6 +81,7 @@ public class AssetContextContributor implements ContextContributor {
                 .source("chat_attachment").build());
     }
 
+    /** 二分截取满足 Token 预算的最长前缀。 */
     private String truncateToTokens(String value, int maxTokens, CharacterTokenCounter tokenCounter) {
         if (maxTokens <= 0 || value == null || value.isBlank()) return "";
         if (tokenCounter.estimate(value) <= maxTokens) return value;
@@ -93,11 +95,13 @@ public class AssetContextContributor implements ContextContributor {
         return value.substring(0, low);
     }
 
+    /** 转义 XML 属性与正文边界字符。 */
     private String safe(String value) {
         return value == null ? "" : value.replace("&", "&amp;").replace("\"", "&quot;")
                 .replace("<", "&lt;").replace(">", "&gt;");
     }
 
+    /** 判断可选上下文字段是否缺失。 */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

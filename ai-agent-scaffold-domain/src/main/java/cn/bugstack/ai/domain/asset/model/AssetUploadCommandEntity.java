@@ -10,10 +10,16 @@ import lombok.Data;
 @Data
 @Builder
 public class AssetUploadCommandEntity {
+    /** 来自认证上下文的租户。 */
     private String tenantId;
+    /** 来自认证上下文的用户。 */
     private String ownerUserId;
+    /** 可选的预关联会话。 */
     private String sessionId;
+    /** 客户端原始文件名。 */
     private String fileName;
+    /** 客户端声明 MIME。 */
     private String mimeType;
+    /** 受上传上限约束的文件内容。 */
     private byte[] bytes;
 }
