@@ -44,6 +44,7 @@ public final class RagBenchmarkCli {
             case "failure-cases" -> failureCases(options);
             case "diagnose-cases" -> diagnoseCases(options);
             case "diagnostic-report" -> diagnosticReport(options);
+            case "compare-formats" -> compareFormats(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
     }
@@ -170,6 +171,16 @@ public final class RagBenchmarkCli {
         reporter.write(report, path(options, "out-json"), path(options, "out-markdown"));
         System.out.printf("diagnostic-report completed queries=%d records=%d integrity=%s%n",
                 report.manifest().queryCount(), report.manifest().recordCount(), report.manifest().integrityHealthy());
+    }
+
+    private static void compareFormats(Map<String, String> options) throws IOException {
+        RagFormatComparisonReporter.Result result = new RagFormatComparisonReporter(new ObjectMapper()).generate(
+                new RagFormatComparisonReporter.Configuration(path(options, "pdf-run"),
+                        path(options, "docx-run"), path(options, "qrels"), path(options, "queries"),
+                        path(options, "document-manifest"), path(options, "resource-evidence"),
+                        path(options, "out")));
+        System.out.printf("compare-formats completed queries=%d json=%s markdown=%s evidence=%s%n",
+                result.report().manifest().queryCount(), result.json(), result.markdown(), result.evidenceManifest());
     }
 
     private static void prepare(Map<String, String> options) throws IOException {
@@ -440,6 +451,8 @@ public final class RagBenchmarkCli {
         lines.add("        --diagnostic-manifest diagnostic-manifest.json --qrels qrels.tsv");
         lines.add("        --documents benchmark.md --document-map document-map.jsonl");
         lines.add("        --out-json report.json --out-markdown report.md");
+        lines.add("compare-formats --pdf-run DIR --docx-run DIR --qrels qrels.tsv --queries queries.jsonl");
+        lines.add("        --document-manifest documents.jsonl --resource-evidence DIR --out EMPTY_DIR");
         lines.forEach(System.out::println);
     }
 

@@ -333,3 +333,11 @@ docs/rag/evaluation-results/pdf-docx-200/
 - DOCX 因果报告在修正后的协议门禁下通过：92/92 最终排名与正式 run 精确一致、`integrityHealthy=true`。首个可观测覆盖损失：融合阈值/TopK 34、Dense raw TopK 1、Sparse raw TopK 1、无损失 56；Rerank 对 23 个代表问题排序改善 9、伤害 5、中性 9。
 - 新增 `persist-failure-analysis`：只接受数据库中已完成 run，校验内部报告完整、全部最终排名一致、failure report hash 一致，再按 `runId + category + queryId` 稳定 failureId 幂等写入 `rag_benchmark_failure_case`。数据库保存 query、gold、变体、首个失败步骤、直接事实、内部损失、竞争文档、替代解释、证据路径及 hash。
 - H2 MySQL 模式验证连续写入两次仍只有一行；不健康内部报告在任何数据库写入前被拒绝。Java 17 对 failure store 与内部 reporter 的 12 个测试通过并重建 CLI。
+- 真实 MySQL 落库并回读通过：PDF 30 条失败分类记录、21 个唯一 query、7 类；DOCX 29 条、23 个唯一 query、7 类；全部证据 hash 长度 64。两次 run 的原 200 文档、800 查询、4 聚合记录保持不变。
+- 首次生成双格式资源对照报告时，`remote-inspect-before/after.txt` 字节级相等门禁失败并停止输出。处理计划：检查 diff，只比较容器 ID、镜像、运行状态、OOMKilled、RestartCount 等稳定安全字段；Docker inspect 中自然变化的时间戳或健康历史只作为观测字段，不能导致“容器重启”误判。新规则必须对真实8容器全覆盖，并保留两个原文件 hash。
+- diff 证明两个 inspect 文件只有首行采样时间不同，后续 8 个容器稳定字段逐行完全相等：RestartCount=0、OOMKilled=false、running、healthy、镜像未变。对照器现跳过首行观测时间，严格比较所有稳定行，并要求其数量与资源采样容器集合一致。
+- 双格式配对报告已生成：`docs/rag/evaluation-results/pdf-docx-ir-full-comparison-20260730-r2/`。200 问题 × 4 变体均完成逐 query 配对；Dense 双命中 189、双失败 5、仅 PDF 命中 3、仅 DOCX 命中 3；Hybrid/Rerank 均为双命中 180、双失败 11、仅 PDF 5、仅 DOCX 4。
+- 摄取对照：PDF 530 chunks、平均 20,608.660 ms、p95 31,332 ms；DOCX 706 chunks、平均 11,626.580 ms、p95 16,533 ms。DOCX 多 176 chunks（+33.2%），但在该派生集上摄取更快；不能据此把更多 chunk 直接解释成更慢。
+- 资源证据：本机 JVM 2,487 样本、远端每个容器 1,712 样本、8 容器；采样错误文件为空。Reranker CPU mean/max 84.013%/455.790%、内存 mean/max 67.828%/67.920%，是计算与延迟首要热点；Embedding CPU mean/max 31.469%/455.660%、内存约 62%；Docling CPU mean/max 25.254%/375.200%。本机 JVM CPU mean/max 1.408%/30.6%，RSS max 571,040 KiB，说明瓶颈主要不在本机 Java CPU。
+- 新增可复现 `compare-formats` 命令与 200 问题 × 4 变体的配对契约测试；测试同时验证格式独占命中、资源样本、稳定 inspect 字段与 Markdown 输出。
+- Java 17 下 benchmark 模块完整测试与打包通过：60 个测试，0 失败、0 错误、0 跳过。提交范围只包含成功正式产物、成功内部诊断、资源证据、配对报告、工具代码和本计划；首次门禁失败目录保留本地但不混入正式成功产物提交。

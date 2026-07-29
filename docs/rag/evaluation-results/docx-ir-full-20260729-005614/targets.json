@@ -1,0 +1,10 @@
+{
+  "targets" : {
+    "dense" : "wf_c583a4bc-6f58-4e19-b305-5fdfcee15e7a",
+    "sparse" : "wf_5bd8efb3-f1bf-41e5-a50f-12a899f36b26",
+    "hybrid_rrf" : "wf_98fe0e10-9466-455b-96d4-9fc26bc28db2",
+    "hybrid_rrf_rerank" : "wf_d941b619-7920-4c98-afb1-5691e7a7f658"
+  },
+  "sourceRunId" : "docx-ir-full-20260729-005614",
+  "schemaVersion" : 1
+}

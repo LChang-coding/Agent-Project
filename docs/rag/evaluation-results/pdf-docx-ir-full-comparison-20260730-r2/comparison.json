@@ -1,0 +1,2390 @@
+{
+  "manifest" : {
+    "schemaVersion" : 1,
+    "generator" : "rag-format-paired-comparison-v1",
+    "pdfRunId" : "pdf-ir-full-20260729-224110",
+    "docxRunId" : "docx-ir-full-20260729-005614",
+    "queryCount" : 200,
+    "inputSha256" : {
+      "qrels" : "2a808171a79832d5798afb879c2d912f5c8863b09c6427fe454f20dc2a025f73",
+      "remote-sampler.err.log" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "remote-inspect-before.txt" : "f77641207bc649583796fc76b45e4f9f1e909dcd8b52711fc01b39608a528c0a",
+      "docxRun" : "cc81197ce8d5f06856ce9b1b143fdfe4207b4abba0d07709e03632c0508f2ed1",
+      "local-process.jsonl" : "8e41d97bf37216591a60120779554aa9178bd2cde99e973bdd0bc8e5c5a609de",
+      "queries" : "146e928420eabd22ee95322f1711cdee9bd42cfa456db44090a35e8c414eaf35",
+      "pdfRun" : "839bc25bf08055824850a351f03f613fe4ffe3c6d05583ce3547936fefe1ab08",
+      "pdfDocuments" : "c06e6239e3ceeb7f68302f7c0cc2745b234a7cf53828a69bd64045f18ede6ed0",
+      "remote-containers.jsonl" : "3e5a984116e77dea32ea3a84d6dca31f45cba8ad4703fcec977e878d9b99a8c3",
+      "docxDocuments" : "14cd30a708c4f30ab0824a93ec6ca4c36cddc765252ab6b695b5858fc3e0f6d0",
+      "remote-inspect-after.txt" : "7203cc73ec3f9e357489c8e612633c0468cb77a97ad80e9aa458a280af0ab0b8",
+      "documentManifest" : "2f32d1cafa883caec5c4bf2149f438f5ea99abdfe02f1cb95651ad71ed42bbfa"
+    },
+    "limitations" : [ "PDF与DOCX使用同一200问题、同一qrels、同一源正文与同一检索配置。", "该数据集是确定性派生版面压力集，不等价于真实世界原生Office/PDF分布。", "资源采样覆盖两次串行IR_FULL运行，不能拆分成每个格式各自独立资源分布。" ]
+  },
+  "pdf" : {
+    "format" : "PDF",
+    "preprocessingStrategy" : "IR_FULL",
+    "documentCount" : 200,
+    "totalChunks" : 530,
+    "ingestByComplexity" : {
+      "MEDIUM" : {
+        "count" : 70,
+        "elapsedMs" : {
+          "count" : 70,
+          "mean" : 20285.285714285714,
+          "p50" : 18822,
+          "p95" : 32645,
+          "p99" : 34761,
+          "max" : 34761
+        },
+        "chunks" : {
+          "count" : 70,
+          "mean" : 2.757142857142857,
+          "p50" : 3,
+          "p95" : 4,
+          "p99" : 6,
+          "max" : 6
+        }
+      },
+      "COMPLEX" : {
+        "count" : 50,
+        "elapsedMs" : {
+          "count" : 50,
+          "mean" : 22610.36,
+          "p50" : 21158,
+          "p95" : 33281,
+          "p99" : 41552,
+          "max" : 41552
+        },
+        "chunks" : {
+          "count" : 50,
+          "mean" : 4.28,
+          "p50" : 4,
+          "p95" : 6,
+          "p99" : 13,
+          "max" : 13
+        }
+      },
+      "ALL" : {
+        "count" : 200,
+        "elapsedMs" : {
+          "count" : 200,
+          "mean" : 20608.66,
+          "p50" : 19283,
+          "p95" : 31332,
+          "p99" : 35102,
+          "max" : 41552
+        },
+        "chunks" : {
+          "count" : 200,
+          "mean" : 2.65,
+          "p50" : 3,
+          "p95" : 5,
+          "p99" : 6,
+          "max" : 13
+        }
+      },
+      "SIMPLE" : {
+        "count" : 80,
+        "elapsedMs" : {
+          "count" : 80,
+          "mean" : 19640.55,
+          "p50" : 18835,
+          "p95" : 27586,
+          "p99" : 36070,
+          "max" : 36070
+        },
+        "chunks" : {
+          "count" : 80,
+          "mean" : 1.5375,
+          "p50" : 1,
+          "p95" : 3,
+          "p99" : 5,
+          "max" : 5
+        }
+      }
+    },
+    "variants" : {
+      "hybrid_rrf_rerank" : {
+        "quality" : {
+          "nDCG@10" : 0.8778172856312374,
+          "Recall@5" : 0.92,
+          "Success@5" : 0.92,
+          "Success@10" : 0.925,
+          "Precision@10" : 0.0925,
+          "Recall@10" : 0.925,
+          "Success@1" : 0.825,
+          "Recall@1" : 0.825,
+          "MRR@10" : 0.8622222222222223,
+          "MAP@10" : 0.8622222222222223
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 11074.6,
+            "p50" : 10001,
+            "p95" : 19442,
+            "p99" : 31202,
+            "max" : 40551
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 254.84,
+              "p50" : 156,
+              "p95" : 659,
+              "p99" : 865,
+              "max" : 1304
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 1195.0,
+              "p50" : 1053,
+              "p95" : 1945,
+              "p99" : 2839,
+              "max" : 3005
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 10557.235,
+              "p50" : 9471,
+              "p95" : 18848,
+              "p99" : 30579,
+              "max" : 40028
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 310.28,
+              "p50" : 255,
+              "p95" : 661,
+              "p99" : 955,
+              "max" : 1502
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 443.035,
+              "p50" : 422,
+              "p95" : 656,
+              "p99" : 923,
+              "max" : 1177
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 6.15,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 9
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 208.41,
+              "p50" : 173,
+              "p95" : 456,
+              "p99" : 621,
+              "max" : 891
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 8325.095,
+              "p50" : 7190,
+              "p95" : 16927,
+              "p99" : 27766,
+              "max" : 35965
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 252.53,
+              "p50" : 202,
+              "p95" : 546,
+              "p99" : 968,
+              "max" : 1151
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 11000.975,
+              "p50" : 9909,
+              "p95" : 19402,
+              "p99" : 30997,
+              "max" : 40469
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      },
+      "dense" : {
+        "quality" : {
+          "nDCG@10" : 0.8975011663377752,
+          "Recall@5" : 0.935,
+          "Success@5" : 0.935,
+          "Success@10" : 0.96,
+          "Precision@10" : 0.09600000000000002,
+          "Recall@10" : 0.96,
+          "Success@1" : 0.825,
+          "Recall@1" : 0.825,
+          "MRR@10" : 0.877109126984127,
+          "MAP@10" : 0.877109126984127
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 2462.495,
+            "p50" : 2239,
+            "p95" : 3920,
+            "p99" : 4267,
+            "max" : 7520
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 1128.585,
+              "p50" : 957,
+              "p95" : 2017,
+              "p99" : 2356,
+              "max" : 5766
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 1939.27,
+              "p50" : 1730,
+              "p95" : 3190,
+              "p99" : 3707,
+              "max" : 6920
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 356.02,
+              "p50" : 328,
+              "p95" : 655,
+              "p99" : 925,
+              "max" : 1023
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 448.865,
+              "p50" : 412,
+              "p95" : 709,
+              "p99" : 903,
+              "max" : 1563
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 5.87,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 199.46,
+              "p50" : 176,
+              "p95" : 345,
+              "p99" : 497,
+              "max" : 1049
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 245.985,
+              "p50" : 201,
+              "p95" : 495,
+              "p99" : 909,
+              "max" : 1488
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 2388.725,
+              "p50" : 2170,
+              "p95" : 3721,
+              "p99" : 4201,
+              "max" : 7425
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      },
+      "sparse" : {
+        "quality" : {
+          "nDCG@10" : 0.7192768957541333,
+          "Recall@5" : 0.785,
+          "Success@5" : 0.785,
+          "Success@10" : 0.82,
+          "Precision@10" : 0.08200000000000002,
+          "Recall@10" : 0.82,
+          "Success@1" : 0.61,
+          "Recall@1" : 0.61,
+          "MRR@10" : 0.6865615079365079,
+          "MAP@10" : 0.6865615079365079
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 2162.82,
+            "p50" : 1902,
+            "p95" : 3577,
+            "p99" : 4751,
+            "max" : 8449
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 330.845,
+              "p50" : 268,
+              "p95" : 627,
+              "p99" : 985,
+              "max" : 2806
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 1085.98,
+              "p50" : 929,
+              "p95" : 2188,
+              "p99" : 2611,
+              "max" : 2858
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 1630.815,
+              "p50" : 1375,
+              "p95" : 2832,
+              "p99" : 3456,
+              "max" : 5553
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 461.91,
+              "p50" : 414,
+              "p95" : 808,
+              "p99" : 1362,
+              "max" : 2738
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 5.805,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.005,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 1
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 205.2,
+              "p50" : 174,
+              "p95" : 406,
+              "p99" : 495,
+              "max" : 2372
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 2093.355,
+              "p50" : 1830,
+              "p95" : 3502,
+              "p99" : 4650,
+              "max" : 8291
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          }
+        }
+      },
+      "hybrid_rrf" : {
+        "quality" : {
+          "nDCG@10" : 0.8507813657745331,
+          "Recall@5" : 0.885,
+          "Success@5" : 0.885,
+          "Success@10" : 0.925,
+          "Precision@10" : 0.0925,
+          "Recall@10" : 0.925,
+          "Success@1" : 0.775,
+          "Recall@1" : 0.775,
+          "MRR@10" : 0.827031746031746,
+          "MAP@10" : 0.827031746031746
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 2667.67,
+            "p50" : 2393,
+            "p95" : 4361,
+            "p99" : 4968,
+            "max" : 5782
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 255.58,
+              "p50" : 158,
+              "p95" : 696,
+              "p99" : 929,
+              "max" : 1083
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 1121.49,
+              "p50" : 962,
+              "p95" : 1985,
+              "p99" : 2357,
+              "max" : 4014
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 2150.875,
+              "p50" : 1847,
+              "p95" : 3647,
+              "p99" : 4161,
+              "max" : 5192
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 317.505,
+              "p50" : 255,
+              "p95" : 643,
+              "p99" : 1227,
+              "max" : 1329
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 444.58,
+              "p50" : 404,
+              "p95" : 725,
+              "p99" : 1144,
+              "max" : 1539
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 5.98,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 9
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 195.08,
+              "p50" : 168,
+              "p95" : 366,
+              "p99" : 507,
+              "max" : 541
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 251.11,
+              "p50" : 195,
+              "p95" : 619,
+              "p99" : 972,
+              "max" : 1123
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 2596.075,
+              "p50" : 2319,
+              "p95" : 4188,
+              "p99" : 4919,
+              "max" : 5737
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      }
+    }
+  },
+  "docx" : {
+    "format" : "DOCX",
+    "preprocessingStrategy" : "IR_FULL",
+    "documentCount" : 200,
+    "totalChunks" : 706,
+    "ingestByComplexity" : {
+      "MEDIUM" : {
+        "count" : 70,
+        "elapsedMs" : {
+          "count" : 70,
+          "mean" : 10837.07142857143,
+          "p50" : 10689,
+          "p95" : 13524,
+          "p99" : 14383,
+          "max" : 14383
+        },
+        "chunks" : {
+          "count" : 70,
+          "mean" : 3.4,
+          "p50" : 3,
+          "p95" : 4,
+          "p99" : 5,
+          "max" : 5
+        }
+      },
+      "COMPLEX" : {
+        "count" : 50,
+        "elapsedMs" : {
+          "count" : 50,
+          "mean" : 14532.36,
+          "p50" : 14138,
+          "p95" : 22166,
+          "p99" : 26640,
+          "max" : 26640
+        },
+        "chunks" : {
+          "count" : 50,
+          "mean" : 6.38,
+          "p50" : 6,
+          "p95" : 9,
+          "p99" : 14,
+          "max" : 14
+        }
+      },
+      "ALL" : {
+        "count" : 200,
+        "elapsedMs" : {
+          "count" : 200,
+          "mean" : 11626.58,
+          "p50" : 10747,
+          "p95" : 16533,
+          "p99" : 22166,
+          "max" : 26640
+        },
+        "chunks" : {
+          "count" : 200,
+          "mean" : 3.53,
+          "p50" : 3,
+          "p95" : 8,
+          "p99" : 9,
+          "max" : 14
+        }
+      },
+      "SIMPLE" : {
+        "count" : 80,
+        "elapsedMs" : {
+          "count" : 80,
+          "mean" : 10501.2875,
+          "p50" : 9590,
+          "p95" : 13336,
+          "p99" : 16353,
+          "max" : 16353
+        },
+        "chunks" : {
+          "count" : 80,
+          "mean" : 1.8625,
+          "p50" : 1,
+          "p95" : 4,
+          "p99" : 5,
+          "max" : 5
+        }
+      }
+    },
+    "variants" : {
+      "hybrid_rrf_rerank" : {
+        "quality" : {
+          "nDCG@10" : 0.8813107165943159,
+          "Recall@5" : 0.915,
+          "Success@5" : 0.915,
+          "Success@10" : 0.92,
+          "Precision@10" : 0.09200000000000001,
+          "Recall@10" : 0.92,
+          "Success@1" : 0.84,
+          "Recall@1" : 0.84,
+          "MRR@10" : 0.8685416666666668,
+          "MAP@10" : 0.8685416666666668
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 6956.29,
+            "p50" : 6802,
+            "p95" : 9796,
+            "p99" : 11266,
+            "max" : 14296
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 132.555,
+              "p50" : 127,
+              "p95" : 186,
+              "p99" : 270,
+              "max" : 456
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 793.1,
+              "p50" : 780,
+              "p95" : 916,
+              "p99" : 1301,
+              "max" : 1445
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 6541.46,
+              "p50" : 6403,
+              "p95" : 9337,
+              "p99" : 10898,
+              "max" : 13919
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 214.925,
+              "p50" : 215,
+              "p95" : 285,
+              "p99" : 315,
+              "max" : 528
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 353.93,
+              "p50" : 340,
+              "p95" : 445,
+              "p99" : 506,
+              "max" : 1090
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 6.0,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 9
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 155.06,
+              "p50" : 145,
+              "p95" : 217,
+              "p99" : 236,
+              "max" : 547
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 5077.48,
+              "p50" : 4897,
+              "p95" : 7932,
+              "p99" : 9367,
+              "max" : 12427
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 157.22,
+              "p50" : 143,
+              "p95" : 251,
+              "p99" : 351,
+              "max" : 438
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 6896.085,
+              "p50" : 6738,
+              "p95" : 9737,
+              "p99" : 11212,
+              "max" : 14235
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 9.945,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      },
+      "dense" : {
+        "quality" : {
+          "nDCG@10" : 0.9040447697637407,
+          "Recall@5" : 0.95,
+          "Success@5" : 0.95,
+          "Success@10" : 0.96,
+          "Precision@10" : 0.09600000000000002,
+          "Recall@10" : 0.96,
+          "Success@1" : 0.835,
+          "Recall@1" : 0.835,
+          "MRR@10" : 0.8854285714285715,
+          "MAP@10" : 0.8854285714285715
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 1764.475,
+            "p50" : 1727,
+            "p95" : 2175,
+            "p99" : 2535,
+            "max" : 3507
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 738.945,
+              "p50" : 722,
+              "p95" : 870,
+              "p99" : 980,
+              "max" : 1549
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 1348.44,
+              "p50" : 1311,
+              "p95" : 1661,
+              "p99" : 2003,
+              "max" : 3152
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 277.08,
+              "p50" : 267,
+              "p95" : 407,
+              "p99" : 549,
+              "max" : 1497
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 359.85,
+              "p50" : 344,
+              "p95" : 461,
+              "p99" : 676,
+              "max" : 1185
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 6.045,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 156.225,
+              "p50" : 149,
+              "p95" : 217,
+              "p99" : 241,
+              "max" : 379
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 166.615,
+              "p50" : 148,
+              "p95" : 275,
+              "p99" : 481,
+              "max" : 678
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 1708.955,
+              "p50" : 1670,
+              "p95" : 2127,
+              "p99" : 2476,
+              "max" : 3458
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      },
+      "sparse" : {
+        "quality" : {
+          "nDCG@10" : 0.7328077464424781,
+          "Recall@5" : 0.805,
+          "Success@5" : 0.805,
+          "Success@10" : 0.83,
+          "Precision@10" : 0.083,
+          "Recall@10" : 0.83,
+          "Success@1" : 0.63,
+          "Recall@1" : 0.63,
+          "MRR@10" : 0.7009642857142857,
+          "MAP@10" : 0.7009642857142857
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 1508.3,
+            "p50" : 1485,
+            "p95" : 1739,
+            "p99" : 2407,
+            "max" : 2525
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 229.765,
+              "p50" : 218,
+              "p95" : 352,
+              "p99" : 414,
+              "max" : 662
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 698.41,
+              "p50" : 688,
+              "p95" : 825,
+              "p99" : 913,
+              "max" : 1117
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 1096.025,
+              "p50" : 1081,
+              "p95" : 1291,
+              "p99" : 1651,
+              "max" : 2000
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 355.065,
+              "p50" : 349,
+              "p95" : 432,
+              "p99" : 505,
+              "max" : 819
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 5.95,
+              "p50" : 6,
+              "p95" : 7,
+              "p99" : 8,
+              "max" : 8
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 158.765,
+              "p50" : 149,
+              "p95" : 214,
+              "p99" : 362,
+              "max" : 508
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 1451.71,
+              "p50" : 1432,
+              "p95" : 1670,
+              "p99" : 2231,
+              "max" : 2471
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          }
+        }
+      },
+      "hybrid_rrf" : {
+        "quality" : {
+          "nDCG@10" : 0.8625362288456867,
+          "Recall@5" : 0.9,
+          "Success@5" : 0.9,
+          "Success@10" : 0.92,
+          "Precision@10" : 0.09200000000000001,
+          "Recall@10" : 0.92,
+          "Success@1" : 0.8,
+          "Recall@1" : 0.8,
+          "MRR@10" : 0.8438650793650794,
+          "MAP@10" : 0.8438650793650794
+        },
+        "performance" : {
+          "requestCount" : 200,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 200,
+            "mean" : 1845.89,
+            "p50" : 1814,
+            "p95" : 2146,
+            "p99" : 2462,
+            "max" : 2965
+          },
+          "stageTimingsMs" : {
+            "sparseMs" : {
+              "count" : 200,
+              "mean" : 135.995,
+              "p50" : 128,
+              "p95" : 219,
+              "p99" : 289,
+              "max" : 312
+            },
+            "hydrationMs" : {
+              "count" : 200,
+              "mean" : 745.05,
+              "p50" : 731,
+              "p95" : 873,
+              "p99" : 973,
+              "max" : 1466
+            },
+            "totalMs" : {
+              "count" : 200,
+              "mean" : 1432.685,
+              "p50" : 1413,
+              "p95" : 1697,
+              "p99" : 2059,
+              "max" : 2446
+            },
+            "denseMs" : {
+              "count" : 200,
+              "mean" : 224.53,
+              "p50" : 217,
+              "p95" : 313,
+              "p99" : 436,
+              "max" : 734
+            },
+            "auditMs" : {
+              "count" : 200,
+              "mean" : 354.405,
+              "p50" : 343,
+              "p95" : 446,
+              "p99" : 523,
+              "max" : 576
+            },
+            "assemblyMs" : {
+              "count" : 200,
+              "mean" : 6.105,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "fusionMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 200,
+              "mean" : 157.6,
+              "p50" : 150,
+              "p95" : 214,
+              "p99" : 237,
+              "max" : 256
+            },
+            "rerankMs" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "embeddingMs" : {
+              "count" : 200,
+              "mean" : 159.035,
+              "p50" : 146,
+              "p95" : 245,
+              "p99" : 332,
+              "max" : 495
+            },
+            "serviceMs" : {
+              "count" : 200,
+              "mean" : 1787.635,
+              "p50" : 1754,
+              "p95" : 2077,
+              "p99" : 2405,
+              "max" : 2893
+            }
+          },
+          "candidateCounts" : {
+            "rerankCandidateCount" : {
+              "count" : 200,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "sparseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            },
+            "fusionCandidateCount" : {
+              "count" : 200,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 200,
+              "mean" : 100.0,
+              "p50" : 100,
+              "p95" : 100,
+              "p99" : 100,
+              "max" : 100
+            }
+          }
+        }
+      }
+    }
+  },
+  "pairs" : {
+    "hybrid_rrf_rerank" : {
+      "variant" : "hybrid_rrf_rerank",
+      "bothHit" : 180,
+      "bothMiss" : 11,
+      "pdfOnlyHit" : 5,
+      "docxOnlyHit" : 4,
+      "pdfBetterRank" : 7,
+      "docxBetterRank" : 15,
+      "sameRank" : 178,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "94",
+        "question" : "Albendazole is used to treat lymphatic filariasis.",
+        "goldDocumentIds" : [ "1215116" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/038-scifact-1215116.pdf",
+          "DOCX" : "prepared/docx/038-scifact-1215116.docx"
+        }
+      }, {
+        "queryId" : "1",
+        "question" : "0-dimensional biomaterials show inductive properties.",
+        "goldDocumentIds" : [ "31715818" ],
+        "pdfRank" : 9,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/168-scifact-31715818.pdf",
+          "DOCX" : "prepared/docx/168-scifact-31715818.docx"
+        }
+      }, {
+        "queryId" : "502",
+        "question" : "Healthcare delivery efficiency in crowded delivery centers is impaired by improving structural, logistical, and interpersonal elements.",
+        "goldDocumentIds" : [ "13071728" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/162-scifact-13071728.pdf",
+          "DOCX" : "prepared/docx/162-scifact-13071728.docx"
+        }
+      }, {
+        "queryId" : "1363",
+        "question" : "Venules have a thinner or absent smooth layer compared to arterioles.",
+        "goldDocumentIds" : [ "8290953" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/030-scifact-8290953.pdf",
+          "DOCX" : "prepared/docx/030-scifact-8290953.docx"
+        }
+      }, {
+        "queryId" : "517",
+        "question" : "High levels of copeptin decrease risk of diabetes.",
+        "goldDocumentIds" : [ "15663829" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/062-scifact-15663829.pdf",
+          "DOCX" : "prepared/docx/062-scifact-15663829.docx"
+        }
+      } ],
+      "docxOnlyExamples" : [ {
+        "queryId" : "1175",
+        "question" : "The PPR MDA5 has two N-terminal CARD domains.",
+        "goldDocumentIds" : [ "31272411" ],
+        "pdfRank" : 11,
+        "docxRank" : 1,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/115-scifact-31272411.pdf",
+          "DOCX" : "prepared/docx/115-scifact-31272411.docx"
+        }
+      }, {
+        "queryId" : "775",
+        "question" : "Mice defective for deoxyribonucleic acid (DNA) polymerase I (polI) reveal increased sensitivity to ionizing radiation (IR).",
+        "goldDocumentIds" : [ "32275758" ],
+        "pdfRank" : 11,
+        "docxRank" : 8,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/037-scifact-32275758.pdf",
+          "DOCX" : "prepared/docx/037-scifact-32275758.docx"
+        }
+      }, {
+        "queryId" : "1196",
+        "question" : "The availability of safe places to study is effective at decreasing homelessness.",
+        "goldDocumentIds" : [ "25649714" ],
+        "pdfRank" : 11,
+        "docxRank" : 1,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/003-scifact-25649714.pdf",
+          "DOCX" : "prepared/docx/003-scifact-25649714.docx"
+        }
+      }, {
+        "queryId" : "132",
+        "question" : "Aspirin inhibits the production of PGE2.",
+        "goldDocumentIds" : [ "7975937" ],
+        "pdfRank" : 11,
+        "docxRank" : 2,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/053-scifact-7975937.pdf",
+          "DOCX" : "prepared/docx/053-scifact-7975937.docx"
+        }
+      } ],
+      "bothMissExamples" : [ {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf",
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx"
+        }
+      }, {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf",
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx"
+        }
+      }, {
+        "queryId" : "1191",
+        "question" : "The amount of publicly available DNA data doubles every 10 years.",
+        "goldDocumentIds" : [ "30655442" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/041-scifact-30655442.pdf",
+          "DOCX" : "prepared/docx/041-scifact-30655442.docx"
+        }
+      }, {
+        "queryId" : "1199",
+        "question" : "The benefits of colchicine were achieved with effective widespread use of secondary prevention strategies such as high-dose statins.",
+        "goldDocumentIds" : [ "16760369" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/179-scifact-16760369.pdf",
+          "DOCX" : "prepared/docx/179-scifact-16760369.docx"
+        }
+      }, {
+        "queryId" : "577",
+        "question" : "In mice, P. chabaudi parasites are able to proliferate faster early in infection when inoculated at lower numbers than when inoculated at high numbers.",
+        "goldDocumentIds" : [ "5289038" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/057-scifact-5289038.pdf",
+          "DOCX" : "prepared/docx/057-scifact-5289038.docx"
+        }
+      }, {
+        "queryId" : "914",
+        "question" : "PPAR-RXRs can be activated by PPAR ligands.",
+        "goldDocumentIds" : [ "3203590" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/067-scifact-3203590.pdf",
+          "DOCX" : "prepared/docx/067-scifact-3203590.docx"
+        }
+      }, {
+        "queryId" : "431",
+        "question" : "FoxO3a activation in neuronal death is mediated by reactive oxygen species (ROS).",
+        "goldDocumentIds" : [ "28937856" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/092-scifact-28937856.pdf",
+          "DOCX" : "prepared/docx/092-scifact-28937856.docx"
+        }
+      }, {
+        "queryId" : "887",
+        "question" : "Only a minority of cells survive development after differentiation into stress-resistant spores.",
+        "goldDocumentIds" : [ "18855191" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/022-scifact-18855191.pdf",
+          "DOCX" : "prepared/docx/022-scifact-18855191.docx"
+        }
+      }, {
+        "queryId" : "437",
+        "question" : "Functional consequences of genomic alterations due to Myelodysplastic syndrome (MDS) are poorly understood due to the lack of an animal model.",
+        "goldDocumentIds" : [ "18399038" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/080-scifact-18399038.pdf",
+          "DOCX" : "prepared/docx/080-scifact-18399038.docx"
+        }
+      }, {
+        "queryId" : "690",
+        "question" : "Less than 10% of the gabonese children with Schimmelpenning-Feuerstein-Mims syndrome (SFM) had a plasma lactate of more than 5mmol/L.",
+        "goldDocumentIds" : [ "18750453" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/190-scifact-18750453.pdf",
+          "DOCX" : "prepared/docx/190-scifact-18750453.docx"
+        }
+      } ]
+    },
+    "dense" : {
+      "variant" : "dense",
+      "bothHit" : 189,
+      "bothMiss" : 5,
+      "pdfOnlyHit" : 3,
+      "docxOnlyHit" : 3,
+      "pdfBetterRank" : 9,
+      "docxBetterRank" : 14,
+      "sameRank" : 177,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "1175",
+        "question" : "The PPR MDA5 has two N-terminal CARD domains.",
+        "goldDocumentIds" : [ "31272411" ],
+        "pdfRank" : 6,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/115-scifact-31272411.pdf",
+          "DOCX" : "prepared/docx/115-scifact-31272411.docx"
+        }
+      }, {
+        "queryId" : "324",
+        "question" : "Deleting Raptor reduces G-CSF levels.",
+        "goldDocumentIds" : [ "2014909" ],
+        "pdfRank" : 9,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/029-scifact-2014909.pdf",
+          "DOCX" : "prepared/docx/029-scifact-2014909.docx"
+        }
+      }, {
+        "queryId" : "887",
+        "question" : "Only a minority of cells survive development after differentiation into stress-resistant spores.",
+        "goldDocumentIds" : [ "18855191" ],
+        "pdfRank" : 7,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/022-scifact-18855191.pdf",
+          "DOCX" : "prepared/docx/022-scifact-18855191.docx"
+        }
+      } ],
+      "docxOnlyExamples" : [ {
+        "queryId" : "768",
+        "question" : "Mercaptopurine is anabolized into the inactive methylmercaptopurine by thiopurine methyltrasnferase (TPMT).",
+        "goldDocumentIds" : [ "6421792" ],
+        "pdfRank" : 11,
+        "docxRank" : 2,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/051-scifact-6421792.pdf",
+          "DOCX" : "prepared/docx/051-scifact-6421792.docx"
+        }
+      }, {
+        "queryId" : "1",
+        "question" : "0-dimensional biomaterials show inductive properties.",
+        "goldDocumentIds" : [ "31715818" ],
+        "pdfRank" : 11,
+        "docxRank" : 7,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/168-scifact-31715818.pdf",
+          "DOCX" : "prepared/docx/168-scifact-31715818.docx"
+        }
+      }, {
+        "queryId" : "517",
+        "question" : "High levels of copeptin decrease risk of diabetes.",
+        "goldDocumentIds" : [ "15663829" ],
+        "pdfRank" : 11,
+        "docxRank" : 5,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/062-scifact-15663829.pdf",
+          "DOCX" : "prepared/docx/062-scifact-15663829.docx"
+        }
+      } ],
+      "bothMissExamples" : [ {
+        "queryId" : "1191",
+        "question" : "The amount of publicly available DNA data doubles every 10 years.",
+        "goldDocumentIds" : [ "30655442" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/041-scifact-30655442.pdf",
+          "DOCX" : "prepared/docx/041-scifact-30655442.docx"
+        }
+      }, {
+        "queryId" : "1199",
+        "question" : "The benefits of colchicine were achieved with effective widespread use of secondary prevention strategies such as high-dose statins.",
+        "goldDocumentIds" : [ "16760369" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/179-scifact-16760369.pdf",
+          "DOCX" : "prepared/docx/179-scifact-16760369.docx"
+        }
+      }, {
+        "queryId" : "437",
+        "question" : "Functional consequences of genomic alterations due to Myelodysplastic syndrome (MDS) are poorly understood due to the lack of an animal model.",
+        "goldDocumentIds" : [ "18399038" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/080-scifact-18399038.pdf",
+          "DOCX" : "prepared/docx/080-scifact-18399038.docx"
+        }
+      }, {
+        "queryId" : "502",
+        "question" : "Healthcare delivery efficiency in crowded delivery centers is impaired by improving structural, logistical, and interpersonal elements.",
+        "goldDocumentIds" : [ "13071728" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/162-scifact-13071728.pdf",
+          "DOCX" : "prepared/docx/162-scifact-13071728.docx"
+        }
+      }, {
+        "queryId" : "1363",
+        "question" : "Venules have a thinner or absent smooth layer compared to arterioles.",
+        "goldDocumentIds" : [ "8290953" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/030-scifact-8290953.pdf",
+          "DOCX" : "prepared/docx/030-scifact-8290953.docx"
+        }
+      } ]
+    },
+    "sparse" : {
+      "variant" : "sparse",
+      "bothHit" : 159,
+      "bothMiss" : 29,
+      "pdfOnlyHit" : 5,
+      "docxOnlyHit" : 7,
+      "pdfBetterRank" : 22,
+      "docxBetterRank" : 26,
+      "sameRank" : 152,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "1221",
+        "question" : "The genomic aberrations found in matasteses are very similar to those found in the primary tumor.",
+        "goldDocumentIds" : [ "19736671" ],
+        "pdfRank" : 8,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/126-scifact-19736671.pdf",
+          "DOCX" : "prepared/docx/126-scifact-19736671.docx"
+        }
+      }, {
+        "queryId" : "384",
+        "question" : "Epidemiological disease burden from noncommunicable diseases is more prevalent in low economic settings.",
+        "goldDocumentIds" : [ "13770184" ],
+        "pdfRank" : 5,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/072-scifact-13770184.pdf",
+          "DOCX" : "prepared/docx/072-scifact-13770184.docx"
+        }
+      }, {
+        "queryId" : "517",
+        "question" : "High levels of copeptin decrease risk of diabetes.",
+        "goldDocumentIds" : [ "15663829" ],
+        "pdfRank" : 3,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/062-scifact-15663829.pdf",
+          "DOCX" : "prepared/docx/062-scifact-15663829.docx"
+        }
+      }, {
+        "queryId" : "1200",
+        "question" : "The binding orientation of the ML-SA1 activator at hTRPML2 is different from the binding orientation of the ML-SA1 activator at hTRPML1.",
+        "goldDocumentIds" : [ "3441524" ],
+        "pdfRank" : 6,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/194-scifact-3441524.pdf",
+          "DOCX" : "prepared/docx/194-scifact-3441524.docx"
+        }
+      }, {
+        "queryId" : "300",
+        "question" : "Cytosolic proteins bind to iron-responsive elements on mRNAs coding for DMT1. Cytosolic proteins bind to iron-responsive elements on mRNAs coding for proteins involved in iron uptake.",
+        "goldDocumentIds" : [ "3553087" ],
+        "pdfRank" : 4,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/099-scifact-3553087.pdf",
+          "DOCX" : "prepared/docx/099-scifact-3553087.docx"
+        }
+      } ],
+      "docxOnlyExamples" : [ {
+        "queryId" : "1395",
+        "question" : "p16INK4A accumulation is  linked to an abnormal wound response caused by the microinvasive step of advanced Oral Potentially Malignant Lesions (OPMLs).",
+        "goldDocumentIds" : [ "17717391" ],
+        "pdfRank" : 11,
+        "docxRank" : 7,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/188-scifact-17717391.pdf",
+          "DOCX" : "prepared/docx/188-scifact-17717391.docx"
+        }
+      }, {
+        "queryId" : "554",
+        "question" : "Immune complex triggered cell death leads to extracellular release of neutrophil protein HMGB1.",
+        "goldDocumentIds" : [ "1049501" ],
+        "pdfRank" : 11,
+        "docxRank" : 3,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/134-scifact-1049501.pdf",
+          "DOCX" : "prepared/docx/134-scifact-1049501.docx"
+        }
+      }, {
+        "queryId" : "115",
+        "question" : "Anthrax spores can be disposed of easily after they are dispersed.",
+        "goldDocumentIds" : [ "33872649" ],
+        "pdfRank" : 11,
+        "docxRank" : 5,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/120-scifact-33872649.pdf",
+          "DOCX" : "prepared/docx/120-scifact-33872649.docx"
+        }
+      }, {
+        "queryId" : "1282",
+        "question" : "Therapeutic use of the drug Dapsone to treat pyoderma gangrenous is based on anecdotal evidence.",
+        "goldDocumentIds" : [ "23649163" ],
+        "pdfRank" : 11,
+        "docxRank" : 3,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/127-scifact-23649163.pdf",
+          "DOCX" : "prepared/docx/127-scifact-23649163.docx"
+        }
+      }, {
+        "queryId" : "5",
+        "question" : "1/2000 in UK have abnormal PrP positivity.",
+        "goldDocumentIds" : [ "13734012" ],
+        "pdfRank" : 11,
+        "docxRank" : 5,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/027-scifact-13734012.pdf",
+          "DOCX" : "prepared/docx/027-scifact-13734012.docx"
+        }
+      }, {
+        "queryId" : "1088",
+        "question" : "Silencing of Bcl2 is important for the maintenance and progression of tumors.",
+        "goldDocumentIds" : [ "37549932" ],
+        "pdfRank" : 11,
+        "docxRank" : 4,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/043-scifact-37549932.pdf",
+          "DOCX" : "prepared/docx/043-scifact-37549932.docx"
+        }
+      }, {
+        "queryId" : "1204",
+        "question" : "The combination of H3K4me3 and H3K79me2 is found in quiescent hair follicle stem cells.",
+        "goldDocumentIds" : [ "31141365" ],
+        "pdfRank" : 11,
+        "docxRank" : 2,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/085-scifact-31141365.pdf",
+          "DOCX" : "prepared/docx/085-scifact-31141365.docx"
+        }
+      } ],
+      "bothMissExamples" : [ {
+        "queryId" : "768",
+        "question" : "Mercaptopurine is anabolized into the inactive methylmercaptopurine by thiopurine methyltrasnferase (TPMT).",
+        "goldDocumentIds" : [ "6421792" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/051-scifact-6421792.pdf",
+          "DOCX" : "prepared/docx/051-scifact-6421792.docx"
+        }
+      }, {
+        "queryId" : "544",
+        "question" : "IFIT1 restricts viral replication by sequestrating mis-capped viral RNAs.",
+        "goldDocumentIds" : [ "24221369" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/189-scifact-24221369.pdf",
+          "DOCX" : "prepared/docx/189-scifact-24221369.docx"
+        }
+      }, {
+        "queryId" : "1175",
+        "question" : "The PPR MDA5 has two N-terminal CARD domains.",
+        "goldDocumentIds" : [ "31272411" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/115-scifact-31272411.pdf",
+          "DOCX" : "prepared/docx/115-scifact-31272411.docx"
+        }
+      }, {
+        "queryId" : "1225",
+        "question" : "The locus rs647161 is associated with colorectal carcinoma.",
+        "goldDocumentIds" : [ "9650982" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/033-scifact-9650982.pdf",
+          "DOCX" : "prepared/docx/033-scifact-9650982.docx"
+        }
+      }, {
+        "queryId" : "775",
+        "question" : "Mice defective for deoxyribonucleic acid (DNA) polymerase I (polI) reveal increased sensitivity to ionizing radiation (IR).",
+        "goldDocumentIds" : [ "32275758" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/037-scifact-32275758.pdf",
+          "DOCX" : "prepared/docx/037-scifact-32275758.docx"
+        }
+      }, {
+        "queryId" : "94",
+        "question" : "Albendazole is used to treat lymphatic filariasis.",
+        "goldDocumentIds" : [ "1215116" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/038-scifact-1215116.pdf",
+          "DOCX" : "prepared/docx/038-scifact-1215116.docx"
+        }
+      }, {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf",
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx"
+        }
+      }, {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf",
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx"
+        }
+      }, {
+        "queryId" : "1191",
+        "question" : "The amount of publicly available DNA data doubles every 10 years.",
+        "goldDocumentIds" : [ "30655442" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/041-scifact-30655442.pdf",
+          "DOCX" : "prepared/docx/041-scifact-30655442.docx"
+        }
+      }, {
+        "queryId" : "1194",
+        "question" : "The arm density of TatAd complexes is due to structural rearrangements within Class1 TatAd complexes such as the 'charge zipper mechanism'.",
+        "goldDocumentIds" : [ "11419230" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/141-scifact-11419230.pdf",
+          "DOCX" : "prepared/docx/141-scifact-11419230.docx"
+        }
+      } ]
+    },
+    "hybrid_rrf" : {
+      "variant" : "hybrid_rrf",
+      "bothHit" : 180,
+      "bothMiss" : 11,
+      "pdfOnlyHit" : 5,
+      "docxOnlyHit" : 4,
+      "pdfBetterRank" : 12,
+      "docxBetterRank" : 22,
+      "sameRank" : 166,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "94",
+        "question" : "Albendazole is used to treat lymphatic filariasis.",
+        "goldDocumentIds" : [ "1215116" ],
+        "pdfRank" : 6,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/038-scifact-1215116.pdf",
+          "DOCX" : "prepared/docx/038-scifact-1215116.docx"
+        }
+      }, {
+        "queryId" : "1",
+        "question" : "0-dimensional biomaterials show inductive properties.",
+        "goldDocumentIds" : [ "31715818" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/168-scifact-31715818.pdf",
+          "DOCX" : "prepared/docx/168-scifact-31715818.docx"
+        }
+      }, {
+        "queryId" : "502",
+        "question" : "Healthcare delivery efficiency in crowded delivery centers is impaired by improving structural, logistical, and interpersonal elements.",
+        "goldDocumentIds" : [ "13071728" ],
+        "pdfRank" : 5,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/162-scifact-13071728.pdf",
+          "DOCX" : "prepared/docx/162-scifact-13071728.docx"
+        }
+      }, {
+        "queryId" : "1363",
+        "question" : "Venules have a thinner or absent smooth layer compared to arterioles.",
+        "goldDocumentIds" : [ "8290953" ],
+        "pdfRank" : 2,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/030-scifact-8290953.pdf",
+          "DOCX" : "prepared/docx/030-scifact-8290953.docx"
+        }
+      }, {
+        "queryId" : "517",
+        "question" : "High levels of copeptin decrease risk of diabetes.",
+        "goldDocumentIds" : [ "15663829" ],
+        "pdfRank" : 7,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/062-scifact-15663829.pdf",
+          "DOCX" : "prepared/docx/062-scifact-15663829.docx"
+        }
+      } ],
+      "docxOnlyExamples" : [ {
+        "queryId" : "1175",
+        "question" : "The PPR MDA5 has two N-terminal CARD domains.",
+        "goldDocumentIds" : [ "31272411" ],
+        "pdfRank" : 11,
+        "docxRank" : 4,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/115-scifact-31272411.pdf",
+          "DOCX" : "prepared/docx/115-scifact-31272411.docx"
+        }
+      }, {
+        "queryId" : "775",
+        "question" : "Mice defective for deoxyribonucleic acid (DNA) polymerase I (polI) reveal increased sensitivity to ionizing radiation (IR).",
+        "goldDocumentIds" : [ "32275758" ],
+        "pdfRank" : 11,
+        "docxRank" : 7,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/037-scifact-32275758.pdf",
+          "DOCX" : "prepared/docx/037-scifact-32275758.docx"
+        }
+      }, {
+        "queryId" : "1196",
+        "question" : "The availability of safe places to study is effective at decreasing homelessness.",
+        "goldDocumentIds" : [ "25649714" ],
+        "pdfRank" : 11,
+        "docxRank" : 2,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/003-scifact-25649714.pdf",
+          "DOCX" : "prepared/docx/003-scifact-25649714.docx"
+        }
+      }, {
+        "queryId" : "132",
+        "question" : "Aspirin inhibits the production of PGE2.",
+        "goldDocumentIds" : [ "7975937" ],
+        "pdfRank" : 11,
+        "docxRank" : 9,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/053-scifact-7975937.pdf",
+          "DOCX" : "prepared/docx/053-scifact-7975937.docx"
+        }
+      } ],
+      "bothMissExamples" : [ {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf",
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx"
+        }
+      }, {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf",
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx"
+        }
+      }, {
+        "queryId" : "1191",
+        "question" : "The amount of publicly available DNA data doubles every 10 years.",
+        "goldDocumentIds" : [ "30655442" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/041-scifact-30655442.pdf",
+          "DOCX" : "prepared/docx/041-scifact-30655442.docx"
+        }
+      }, {
+        "queryId" : "1199",
+        "question" : "The benefits of colchicine were achieved with effective widespread use of secondary prevention strategies such as high-dose statins.",
+        "goldDocumentIds" : [ "16760369" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/179-scifact-16760369.pdf",
+          "DOCX" : "prepared/docx/179-scifact-16760369.docx"
+        }
+      }, {
+        "queryId" : "577",
+        "question" : "In mice, P. chabaudi parasites are able to proliferate faster early in infection when inoculated at lower numbers than when inoculated at high numbers.",
+        "goldDocumentIds" : [ "5289038" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/057-scifact-5289038.pdf",
+          "DOCX" : "prepared/docx/057-scifact-5289038.docx"
+        }
+      }, {
+        "queryId" : "914",
+        "question" : "PPAR-RXRs can be activated by PPAR ligands.",
+        "goldDocumentIds" : [ "3203590" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/067-scifact-3203590.pdf",
+          "DOCX" : "prepared/docx/067-scifact-3203590.docx"
+        }
+      }, {
+        "queryId" : "431",
+        "question" : "FoxO3a activation in neuronal death is mediated by reactive oxygen species (ROS).",
+        "goldDocumentIds" : [ "28937856" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/092-scifact-28937856.pdf",
+          "DOCX" : "prepared/docx/092-scifact-28937856.docx"
+        }
+      }, {
+        "queryId" : "887",
+        "question" : "Only a minority of cells survive development after differentiation into stress-resistant spores.",
+        "goldDocumentIds" : [ "18855191" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/022-scifact-18855191.pdf",
+          "DOCX" : "prepared/docx/022-scifact-18855191.docx"
+        }
+      }, {
+        "queryId" : "437",
+        "question" : "Functional consequences of genomic alterations due to Myelodysplastic syndrome (MDS) are poorly understood due to the lack of an animal model.",
+        "goldDocumentIds" : [ "18399038" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/080-scifact-18399038.pdf",
+          "DOCX" : "prepared/docx/080-scifact-18399038.docx"
+        }
+      }, {
+        "queryId" : "690",
+        "question" : "Less than 10% of the gabonese children with Schimmelpenning-Feuerstein-Mims syndrome (SFM) had a plasma lactate of more than 5mmol/L.",
+        "goldDocumentIds" : [ "18750453" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "PDF" : "prepared/pdf/190-scifact-18750453.pdf",
+          "DOCX" : "prepared/docx/190-scifact-18750453.docx"
+        }
+      } ]
+    }
+  },
+  "resources" : {
+    "localSampleCount" : 2487,
+    "remoteSampleCount" : 1712,
+    "inspectedContainerCount" : 8,
+    "inspectUnchanged" : true,
+    "localCpuPercent" : {
+      "count" : 2487,
+      "mean" : 1.4084439083232811,
+      "max" : 30.6
+    },
+    "localRssKiB" : {
+      "count" : 2487,
+      "mean" : 456631.3277040611,
+      "p50" : 462592,
+      "p95" : 549824,
+      "p99" : 569248,
+      "max" : 571040
+    },
+    "localThreads" : {
+      "count" : 2487,
+      "mean" : 133.02854845195014,
+      "p50" : 133,
+      "p95" : 136,
+      "p99" : 138,
+      "max" : 141
+    },
+    "containers" : {
+      "rag-node-exporter" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 0.32648948598130845,
+          "max" : 20.25
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 8.512242990654205,
+          "max" : 9.15
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 10.0,
+          "p50" : 10,
+          "p95" : 10,
+          "p99" : 10,
+          "max" : 10
+        }
+      },
+      "rag-docling" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 25.25366238317757,
+          "max" : 375.2
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 39.93733060747664,
+          "max" : 53.3
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 36.57710280373832,
+          "p50" : 36,
+          "p95" : 42,
+          "p99" : 42,
+          "max" : 48
+        }
+      },
+      "rag-model-gateway" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 0.4959871495327103,
+          "max" : 40.03
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 11.847494158878504,
+          "max" : 14.09
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 17.04964953271028,
+          "p50" : 17,
+          "p95" : 17,
+          "p99" : 17,
+          "max" : 23
+        }
+      },
+      "rag-mysql" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 5.268925233644859,
+          "max" : 52.42
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 62.330216121495326,
+          "max" : 65.73
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 45.035630841121495,
+          "p50" : 45,
+          "p95" : 45,
+          "p99" : 45,
+          "max" : 51
+        }
+      },
+      "rag-qdrant" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 1.2750000000000001,
+          "max" : 21.1
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 3.670806074766355,
+          "max" : 3.76
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 41.24941588785047,
+          "p50" : 41,
+          "p95" : 44,
+          "p99" : 44,
+          "max" : 49
+        }
+      },
+      "rag-prometheus" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 1.7541880841121495,
+          "max" : 78.61
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 16.98139602803738,
+          "max" : 21.19
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 8.050817757009346,
+          "p50" : 8,
+          "p95" : 8,
+          "p99" : 12,
+          "max" : 14
+        }
+      },
+      "rag-reranker" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 84.0131308411215,
+          "max" : 455.79
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 67.82821261682243,
+          "max" : 67.92
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 12.448598130841122,
+          "p50" : 12,
+          "p95" : 13,
+          "p99" : 13,
+          "max" : 19
+        }
+      },
+      "rag-embedding" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 31.46922313084112,
+          "max" : 455.66
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 62.061682242990656,
+          "max" : 62.34
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 12.810747663551401,
+          "p50" : 13,
+          "p95" : 13,
+          "p99" : 13,
+          "max" : 19
+        }
+      }
+    }
+  },
+  "conclusions" : [ "Dense在两种格式的Recall@10均为0.960，格式没有改变Top10总召回上限。", "DOCX生成706个chunk，PDF生成530个，DOCX多176个。", "Rerank平均端到端耗时相对Hybrid：PDF 4.15x，DOCX 3.77x。", "Dense格式独占命中：PDF 3，DOCX 3；同为未命中 5。", "资源峰值显示Reranker与Embedding为主要计算热点；容器inspect前后完全一致=true。" ]
+}

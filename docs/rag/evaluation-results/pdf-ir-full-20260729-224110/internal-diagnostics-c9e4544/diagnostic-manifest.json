@@ -1,0 +1,17 @@
+{
+  "schemaVersion" : 1,
+  "status" : "completed",
+  "runId" : "pdf-ir-full-diagnostics-c9e4544",
+  "codeRevision" : "c9e4544",
+  "caseReportSha256" : "f052d702e772e97b2d01cb06ecc797e2dca3027deca1454d3de54936527738e7",
+  "targetsSha256" : "d4cf4b8be325de1dec0b3b12aec4a5c8e1a544e17ea9790158ccd9030a977212",
+  "runDocumentMapSha256" : "6b04c03da05fcd115417e644bebbd7110454a9d3d9cb251a774c1db35d12857a",
+  "queryCount" : 21,
+  "expectedRecordCount" : 84,
+  "completedRecordCount" : 84,
+  "requestTimeoutSeconds" : 240,
+  "startedAt" : "2026-07-29T18:37:14.742439Z",
+  "finishedAt" : "2026-07-29T18:41:24.537888Z",
+  "diagnosticJsonlSha256" : "1f1039b37ec4431d0b1b633661d70f48c1f0ed55c54c65840c06eef068771384",
+  "failureType" : null
+}

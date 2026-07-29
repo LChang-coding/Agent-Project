@@ -1,0 +1,207 @@
+{
+  "resources" : {
+    "localSampleCount" : 2487,
+    "remoteSampleCount" : 1712,
+    "inspectedContainerCount" : 8,
+    "inspectUnchanged" : true,
+    "localCpuPercent" : {
+      "count" : 2487,
+      "mean" : 1.4084439083232811,
+      "max" : 30.6
+    },
+    "localRssKiB" : {
+      "count" : 2487,
+      "mean" : 456631.3277040611,
+      "p50" : 462592,
+      "p95" : 549824,
+      "p99" : 569248,
+      "max" : 571040
+    },
+    "localThreads" : {
+      "count" : 2487,
+      "mean" : 133.02854845195014,
+      "p50" : 133,
+      "p95" : 136,
+      "p99" : 138,
+      "max" : 141
+    },
+    "containers" : {
+      "rag-node-exporter" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 0.32648948598130845,
+          "max" : 20.25
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 8.512242990654205,
+          "max" : 9.15
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 10.0,
+          "p50" : 10,
+          "p95" : 10,
+          "p99" : 10,
+          "max" : 10
+        }
+      },
+      "rag-docling" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 25.25366238317757,
+          "max" : 375.2
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 39.93733060747664,
+          "max" : 53.3
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 36.57710280373832,
+          "p50" : 36,
+          "p95" : 42,
+          "p99" : 42,
+          "max" : 48
+        }
+      },
+      "rag-model-gateway" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 0.4959871495327103,
+          "max" : 40.03
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 11.847494158878504,
+          "max" : 14.09
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 17.04964953271028,
+          "p50" : 17,
+          "p95" : 17,
+          "p99" : 17,
+          "max" : 23
+        }
+      },
+      "rag-mysql" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 5.268925233644859,
+          "max" : 52.42
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 62.330216121495326,
+          "max" : 65.73
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 45.035630841121495,
+          "p50" : 45,
+          "p95" : 45,
+          "p99" : 45,
+          "max" : 51
+        }
+      },
+      "rag-qdrant" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 1.2750000000000001,
+          "max" : 21.1
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 3.670806074766355,
+          "max" : 3.76
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 41.24941588785047,
+          "p50" : 41,
+          "p95" : 44,
+          "p99" : 44,
+          "max" : 49
+        }
+      },
+      "rag-prometheus" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 1.7541880841121495,
+          "max" : 78.61
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 16.98139602803738,
+          "max" : 21.19
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 8.050817757009346,
+          "p50" : 8,
+          "p95" : 8,
+          "p99" : 12,
+          "max" : 14
+        }
+      },
+      "rag-reranker" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 84.0131308411215,
+          "max" : 455.79
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 67.82821261682243,
+          "max" : 67.92
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 12.448598130841122,
+          "p50" : 12,
+          "p95" : 13,
+          "p99" : 13,
+          "max" : 19
+        }
+      },
+      "rag-embedding" : {
+        "cpuPercent" : {
+          "count" : 1712,
+          "mean" : 31.46922313084112,
+          "max" : 455.66
+        },
+        "memoryPercent" : {
+          "count" : 1712,
+          "mean" : 62.061682242990656,
+          "max" : 62.34
+        },
+        "pids" : {
+          "count" : 1712,
+          "mean" : 12.810747663551401,
+          "p50" : 13,
+          "p95" : 13,
+          "p99" : 13,
+          "max" : 19
+        }
+      }
+    }
+  },
+  "schemaVersion" : 1,
+  "inputs" : {
+    "qrels" : "2a808171a79832d5798afb879c2d912f5c8863b09c6427fe454f20dc2a025f73",
+    "remote-sampler.err.log" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "remote-inspect-before.txt" : "f77641207bc649583796fc76b45e4f9f1e909dcd8b52711fc01b39608a528c0a",
+    "docxRun" : "cc81197ce8d5f06856ce9b1b143fdfe4207b4abba0d07709e03632c0508f2ed1",
+    "local-process.jsonl" : "8e41d97bf37216591a60120779554aa9178bd2cde99e973bdd0bc8e5c5a609de",
+    "queries" : "146e928420eabd22ee95322f1711cdee9bd42cfa456db44090a35e8c414eaf35",
+    "pdfRun" : "839bc25bf08055824850a351f03f613fe4ffe3c6d05583ce3547936fefe1ab08",
+    "pdfDocuments" : "c06e6239e3ceeb7f68302f7c0cc2745b234a7cf53828a69bd64045f18ede6ed0",
+    "remote-containers.jsonl" : "3e5a984116e77dea32ea3a84d6dca31f45cba8ad4703fcec977e878d9b99a8c3",
+    "docxDocuments" : "14cd30a708c4f30ab0824a93ec6ca4c36cddc765252ab6b695b5858fc3e0f6d0",
+    "remote-inspect-after.txt" : "7203cc73ec3f9e357489c8e612633c0468cb77a97ad80e9aa458a280af0ab0b8",
+    "documentManifest" : "2f32d1cafa883caec5c4bf2149f438f5ea99abdfe02f1cb95651ad71ed42bbfa"
+  },
+  "generator" : "rag-resource-evidence-v1"
+}

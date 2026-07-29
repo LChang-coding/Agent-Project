@@ -1,0 +1,10 @@
+{
+  "schemaVersion" : 1,
+  "generator" : "rag-format-failure-input-v1",
+  "documentCount" : 200,
+  "goldSha256" : "8cb8df8a851dd125ceed41383955cf55e8f3ba538e7c03bde3c5320a0df72ae7",
+  "documentsManifestSha256" : "2f32d1cafa883caec5c4bf2149f438f5ea99abdfe02f1cb95651ad71ed42bbfa",
+  "queriesSha256" : "146e928420eabd22ee95322f1711cdee9bd42cfa456db44090a35e8c414eaf35",
+  "documentsSha256" : "7e1479ca549e3e48dd442b03770e88f160ef90334a8e18f09cfa6349fee24e08",
+  "documentMapSha256" : "8a93c2134c689d3fd78d90ddee9414b3a08bc43e20b56ef55d781ea9f61ef17b"
+}

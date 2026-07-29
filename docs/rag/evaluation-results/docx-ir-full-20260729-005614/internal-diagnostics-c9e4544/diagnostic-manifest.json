@@ -1,0 +1,17 @@
+{
+  "schemaVersion" : 1,
+  "status" : "completed",
+  "runId" : "docx-ir-full-diagnostics-c9e4544",
+  "codeRevision" : "c9e4544",
+  "caseReportSha256" : "624d0b7ce9e01f96989d6c390296a3066691b64b75ac53eaaf2a90ec109306fc",
+  "targetsSha256" : "30361cc60d28430401cd86f41e1e4fd1cdbb56c9328f82b29434a6ddf9c2dbed",
+  "runDocumentMapSha256" : "5068d46c6a58b05d5ff293288c758b5d4650e300a83d199f96f1107aaa7154f4",
+  "queryCount" : 23,
+  "expectedRecordCount" : 92,
+  "completedRecordCount" : 92,
+  "requestTimeoutSeconds" : 240,
+  "startedAt" : "2026-07-29T18:41:45.115948Z",
+  "finishedAt" : "2026-07-29T18:46:31.008982Z",
+  "diagnosticJsonlSha256" : "9b73f0e5e5bf20d27f087855d8820e699c6e9931e9fad752f4ed89f14189c1fe",
+  "failureType" : null
+}
