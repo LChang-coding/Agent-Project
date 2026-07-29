@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -32,6 +33,8 @@ public final class RagBenchmarkCli {
             case "prepare" -> prepare(options);
             case "prepare-formats" -> prepareFormats(options);
             case "validate-formats" -> validateFormats(options);
+            case "run-format" -> runFormat(options);
+            case "persist-evaluation" -> persistEvaluation(options);
             case "score" -> score(options);
             case "run" -> run(options);
             case "evaluate" -> evaluate(options);
@@ -40,6 +43,26 @@ public final class RagBenchmarkCli {
             case "diagnose-cases" -> diagnoseCases(options);
             case "diagnostic-report" -> diagnosticReport(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
+        }
+    }
+
+    private static void persistEvaluation(Map<String, String> options) throws Exception {
+        String url = environment(options, "db-url-env", "RAG_BENCHMARK_DB_URL");
+        String user = environment(options, "db-user-env", "RAG_BENCHMARK_DB_USER");
+        String password = environment(options, "db-password-env", "RAG_BENCHMARK_DB_PASSWORD");
+        try (var connection = DriverManager.getConnection(url, user, password)) {
+            RagBenchmarkJdbcStore.Result result = new RagBenchmarkJdbcStore(new ObjectMapper()).persist(connection,
+                    new RagBenchmarkJdbcStore.Configuration(path(options, "dataset-manifest"),
+                            path(options, "run-manifest"), path(options, "document-results"),
+                            path(options, "run-records"),
+                            path(options, "qrels"), required(options, "format"),
+                            required(options, "preprocessing-strategy"),
+                            required(options, "preprocessing-revision"), required(options, "git-commit"),
+                            sha256Value(options, "config-sha256"), required(options, "artifact-root")));
+            System.out.printf("persisted evaluation runId=%s dataset=%s documents=%d queryResults=%d "
+                            + "aggregates=%d%n",
+                    result.runId(), result.datasetId(), result.documentResultCount(),
+                    result.queryResultCount(), result.aggregateCount());
         }
     }
 
@@ -66,6 +89,26 @@ public final class RagBenchmarkCli {
         System.out.printf("prepared format dataset=%s pairedDocuments=%d queries=%d treeSha256=%s out=%s%n",
                 manifest.datasetName(), manifest.pairedDocumentCount(), manifest.queryCount(),
                 manifest.treeSha256(), path(options, "out"));
+    }
+
+    private static void runFormat(Map<String, String> options) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Remote remote = remote(options, objectMapper);
+        RagFormatBenchmarkRunner.Configuration configuration = new RagFormatBenchmarkRunner.Configuration(
+                required(options, "run-id"), remote.baseUrl(), remote.credentialSource(),
+                required(options, "code-revision"), path(options, "dataset"),
+                required(options, "format").toUpperCase(),
+                required(options, "preprocessing-strategy"),
+                required(options, "preprocessing-revision"),
+                sha256Value(options, "config-sha256"), path(options, "out"),
+                number(options, "seed", 20260729L), nonNegativeInteger(options, "warmup-queries", 5),
+                Duration.ofMillis(integer(options, "poll-ms", 1000)),
+                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 1800)));
+        RagFormatBenchmarkRunner.Result result = new RagFormatBenchmarkRunner(objectMapper, remote.client())
+                .run(configuration);
+        System.out.printf("completed format runId=%s knowledgeBaseId=%s documents=%d queryResults=%d out=%s%n",
+                result.runId(), result.knowledgeBaseId(), result.completedDocumentCount(),
+                result.completedQueryResultCount(), configuration.outputDirectory());
     }
 
     private static void failureCases(Map<String, String> options) throws IOException {
@@ -266,6 +309,15 @@ public final class RagBenchmarkCli {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("缺少参数 --" + name);
         return value;
     }
+    private static String environment(Map<String, String> values, String optionName, String fallbackName) {
+        String name = values.getOrDefault(optionName, fallbackName);
+        if (!name.matches("[A-Z][A-Z0-9_]{2,127}")) {
+            throw new IllegalArgumentException("--" + optionName + " 必须是合法环境变量名");
+        }
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) throw new IllegalArgumentException("环境变量 " + name + " 未设置");
+        return value;
+    }
     private static String sha256Value(Map<String, String> values, String name) {
         String value = required(values, name);
         if (!value.matches("[0-9a-f]{64}")) {
@@ -327,6 +379,16 @@ public final class RagBenchmarkCli {
         lines.add("prepare-formats --corpus corpus.jsonl --queries queries.jsonl --qrels test.tsv --out DIR");
         lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE [--seed N]");
         lines.add("validate-formats --prepared DIR");
+        lines.add("run-format --base-url http://HOST:PORT/api --dataset DIR --format PDF|DOCX");
+        lines.add("        --out EMPTY_DIR --run-id ID --code-revision SHA1");
+        lines.add("        --preprocessing-strategy NAME --preprocessing-revision REV --config-sha256 SHA256");
+        lines.add("        [--token-env RAG_BENCHMARK_ACCESS_TOKEN --warmup-queries 5 --seed 20260729]");
+        lines.add("        [--poll-ms 1000 --ingest-timeout-seconds 1800 --request-timeout-seconds 120]");
+        lines.add("persist-evaluation --dataset-manifest FILE --run-manifest FILE");
+        lines.add("        --document-results document-results.jsonl --run-records run.jsonl");
+        lines.add("        --qrels FILE --format PDF|DOCX --preprocessing-strategy NAME");
+        lines.add("        --preprocessing-revision REV --git-commit SHA1 --config-sha256 SHA256");
+        lines.add("        --artifact-root RELATIVE_PATH [--db-url-env NAME --db-user-env NAME --db-password-env NAME]");
         lines.add("score   --qrels qrels.tsv --run run.jsonl --out metrics.json");
         lines.add("run     --base-url http://HOST:PORT/api --prepared DIR --out EMPTY_DIR --run-id ID");
         lines.add("        --code-revision GIT_COMMIT");

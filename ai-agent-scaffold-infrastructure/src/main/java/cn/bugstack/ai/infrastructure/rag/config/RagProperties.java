@@ -1,5 +1,6 @@
 package cn.bugstack.ai.infrastructure.rag.config;
 
+import cn.bugstack.ai.domain.rag.model.valobj.RagPreprocessingStrategy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
@@ -429,6 +430,13 @@ public class RagProperties {
         /** 是否启动 Kafka/数据库摄取唤醒。 */
         private boolean enabled;
 
+        /** 是否允许启动会降低检索质量的预处理消融；正常环境必须保持关闭。 */
+        private boolean benchmarkPreprocessingEnabled;
+
+        /** 当前进程冻结的预处理策略；生产默认使用完整 IR 链路。 */
+        @NotNull
+        private RagPreprocessingStrategy preprocessingStrategy = RagPreprocessingStrategy.IR_FULL;
+
         /** 数据库恢复扫描间隔。 */
         @Min(100)
         private long pollDelayMs = 2000L;
@@ -481,11 +489,20 @@ public class RagProperties {
                     && overlapChars < childMaxChars;
         }
 
+        /** 非完整策略只能在明确的 benchmark 进程中启用。 */
+        @AssertTrue(message = "非IR_FULL预处理策略只能在benchmark preprocessing mode中启用")
+        public boolean isPreprocessingStrategySafe() {
+            return preprocessingStrategy == RagPreprocessingStrategy.IR_FULL
+                    || benchmarkPreprocessingEnabled;
+        }
+
         @Override
         public String toString() {
             return "Worker{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
                     + ", scanBatchSize=" + scanBatchSize + ", concurrency=1, leaseDurationMs="
-                    + leaseDurationMs + ", heartbeatIntervalMs=" + heartbeatIntervalMs + '}';
+                    + leaseDurationMs + ", heartbeatIntervalMs=" + heartbeatIntervalMs
+                    + ", benchmarkPreprocessingEnabled=" + benchmarkPreprocessingEnabled
+                    + ", preprocessingStrategy=" + preprocessingStrategy + '}';
         }
     }
 

@@ -182,3 +182,38 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 独立全量校验结果：`valid=true`、格式文件 400、配对源文档 200、问题 200、qrels 200、失败 0。
 - `mvn -pl ai-agent-scaffold-benchmark test`：52 个测试通过，0 失败、0 错误、0 跳过。
 - 已确认该集是同源受控版面压力集，不代表真实世界原生 Office/PDF 分布；生成式答案没有金标，正式报告不得据此计算答案正确率或忠实度。
+
+### 2026-07-29：第二批执行计划——预处理消融与评测落库
+
+目标：让五种预处理策略在不改变生产默认行为的前提下可重复运行，并建立离线评测专用的幂等落库闭环。
+
+执行边界：
+
+- 生产默认仍固定为 `IR_FULL`；任何非完整策略只能在显式开启 benchmark preprocessing mode 时启动，防止消融配置误入正常租户流量。
+- 预处理策略按应用进程启动配置冻结，单次正式运行不在任务中途动态切换；每个策略使用独立知识库/运行身份，避免同一任务恢复时配置漂移。
+- 现有 parser、对象存储、租约、取消、checkpoint、Embedding 和 Qdrant 链路保持不变，只在“解析完成后选择进入 Cleaner/IR/扁平化输入”和“分块方式”两个明确切点做消融。
+- 评测表不复用在线 `rag_retrieval_record` 充当实验主表；在线表继续保存真实检索审计，新增 benchmark dataset/run/query-result/aggregate/failure 表保存实验身份、金标、原始排名、阶段延迟与失败证据引用。
+- benchmark CLI 通过环境变量读取数据库连接信息，源码、SQL、日志和产物不得出现凭据。
+
+本批计划：
+
+1. 在领域层定义稳定的预处理策略枚举和构造规则，输出明确的 parser/cleaner/chunker strategy revision。
+2. 在 `RagProperties.Worker` 增加受保护的 benchmark mode 与 preprocessing strategy，增加配置校验和脱敏摘要。
+3. 将 `RagIngestWorker` 的清洗与分块切点提取为可单测的策略执行器；为五种策略建立契约测试，证明输入、Cleaner、结构信息和 chunk 结果确实不同。
+4. 让 IR、质量报告、chunk manifest 和任务日志记录实际策略，保证失败可追溯；恢复 checkpoint 时校验策略，发现漂移立即失败而不是继续污染索引。
+5. 新增评测数据库迁移，包含数据集、运行、逐问题结果、汇总、失败案例五类表及唯一键、hash、终态和查询索引。
+6. benchmark 模块增加 JDBC 幂等写入/校验命令，先以本地构造结果做单元和 MySQL 契约验证，再接入格式批量运行结果。
+7. 运行相关模块测试和构建，把实际变更、门禁和数据库验证结果追加到本节后中文提交。
+
+本批实际操作与结果：
+
+- 新增五种进程级预处理策略：`LEGACY_MARKDOWN_FLATTEN`、`RAW_TEXT_CHUNK`、`IR_NO_CLEANER`、`IR_NO_STRUCTURED_CHUNKING`、`IR_FULL`；每种策略都有稳定 revision，并写入 Document IR、质量报告、chunk manifest 和 checkpoint 恢复校验。
+- 生产默认保持 `IR_FULL`。非完整策略必须同时显式启用 `benchmarkPreprocessingEnabled`；基准进程允许记录低质量处置后继续索引，正常生产进程仍执行 `NEEDS_REVIEW/REJECTED` 门禁，避免对照组被质量门禁提前截断。
+- 新增可独立单测的 `DocumentPreprocessingStrategyExecutor`，明确控制 Cleaner 是否执行、结构块是否保留、是否退化为旧式 Markdown/纯文本扁平输入；`RagIngestWorker` 的解析、强制 OCR、对象存储、租约、取消和向量写入边界未改。
+- 新增 `run-format` 生产黑盒命令：逐个上传 200 份 PDF 或 DOCX，等待每个任务终态，校验文档激活，将后端内部 documentId 映射回 SciFact sourceDocumentId，再执行 200×4 检索消融。任一摄取错误、检索错误、降级、空排名、未知文档或无效 Rerank 都立即触发门禁。
+- 新增格式运行器 HTTP 模拟端到端测试：实际遍历 200 份 PDF、产生 200 条逐文档结果和 800 条检索记录，验证内部 ID 回映后四组 Recall@10 均为 1.0。该值仅是可控 HTTP 桩的映射正确性证明，不是产品 RAG 质量结果。
+- 新增六张评测表迁移：dataset、run、document_result、query_result、aggregate、failure_case；完整保存运行身份、数据/配置/hash、逐文档摄取、逐问题质量与阶段延迟、汇总和失败证据引用。
+- 新增 `persist-evaluation` JDBC 事务写入：同一 dataset manifest 冲突拒绝覆盖，200 条文档、800 条查询和 4 条汇总在提交前分别校验行数；H2 MySQL 模式集成测试连续写入两次，验证幂等后仍为 1/1/200/800/4 行。
+- `mvn -pl ai-agent-scaffold-benchmark test`：54 个测试通过，0 失败、0 错误、0 跳过。
+- Java 17 下运行 `DocumentPreprocessingStrategyExecutorTest`、`RagIngestWorkerTest`、`RagPropertiesTest`：32 个测试通过，0 失败、0 错误、0 跳过。Java 25 会触发现有 Byte Buddy 兼容问题，因此正式测试固定使用项目约束的 Java 17。
+- 本批尚未把迁移应用到真实 MySQL，也尚未启动真实 PDF/DOCX 摄取；这些属于下一批运行环境门禁与正式实验，不将模拟测试数据冒充真实评测结果。

@@ -1,5 +1,6 @@
 package cn.bugstack.ai.test.config;
 
+import cn.bugstack.ai.domain.rag.model.valobj.RagPreprocessingStrategy;
 import cn.bugstack.ai.infrastructure.rag.config.RagProperties;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
@@ -239,6 +240,19 @@ public class RagPropertiesTest {
                 "worker.heartbeatWithinLease".equals(violation.getPropertyPath().toString())));
         Assert.assertTrue(violations.stream().anyMatch(violation ->
                 "worker.boundaryValid".equals(violation.getPropertyPath().toString())));
+    }
+
+    /** 校验消融安全开关；正常进程不能意外关闭 Cleaner 或结构感知分块。 */
+    @Test
+    public void shouldRequireBenchmarkModeForAblationPreprocessing() {
+        RagProperties properties = enabledProperties();
+        properties.getWorker().setPreprocessingStrategy(RagPreprocessingStrategy.LEGACY_MARKDOWN_FLATTEN);
+
+        Assert.assertTrue(validator.validate(properties).stream().anyMatch(violation ->
+                "worker.preprocessingStrategySafe".equals(violation.getPropertyPath().toString())));
+
+        properties.getWorker().setBenchmarkPreprocessingEnabled(true);
+        Assert.assertTrue(validator.validate(properties).isEmpty());
     }
 
     private RagProperties enabledProperties() {

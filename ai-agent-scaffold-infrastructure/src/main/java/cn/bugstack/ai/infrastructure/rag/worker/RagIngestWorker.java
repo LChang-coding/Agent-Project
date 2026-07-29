@@ -20,7 +20,9 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagIngestJobStatus;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestOperation;
 import cn.bugstack.ai.domain.rag.model.valobj.RagIngestStage;
 import cn.bugstack.ai.domain.rag.model.valobj.RagObjectStorageScope;
+import cn.bugstack.ai.domain.rag.model.valobj.RagPreprocessingStrategy;
 import cn.bugstack.ai.domain.rag.service.DeterministicSparseEncoder;
+import cn.bugstack.ai.domain.rag.service.DocumentPreprocessingStrategyExecutor;
 import cn.bugstack.ai.domain.rag.service.DocumentIrChunker;
 import cn.bugstack.ai.domain.rag.service.DocumentIrCleaner;
 import cn.bugstack.ai.domain.rag.service.DocumentParseQualityEvaluator;
@@ -82,6 +84,8 @@ public class RagIngestWorker {
     private final RagProperties properties;
     private final DocumentIrChunker chunker = new DocumentIrChunker();
     private final DocumentIrCleaner cleaner = DocumentIrCleaner.standard();
+    private final DocumentPreprocessingStrategyExecutor preprocessing =
+            new DocumentPreprocessingStrategyExecutor(cleaner);
     private final DocumentParseQualityEvaluator qualityEvaluator = DocumentParseQualityEvaluator.standard();
     private final ObjectMapper objectMapper;
     private final RagIngestErrorClassifier errorClassifier = new RagIngestErrorClassifier();
@@ -376,7 +380,7 @@ public class RagIngestWorker {
     private void startVersionProcessing(RagDocumentVersionEntity version) {
         if (version.status() == RagDocumentVersionStatus.PROCESSING) return;
         RagDocumentVersionEntity processing = version.processing(properties.getDocling().getParserRevision(),
-                DocumentIrChunker.CHUNKER_VERSION, properties.getEmbedding().getModelRevision());
+                chunkerRevision(), properties.getEmbedding().getModelRevision());
         if (repository.updateDocumentVersion(version.tenantId(), processing, version.revision()) != 1) {
             throw new AppException("RAG_INGEST_VERSION_CONFLICT", "文档版本处理状态已变更");
         }
@@ -806,25 +810,28 @@ public class RagIngestWorker {
     /** 清洗后执行结构质量门禁；低质量 PDF 可触发强制 OCR 重跑。 */
     private PreprocessedDocument cleanAndEvaluate(RagIngestJobEntity job,
                                                   RagDocumentParserPort.ParsedDocument parsed) {
+        RagPreprocessingStrategy strategy = preprocessingStrategy();
         long cleanStarted = System.nanoTime();
-        stageStarted(job, "document_cleaning", "开始执行可逆Cleaner Chain", parsed.documentIr().blocks().size());
-        DocumentIrCleaner.CleaningResult cleaned = cleaner.cleanWithAudit(parsed.documentIr());
-        for (DocumentIrCleaner.CleaningAudit audit : cleaned.audits()) {
+        stageStarted(job, "document_preprocessing_strategy",
+                "开始执行预处理策略：" + strategy.name(), parsed.documentIr().blocks().size());
+        DocumentPreprocessingStrategyExecutor.Result selected = preprocessing.execute(parsed, strategy);
+        for (DocumentIrCleaner.CleaningAudit audit : selected.cleaningAudits()) {
             stageCompleted(job, "clean_" + audit.cleanerName(),
                     "清洗步骤完成：" + audit.cleanerName(), audit.costMs(),
                     audit.inputBlocks(), audit.outputBlocks());
         }
-        stageCompleted(job, "document_cleaning", "可逆Cleaner Chain执行完成",
+        stageCompleted(job, "document_preprocessing_strategy",
+                "预处理策略执行完成：" + strategy.name(),
                 elapsedNanos(cleanStarted), parsed.documentIr().blocks().size(),
-                cleaned.document().blocks().size());
+                selected.document().blocks().size());
         long qualityStarted = System.nanoTime();
-        stageStarted(job, "parse_quality_evaluate", "开始计算解析质量报告", cleaned.document().blocks().size());
-        DocumentParseQualityReport quality = qualityEvaluator.evaluate(cleaned.document());
+        stageStarted(job, "parse_quality_evaluate", "开始计算解析质量报告", selected.document().blocks().size());
+        DocumentParseQualityReport quality = qualityEvaluator.evaluate(selected.document());
         stageCompleted(job, "parse_quality_evaluate",
                 "解析质量评估完成，处置=" + quality.disposition().name(),
-                elapsedNanos(qualityStarted), cleaned.document().blocks().size(),
+                elapsedNanos(qualityStarted), selected.document().blocks().size(),
                 quality.findings().size());
-        return new PreprocessedDocument(parsed, cleaned.document(), cleaned.audits(), quality);
+        return new PreprocessedDocument(parsed, selected.document(), selected.cleaningAudits(), quality);
     }
 
     private boolean requiresForcedOcr(String mimeType, PreprocessedDocument value) {
@@ -835,6 +842,10 @@ public class RagIngestWorker {
     }
 
     private void enforceQualityGate(DocumentParseQualityReport quality) {
+        if (properties.getWorker().isBenchmarkPreprocessingEnabled()
+                && preprocessingStrategy() != RagPreprocessingStrategy.IR_FULL) {
+            return;
+        }
         if (quality.disposition() == DocumentQualityDisposition.NEEDS_REVIEW) {
             throw new AppException("RAG_PARSE_NEEDS_REVIEW", "文档解析质量不足，需要人工复核");
         }
@@ -857,6 +868,7 @@ public class RagIngestWorker {
         }
         try {
             DocumentIr ir = objectMapper.readValue(bytes, DocumentIr.class);
+            verifyPreprocessingStrategy(ir);
             DocumentParseQualityReport quality = qualityEvaluator.evaluate(ir);
             enforceQualityGate(quality);
             String display = renderDisplay(ir);
@@ -934,7 +946,10 @@ public class RagIngestWorker {
                     StandardCharsets.UTF_8);
             Files.writeString(workspace.qualityReportPath(), json(Map.of(
                     "report", value.quality(), "cleaningAudits", value.cleaningAudits(),
-                    "parserWarnings", value.parsed().warnings())), StandardCharsets.UTF_8);
+                    "parserWarnings", value.parsed().warnings(),
+                    "preprocessingStrategy", preprocessingStrategy().name(),
+                    "preprocessingStrategyRevision", preprocessingStrategy().revision())),
+                    StandardCharsets.UTF_8);
             ObjectStorageResultEntity parserOutputObject = putArtifact(workspace.parserOutputPath(),
                     RagObjectStorageScope.parserOutputObjectKey(job.tenantId(), job.knowledgeBaseId(),
                             job.documentId(), job.versionId()), "application/json");
@@ -962,6 +977,8 @@ public class RagIngestWorker {
             Files.writeString(workspace.chunkManifestPath(), json(Map.of(
                     "schemaVersion", "1.0", "chunkerVersion", DocumentIrChunker.CHUNKER_VERSION,
                     "tokenizerVersion", DocumentIrChunker.TOKENIZER_VERSION,
+                    "preprocessingStrategy", preprocessingStrategy().name(),
+                    "preprocessingStrategyRevision", preprocessingStrategy().revision(),
                     "warnings", result.warnings(), "chunks", result.chunks())), StandardCharsets.UTF_8);
             putArtifact(workspace.chunkManifestPath(),
                     RagObjectStorageScope.chunkManifestObjectKey(job.tenantId(), job.knowledgeBaseId(),
@@ -1019,6 +1036,29 @@ public class RagIngestWorker {
                     .getInstance("SHA-256").digest(bytes));
         } catch (java.security.NoSuchAlgorithmException error) {
             throw new IllegalStateException("JVM缺少SHA-256", error);
+        }
+    }
+
+    private RagPreprocessingStrategy preprocessingStrategy() {
+        return properties.getWorker().getPreprocessingStrategy();
+    }
+
+    private String chunkerRevision() {
+        return DocumentIrChunker.CHUNKER_VERSION + "+" + preprocessingStrategy().revision();
+    }
+
+    private void verifyPreprocessingStrategy(DocumentIr ir) {
+        String actual = ir.metadata().get("preprocessing_strategy");
+        String revision = ir.metadata().get("preprocessing_strategy_revision");
+        RagPreprocessingStrategy expected = preprocessingStrategy();
+        // 策略字段上线前的 IR 只能来自当时唯一存在的完整生产链路，允许 IR_FULL 兼容恢复。
+        if (expected == RagPreprocessingStrategy.IR_FULL
+                && (actual == null || actual.isBlank()) && (revision == null || revision.isBlank())) {
+            return;
+        }
+        if (!expected.name().equals(actual) || !expected.revision().equals(revision)) {
+            throw new AppException("RAG_PREPROCESSING_STRATEGY_DRIFT",
+                    "检查点预处理策略与当前进程配置不一致");
         }
     }
 

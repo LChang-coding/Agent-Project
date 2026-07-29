@@ -69,20 +69,33 @@ public final class RagBenchmarkHttpClient {
     }
 
     public Upload uploadMarkdown(String knowledgeBaseId, Path file) throws IOException, InterruptedException {
-        if (!Files.isRegularFile(file) || !file.getFileName().toString().endsWith(".md")) {
-            throw new IllegalArgumentException("benchmark上传文件必须是可读Markdown");
-        }
+        return uploadDocument(knowledgeBaseId, file);
+    }
+
+    public Upload uploadDocument(String knowledgeBaseId, Path file) throws IOException, InterruptedException {
+        if (!Files.isRegularFile(file)) throw new IllegalArgumentException("benchmark上传文件不存在");
+        String contentType = contentType(file);
         String boundary = "rag-benchmark-" + UUID.randomUUID();
         String fileName = file.getFileName().toString();
         HttpRequest.BodyPublisher body = HttpRequest.BodyPublishers.concat(
                 bytes("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\""
-                        + fileName + "\"\r\nContent-Type: text/markdown\r\n\r\n"),
+                        + fileName + "\"\r\nContent-Type: " + contentType + "\r\n\r\n"),
                 HttpRequest.BodyPublishers.ofFile(file), bytes("\r\n--" + boundary + "--\r\n"));
         HttpRequest request = request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents")
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary).POST(body).build();
         JsonNode data = send(request).data();
         return new Upload(requiredText(data, "documentId"), requiredText(data, "taskId"),
                 requiredText(data, "status"), data.path("deduplicated").asBoolean(false));
+    }
+
+    private String contentType(Path file) {
+        String name = file.getFileName().toString().toLowerCase();
+        if (name.endsWith(".md") || name.endsWith(".markdown")) return "text/markdown";
+        if (name.endsWith(".pdf")) return "application/pdf";
+        if (name.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        throw new IllegalArgumentException("benchmark只允许Markdown、PDF或DOCX");
     }
 
     public IngestTask getTask(String taskId) throws IOException, InterruptedException {
@@ -144,8 +157,10 @@ public final class RagBenchmarkHttpClient {
         for (JsonNode citation : data.path("citations")) {
             String heading = optionalText(citation, "headingPath");
             String documentId = RagBenchmarkArtifactWriter.documentIdFromHeading(heading);
+            if (documentId == null || documentId.isBlank()) documentId = optionalText(citation, "documentId");
             if (documentId == null || documentId.isBlank()) {
-                throw new BenchmarkProtocolException("RAG_BENCHMARK_HEADING_INVALID", "引用缺少合法benchmark文档标识");
+                throw new BenchmarkProtocolException("RAG_BENCHMARK_DOCUMENT_ID_INVALID",
+                        "引用既无benchmark标识也无documentId");
             }
             uniqueDocuments.add(documentId);
             headings.add(heading);
