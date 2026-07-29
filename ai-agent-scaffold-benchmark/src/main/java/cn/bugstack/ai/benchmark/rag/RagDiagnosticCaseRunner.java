@@ -41,6 +41,7 @@ public final class RagDiagnosticCaseRunner {
         Path recordsPath = configuration.outputDirectory().resolve("diagnostic.jsonl");
         Map<String, QueryCase> queries = readCases(configuration.caseReport(), configuration.maxQueries());
         Map<String, String> targets = readTargets(configuration.targets());
+        Map<String, String> documentIds = readDocumentIds(configuration.runDocumentMap());
         Instant started = Instant.now();
         writeManifest(manifestPath, manifest("running", configuration, queries.size(), 0, started, null, null));
         int completed = 0;
@@ -50,19 +51,21 @@ public final class RagDiagnosticCaseRunner {
                 for (String variant : RagFailureCaseReporter.VARIANTS) {
                     long requestStarted = System.nanoTime();
                     RagBenchmarkHttpClient.DebugResult result = client.debug(targets.get(variant), query.question());
+                    List<RagBenchmarkHttpClient.DiagnosticCandidate> mappedCandidates =
+                            mapCandidates(result.diagnosticCandidates(), documentIds);
                     if (result.degraded() || result.rankedDocumentIds().isEmpty()
                             || result.diagnosticMaxCapturedCount() < 1
                             || result.diagnosticsTruncated()
-                            || result.diagnosticCapturedCount() != result.diagnosticCandidates().size()
-                            || result.diagnosticCandidates().stream().anyMatch(value ->
+                            || result.diagnosticCapturedCount() != mappedCandidates.size()
+                            || mappedCandidates.stream().anyMatch(value ->
                             value.benchmarkDocumentId() == null || value.benchmarkDocumentId().isBlank())) {
                         throw new IllegalStateException("诊断请求不健康: " + query.queryId() + "/" + variant
-                                + " " + healthSummary(result));
+                                + " " + healthSummary(result, mappedCandidates));
                     }
                     DiagnosticRecord record = new DiagnosticRecord(configuration.runId(), query.queryId(),
                             query.question(), query.categories(), variant, result.retrievalId(),
                             result.rankedDocumentIds(), (System.nanoTime() - requestStarted) / 1_000_000L,
-                            result.timingsMs(), result.candidateCounts(), result.diagnosticCandidates(),
+                            result.timingsMs(), result.candidateCounts(), mappedCandidates,
                             result.httpStatus(), result.responseBytes());
                     writer.write(mapper.writeValueAsString(record));
                     writer.newLine();
@@ -81,21 +84,59 @@ public final class RagDiagnosticCaseRunner {
         return new Result(queries.size(), completed, recordsPath, manifestPath, recordsSha256);
     }
 
-    private String healthSummary(RagBenchmarkHttpClient.DebugResult result) {
-        long missingBenchmarkDocumentIds = result.diagnosticCandidates().stream().filter(value ->
+    private String healthSummary(RagBenchmarkHttpClient.DebugResult result,
+                                 List<RagBenchmarkHttpClient.DiagnosticCandidate> candidates) {
+        long missingBenchmarkDocumentIds = candidates.stream().filter(value ->
                 value.benchmarkDocumentId() == null || value.benchmarkDocumentId().isBlank()).count();
         return "retrievalId=" + safeIdentity(result.retrievalId())
                 + " degraded=" + result.degraded()
                 + " rankedDocuments=" + result.rankedDocumentIds().size()
                 + " diagnosticsTruncated=" + result.diagnosticsTruncated()
                 + " diagnosticCapturedCount=" + result.diagnosticCapturedCount()
-                + " diagnosticCandidateSize=" + result.diagnosticCandidates().size()
+                + " diagnosticCandidateSize=" + candidates.size()
                 + " diagnosticMaxCapturedCount=" + result.diagnosticMaxCapturedCount()
                 + " missingBenchmarkDocumentIds=" + missingBenchmarkDocumentIds;
     }
 
     private String safeIdentity(String value) {
         return value == null || !value.matches("[A-Za-z0-9_.-]{1,160}") ? "unavailable" : value;
+    }
+
+    private Map<String, String> readDocumentIds(Path path) throws IOException {
+        Map<String, String> values = new LinkedHashMap<>();
+        try (var reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) continue;
+                JsonNode node = mapper.readTree(line);
+                String internalId = node.path("internalDocumentId").asText();
+                String sourceId = node.path("sourceDocumentId").asText();
+                if (internalId.isBlank() || sourceId.isBlank() || values.putIfAbsent(internalId, sourceId) != null) {
+                    throw new IllegalArgumentException("正式运行document-map记录非法或重复");
+                }
+            }
+        }
+        if (values.isEmpty()) throw new IllegalArgumentException("正式运行document-map为空");
+        return Map.copyOf(values);
+    }
+
+    private List<RagBenchmarkHttpClient.DiagnosticCandidate> mapCandidates(
+            List<RagBenchmarkHttpClient.DiagnosticCandidate> candidates, Map<String, String> documentIds) {
+        return candidates.stream().map(candidate -> {
+            String mapped = documentIds.get(candidate.documentId());
+            if (mapped == null) {
+                throw new IllegalStateException("诊断候选引用未知internalDocumentId: " + candidate.documentId());
+            }
+            String markerId = candidate.benchmarkDocumentId();
+            if (markerId != null && !markerId.isBlank() && !markerId.equals(mapped)) {
+                throw new IllegalStateException("诊断候选文档身份冲突: " + candidate.documentId());
+            }
+            return new RagBenchmarkHttpClient.DiagnosticCandidate(candidate.bindingId(), candidate.profileId(),
+                    candidate.stage(), candidate.rank(), candidate.knowledgeBaseId(), candidate.documentId(),
+                    candidate.versionId(), candidate.generation(), candidate.chunkId(), candidate.headingPath(),
+                    mapped, candidate.denseScore(), candidate.sparseScore(), candidate.fusionScore(),
+                    candidate.rerankScore(), candidate.outcome());
+        }).toList();
     }
 
     private Map<String, QueryCase> readCases(Path path, int maxQueries) throws IOException {
@@ -141,6 +182,7 @@ public final class RagDiagnosticCaseRunner {
         values.put("codeRevision", configuration.codeRevision());
         values.put("caseReportSha256", sha256(configuration.caseReport()));
         values.put("targetsSha256", sha256(configuration.targets()));
+        values.put("runDocumentMapSha256", sha256(configuration.runDocumentMap()));
         values.put("queryCount", queryCount);
         values.put("expectedRecordCount", queryCount * 4);
         values.put("completedRecordCount", completedRecords);
@@ -171,13 +213,15 @@ public final class RagDiagnosticCaseRunner {
     }
 
     public record Configuration(String runId, String codeRevision, Path caseReport, Path targets,
-                                Path outputDirectory, int maxQueries, int requestTimeoutSeconds) {
+                                Path runDocumentMap, Path outputDirectory,
+                                int maxQueries, int requestTimeoutSeconds) {
         void validate() {
             if (runId == null || !runId.matches("[A-Za-z0-9_.-]{1,120}")
                     || codeRevision == null || codeRevision.isBlank() || maxQueries < 1 || maxQueries > 100
                     || requestTimeoutSeconds < 1 || requestTimeoutSeconds > 3600
                     || caseReport == null || targets == null || !Files.isRegularFile(caseReport)
-                    || !Files.isRegularFile(targets) || outputDirectory == null) {
+                    || !Files.isRegularFile(targets) || runDocumentMap == null
+                    || !Files.isRegularFile(runDocumentMap) || outputDirectory == null) {
                 throw new IllegalArgumentException("诊断运行配置非法");
             }
         }

@@ -138,8 +138,8 @@ public final class RagBenchmarkCli {
         RagDiagnosticCaseRunner.Result result = new RagDiagnosticCaseRunner(objectMapper, remote.client()).run(
                 new RagDiagnosticCaseRunner.Configuration(required(options, "run-id"),
                         required(options, "code-revision"), path(options, "case-report"),
-                        path(options, "targets"), path(options, "out"), integer(options, "max-queries", 100),
-                        remote.requestTimeoutSeconds()));
+                        path(options, "targets"), path(options, "run-document-map"), path(options, "out"),
+                        integer(options, "max-queries", 100), remote.requestTimeoutSeconds()));
         System.out.printf("diagnose-cases completed queries=%d records=%d sha256=%s out=%s%n",
                 result.queryCount(), result.recordCount(), result.recordsSha256(), result.records().getParent());
     }
@@ -416,7 +416,8 @@ public final class RagBenchmarkCli {
         lines.add("        --document-map document-map.jsonl --run run.jsonl --out-json report.json");
         lines.add("        --out-markdown report.md [--max-per-category 3]");
         lines.add("diagnose-cases --base-url http://HOST:PORT/api --case-report report.json --targets targets.json");
-        lines.add("        --out EMPTY_DIR --run-id ID --code-revision GIT_COMMIT [--max-queries 100]");
+        lines.add("        --run-document-map document-map.jsonl --out EMPTY_DIR");
+        lines.add("        --run-id ID --code-revision GIT_COMMIT [--max-queries 100]");
         lines.add("diagnostic-report --failure-report report.json --diagnostics diagnostic.jsonl");
         lines.add("        --diagnostic-manifest diagnostic-manifest.json --qrels qrels.tsv");
         lines.add("        --documents benchmark.md --document-map document-map.jsonl");

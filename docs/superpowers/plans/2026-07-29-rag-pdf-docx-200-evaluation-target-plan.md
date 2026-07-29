@@ -316,3 +316,7 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 处理顺序：先让 runner 在异常中输出不含正文/凭据的结构化健康摘要；增加单元测试证明异常能精确指出哪个条件失败；重建 CLI 后只重跑 `queryId=1` 冒烟。若仍失败，使用该响应的 retrievalId/traceId 查日志和在线检索记录，确认是诊断上限、文档身份 payload、绑定目标或服务端版本问题。
 - 只有单查询四变体全部满足完整候选门禁后，才删除本次空的失败输出目录并新建不同 runId 的全量诊断；不得把失败目录覆盖为成功目录。
 - 已实现脱敏健康摘要，包含 retrievalId、降级状态、排名数量、候选截断状态、声明/实际候选数量、最大采集数和缺失 benchmark 文档身份数量；定向测试 2 个通过并重建 CLI。下一步以该提交 revision 执行单查询冒烟。
+- 单查询复跑得到精确事实：`retrievalId=ret_b1617d4d677249349273e5f072ea64a1`、`degraded=false`、最终排名 9、诊断候选 140/140、未截断、最大采集数 2048，但 140 个候选全部缺少由 heading marker 推导的 benchmark 文档身份。
+- 根因已定位为诊断工具的身份回映假设不适配格式数据集：PDF/DOCX 解析清洗后 `headingPath` 不保证保留 benchmark marker；正式格式运行本来就是通过各自 `document-map.jsonl` 的 `internalDocumentId -> sourceDocumentId` 做权威回映。服务端候选仍携带 internal documentId，因此证据没有丢失。
+- 修复方案：`diagnose-cases` 显式接收该正式运行的 document-map，以 internal documentId 回映 sourceDocumentId；若 heading marker 也存在则校验两种映射一致，未知 internal ID 或冲突仍立即失败。诊断 manifest 记录 document-map SHA-256，确保 PDF 与 DOCX 不会串库。
+- 已实现权威 document-map 回映、未知 internal ID/双映射冲突门禁和 manifest hash；单元测试证明 heading marker 缺失时仍可由正式运行映射恢复 sourceDocumentId，未知文档仍失败。Java 17 定向测试 2 个通过并重建 CLI。
