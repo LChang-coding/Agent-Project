@@ -272,11 +272,10 @@ public final class RagInternalDiagnosticReporter {
             throw new IllegalArgumentException("诊断阶段闭包不完整: " + record.queryId() + "/" + record.variant());
         }
         byStage.forEach((stage, candidates) -> {
-            Set<Integer> ranks = new LinkedHashSet<>();
-            candidates.forEach(candidate -> ranks.add(candidate.rank()));
-            for (int rank = 1; rank <= candidates.size(); rank++) {
-                if (!ranks.contains(rank)) throw new IllegalArgumentException("诊断阶段rank不连续或重复: "
-                        + record.queryId() + "/" + record.variant() + "/" + stage);
+            if ("candidate_filter".equals(stage)) {
+                validateCandidateFilterRanks(record, byStage.get("fusion"), candidates);
+            } else {
+                requireContinuousRanks(record, stage, candidates);
             }
         });
         Map<String, Integer> counts = record.candidateCounts();
@@ -297,6 +296,55 @@ public final class RagInternalDiagnosticReporter {
             if (counts.getOrDefault("rerankCandidateCount", -1) != 0) {
                 throw new IllegalArgumentException("非Rerank变体候选数非法: " + record.queryId());
             }
+        }
+    }
+
+    private void validateCandidateFilterRanks(RagDiagnosticCaseRunner.DiagnosticRecord record,
+                                              List<RagBenchmarkHttpClient.DiagnosticCandidate> fusion,
+                                              List<RagBenchmarkHttpClient.DiagnosticCandidate> candidates) {
+        Map<Integer, RagBenchmarkHttpClient.DiagnosticCandidate> fusionByRank = new LinkedHashMap<>();
+        fusion.forEach(candidate -> {
+            if (candidate.rank() < 1 || fusionByRank.putIfAbsent(candidate.rank(), candidate) != null) {
+                throw new IllegalArgumentException("融合阶段rank非法: " + record.queryId() + "/" + record.variant());
+            }
+        });
+        Set<String> chunks = new LinkedHashSet<>();
+        List<RagBenchmarkHttpClient.DiagnosticCandidate> kept = new ArrayList<>();
+        for (RagBenchmarkHttpClient.DiagnosticCandidate candidate : candidates) {
+            if (!chunks.add(candidate.chunkId())) {
+                throw new IllegalArgumentException("候选过滤阶段chunk重复: "
+                        + record.queryId() + "/" + record.variant());
+            }
+            if ("kept".equals(candidate.outcome())) {
+                kept.add(candidate);
+                continue;
+            }
+            RagBenchmarkHttpClient.DiagnosticCandidate upstream = fusionByRank.get(candidate.rank());
+            if (upstream == null || !upstream.chunkId().equals(candidate.chunkId())) {
+                throw new IllegalArgumentException("候选过滤淘汰项未保留融合阶段rank: "
+                        + record.queryId() + "/" + record.variant());
+            }
+        }
+        if (!chunks.equals(fusion.stream().map(RagBenchmarkHttpClient.DiagnosticCandidate::chunkId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)))) {
+            throw new IllegalArgumentException("候选过滤阶段与融合阶段chunk集合不闭合: "
+                    + record.queryId() + "/" + record.variant());
+        }
+        requireContinuousRanks(record, "candidate_filter/kept", kept);
+    }
+
+    private void requireContinuousRanks(RagDiagnosticCaseRunner.DiagnosticRecord record, String stage,
+                                        List<RagBenchmarkHttpClient.DiagnosticCandidate> candidates) {
+        Set<Integer> ranks = new LinkedHashSet<>();
+        candidates.forEach(candidate -> {
+            if (candidate.rank() < 1 || !ranks.add(candidate.rank())) {
+                throw new IllegalArgumentException("诊断阶段rank不连续或重复: "
+                        + record.queryId() + "/" + record.variant() + "/" + stage);
+            }
+        });
+        for (int rank = 1; rank <= candidates.size(); rank++) {
+            if (!ranks.contains(rank)) throw new IllegalArgumentException("诊断阶段rank不连续或重复: "
+                    + record.queryId() + "/" + record.variant() + "/" + stage);
         }
     }
 

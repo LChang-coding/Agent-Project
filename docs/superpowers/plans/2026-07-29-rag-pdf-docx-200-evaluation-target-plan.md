@@ -325,3 +325,8 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 漂移诊断计划：程序化比较 84 条记录与原 run 的顺序相等、集合相等、Top10 交集和 gold 命中状态；若 gold 成败改变，则该 query 只能列为时间漂移证据、不得归因。若 gold 状态不变但顺序变化，因果报告需显式记录 drift 类型并只使用首个失败阶段的候选存在/缺失事实，不使用当前名次证明当时排序。任何放宽都必须有单测和报告醒目标识。
 - 核验原始记录后排除真实排名漂移：原 run 的 `queryId=1/dense` 为 9 个 sourceDocumentId，诊断记录为相同顺序的 9 个 internalDocumentId；runner 只回映了内部候选，没有回映最终 citations 的 documentId，导致报告比较了两套身份空间。
 - 已把最终排名也按同一正式 run document-map 回映；若返回值已经是合法 sourceDocumentId 则保持，既非 internal ID 也非 source ID 时失败。Java 17 对 runner 与因果 reporter 的 10 个定向测试通过并重建 CLI；需用新 revision 重跑诊断，旧 84 条保留为身份回映失败证据而不进入因果结论。
+- PDF 新 revision 诊断完成 21 问题/84 记录，SHA-256 `1f1039b37ec4431d0b1b633661d70f48c1f0ed55c54c65840c06eef068771384`；报告校验 84/84 最终排名与正式 run 精确一致、`integrityHealthy=true`。首个可观测覆盖损失计数：融合阈值/TopK 30、Sparse raw TopK 1、无损失 53；Rerank 在 21 个代表问题中排序改善 9、伤害 5、中性 7。
+- DOCX 在线诊断完成 23 问题/92 记录，SHA-256 `9b73f0e5e5bf20d27f087855d8820e699c6e9931e9fad752f4ed89f14189c1fe`；报告在 `queryId=1175/sparse/candidate_filter` 的 rank 连续性门禁停止。
+- DOCX rank 门禁诊断计划：对该 query 的 Sparse raw、candidate_filter、context_filter 与最终阶段逐项核对 rank、chunkId、outcome 和分数；确认 candidate_filter 的 rank 是“阶段内重排位次”还是“保留上游位次”。若协议语义是保留上游位次，则验证应改成唯一、正数、单调且为上游 rank 子集，连续性只适用于会重新编号的阶段；必须增加含 rank 空洞和重复 rank 的正反测试。
+- 源码与真实轨迹证明 `candidate_filter` 有两套合法 rank 语义：淘汰项记录融合阶段原 rank，保留项按过滤后次序重新编号；因此同一数字可分别出现在一个淘汰项和一个保留项上。`1175/sparse` 的 rank 8 正是“融合 rank 8 被重复内容淘汰 + 原融合 rank 9 压缩为保留 rank 8”。
+- reporter 已改为：普通阶段仍要求正数、唯一、1..N 连续；candidate_filter 要求全 chunk 与 fusion 集合严格闭合、chunk 不重复、淘汰项 `(rank,chunkId)` 与 fusion 一致、仅 kept 子序列要求连续。新增正例覆盖合法重复 rank，反例覆盖 kept rank 空洞；Java 17 测试 10 个通过。

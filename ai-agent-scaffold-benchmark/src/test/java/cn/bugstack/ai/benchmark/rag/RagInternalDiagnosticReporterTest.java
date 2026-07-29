@@ -118,6 +118,55 @@ class RagInternalDiagnosticReporterTest {
     }
 
     @Test
+    void shouldAcceptCandidateFilterWithDiscardedUpstreamRankAndCompressedKeptRank() throws Exception {
+        Fixture fixture = singleGoldFixture();
+        List<RagDiagnosticCaseRunner.DiagnosticRecord> records = readRecords(fixture.diagnostics());
+        String gold = RagBenchmarkArtifactWriter.marker("gold");
+        String wrong = RagBenchmarkArtifactWriter.marker("wrong");
+        List<RagBenchmarkHttpClient.DiagnosticCandidate> candidates = new ArrayList<>();
+        candidates.add(candidate("dense_raw", 1, "wrong", wrong, 0.9, null, null, null,
+                "returned_by_vector_store"));
+        candidates.add(candidate("dense_raw", 2, "gold", gold, 0.7, null, null, null,
+                "returned_by_vector_store"));
+        candidates.add(candidate("fusion", 1, "gold", gold, 0.7, null, 0.9, null,
+                "kept_after_fusion_threshold_topk"));
+        candidates.add(candidate("fusion", 2, "wrong", wrong, 0.9, null, 0.8, null,
+                "kept_after_fusion_threshold_topk"));
+        candidates.add(candidate("candidate_filter", 1, "gold", gold, 0.7, null, 0.9, null,
+                "discarded_duplicate_content_hash"));
+        candidates.add(candidate("candidate_filter", 1, "wrong", wrong, 0.9, null, 0.8, null, "kept"));
+        candidates.add(candidate("pre_assembly", 1, "wrong", wrong, 0.9, null, 0.8, null,
+                "kept_without_rerank"));
+        candidates.add(candidate("context_budget", 1, "wrong", wrong, 0.9, null, 0.8, null,
+                "accepted_citation"));
+        records.set(0, record("dense", List.of("wrong"), candidates));
+        writeRecords(fixture, records);
+
+        RagInternalDiagnosticReporter.Report report = new RagInternalDiagnosticReporter(mapper)
+                .generate(fixture.configuration());
+        assertTrue(report.manifest().integrityHealthy());
+    }
+
+    @Test
+    void shouldRejectNonContinuousKeptRanksInsideCandidateFilter() throws Exception {
+        Fixture fixture = singleGoldFixture();
+        List<RagDiagnosticCaseRunner.DiagnosticRecord> records = readRecords(fixture.diagnostics());
+        RagDiagnosticCaseRunner.DiagnosticRecord dense = records.get(0);
+        List<RagBenchmarkHttpClient.DiagnosticCandidate> changed = dense.diagnostics().stream().map(value ->
+                "candidate_filter".equals(value.stage())
+                        ? new RagBenchmarkHttpClient.DiagnosticCandidate(value.bindingId(), value.profileId(),
+                        value.stage(), 2, value.knowledgeBaseId(), value.documentId(), value.versionId(),
+                        value.generation(), value.chunkId(), value.headingPath(), value.benchmarkDocumentId(),
+                        value.denseScore(), value.sparseScore(), value.fusionScore(), value.rerankScore(),
+                        value.outcome()) : value).toList();
+        records.set(0, copy(dense, changed));
+        writeRecords(fixture, records);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new RagInternalDiagnosticReporter(mapper).generate(fixture.configuration()));
+    }
+
+    @Test
     void shouldClassifyMultiGoldOppositeRankMovesAsMixed() throws Exception {
         List<String> gold = List.of("gold-a", "gold-b");
         Map<String, List<String>> rankings = new LinkedHashMap<>();
@@ -348,7 +397,7 @@ class RagInternalDiagnosticReporterTest {
                                                                   String heading, Double dense, Double sparse,
                                                                   Double fusion, Double rerank, String outcome) {
         return new RagBenchmarkHttpClient.DiagnosticCandidate("binding", "profile", stage, rank, "kb",
-                "source-doc", "version", 1, "chunk-" + stage + "-" + rank + "-" + documentId,
+                "source-doc", "version", 1, "chunk-" + documentId,
                 heading + " — title", documentId, dense, sparse, fusion, rerank, outcome);
     }
 
