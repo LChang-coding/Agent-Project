@@ -1,0 +1,41 @@
+[ {
+  "profileId" : "profile_68af95617ba64ee5b7d42b97aeb23821",
+  "revision" : 0,
+  "definition" : {
+    "variant" : "dense",
+    "mode" : "dense",
+    "denseEnabled" : true,
+    "sparseEnabled" : false,
+    "rerankEnabled" : false
+  }
+}, {
+  "profileId" : "profile_8d5c3bf7e77f4f1dbc1f17c30cca6167",
+  "revision" : 0,
+  "definition" : {
+    "variant" : "sparse",
+    "mode" : "sparse",
+    "denseEnabled" : false,
+    "sparseEnabled" : true,
+    "rerankEnabled" : false
+  }
+}, {
+  "profileId" : "profile_a756f13d75674446b0543ee2d33a3e6f",
+  "revision" : 0,
+  "definition" : {
+    "variant" : "hybrid_rrf",
+    "mode" : "hybrid",
+    "denseEnabled" : true,
+    "sparseEnabled" : true,
+    "rerankEnabled" : false
+  }
+}, {
+  "profileId" : "profile_365754f5d67b447a892b2811b94f6836",
+  "revision" : 0,
+  "definition" : {
+    "variant" : "hybrid_rrf_rerank",
+    "mode" : "hybrid",
+    "denseEnabled" : true,
+    "sparseEnabled" : true,
+    "rerankEnabled" : true
+  }
+} ]

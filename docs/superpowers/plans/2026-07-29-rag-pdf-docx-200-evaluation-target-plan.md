@@ -267,3 +267,22 @@ docs/rag/evaluation-results/pdf-docx-200/
 - `RagBenchmarkRunnerTest` 与 `RagFormatBenchmarkRunnerTest` 已覆盖工作流创建、发布、绑定和检索；benchmark 模块全量 54 个测试通过，0 失败、0 错误、0 跳过。
 - 真实冒烟使用已完成摄取的 PDF/DOCX 同源知识库，通过生产 API 创建并发布工作流、创建 profile/binding 后执行检索：业务码 `0000`，`citations=2`，`degraded=false`，诊断候选 14；阶段耗时为 embedding 247 ms、dense 565 ms、sparse 68 ms、fusion 0 ms、rerank 870 ms、检索 total 2262 ms、service 2689 ms。
 - 本次冒烟响应携带 traceId 与 retrievalId，可由日志 CLI 继续关联；未在计划或源码写入访问令牌、数据库密码或模型 API Key。
+
+本批第二阶段实际操作与结果——PDF `IR_FULL`：
+
+- 正式运行身份：`pdf-ir-full-20260729-224110`；代码 revision `6ad021a8a6e9dcb99d2648c24c9e95e31be7ad89`；config SHA-256 `f1e064aa829ae6c1a4b751a49e701dc0bbb53f0ee944d6691372b25c34a6d9e2`。
+- 200 份 PDF 全部摄取完成，0 失败；复杂度分布 SIMPLE 80、MEDIUM 70、COMPLEX 50；共生成 530 个 chunk。逐文档摄取耗时最小 14,019 ms、平均 20,608.66 ms、最大 41,552 ms。
+- 正式测量产生 800 条唯一“queryId × variant”记录，每个变体 200 条；另有 20 条 warmup 只保留在线审计、不计质量指标。800 条中 0 错误、0 降级、0 空排名、0 未知文档，Rerank 变体 200 条均记录有效 `rerankMs`。
+- 产物 manifest 门禁通过：dataset manifest/tree hash 与冻结数据集一致；`run.jsonl` SHA-256 `839bc25bf08055824850a351f03f613fe4ffe3c6d05583ce3547936fefe1ab08`，`document-results.jsonl` SHA-256 `c06e6239e3ceeb7f68302f7c0cc2745b234a7cf53828a69bd64045f18ede6ed0`，均与 run manifest 相符。
+- 真实检索质量：
+  - dense：Recall@1/5/10 = 0.825/0.935/0.960，MRR@10 = 0.877109，nDCG@10 = 0.897501。
+  - sparse：Recall@1/5/10 = 0.610/0.785/0.820，MRR@10 = 0.686562，nDCG@10 = 0.719277。
+  - hybrid_rrf：Recall@1/5/10 = 0.775/0.885/0.925，MRR@10 = 0.827032，nDCG@10 = 0.850781。
+  - hybrid_rrf_rerank：Recall@1/5/10 = 0.825/0.920/0.925，MRR@10 = 0.862222，nDCG@10 = 0.877817。
+- 真实端到端检索耗时（mean/p50/p95/p99/max，单位 ms）：
+  - dense：2462.495 / 2239 / 3920 / 4267 / 7520。
+  - sparse：2162.820 / 1902 / 3577 / 4751 / 8449。
+  - hybrid_rrf：2667.670 / 2393 / 4361 / 4968 / 5782。
+  - hybrid_rrf_rerank：11074.600 / 10001 / 19442 / 31202 / 40551；其中 `rerankMs` 平均 8325.095 ms，是已证实的首要性能瓶颈。
+- PDF 上的技术结论不是“组件越多越好”：Dense 的 Recall@10 最高；加入当前等权 RRF 后 Recall@10 下降 0.035，Rerank 没有恢复召回集合，只把 Recall@1 从 0.775 拉回 0.825，并以约 4.15 倍于 hybrid 的平均端到端耗时为代价。正式报告必须将其列为负收益/需调参项。
+- 已通过 `persist-evaluation` 事务写入真实 MySQL，并回读确认：run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；未把 warmup 或 HTTP 桩数据写入评测结果表。

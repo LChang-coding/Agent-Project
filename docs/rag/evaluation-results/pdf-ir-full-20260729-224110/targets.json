@@ -1,0 +1,10 @@
+{
+  "sourceRunId" : "pdf-ir-full-20260729-224110",
+  "schemaVersion" : 1,
+  "targets" : {
+    "dense" : "wf_c6560241-e611-407e-ad8f-40dc0d20b89d",
+    "sparse" : "wf_e8de1cbf-165f-4069-ad3d-3d74576a88de",
+    "hybrid_rrf" : "wf_9fbfa7b2-3d9f-4ef1-9fb9-c9916e37e50e",
+    "hybrid_rrf_rerank" : "wf_00d2671b-4ebe-4c2b-a2cf-cd8550ff9b34"
+  }
+}
