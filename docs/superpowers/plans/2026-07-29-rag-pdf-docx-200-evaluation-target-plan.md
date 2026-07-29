@@ -399,3 +399,39 @@ docs/rag/evaluation-results/pdf-docx-200/
   - hybrid_rrf_rerank：6,583.030/6,601/8,166/9,064/9,410；其中 Rerank 阶段平均 4,926.325 ms，占该变体平均端到端耗时约 74.8%，仍是首要延迟瓶颈。
 - 旧版压平策略上也不是组件越多越好：相对 dense，等权 RRF 的 Recall@10 下降 0.070；Rerank 只能重排融合后 10 个候选，无法恢复已被融合裁掉的文档，因此 Recall@10 仍为 0.910。Rerank 将 hybrid 的 Recall@1 从 0.755 提升至 0.845，但平均延迟增加 4,951.565 ms（约 4.04 倍）。
 - 已用 `persist-evaluation` 事务写入真实 MySQL，并独立回读确认：run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；run 身份、格式、策略、revision、Git SHA、config hash 和 completed 状态均与本地产物一致。
+
+第六批第四次执行计划——DOCX `LEGACY_MARKDOWN_FLATTEN`：
+
+1. 复用已完成 PDF 正式运行的同一 8091 应用进程，不重建 JAR；再次核验实际进程环境为 `benchmarkPreprocessingEnabled=true`、`LEGACY_MARKDOWN_FLATTEN`，保持相同应用 JAR、策略 revision、config hash、数据集和随机种子。
+2. 使用全新 runId `docx-legacy-markdown-20260730-053647` 从 0 摄取 200 份 DOCX；只按任务终态、分块完整性、错误码和源文件 SHA-256 判定健康，不复用任何其他格式或失败 run 的记录。
+3. 摄取必须满足 200 个唯一源文档、内部 documentId 和 taskId、0 失败、全部 `processedChunks=totalChunks>0`；随后执行 20 条 warmup，要求 0 错误、0 降级、0 空排名。
+4. 正式查询必须形成 200×4=800 个唯一组合，每个变体 200 条，0 错误、0 降级、0 空结果；首个异常立即停止并先追加诊断，不做样本级重试或结果拼接。
+5. 完成后独立校验 run/document hash，汇总质量、逐阶段延迟和 chunk/摄取性能；用 `persist-evaluation` 事务落库并回读 1/200/800/4/0 行。
+6. 把真实结果追加到本计划并中文本地提交；只有 PDF 与 DOCX 同策略都闭环后，才进入下一预处理策略。
+
+DOCX `LEGACY_MARKDOWN_FLATTEN` 首次落库门禁诊断计划：
+
+- 本地正式 run 已完成 200 文档和 800 查询，所有业务门禁与文件 hash 均通过；首次 `persist-evaluation` 执行会话没有返回标准输出，但数据库独立回读为 run/document/query/aggregate/failure = 0/0/0/0/0，不能认定落库成功。
+- 先确认不存在仍在运行的持久化 JVM，避免并发重复写；再以同一只读输入和同一数据库环境直接执行 CLI，保留明确退出码与脱敏异常，不修改任何评测文件。
+- 若 CLI 报数据/manifest/hash 门禁错误，停止并核对本地产物；若是数据库连接或瞬时事务错误，确认隧道和 MySQL 可用后利用既有唯一键/事务幂等语义重试。
+- 重试后必须独立回读 1/200/800/4/0 和 run 身份；在此之前不提交 DOCX 正式产物、不进入下一策略。
+
+DOCX `LEGACY_MARKDOWN_FLATTEN` 实际结果与落库诊断结论：
+
+- 正式 run `docx-legacy-markdown-20260730-053647` 使用与 PDF 完全相同的代码 revision、应用 JAR、策略 revision、config hash、数据集和随机种子，从 0 独立运行；没有复用其他 run 的任何记录。
+- 200/200 份 DOCX 摄取完成，源文档、内部 documentId、taskId 均为 200 个唯一值；源文件 SHA-256 与冻结 documents manifest 200/200 一致。共生成 501 个 chunk，0 失败；摄取耗时 mean/p50/p95/p99/max 为 9,483.180/9,087/13,273/14,929/23,560 ms。
+- 20 条 warmup 全部健康；正式运行形成 800 个唯一 `queryId × variant`、200 个唯一 query、每个变体 200 条，0 错误、0 降级、0 空结果。
+- `run.jsonl` SHA-256 为 `54ab887d21f0dc4ce6a452a3d04c881f7c2a809de970295fb0249574f71d5faa`，`document-results.jsonl` SHA-256 为 `67547b2aca133fda47efbcfa1d7d83595132c2573d270203f584a5d0d096d295`；两者均与完成态 manifest 一致。完整运行总时长 4,277,598 ms。
+- 真实质量：
+  - dense：Recall@1/5/10 = 0.825/0.940/0.960，MRR@10 = 0.876792，nDCG@10 = 0.897415，MAP@10 = 0.876792。
+  - sparse：Recall@1/5/10 = 0.645/0.795/0.820，MRR@10 = 0.707264，nDCG@10 = 0.734857，MAP@10 = 0.707264。
+  - hybrid_rrf：Recall@1/5/10 = 0.765/0.880/0.920，MRR@10 = 0.822907，nDCG@10 = 0.846708，MAP@10 = 0.822907。
+  - hybrid_rrf_rerank：Recall@1/5/10 = 0.855/0.920/0.920，MRR@10 = 0.880000，nDCG@10 = 0.890080，MAP@10 = 0.880000。
+- 端到端检索耗时 mean/p50/p95/p99/max（ms）：
+  - dense：1,560.440/1,517/2,012/2,209/3,111。
+  - sparse：1,361.365/1,327/1,657/2,149/2,379。
+  - hybrid_rrf：1,634.350/1,577/2,154/2,578/2,659。
+  - hybrid_rrf_rerank：7,020.835/6,898/8,694/9,570/10,847；其中 Rerank 阶段平均 5,342.560 ms，占平均端到端耗时约 76.1%。
+- 同策略格式差异：DOCX 比 PDF 多 65 chunks（+14.9%），但摄取平均耗时少 4,083.730 ms（-30.1%）。PDF 的 dense Recall@10 高 0.020，DOCX 的 hybrid/rerank Recall@10 高 0.010；该差异来自解析/分块与索引内容交互，不能仅凭 chunk 数解释，需在最终跨策略失败转移中下钻。
+- 首次“落库失败”是监控误判：异步执行器在 JDBC 事务仍运行时提前向上层返回，数据库被过早回读为 0 行；不存在 SQL 异常或回滚。改用直接命令会话等待约 44 秒后，CLI 明确返回 persisted，退出码 0。
+- 最终真实 MySQL 独立回读为 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；run 身份、DOCX 格式、策略/revision、Git SHA、config hash 和 completed 状态全部一致。

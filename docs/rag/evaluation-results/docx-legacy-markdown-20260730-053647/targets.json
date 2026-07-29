@@ -1,0 +1,10 @@
+{
+  "sourceRunId" : "docx-legacy-markdown-20260730-053647",
+  "schemaVersion" : 1,
+  "targets" : {
+    "dense" : "wf_09012132-9ac0-4c67-82fe-83fbe2718ef1",
+    "sparse" : "wf_b7218796-f126-4665-965f-9c555230e243",
+    "hybrid_rrf" : "wf_7d494818-8ac0-4d37-b4dc-3425364ab595",
+    "hybrid_rrf_rerank" : "wf_ea640b85-4cbd-4e14-986c-a613c471eb02"
+  }
+}
