@@ -36,6 +36,7 @@ public final class RagBenchmarkCli {
             case "prepare-format-failure-inputs" -> prepareFormatFailureInputs(options);
             case "run-format" -> runFormat(options);
             case "persist-evaluation" -> persistEvaluation(options);
+            case "persist-failure-analysis" -> persistFailureAnalysis(options);
             case "score" -> score(options);
             case "run" -> run(options);
             case "evaluate" -> evaluate(options);
@@ -64,6 +65,21 @@ public final class RagBenchmarkCli {
                             + "aggregates=%d%n",
                     result.runId(), result.datasetId(), result.documentResultCount(),
                     result.queryResultCount(), result.aggregateCount());
+        }
+    }
+
+    private static void persistFailureAnalysis(Map<String, String> options) throws Exception {
+        String url = environment(options, "db-url-env", "RAG_BENCHMARK_DB_URL");
+        String user = environment(options, "db-user-env", "RAG_BENCHMARK_DB_USER");
+        String password = environment(options, "db-password-env", "RAG_BENCHMARK_DB_PASSWORD");
+        try (var connection = DriverManager.getConnection(url, user, password)) {
+            RagBenchmarkFailureJdbcStore.Result result = new RagBenchmarkFailureJdbcStore(
+                    new ObjectMapper()).persist(connection, new RagBenchmarkFailureJdbcStore.Configuration(
+                    required(options, "run-id"), path(options, "failure-report"),
+                    path(options, "internal-analysis"), required(options, "artifact-root")));
+            System.out.printf("persisted failure analysis runId=%s failures=%d reportSha256=%s analysisSha256=%s%n",
+                    result.runId(), result.failureCount(), result.failureReportSha256(),
+                    result.internalAnalysisSha256());
         }
     }
 
@@ -398,6 +414,8 @@ public final class RagBenchmarkCli {
         lines.add("        --document-results document-results.jsonl --run-records run.jsonl");
         lines.add("        --qrels FILE --format PDF|DOCX --preprocessing-strategy NAME");
         lines.add("        --preprocessing-revision REV --git-commit SHA1 --config-sha256 SHA256");
+        lines.add("        --artifact-root RELATIVE_PATH [--db-url-env NAME --db-user-env NAME --db-password-env NAME]");
+        lines.add("persist-failure-analysis --run-id ID --failure-report FILE --internal-analysis FILE");
         lines.add("        --artifact-root RELATIVE_PATH [--db-url-env NAME --db-user-env NAME --db-password-env NAME]");
         lines.add("score   --qrels qrels.tsv --run run.jsonl --out metrics.json");
         lines.add("run     --base-url http://HOST:PORT/api --prepared DIR --out EMPTY_DIR --run-id ID");

@@ -330,3 +330,6 @@ docs/rag/evaluation-results/pdf-docx-200/
 - DOCX rank 门禁诊断计划：对该 query 的 Sparse raw、candidate_filter、context_filter 与最终阶段逐项核对 rank、chunkId、outcome 和分数；确认 candidate_filter 的 rank 是“阶段内重排位次”还是“保留上游位次”。若协议语义是保留上游位次，则验证应改成唯一、正数、单调且为上游 rank 子集，连续性只适用于会重新编号的阶段；必须增加含 rank 空洞和重复 rank 的正反测试。
 - 源码与真实轨迹证明 `candidate_filter` 有两套合法 rank 语义：淘汰项记录融合阶段原 rank，保留项按过滤后次序重新编号；因此同一数字可分别出现在一个淘汰项和一个保留项上。`1175/sparse` 的 rank 8 正是“融合 rank 8 被重复内容淘汰 + 原融合 rank 9 压缩为保留 rank 8”。
 - reporter 已改为：普通阶段仍要求正数、唯一、1..N 连续；candidate_filter 要求全 chunk 与 fusion 集合严格闭合、chunk 不重复、淘汰项 `(rank,chunkId)` 与 fusion 一致、仅 kept 子序列要求连续。新增正例覆盖合法重复 rank，反例覆盖 kept rank 空洞；Java 17 测试 10 个通过。
+- DOCX 因果报告在修正后的协议门禁下通过：92/92 最终排名与正式 run 精确一致、`integrityHealthy=true`。首个可观测覆盖损失：融合阈值/TopK 34、Dense raw TopK 1、Sparse raw TopK 1、无损失 56；Rerank 对 23 个代表问题排序改善 9、伤害 5、中性 9。
+- 新增 `persist-failure-analysis`：只接受数据库中已完成 run，校验内部报告完整、全部最终排名一致、failure report hash 一致，再按 `runId + category + queryId` 稳定 failureId 幂等写入 `rag_benchmark_failure_case`。数据库保存 query、gold、变体、首个失败步骤、直接事实、内部损失、竞争文档、替代解释、证据路径及 hash。
+- H2 MySQL 模式验证连续写入两次仍只有一行；不健康内部报告在任何数据库写入前被拒绝。Java 17 对 failure store 与内部 reporter 的 12 个测试通过并重建 CLI。
