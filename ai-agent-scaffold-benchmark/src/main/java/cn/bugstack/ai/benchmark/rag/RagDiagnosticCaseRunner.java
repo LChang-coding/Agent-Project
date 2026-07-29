@@ -56,7 +56,8 @@ public final class RagDiagnosticCaseRunner {
                             || result.diagnosticCapturedCount() != result.diagnosticCandidates().size()
                             || result.diagnosticCandidates().stream().anyMatch(value ->
                             value.benchmarkDocumentId() == null || value.benchmarkDocumentId().isBlank())) {
-                        throw new IllegalStateException("诊断请求不健康: " + query.queryId() + "/" + variant);
+                        throw new IllegalStateException("诊断请求不健康: " + query.queryId() + "/" + variant
+                                + " " + healthSummary(result));
                     }
                     DiagnosticRecord record = new DiagnosticRecord(configuration.runId(), query.queryId(),
                             query.question(), query.categories(), variant, result.retrievalId(),
@@ -78,6 +79,23 @@ public final class RagDiagnosticCaseRunner {
         writeManifest(manifestPath, manifest("completed", configuration, queries.size(), completed, started,
                 Instant.now(), recordsSha256));
         return new Result(queries.size(), completed, recordsPath, manifestPath, recordsSha256);
+    }
+
+    private String healthSummary(RagBenchmarkHttpClient.DebugResult result) {
+        long missingBenchmarkDocumentIds = result.diagnosticCandidates().stream().filter(value ->
+                value.benchmarkDocumentId() == null || value.benchmarkDocumentId().isBlank()).count();
+        return "retrievalId=" + safeIdentity(result.retrievalId())
+                + " degraded=" + result.degraded()
+                + " rankedDocuments=" + result.rankedDocumentIds().size()
+                + " diagnosticsTruncated=" + result.diagnosticsTruncated()
+                + " diagnosticCapturedCount=" + result.diagnosticCapturedCount()
+                + " diagnosticCandidateSize=" + result.diagnosticCandidates().size()
+                + " diagnosticMaxCapturedCount=" + result.diagnosticMaxCapturedCount()
+                + " missingBenchmarkDocumentIds=" + missingBenchmarkDocumentIds;
+    }
+
+    private String safeIdentity(String value) {
+        return value == null || !value.matches("[A-Za-z0-9_.-]{1,160}") ? "unavailable" : value;
     }
 
     private Map<String, QueryCase> readCases(Path path, int maxQueries) throws IOException {

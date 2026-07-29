@@ -100,6 +100,8 @@ class RagDiagnosticCaseRunnerTest {
                                 temp.resolve("bad-output"), 10, 5)));
 
         assertTrue(error.getMessage().contains("诊断请求不健康"));
+        assertTrue(error.getMessage().contains("missingBenchmarkDocumentIds=1"));
+        assertTrue(error.getMessage().contains("diagnosticCapturedCount=1"));
         assertEquals("failed", new ObjectMapper().readTree(temp.resolve("bad-output/diagnostic-manifest.json")
                 .toFile()).path("status").asText());
     }

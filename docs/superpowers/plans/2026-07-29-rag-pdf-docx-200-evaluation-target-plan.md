@@ -308,3 +308,11 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 输入构建器拒绝覆盖已有目录，校验 200 个 gold 文档均存在 PDF/DOCX 配对、文档 ID/标题/正文不空以及 manifest 记录数一致；单元测试覆盖确定性 hash、源路径和拒绝覆盖。
 - Java 17 定向执行失败输入、失败报告、在线诊断和内部因果报告共 14 个测试，0 失败、0 错误、0 跳过。
 - Java 17 执行 benchmark 模块完整测试并打包 CLI：55 个测试通过，0 失败、0 错误、0 跳过；生成 `ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar`。下一阶段只使用该已验证 CLI 生成真实 PDF/DOCX 失败证据。
+
+在线内部诊断门禁失败与处理计划：
+
+- PDF 诊断在首条 `queryId=1/dense` 停止，`completedRecordCount=0`，失败类型 `IllegalStateException`；没有把不健康响应写成有效证据，也没有继续请求后续案例。
+- 该门禁仅说明当前调试响应至少违反以下条件之一：排名非空、`degraded=false`、诊断候选非空、未截断、声明数量与实际数量一致、每个候选含 `benchmarkDocumentId`。现阶段不能凭异常文本猜测具体条件。
+- 处理顺序：先让 runner 在异常中输出不含正文/凭据的结构化健康摘要；增加单元测试证明异常能精确指出哪个条件失败；重建 CLI 后只重跑 `queryId=1` 冒烟。若仍失败，使用该响应的 retrievalId/traceId 查日志和在线检索记录，确认是诊断上限、文档身份 payload、绑定目标或服务端版本问题。
+- 只有单查询四变体全部满足完整候选门禁后，才删除本次空的失败输出目录并新建不同 runId 的全量诊断；不得把失败目录覆盖为成功目录。
+- 已实现脱敏健康摘要，包含 retrievalId、降级状态、排名数量、候选截断状态、声明/实际候选数量、最大采集数和缺失 benchmark 文档身份数量；定向测试 2 个通过并重建 CLI。下一步以该提交 revision 执行单查询冒烟。
