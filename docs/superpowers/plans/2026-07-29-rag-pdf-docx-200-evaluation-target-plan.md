@@ -341,3 +341,61 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 资源证据：本机 JVM 2,487 样本、远端每个容器 1,712 样本、8 容器；采样错误文件为空。Reranker CPU mean/max 84.013%/455.790%、内存 mean/max 67.828%/67.920%，是计算与延迟首要热点；Embedding CPU mean/max 31.469%/455.660%、内存约 62%；Docling CPU mean/max 25.254%/375.200%。本机 JVM CPU mean/max 1.408%/30.6%，RSS max 571,040 KiB，说明瓶颈主要不在本机 Java CPU。
 - 新增可复现 `compare-formats` 命令与 200 问题 × 4 变体的配对契约测试；测试同时验证格式独占命中、资源样本、稳定 inspect 字段与 Markdown 输出。
 - Java 17 下 benchmark 模块完整测试与打包通过：60 个测试，0 失败、0 错误、0 跳过。提交范围只包含成功正式产物、成功内部诊断、资源证据、配对报告、工具代码和本计划；首次门禁失败目录保留本地但不混入正式成功产物提交。
+
+### 2026-07-30：第六批执行计划——五种预处理策略双格式消融
+
+目标：在同一 200 问题/200 文档快照、同一应用 JAR、同一模型与检索配置上，完成 `LEGACY_MARKDOWN_FLATTEN`、`RAW_TEXT_CHUNK`、`IR_NO_CLEANER`、`IR_NO_STRUCTURED_CHUNKING` 相对 `IR_FULL` 的 PDF/DOCX 全量消融，量化旧式 Markdown 压平、Cleaner 和结构感知分块的真实收益与代价。
+
+执行顺序与门禁：
+
+1. 冻结现有应用 JAR SHA-256、数据集 tree/manifest hash、模型服务和数据库连接；不重建包含其他用户未提交改动的应用 JAR，不上传 Java 项目到服务器。
+2. 每个策略单独重启本机 8091 应用，显式设置 `benchmarkPreprocessingEnabled=true` 与唯一策略；健康检查、实际进程环境和一次小文档摄取均确认策略后，才启动 200 份正式运行。
+3. 顺序按 `LEGACY_MARKDOWN_FLATTEN → RAW_TEXT_CHUNK → IR_NO_CLEANER → IR_NO_STRUCTURED_CHUNKING`；每个策略先 PDF 后 DOCX，禁止并行挤占 Docling/Embedding/Reranker。
+4. 每个 run 必须满足 200 文档完成、800 个 query×variant 唯一记录、0 错误、0 降级、0 空结果、hash 一致，并立即落库；任何门禁失败先停止该策略后续格式并追加诊断。
+5. config hash 由固定的“benchmark mode、strategy、strategy revision、应用 JAR hash、冻结数据集 hash”规范字符串计算；同策略 PDF/DOCX 必须相同，不同策略必须不同。
+6. 每个策略保存逐文档耗时/chunk、逐 query 质量与阶段延迟；完成后以 `IR_FULL` 为共同基线输出组件增益矩阵、格式交互、失败转移和瓶颈。不得跨策略用不同 query 或不同快照拼接指标。
+7. 旧式/消融运行不会替代生产默认；全部完成后恢复本机应用为 `IR_FULL`，执行健康检查和一条真实检索。
+
+第六批首次运行门禁诊断计划（`pdf-legacy-markdown-20260730-030455`）：
+
+- 首次进度检查错误地用不存在的 `success` 与 `chunkCount` 字段判定摄取失败，并在 8/200 时主动中断。实际记录协议使用 `status=completed`、`stage=completed`、`processedChunks/totalChunks` 与 `errorCode=null`；抽查前三条均为真实成功，分别写入 3、1、1 个 chunk。
+- 本次中断属于评测监控器的字段口径错误，不是 RAG 摄取失败。该目录作为“人工中断的无效 run”保留，不进入汇总、不落库、不覆盖，也不计入正式结果。
+- 修正后摄取门禁统一为：`status=completed AND stage=completed AND errorCode IS null AND processedChunks=totalChunks AND totalChunks>0`；检索门禁仍为 `errorCode` 为空、`degraded=false`、`rankedDocumentIds` 非空。
+- 使用相同应用 JAR、策略 revision、config hash、数据集和随机种子新建不同 runId，从 0/200 重跑 PDF；完成前持续按正确协议检查，禁止复用或拼接前 8 条记录。
+
+第六批第二次运行门禁诊断计划（`pdf-legacy-markdown-20260730-030732-r2`）：
+
+- 该 run 已完成 200/200 文档、436 chunks、20/20 warmup，正式检索写入 57/800 后 runner 进程消失；已写记录仍为 0 错误、0 降级、0 空排名、57 个唯一组合，但 run 不完整，不能汇总或落库。
+- 诊断顺序：先读取统一执行会话的退出码与标准输出，检查 `run-manifest.json` 状态和结果目录是否存在失败摘要；再按最后一条 query/variant 的 trace/retrieval 身份检查本机应用日志，区分 CLI 进程被外部终止、HTTP/模型异常、序列化异常或本机资源问题。
+- 同时检查应用 8091、MySQL 隧道以及远端 Docling/Embedding/Reranker/Qdrant 健康；只做只读核验，不迁移 MySQL、不上传项目。
+- 若属于 runner 自身异常，先补回归测试并修复 CLI；若属于瞬时外部错误，确认服务恢复且现有 runner 不支持安全断点后，用新 runId 从 0/200 重跑，禁止拼接 57 条部分结果。
+- 当前部分目录作为失败证据保留，不覆盖、不落库；只有新的 200 文档、800 唯一组合、0 错误、0 降级、0 空结果 run 才能成为正式消融数据。
+
+第六批第二次运行诊断事实与恢复门禁：
+
+- runner 退出码为 1，明确异常为 `RAG_BENCHMARK_MEASURED_GATE_FAILED: sample_unhealthy`；manifest 已原子标记 `status=failed`，因此不是进程被外部杀死，也不是部分 run 被误判完成。
+- 失败样本是 `queryId=1194` 的 `hybrid_rrf_rerank`。对应 `retrievalId=ret_c5fd7978068f46b3a397b76b72c4b1cc`、`traceId=e9eb6ad6-d37f-42d5-8800-104e62e6cf62`：Dense 100、Sparse 100、融合 10、候选加载和过滤均成功；Reranker 等待后失败，服务端以 `RAG_RERANK_UNAVAILABLE` 降级返回融合顺序，整条请求耗时 35,407 ms。严格 gate 拒绝写盘，因此 `run.jsonl` 只保留此前 57 条健康前缀。
+- 公网端口 22、8082 均可建立 TCP；Reranker 最小探针首次在 5.014 秒收到 empty reply，随后四次均为 HTTP 200（0.135–0.161 秒），与瞬时连接被服务端关闭相符。Java 适配器已对 IOException/超时执行最多 2 次重试，本次是在重试耗尽后降级，不属于 runner 漏重试。
+- 同一失败问题在服务恢复后连续重放三次 Rerank 变体均 HTTP 200、`degraded=false`、10 个 rerank 候选；总耗时 19.961、9.297、7.326 秒，Rerank 阶段分别 5.646、7.119、5.439 秒。第一次重放的 12.796 秒发生在 Embedding 阶段，说明远端模型链路存在显著冷/抖动尾延迟，但当前功能已恢复。
+- SSH TCP 可达但服务器主动关闭密码会话，现有本机凭据暂时不能读取容器日志；这不阻塞通过公开模型网关和 Java 端全链路证据完成恢复确认，但容器级根因（网关 upstream reset、TEI 进程重启或宿主资源尖峰）仍标记为未证实，禁止臆测。
+- 重跑前新增恢复门禁：用真实网关对 Reranker 执行连续批量探针，要求全部 HTTP 200、响应数量完整、无空响应；再用失败 query 连续执行三次 Java 全链路 Rerank，要求 0 降级。两项通过后才以新 runId 从 0/200 重跑。
+
+第六批第三次运行实际结果——PDF `LEGACY_MARKDOWN_FLATTEN`：
+
+- 恢复门禁通过后以全新 runId `pdf-legacy-markdown-20260730-041002-r3` 从 0 开始重跑；没有复用首次人工中断的 8 条记录，也没有拼接第二次失败运行的 57 条健康前缀。
+- 运行身份保持冻结：代码 revision `6ad021a8a6e9dcb99d2648c24c9e95e31be7ad89`，应用 JAR SHA-256 `16123df8ce18d0ae4af84ff47175fc5172eb2fe3dbb3b0c1c28b44279aaff2c9`，策略 revision `legacy-markdown-flatten-v1`，config SHA-256 `3aa1a66b60140f32e8c50dbb46cc603b1a55992e4b44134b8f73ece4b962ba52`，数据集 manifest SHA-256 `6c368107d66c192194933884d3cc0ac156283364f3a1a388cdafd6c69b9e12ac`。
+- 200/200 份 PDF 摄取完成，源文档、内部 documentId、taskId 均为 200 个唯一值；源文件 SHA-256 与冻结 documents manifest 200/200 一致。共生成 436 个 chunk，0 失败；摄取耗时 mean/p50/p95/p99/max 为 13,566.910/12,790/17,282/19,607/27,296 ms。
+- 20 条 warmup 全部满足无错误、无降级、非空排名；正式运行产生 800 个唯一 `queryId × variant`，200 个唯一 query，每个变体 200 条，0 错误、0 降级、0 空结果、0 未知文档。
+- `run.jsonl` SHA-256 为 `4b808a9dc80e2a653c01a1ff3b2d65caed8f4ce7367d72de32ce25b312c724a1`，`document-results.jsonl` SHA-256 为 `f2db1e6f302343e04b573d1747c98b6c4c9f41ca9e5003b884f84365a7255586`；两者均与完成态 run manifest 精确一致。完整运行总时长 4,997,195 ms。
+- 真实质量：
+  - dense：Recall@1/5/10 = 0.840/0.945/0.980，MRR@10 = 0.889143，nDCG@10 = 0.911210，MAP@10 = 0.889143。
+  - sparse：Recall@1/5/10 = 0.640/0.775/0.825，MRR@10 = 0.701845，nDCG@10 = 0.731579，MAP@10 = 0.701845。
+  - hybrid_rrf：Recall@1/5/10 = 0.755/0.895/0.910，MRR@10 = 0.819929，nDCG@10 = 0.842603，MAP@10 = 0.819929。
+  - hybrid_rrf_rerank：Recall@1/5/10 = 0.845/0.910/0.910，MRR@10 = 0.871833，nDCG@10 = 0.881517，MAP@10 = 0.871833。
+- 端到端检索耗时 mean/p50/p95/p99/max（ms）：
+  - dense：1,549.475/1,506/1,940/2,234/2,851。
+  - sparse：1,323.785/1,302/1,504/1,852/2,491。
+  - hybrid_rrf：1,631.465/1,569/2,110/2,449/3,294。
+  - hybrid_rrf_rerank：6,583.030/6,601/8,166/9,064/9,410；其中 Rerank 阶段平均 4,926.325 ms，占该变体平均端到端耗时约 74.8%，仍是首要延迟瓶颈。
+- 旧版压平策略上也不是组件越多越好：相对 dense，等权 RRF 的 Recall@10 下降 0.070；Rerank 只能重排融合后 10 个候选，无法恢复已被融合裁掉的文档，因此 Recall@10 仍为 0.910。Rerank 将 hybrid 的 Recall@1 从 0.755 提升至 0.845，但平均延迟增加 4,951.565 ms（约 4.04 倍）。
+- 已用 `persist-evaluation` 事务写入真实 MySQL，并独立回读确认：run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；run 身份、格式、策略、revision、Git SHA、config hash 和 completed 状态均与本地产物一致。

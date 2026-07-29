@@ -1,0 +1,10 @@
+{
+  "targets" : {
+    "dense" : "wf_258e5ec6-43b6-482e-8e6f-317515162130",
+    "sparse" : "wf_e18386c4-ba7f-4ae2-9e32-197d043986e0",
+    "hybrid_rrf" : "wf_3f358638-9661-4860-ac76-4e03e1f06222",
+    "hybrid_rrf_rerank" : "wf_630cd420-24b2-4ad0-b836-2484f0e8a565"
+  },
+  "sourceRunId" : "pdf-legacy-markdown-20260730-041002-r3",
+  "schemaVersion" : 1
+}

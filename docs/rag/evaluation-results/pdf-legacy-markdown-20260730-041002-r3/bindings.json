@@ -1,0 +1,17 @@
+[ {
+  "bindingId" : "binding_6ec0dbad35d94bbd81fea37ea5d64cf1",
+  "targetId" : "wf_258e5ec6-43b6-482e-8e6f-317515162130",
+  "revision" : 0
+}, {
+  "bindingId" : "binding_36b4848c497045edbbfa88d1a9766230",
+  "targetId" : "wf_e18386c4-ba7f-4ae2-9e32-197d043986e0",
+  "revision" : 0
+}, {
+  "bindingId" : "binding_c5b3159f3388456fac59f5c8560acb49",
+  "targetId" : "wf_3f358638-9661-4860-ac76-4e03e1f06222",
+  "revision" : 0
+}, {
+  "bindingId" : "binding_c876a2cc4afa43628a3f2cf294dbdf31",
+  "targetId" : "wf_630cd420-24b2-4ad0-b836-2484f0e8a565",
+  "revision" : 0
+} ]
