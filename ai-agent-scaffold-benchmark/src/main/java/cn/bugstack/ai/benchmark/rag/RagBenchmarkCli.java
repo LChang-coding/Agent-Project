@@ -30,6 +30,8 @@ public final class RagBenchmarkCli {
         Map<String, String> options = options(args);
         switch (args[0].toLowerCase()) {
             case "prepare" -> prepare(options);
+            case "prepare-formats" -> prepareFormats(options);
+            case "validate-formats" -> validateFormats(options);
             case "score" -> score(options);
             case "run" -> run(options);
             case "evaluate" -> evaluate(options);
@@ -39,6 +41,31 @@ public final class RagBenchmarkCli {
             case "diagnostic-report" -> diagnosticReport(options);
             default -> throw new IllegalArgumentException("不支持的命令: " + args[0]);
         }
+    }
+
+    private static void validateFormats(Map<String, String> options) throws IOException {
+        Path root = path(options, "prepared");
+        RagFormatDatasetValidator.Report report = new RagFormatDatasetValidator(new ObjectMapper()).validate(root);
+        System.out.printf("validated format dataset valid=%s formatDocuments=%d pairedDocuments=%d queries=%d "
+                        + "qrels=%d treeSha256=%s failures=%d%n",
+                report.valid(), report.formatDocumentCount(), report.pairedDocumentCount(), report.queryCount(),
+                report.qrelCount(), report.actualTreeSha256(), report.failures().size());
+        if (!report.valid()) {
+            report.failures().forEach(value -> System.err.println("validation failure: " + value));
+            throw new IllegalStateException("格式评测数据校验失败");
+        }
+    }
+
+    private static void prepareFormats(Map<String, String> options) throws IOException {
+        RagFormatDatasetBuilder.Manifest manifest = new RagFormatDatasetBuilder(new ObjectMapper()).build(
+                new RagFormatDatasetBuilder.Configuration(required(options, "dataset"),
+                        path(options, "corpus"), path(options, "queries"), path(options, "qrels"),
+                        path(options, "out"), required(options, "source-url"),
+                        required(options, "source-revision"), required(options, "license"),
+                        number(options, "seed", 20260729L)));
+        System.out.printf("prepared format dataset=%s pairedDocuments=%d queries=%d treeSha256=%s out=%s%n",
+                manifest.datasetName(), manifest.pairedDocumentCount(), manifest.queryCount(),
+                manifest.treeSha256(), path(options, "out"));
     }
 
     private static void failureCases(Map<String, String> options) throws IOException {
@@ -297,6 +324,9 @@ public final class RagBenchmarkCli {
         lines.add("prepare --corpus corpus.jsonl --queries queries.jsonl --qrels test.tsv --out DIR");
         lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE");
         lines.add("        [--max-documents N --max-queries N --seed N --shard-max-bytes N]");
+        lines.add("prepare-formats --corpus corpus.jsonl --queries queries.jsonl --qrels test.tsv --out DIR");
+        lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE [--seed N]");
+        lines.add("validate-formats --prepared DIR");
         lines.add("score   --qrels qrels.tsv --run run.jsonl --out metrics.json");
         lines.add("run     --base-url http://HOST:PORT/api --prepared DIR --out EMPTY_DIR --run-id ID");
         lines.add("        --code-revision GIT_COMMIT");

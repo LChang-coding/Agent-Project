@@ -149,3 +149,36 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 已确认既有 SciFact 质量评测不能证明 PDF/DOCX 原生摄取质量；既有三格式 E2E 只有每格式 1 份、5 个问题，只能作为冒烟基线。
 - 已确认当前生产链路具备 Canonical Document IR、格式专用解析、可逆 Cleaner、结构感知分块、质量报告和影子 Generation 激活，可作为本轮新方案基线。
 - 工作区已有 `RunControlService.java`、日志、RAG 审计文档和若干未跟踪运行目录改动；均视为用户/其他任务内容，本轮不覆盖、不清理、不混入提交。
+
+### 2026-07-29：第一批执行计划——冻结同源格式数据集
+
+目标：先建立可重复、可验证、可公平对比的 PDF/DOCX 各 200 份数据集，不在这一批启动远端摄取。
+
+执行前门禁与已确认事实：
+
+- SciFact 正式 prepared 数据含 300 个问题、339 条正例标注、283 个唯一金标文档；可以在保留每个入选问题全部正例的前提下确定性选出恰好 200 个问题和 200 个金标文档。
+- PDF 与 DOCX 必须使用相同的 200 个源文档、问题和 qrels，保证格式/解析策略是对照实验的唯一主要变量。
+- DocBench 数据下载依赖外部网盘且仓库内未发现可直接核验的正式许可证；TableBank 对数据再分发另有研究用途约束。本轮正式检索质量集不引入许可证不清晰的数据。
+- 正式数据源固定为本地已校验的公开 SciFact 快照；源 URL、许可证、源文件哈希和派生算法写入 manifest。
+- 版面复杂度为确定性生成的受控变量，报告中必须标注为“同源派生版面压力集”，不得表述成天然采集的真实办公文档。
+
+本批实现：
+
+1. 在 `ai-agent-scaffold-benchmark` 增加 PDFBox 与 Apache POI 依赖，版本与现有基础设施保持一致。
+2. 增加 `prepare-formats` 命令，按稳定哈希选择 200 个正例闭包文档，并为 PDF、DOCX 分别生成简单 80、中等 70、复杂 50 份文件。
+3. 输出 dataset manifest、document manifest、query JSONL、qrels TSV、gold JSONL、许可证与来源说明、逐文件 SHA-256；目标目录已存在时拒绝覆盖。
+4. 复杂度模板至少覆盖标题层级、列表、表格、页眉页脚、分页与跨段内容；金标正文和稳定证据标识在两种格式中保持一致。
+5. 增加确定性、数量分层、qrels 闭包、文件可读、文本/证据保留和防覆盖测试。
+6. 生成项目内本地备份，运行模块测试并校验 manifest；完成后把实际命令、数量、哈希、测试结果和偏差追加在本节下方，再做中文本地提交。
+
+本批实际操作与结果：
+
+- 新增 Java CLI 命令 `prepare-formats`：只选择单金标且源文档不重复的问题，以稳定哈希和固定种子 `20260729` 选出 200 对问题/文档，避免未入选正例污染 qrels。
+- 新增 Java CLI 命令 `validate-formats`：独立读取落盘 manifest，逐个重算 400 个文件的 SHA-256，实际使用 PDFBox/POI 打开文件并检查证据标识，同时校验 200 个源文档的 PDF/DOCX 配对、80/70/50 分层、问题/gold/qrels 闭包和整棵目录哈希。
+- 新增格式生成单元测试，覆盖恰好 200 对、格式与复杂度数量、二次生成哈希一致、PDF/DOCX 可打开、证据标识可提取、qrels 闭包、输入不足和禁止覆盖。
+- 首轮确定性测试发现 DOCX ZIP entry 时间戳随运行时间漂移；未放宽门禁，改为生成后固定 ZIP entry 的创建/访问/修改时间并以固定压缩级别重封装。修复后二次生成 tree hash 一致。
+- 已生成本地备份 `docs/rag/evaluation-data/pdf-docx-200/`：PDF 200 份、DOCX 200 份、共约 2.6 MiB；每种格式简单 80、中等 70、复杂 50。
+- 数据集身份：`scifact-paired-pdf-docx-200-v1`；派生算法：`scifact-paired-format-layout-v1`；数据目录 `treeSha256=4b6d97580c7f84d2e43f5ddcd3793c59b973540f114f5eaf1396a7648334d463`；dataset manifest 文件 `sha256=6c368107d66c192194933884d3cc0ac156283364f3a1a388cdafd6c69b9e12ac`。
+- 独立全量校验结果：`valid=true`、格式文件 400、配对源文档 200、问题 200、qrels 200、失败 0。
+- `mvn -pl ai-agent-scaffold-benchmark test`：52 个测试通过，0 失败、0 错误、0 跳过。
+- 已确认该集是同源受控版面压力集，不代表真实世界原生 Office/PDF 分布；生成式答案没有金标，正式报告不得据此计算答案正确率或忠实度。

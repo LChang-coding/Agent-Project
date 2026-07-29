@@ -1,0 +1,30 @@
+{
+  "schemaVersion" : 1,
+  "datasetName" : "scifact-paired-pdf-docx-200-v1",
+  "derivation" : "scifact-paired-format-layout-v1",
+  "seed" : 20260729,
+  "generatedAt" : "2026-07-29T00:00:00Z",
+  "sourceUrl" : "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip",
+  "sourceRevision" : "beir-scifact-2021-03-19",
+  "license" : "CC-BY-4.0_annotations_ODC-By-1.0_S2ORC",
+  "pairedDocumentCount" : 200,
+  "queryCount" : 200,
+  "qrelCount" : 200,
+  "complexityCountsPerFormat" : {
+    "SIMPLE" : 80,
+    "COMPLEX" : 50,
+    "MEDIUM" : 70
+  },
+  "formatCounts" : {
+    "DOCX" : 200,
+    "PDF" : 200
+  },
+  "corpusSha256" : "dec31c8182f3d744c7d2c09423756fd1d17cbef75808db13ba01cc0aab4d1ac6",
+  "queriesSha256" : "8ff84a7c903f722981cd8d595c022660140c51867b27608a6d4910db86080313",
+  "qrelsSha256" : "0864bb985e0ca2367ba217977e72004d549054b2b06666ed9d4825ac7c21284c",
+  "queriesPath" : "gold/queries.jsonl",
+  "qrelsPath" : "gold/qrels.tsv",
+  "goldPath" : "gold/gold.jsonl",
+  "documentManifestPath" : "manifests/documents.jsonl",
+  "treeSha256" : "4b6d97580c7f84d2e43f5ddcd3793c59b973540f114f5eaf1396a7648334d463"
+}
