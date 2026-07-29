@@ -217,3 +217,53 @@ docs/rag/evaluation-results/pdf-docx-200/
 - `mvn -pl ai-agent-scaffold-benchmark test`：54 个测试通过，0 失败、0 错误、0 跳过。
 - Java 17 下运行 `DocumentPreprocessingStrategyExecutorTest`、`RagIngestWorkerTest`、`RagPropertiesTest`：32 个测试通过，0 失败、0 错误、0 跳过。Java 25 会触发现有 Byte Buddy 兼容问题，因此正式测试固定使用项目约束的 Java 17。
 - 本批尚未把迁移应用到真实 MySQL，也尚未启动真实 PDF/DOCX 摄取；这些属于下一批运行环境门禁与正式实验，不将模拟测试数据冒充真实评测结果。
+
+### 2026-07-29：第三批执行计划——真实环境门禁与 IR_FULL 正式运行
+
+目标：在不上传本地项目、不迁移现有 MySQL 实例的前提下，把评测表应用到当前数据库，使用本机最新 Java 应用连接既有远端中间件，完成真实 PDF/DOCX 冒烟和 `IR_FULL` 正式运行。
+
+执行顺序与停止条件：
+
+1. 只读核验本机 8091 进程、MySQL SSH 隧道、RAG 模型/Docling/Qdrant/Kafka/MinIO 连通性及磁盘资源；不输出凭据，不改变远端中间件拓扑。
+2. 通过现有本地数据库连接应用评测迁移；校验六张表存在、列/索引完整且既有在线 RAG 表未变化。
+3. 用 Java 17 构建最新应用和 benchmark CLI；记录 Git SHA、JAR SHA-256、脱敏配置 SHA-256和运行命令模板。
+4. 停止旧的本机 8091 进程并启动本提交构建的应用，生产策略固定 `IR_FULL`；完成健康检查、登录、单份 PDF 和单份 DOCX 的上传—摄取—检索—引用身份回映冒烟。
+5. 冒烟中任一任务错误、超时、降级、空排名、模型不通或索引数量不一致，立即停止扩大运行，保存 taskId/traceId/文档/阶段和错误码后先修复。
+6. 冒烟通过后依次执行 PDF 200 和 DOCX 200 的 `IR_FULL` 正式运行；每个运行使用独立知识库与 runId，原始产物写入项目内 `docs/rag/evaluation-results/`。
+7. 每个正式运行完成后校验 200 条文档、800 条查询、4 个唯一变体、0 业务错误、0 静默降级、0 空结果、manifest/data/config/run hash，并事务落库。
+8. 把真实数量、任务与运行身份、质量和阶段延迟、数据库行数、失败门禁及修复过程追加到本节；完成 IR_FULL 双格式闭环后中文本地提交。
+
+真实启动阻塞诊断（执行中）：
+
+- 最新应用 JAR 构建成功，但首次以 `java -jar` 启动在 Spring 初始化前终止；异常为 `Application.isExecutableFile` 对 JAR 内 `ZipPath` 调用 `toFile()`，抛出 `UnsupportedOperationException`。
+- 根因范围已收敛到“本地观测脚本自动发现”辅助逻辑，不是 MySQL、Kafka、Qdrant、Embedding、Reranker 或 Docling 故障；旧 IntelliJ classpath 启动不会经过 ZipPath，因而此前未暴露。
+- 修复计划：让脚本探测只接受默认文件系统中的真实文件，JAR 内资源直接跳过本地脚本自启动；增加 classpath/ZipPath 契约测试，重新执行 Java 17 测试、打包和 `java -jar` 启动门禁后再继续格式冒烟。
+
+真实绑定门禁诊断（执行中）：
+
+- PDF 与 DOCX 各一份已真实摄取并进入 `ready`；DOCX 首次用 curl 默认 `application/octet-stream` 被 `RAG_FILE_MIME_MISMATCH` 正确拒绝，改用规范 OOXML MIME 后成功。该拒绝证明格式/MIME 安全门禁有效，不计作解析链失败。
+- 调试绑定拒绝 benchmark 生成的虚构 workflow target，错误为 `RAG_BINDING_TARGET_NOT_FOUND`。根因是当前领域层已要求目标属于当前租户且工作流必须发布，而旧 benchmark runner 仍直接拼接 targetId。
+- 修复计划：benchmark 通过生产 Workflow API 为四个检索变体分别创建并发布最小合法工作流，再创建一对一 RAG binding；HTTP 桩和真实冒烟都验证“已发布目标—唯一 profile—唯一 binding”，禁止绕过目标授权。
+
+### 2026-07-29：第四批执行计划——合法目标冒烟与双格式正式评测
+
+目标：关闭可执行 JAR 与真实 Workflow 目标绑定两个运行阻塞，在真实本机应用和既有远端 RAG 中间件上取得可落库的 PDF/DOCX 质量与阶段延迟数据。
+
+执行门禁：
+
+1. 用 Java 17 重跑可执行 JAR 路径测试、benchmark 目标创建/发布测试和完整模块测试；任一失败不启动正式运行。
+2. 重建应用与 CLI，记录新 Git/JAR/config hash；应用只在本机运行，Java 项目不得上传 RAG 服务器。
+3. 通过生产 API 创建最小 Workflow 并发布，以返回的真实 workflowId 创建检索 profile/binding；用已 ready 的 PDF/DOCX 冒烟库执行一次真实检索。
+4. 冒烟必须满足 HTTP/业务成功、`degraded=false`、排名与引用非空、文档身份可回映、阶段延迟字段存在；否则保留 traceId/taskId 后停止扩大运行。
+5. 冒烟通过后，按 PDF `IR_FULL`、DOCX `IR_FULL` 顺序运行各 200 文档、200 问题和四个检索变体。长任务持续检查摄取错误、降级、空排名和进程存活。
+6. 每个格式运行结束立即校验 manifest、200 条 document result、800 条 query result、四个唯一变体和全部 hash，再用评测 JDBC 事务写入六张表并回读计数。
+7. 把真实质量指标、摄取/检索阶段 p50/p95/p99、资源瓶颈和失败案例对应源文档/chunk 追加到本计划及正式报告；禁止用模拟桩数据替代正式结果。
+
+本批第一阶段实际操作与结果：
+
+- 修复应用以可执行 JAR 启动时把 JAR 内 `ZipPath` 当成本地文件调用 `toFile()` 的问题：观测脚本探测现在只接受默认文件系统中的真实可执行文件，JAR 内资源明确跳过。
+- 新增 `ApplicationTest`，分别验证本地可执行文件可识别、ZIP 文件系统路径不抛异常且不会被误判。Java 17 定向测试 1/1 通过。
+- benchmark 不再构造虚假的 workflow targetId；四个检索变体分别通过生产 Workflow API 创建并发布最小工作流，再使用服务端返回的 workflowId 建立 RAG binding。
+- `RagBenchmarkRunnerTest` 与 `RagFormatBenchmarkRunnerTest` 已覆盖工作流创建、发布、绑定和检索；benchmark 模块全量 54 个测试通过，0 失败、0 错误、0 跳过。
+- 真实冒烟使用已完成摄取的 PDF/DOCX 同源知识库，通过生产 API 创建并发布工作流、创建 profile/binding 后执行检索：业务码 `0000`，`citations=2`，`degraded=false`，诊断候选 14；阶段耗时为 embedding 247 ms、dense 565 ms、sparse 68 ms、fusion 0 ms、rerank 870 ms、检索 total 2262 ms、service 2689 ms。
+- 本次冒烟响应携带 traceId 与 retrievalId，可由日志 CLI 继续关联；未在计划或源码写入访问令牌、数据库密码或模型 API Key。

@@ -36,6 +36,7 @@ class RagFormatBenchmarkRunnerTest {
     private final List<String> internalDocuments = new ArrayList<>();
     private final AtomicInteger profileSequence = new AtomicInteger();
     private final AtomicInteger bindingSequence = new AtomicInteger();
+    private final AtomicInteger workflowSequence = new AtomicInteger();
     private HttpServer server;
 
     @AfterEach
@@ -50,6 +51,7 @@ class RagFormatBenchmarkRunnerTest {
         readGold(dataset.resolve("gold/gold.jsonl"));
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/v1/rag", this::route);
+        server.createContext("/api/v1/workflows", this::route);
         server.start();
         URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
         RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
@@ -115,6 +117,17 @@ class RagFormatBenchmarkRunnerTest {
         if ("/api/v1/rag/retrieval-profiles".equals(path)) {
             int id = profileSequence.incrementAndGet();
             respond(exchange, Map.of("profileId", "profile-" + id, "revision", 1));
+            return;
+        }
+        if ("/api/v1/workflows".equals(path) && "POST".equals(method)) {
+            int id = workflowSequence.incrementAndGet();
+            respond(exchange, Map.of("workflowId", "workflow-" + id, "status", "draft"));
+            return;
+        }
+        if (path.matches("/api/v1/workflows/workflow-\\d+/publish") && "POST".equals(method)) {
+            String workflowId = path.split("/")[4];
+            respond(exchange, Map.of("workflow", Map.of("workflowId", workflowId,
+                    "status", "published", "publishedVersion", 1)));
             return;
         }
         if ("/api/v1/rag/bindings".equals(path)) {

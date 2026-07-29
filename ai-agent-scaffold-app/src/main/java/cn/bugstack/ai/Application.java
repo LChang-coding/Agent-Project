@@ -9,8 +9,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.mybatis.spring.annotation.MapperScan;
 
-import java.io.File;
 import java.net.URI;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -100,9 +100,11 @@ public class Application {
         return null;
     }
 
-    private static boolean isExecutableFile(Path path) {
-        File file = path == null ? null : path.toFile();
-        return file != null && file.isFile() && file.canExecute();
+    static boolean isExecutableFile(Path path) {
+        return path != null
+                && FileSystems.getDefault().equals(path.getFileSystem())
+                && Files.isRegularFile(path)
+                && Files.isExecutable(path);
     }
 
     @Bean("myToolCallbackProvider")

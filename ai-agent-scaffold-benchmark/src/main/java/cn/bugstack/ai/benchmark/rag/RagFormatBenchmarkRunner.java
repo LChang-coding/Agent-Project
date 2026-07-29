@@ -187,7 +187,9 @@ public final class RagFormatBenchmarkRunner {
                 : RagBenchmarkHttpClient.ProfileDefinition.ablations()) {
             RagBenchmarkHttpClient.Profile profile = client.createProfile(
                     bounded("fmt_" + configuration.runId() + "_" + definition.variant(), 96), definition);
-            String targetId = bounded("fmt_" + configuration.runId() + "_" + definition.variant(), 120);
+            RagBenchmarkHttpClient.Workflow workflow = client.createPublishedWorkflow(
+                    bounded("fmt_" + configuration.runId() + "_" + definition.variant(), 96));
+            String targetId = workflow.workflowId();
             RagBenchmarkHttpClient.Binding binding = client.createBinding(targetId, knowledgeBaseId,
                     profile.profileId());
             targets.put(definition.variant(), targetId);

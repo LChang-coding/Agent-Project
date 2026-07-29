@@ -68,7 +68,9 @@ public final class RagBenchmarkRunner {
                     : RagBenchmarkHttpClient.ProfileDefinition.ablations()) {
                 RagBenchmarkHttpClient.Profile profile = client.createProfile(
                         bounded("bench_" + configuration.runId() + "_" + definition.variant(), 96), definition);
-                String targetId = bounded("bench_" + configuration.runId() + "_" + definition.variant(), 120);
+                RagBenchmarkHttpClient.Workflow workflow = client.createPublishedWorkflow(
+                        bounded("bench_" + configuration.runId() + "_" + definition.variant(), 96));
+                String targetId = workflow.workflowId();
                 RagBenchmarkHttpClient.Binding binding = client.createBinding(targetId,
                         knowledgeBase.knowledgeBaseId(), profile.profileId());
                 targets.put(definition.variant(), targetId);

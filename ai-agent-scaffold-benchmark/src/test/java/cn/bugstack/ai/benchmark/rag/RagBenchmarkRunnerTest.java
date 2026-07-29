@@ -60,8 +60,9 @@ class RagBenchmarkRunnerTest {
 
         AtomicInteger profileSequence = new AtomicInteger();
         AtomicInteger bindingSequence = new AtomicInteger();
+        AtomicInteger workflowSequence = new AtomicInteger();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/", exchange -> handle(exchange, profileSequence, bindingSequence));
+        server.createContext("/", exchange -> handle(exchange, profileSequence, bindingSequence, workflowSequence));
         server.start();
         URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
         RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
@@ -416,7 +417,8 @@ class RagBenchmarkRunnerTest {
 
     private record QueryFixture(String queryId, String text) {}
 
-    private void handle(HttpExchange exchange, AtomicInteger profiles, AtomicInteger bindings) throws IOException {
+    private void handle(HttpExchange exchange, AtomicInteger profiles, AtomicInteger bindings,
+                        AtomicInteger workflows) throws IOException {
         String path = exchange.getRequestURI().getPath();
         exchange.getRequestBody().readAllBytes();
         String data;
@@ -431,6 +433,12 @@ class RagBenchmarkRunnerTest {
             data = "[{\"documentId\":\"doc-1\",\"status\":\"ready\",\"activeVersionId\":\"ver-1\",\"activeGeneration\":1}]";
         } else if (path.equals("/api/v1/rag/retrieval-profiles")) {
             data = "{\"profileId\":\"profile-" + profiles.incrementAndGet() + "\",\"revision\":0}";
+        } else if (path.equals("/api/v1/workflows") && exchange.getRequestMethod().equals("POST")) {
+            data = "{\"workflowId\":\"workflow-" + workflows.incrementAndGet() + "\",\"status\":\"draft\"}";
+        } else if (path.matches("/api/v1/workflows/workflow-\\d+/publish")) {
+            String workflowId = path.split("/")[4];
+            data = "{\"workflow\":{\"workflowId\":\"" + workflowId
+                    + "\",\"status\":\"published\",\"publishedVersion\":1}}";
         } else if (path.equals("/api/v1/rag/bindings")) {
             data = "{\"bindingId\":\"binding-" + bindings.incrementAndGet() + "\",\"revision\":0}";
         } else if (path.equals("/api/v1/rag/retrieval-debug")) {

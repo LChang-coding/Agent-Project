@@ -140,6 +140,24 @@ public final class RagBenchmarkHttpClient {
         return new Profile(requiredText(data, "profileId"), data.path("revision").asLong(), value);
     }
 
+    public Workflow createPublishedWorkflow(String name) throws IOException, InterruptedException {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("workflowName", name);
+        payload.put("description", "RAG benchmark retrieval target");
+        payload.put("visibility", "private");
+        JsonNode created = postJson("/v1/workflows", payload);
+        String workflowId = requiredText(created, "workflowId");
+        JsonNode published = postJson("/v1/workflows/" + encodePath(workflowId) + "/publish", Map.of());
+        JsonNode workflow = published.path("workflow");
+        if (!workflowId.equals(requiredText(workflow, "workflowId"))
+                || !"published".equalsIgnoreCase(requiredText(workflow, "status"))
+                || workflow.path("publishedVersion").asInt() < 1) {
+            throw new BenchmarkProtocolException("RAG_BENCHMARK_WORKFLOW_NOT_PUBLISHED",
+                    "benchmark工作流发布响应不完整");
+        }
+        return new Workflow(workflowId, workflow.path("publishedVersion").asInt());
+    }
+
     public Binding createBinding(String targetId, String knowledgeBaseId, String profileId)
             throws IOException, InterruptedException {
         JsonNode data = postJson("/v1/rag/bindings", Map.of("targetType", "workflow", "targetId", targetId,
@@ -305,6 +323,7 @@ public final class RagBenchmarkHttpClient {
         }
     }
     public record Profile(String profileId, long revision, ProfileDefinition definition) {}
+    public record Workflow(String workflowId, int publishedVersion) {}
     public record Binding(String bindingId, String targetId, long revision) {}
     public record DebugResult(String retrievalId, List<String> rankedDocumentIds, List<String> citationHeadings,
                               boolean degraded, List<String> degradationReasons, Map<String, Long> timingsMs,
