@@ -35,8 +35,8 @@ class RagDiagnosticCaseRunnerTest {
                    "candidates":[{"bindingId":"b1","profileId":"p1","stage":"dense_raw","rank":1,
                      "knowledgeBaseId":"kb1","documentId":"doc-1","versionId":"v1","generation":1,
                      "chunkId":"c1","headingPath":"ordinary heading","denseScore":0.8,"outcome":"returned_by_vector_store"}]},
-                 "citations":[{"headingPath":"%s — title"}]}
-                """.formatted(RagBenchmarkArtifactWriter.marker("doc-1")))));
+                 "citations":[{"documentId":"doc-1","headingPath":"ordinary heading"}]}
+                """)));
         server.start();
     }
 
@@ -46,7 +46,7 @@ class RagDiagnosticCaseRunnerTest {
     void shouldPersistFourVariantsWithHealthyDiagnostics() throws Exception {
         Path cases = temp.resolve("cases.json");
         Path targets = temp.resolve("targets.json");
-        Path documentMap = documentMap("doc-1", "doc-1");
+        Path documentMap = documentMap("doc-1", "source-1");
         Files.writeString(cases, """
                 {"cases":{"persistent_miss":[{"queryId":"q1","question":"question one"}],
                 "dense_only_success":[{"queryId":"q1","question":"question one"}]}}
@@ -68,7 +68,8 @@ class RagDiagnosticCaseRunnerTest {
         assertEquals(4, Files.readAllLines(result.records()).size());
         assertEquals("completed", new ObjectMapper().readTree(result.manifest().toFile()).path("status").asText());
         assertTrue(Files.readString(result.records()).contains("dense_raw"));
-        assertTrue(Files.readString(result.records()).contains("\"benchmarkDocumentId\":\"doc-1\""));
+        assertTrue(Files.readString(result.records()).contains("\"benchmarkDocumentId\":\"source-1\""));
+        assertTrue(Files.readString(result.records()).contains("\"rankedDocumentIds\":[\"source-1\"]"));
     }
 
     @Test
@@ -86,7 +87,7 @@ class RagDiagnosticCaseRunnerTest {
                 """.formatted(RagBenchmarkArtifactWriter.marker("doc-1")))));
         Path cases = temp.resolve("bad-cases.json");
         Path targets = temp.resolve("bad-targets.json");
-        Path documentMap = documentMap("doc-other", "doc-other");
+        Path documentMap = documentMap("doc-other", "doc-1");
         Files.writeString(cases, """
                 {"cases":{"persistent_miss":[{"queryId":"q1","question":"question one"}]}}
                 """);

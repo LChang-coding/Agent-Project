@@ -51,9 +51,10 @@ public final class RagDiagnosticCaseRunner {
                 for (String variant : RagFailureCaseReporter.VARIANTS) {
                     long requestStarted = System.nanoTime();
                     RagBenchmarkHttpClient.DebugResult result = client.debug(targets.get(variant), query.question());
+                    List<String> mappedRanking = mapRankedDocuments(result.rankedDocumentIds(), documentIds);
                     List<RagBenchmarkHttpClient.DiagnosticCandidate> mappedCandidates =
                             mapCandidates(result.diagnosticCandidates(), documentIds);
-                    if (result.degraded() || result.rankedDocumentIds().isEmpty()
+                    if (result.degraded() || mappedRanking.isEmpty()
                             || result.diagnosticMaxCapturedCount() < 1
                             || result.diagnosticsTruncated()
                             || result.diagnosticCapturedCount() != mappedCandidates.size()
@@ -64,7 +65,7 @@ public final class RagDiagnosticCaseRunner {
                     }
                     DiagnosticRecord record = new DiagnosticRecord(configuration.runId(), query.queryId(),
                             query.question(), query.categories(), variant, result.retrievalId(),
-                            result.rankedDocumentIds(), (System.nanoTime() - requestStarted) / 1_000_000L,
+                            mappedRanking, (System.nanoTime() - requestStarted) / 1_000_000L,
                             result.timingsMs(), result.candidateCounts(), mappedCandidates,
                             result.httpStatus(), result.responseBytes());
                     writer.write(mapper.writeValueAsString(record));
@@ -136,6 +137,16 @@ public final class RagDiagnosticCaseRunner {
                     candidate.versionId(), candidate.generation(), candidate.chunkId(), candidate.headingPath(),
                     mapped, candidate.denseScore(), candidate.sparseScore(), candidate.fusionScore(),
                     candidate.rerankScore(), candidate.outcome());
+        }).toList();
+    }
+
+    private List<String> mapRankedDocuments(List<String> rankedDocumentIds, Map<String, String> documentIds) {
+        Set<String> sourceIds = Set.copyOf(documentIds.values());
+        return rankedDocumentIds.stream().map(documentId -> {
+            String mapped = documentIds.get(documentId);
+            if (mapped != null) return mapped;
+            if (sourceIds.contains(documentId)) return documentId;
+            throw new IllegalStateException("诊断最终排名引用未知文档身份: " + documentId);
         }).toList();
     }
 

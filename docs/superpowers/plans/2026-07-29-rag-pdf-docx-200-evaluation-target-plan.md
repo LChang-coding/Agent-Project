@@ -320,3 +320,8 @@ docs/rag/evaluation-results/pdf-docx-200/
 - 根因已定位为诊断工具的身份回映假设不适配格式数据集：PDF/DOCX 解析清洗后 `headingPath` 不保证保留 benchmark marker；正式格式运行本来就是通过各自 `document-map.jsonl` 的 `internalDocumentId -> sourceDocumentId` 做权威回映。服务端候选仍携带 internal documentId，因此证据没有丢失。
 - 修复方案：`diagnose-cases` 显式接收该正式运行的 document-map，以 internal documentId 回映 sourceDocumentId；若 heading marker 也存在则校验两种映射一致，未知 internal ID 或冲突仍立即失败。诊断 manifest 记录 document-map SHA-256，确保 PDF 与 DOCX 不会串库。
 - 已实现权威 document-map 回映、未知 internal ID/双映射冲突门禁和 manifest hash；单元测试证明 heading marker 缺失时仍可由正式运行映射恢复 sourceDocumentId，未知文档仍失败。Java 17 定向测试 2 个通过并重建 CLI。
+- PDF 全量代表案例在线诊断完成：21 个唯一问题、84 条四变体记录，0 请求错误、0 降级、0 截断；`diagnostic.jsonl` SHA-256 `0a82918471f1118d23a1bc748208ba077fccd7520e34c81abc20b44768621bd8`。
+- 因果报告门禁在 `queryId=1/dense` 发现在线诊断最终排名与原正式 run 漂移后拒绝生成；这说明“当前内部候选”不能未经标注直接冒充“正式运行当时的内部状态”。
+- 漂移诊断计划：程序化比较 84 条记录与原 run 的顺序相等、集合相等、Top10 交集和 gold 命中状态；若 gold 成败改变，则该 query 只能列为时间漂移证据、不得归因。若 gold 状态不变但顺序变化，因果报告需显式记录 drift 类型并只使用首个失败阶段的候选存在/缺失事实，不使用当前名次证明当时排序。任何放宽都必须有单测和报告醒目标识。
+- 核验原始记录后排除真实排名漂移：原 run 的 `queryId=1/dense` 为 9 个 sourceDocumentId，诊断记录为相同顺序的 9 个 internalDocumentId；runner 只回映了内部候选，没有回映最终 citations 的 documentId，导致报告比较了两套身份空间。
+- 已把最终排名也按同一正式 run document-map 回映；若返回值已经是合法 sourceDocumentId 则保持，既非 internal ID 也非 source ID 时失败。Java 17 对 runner 与因果 reporter 的 10 个定向测试通过并重建 CLI；需用新 revision 重跑诊断，旧 84 条保留为身份回映失败证据而不进入因果结论。
