@@ -33,6 +33,7 @@ public final class RagBenchmarkCli {
             case "prepare" -> prepare(options);
             case "prepare-formats" -> prepareFormats(options);
             case "validate-formats" -> validateFormats(options);
+            case "prepare-format-failure-inputs" -> prepareFormatFailureInputs(options);
             case "run-format" -> runFormat(options);
             case "persist-evaluation" -> persistEvaluation(options);
             case "score" -> score(options);
@@ -64,6 +65,14 @@ public final class RagBenchmarkCli {
                     result.runId(), result.datasetId(), result.documentResultCount(),
                     result.queryResultCount(), result.aggregateCount());
         }
+    }
+
+    private static void prepareFormatFailureInputs(Map<String, String> options) throws IOException {
+        RagFormatFailureInputBuilder.Result result = new RagFormatFailureInputBuilder(new ObjectMapper()).build(
+                new RagFormatFailureInputBuilder.Configuration(path(options, "gold"),
+                        path(options, "documents-manifest"), path(options, "out")));
+        System.out.printf("prepared format failure inputs documents=%d manifest=%s%n",
+                result.value().documentCount(), result.manifest());
     }
 
     private static void validateFormats(Map<String, String> options) throws IOException {
@@ -379,6 +388,7 @@ public final class RagBenchmarkCli {
         lines.add("prepare-formats --corpus corpus.jsonl --queries queries.jsonl --qrels test.tsv --out DIR");
         lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE [--seed N]");
         lines.add("validate-formats --prepared DIR");
+        lines.add("prepare-format-failure-inputs --gold gold.jsonl --documents-manifest documents.jsonl --out DIR");
         lines.add("run-format --base-url http://HOST:PORT/api --dataset DIR --format PDF|DOCX");
         lines.add("        --out EMPTY_DIR --run-id ID --code-revision SHA1");
         lines.add("        --preprocessing-strategy NAME --preprocessing-revision REV --config-sha256 SHA256");

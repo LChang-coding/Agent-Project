@@ -38,6 +38,7 @@ class RagFailureCaseReporterTest {
         assertEquals("q2", rescue.queryId());
         assertEquals("Gold two", rescue.goldDocuments().get(0).title());
         assertTrue(rescue.goldDocuments().get(0).excerpt().contains("gold two evidence"));
+        assertEquals("docs/pdf/d2.pdf", rescue.goldDocuments().get(0).sourcePaths().get("PDF"));
         assertEquals("not_captured_in_run_jsonl", rescue.variants().get("hybrid_rrf").scoreEvidence());
 
         Path json = temp.resolve("report.json");
@@ -49,6 +50,7 @@ class RagFailureCaseReporterTest {
         assertTrue(rendered.contains("逐候选分数=未采集"));
         assertTrue(rendered.contains("关键错误召回文档"));
         assertTrue(rendered.contains("unrelated distractor content"));
+        assertTrue(rendered.contains("PDF=docs/pdf/d2.pdf"));
     }
 
     @Test
@@ -85,7 +87,7 @@ class RagFailureCaseReporterTest {
         Files.writeString(qrels, "query-id\tcorpus-id\tscore\nq1\td1\t1\nq2\td2\t1\nq3\td3\t1\n");
         Files.writeString(documentMap, """
                 {"documentId":"d1","headingMarker":"M1"}
-                {"documentId":"d2","headingMarker":"M2"}
+                {"documentId":"d2","headingMarker":"M2","sourcePaths":{"PDF":"docs/pdf/d2.pdf","DOCX":"docs/docx/d2.docx"}}
                 {"documentId":"d3","headingMarker":"M3"}
                 {"documentId":"n1","headingMarker":"MN"}
                 """.strip() + "\n");

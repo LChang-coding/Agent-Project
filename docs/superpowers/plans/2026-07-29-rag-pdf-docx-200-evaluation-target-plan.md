@@ -286,3 +286,25 @@ docs/rag/evaluation-results/pdf-docx-200/
   - hybrid_rrf_rerank：11074.600 / 10001 / 19442 / 31202 / 40551；其中 `rerankMs` 平均 8325.095 ms，是已证实的首要性能瓶颈。
 - PDF 上的技术结论不是“组件越多越好”：Dense 的 Recall@10 最高；加入当前等权 RRF 后 Recall@10 下降 0.035，Rerank 没有恢复召回集合，只把 Recall@1 从 0.775 拉回 0.825，并以约 4.15 倍于 hybrid 的平均端到端耗时为代价。正式报告必须将其列为负收益/需调参项。
 - 已通过 `persist-evaluation` 事务写入真实 MySQL，并回读确认：run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；未把 warmup 或 HTTP 桩数据写入评测结果表。
+
+### 2026-07-30：第五批执行计划——双格式失败案例、资源证据与正式报告
+
+目标：把“质量未命中”从汇总比例下钻到可复核的问题、源文件、金标证据和在线候选 chunk，并完成双格式资源/瓶颈报告。
+
+执行计划：
+
+1. 增加格式数据集失败分析输入适配：从冻结的 `gold.jsonl`、`queries.jsonl` 和文档 manifest 确定性生成 reporter 所需的规范 query、文档正文和 document-map；每个文档同时保留 PDF/DOCX 本地相对路径。
+2. 对 PDF、DOCX 两个 800 条 run 分别执行失败分类，至少覆盖 persistent miss、dense/sparse 单路差异、RRF 得失和 Rerank 重排增益/伤害；报告中明确“事实、推断、替代解释、证伪方法”。
+3. 从每类选取代表性问题，通过各自真实 target 再跑 `diagnose-cases`，保存 Dense/Sparse/Fusion/Rerank 候选、chunkId、分数、阶段结果和 trace/retrieval 身份；禁止只凭词项重合宣称根因。
+4. 对双格式同一 queryId 做配对比较，列出 PDF 命中而 DOCX 未命中、DOCX 命中而 PDF 未命中、两者都失败以及排序显著变化的实例，并链接对应源 PDF、DOCX。
+5. 校验 2,487 个本机 JVM 样本和 1,712 个远端八容器样本，生成带文件 hash 的资源 evidence manifest；确认采样错误为空、容器前后状态/重启/OOM 无变化。
+6. 输出正式中文报告，包含数据集边界、运行命令与线程/并发、摄取/质量/延迟、格式配对、技术点增益、资源峰值、失败案例因果、瓶颈和可执行优化建议。
+7. 把真实 DOCX 结果、数据库回读、失败分析和报告路径追加到本计划，运行相关测试与完整产物门禁后做中文本地提交。
+
+本批第一阶段实际操作与结果：
+
+- 新增 `prepare-format-failure-inputs`：从冻结的 `gold.jsonl` 与 `manifests/documents.jsonl` 确定性生成失败分析所需的 `queries.jsonl`、`documents.md` 和 `document-map.jsonl`，并记录所有输入/输出 SHA-256。
+- `document-map.jsonl` 同时保存每个 SciFact 文档对应的 PDF、DOCX 项目内相对路径；失败案例 JSON 与 Markdown 的 gold 文档和错误召回文档均继承这些路径，能够从 queryId 直接回溯到两种原文件。
+- 输入构建器拒绝覆盖已有目录，校验 200 个 gold 文档均存在 PDF/DOCX 配对、文档 ID/标题/正文不空以及 manifest 记录数一致；单元测试覆盖确定性 hash、源路径和拒绝覆盖。
+- Java 17 定向执行失败输入、失败报告、在线诊断和内部因果报告共 14 个测试，0 失败、0 错误、0 跳过。
+- Java 17 执行 benchmark 模块完整测试并打包 CLI：55 个测试通过，0 失败、0 错误、0 跳过；生成 `ai-agent-scaffold-benchmark-cli-jar-with-dependencies.jar`。下一阶段只使用该已验证 CLI 生成真实 PDF/DOCX 失败证据。

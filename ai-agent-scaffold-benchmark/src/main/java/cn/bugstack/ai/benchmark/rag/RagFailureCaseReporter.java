@@ -147,7 +147,7 @@ public final class RagFailureCaseReporter {
             String documentId = record.rankedDocumentIds().get(index);
             DocumentEvidence document = requireDocument(documents, documentId);
             ranking.add(new RankedDocument(index + 1, documentId, document.title(), document.excerpt(),
-                    document.headingMarker(), qrels.getOrDefault(documentId, 0), null));
+                    document.headingMarker(), document.sourcePaths(), qrels.getOrDefault(documentId, 0), null));
         }
         return new VariantEvidence(name, metrics, record.elapsedMs(), sorted(record.stageTimingsMs()),
                 sorted(record.candidateCounts()), List.copyOf(ranking), "not_captured_in_run_jsonl");
@@ -171,7 +171,7 @@ public final class RagFailureCaseReporter {
     }
 
     private Map<String, DocumentEvidence> readDocuments(Path markdown, Path mapPath) throws IOException {
-        Map<String, String> markerToId = new LinkedHashMap<>();
+        Map<String, DocumentMapEntry> markerToEntry = new LinkedHashMap<>();
         try (BufferedReader reader = Files.newBufferedReader(mapPath, StandardCharsets.UTF_8)) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -179,7 +179,11 @@ public final class RagFailureCaseReporter {
                 JsonNode node = mapper.readTree(line);
                 String marker = node.path("headingMarker").asText();
                 String id = node.path("documentId").asText();
-                if (marker.isBlank() || id.isBlank() || markerToId.putIfAbsent(marker, id) != null) {
+                Map<String, String> sourcePaths = new LinkedHashMap<>();
+                node.path("sourcePaths").fields().forEachRemaining(entry ->
+                        sourcePaths.put(entry.getKey(), entry.getValue().asText()));
+                if (marker.isBlank() || id.isBlank()
+                        || markerToEntry.putIfAbsent(marker, new DocumentMapEntry(id, Map.copyOf(sourcePaths))) != null) {
                     throw new IllegalArgumentException("document-map记录非法或重复");
                 }
             }
@@ -191,7 +195,7 @@ public final class RagFailureCaseReporter {
         for (String line : Files.readAllLines(markdown, StandardCharsets.UTF_8)) {
             Matcher matcher = HEADING.matcher(line);
             if (matcher.matches()) {
-                flushDocument(result, markerToId, marker, title, body.toString());
+                flushDocument(result, markerToEntry, marker, title, body.toString());
                 marker = matcher.group(1);
                 title = matcher.group(2).strip();
                 body.setLength(0);
@@ -200,19 +204,20 @@ public final class RagFailureCaseReporter {
                 body.append(line);
             }
         }
-        flushDocument(result, markerToId, marker, title, body.toString());
-        if (result.size() != markerToId.size()) throw new IllegalArgumentException("Markdown文档数与document-map不一致");
+        flushDocument(result, markerToEntry, marker, title, body.toString());
+        if (result.size() != markerToEntry.size()) throw new IllegalArgumentException("Markdown文档数与document-map不一致");
         return result;
     }
 
-    private void flushDocument(Map<String, DocumentEvidence> result, Map<String, String> markerToId,
+    private void flushDocument(Map<String, DocumentEvidence> result, Map<String, DocumentMapEntry> markerToEntry,
                                String marker, String title, String content) {
         if (marker == null) return;
-        String id = markerToId.get(marker);
+        DocumentMapEntry entry = markerToEntry.get(marker);
+        String id = entry == null ? null : entry.documentId();
         if (id == null || content == null || content.isBlank()) throw new IllegalArgumentException("Markdown包含未映射或空文档: " + marker);
         String normalized = content.strip();
         String excerpt = normalized.length() <= EXCERPT_LIMIT ? normalized : normalized.substring(0, EXCERPT_LIMIT).stripTrailing() + "…";
-        if (result.putIfAbsent(id, new DocumentEvidence(id, title, excerpt, marker)) != null) {
+        if (result.putIfAbsent(id, new DocumentEvidence(id, title, excerpt, marker, entry.sourcePaths())) != null) {
             throw new IllegalArgumentException("Markdown文档ID重复: " + id);
         }
     }
@@ -336,6 +341,7 @@ public final class RagFailureCaseReporter {
         for (DocumentEvidence doc : value.goldDocuments()) {
             out.append("- `").append(doc.documentId()).append("` ").append(doc.title()).append("\n\n  > ")
                     .append(doc.excerpt().replace("\n", " ")).append("\n");
+            renderSourcePaths(out, doc.sourcePaths(), "  ");
         }
         out.append("\n| 变体 | Recall@10 | MRR@10 | nDCG@10 | Gold首名次 | 延迟ms | Top10文档ID（*为gold） |\n")
                 .append("|---|---:|---:|---:|---:|---:|---|\n");
@@ -351,11 +357,27 @@ public final class RagFailureCaseReporter {
         failedVariant.ranking().stream().filter(item -> item.relevance() < 1).limit(3).forEach(item -> out
                 .append("- rank=").append(item.rank()).append(" `").append(item.documentId()).append("` ")
                 .append(item.title()).append("（本地heading=`").append(item.headingMarker()).append("`）\n\n  > ")
-                .append(item.excerpt().replace("\n", " ")).append("\n"));
+                .append(item.excerpt().replace("\n", " ")).append("\n")
+                .append(renderSourcePaths(item.sourcePaths(), "  ")));
         out.append("\n首个可观测失败步骤：`").append(value.firstObservableFailure()).append("`。\n\n直接证据：\n\n");
         value.directFacts().forEach(fact -> out.append("- ").append(fact).append("\n"));
         out.append("\n").append(value.inference()).append("\n\n").append(value.alternativeExplanation())
                 .append("\n\n").append(value.falsification()).append("\n");
+    }
+
+    private void renderSourcePaths(StringBuilder out, Map<String, String> sourcePaths, String indent) {
+        out.append(renderSourcePaths(sourcePaths, indent));
+    }
+
+    private String renderSourcePaths(Map<String, String> sourcePaths, String indent) {
+        if (sourcePaths == null || sourcePaths.isEmpty()) return "";
+        StringBuilder rendered = new StringBuilder();
+        rendered.append("\n").append(indent).append("本地源文件：");
+        sourcePaths.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
+                rendered.append(" `").append(entry.getKey()).append("=")
+                        .append(entry.getValue()).append("`"));
+        rendered.append("\n");
+        return rendered.toString();
     }
 
     private String format(double value) { return String.format(Locale.ROOT, "%.6f", value); }
@@ -410,10 +432,13 @@ public final class RagFailureCaseReporter {
                                List<DocumentEvidence> goldDocuments, Map<String, VariantEvidence> variants,
                                String firstObservableFailure, List<String> directFacts, String inference,
                                String alternativeExplanation, String falsification, double selectionMagnitude) {}
-    public record DocumentEvidence(String documentId, String title, String excerpt, String headingMarker) {}
+    public record DocumentEvidence(String documentId, String title, String excerpt, String headingMarker,
+                                   Map<String, String> sourcePaths) {}
     public record VariantEvidence(String variant, RagRetrievalScorer.QueryMetrics metrics, long elapsedMs,
                                   Map<String, Long> stageTimingsMs, Map<String, Integer> candidateCounts,
                                   List<RankedDocument> ranking, String scoreEvidence) {}
     public record RankedDocument(int rank, String documentId, String title, String excerpt,
-                                 String headingMarker, int relevance, Double score) {}
+                                 String headingMarker, Map<String, String> sourcePaths,
+                                 int relevance, Double score) {}
+    private record DocumentMapEntry(String documentId, Map<String, String> sourcePaths) {}
 }
