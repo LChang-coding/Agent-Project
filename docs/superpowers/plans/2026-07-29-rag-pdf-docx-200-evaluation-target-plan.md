@@ -801,3 +801,41 @@ DOCX / IR_NO_CLEANER 实际执行结果：
 - 检索 mean/p50/p95/max：dense=`2,262/2,081/3,254/3,898 ms`，sparse=`1,798/1,772/2,256/2,458 ms`，hybrid_rrf=`2,355/2,246/3,116/3,825 ms`，hybrid_rrf_rerank=`9,518/8,938/13,343/18,447 ms`；rerank 阶段平均 6,993 ms，仍为主瓶颈。
 - 与同策略 PDF 的同集差异：DOCX chunks 167 vs 137（+30，+21.9%），摄取平均时延 15,928 vs 26,912 ms（-40.8%）；dense Recall@10 相同为 1.00。DOCX hybrid+rerank 的 Recall@1/MRR/nDCG 比 PDF 高 `+0.04/+0.019524/+0.014305`，但仍未超过 DOCX dense；这支持“格式结构影响候选/重排排序”，不支持“更多分块必然提高 dense 召回”的结论。
 - JDBC 输出 50/200/4，独立数据库回读 run/document/query/aggregate/failure=`1/50/200/4/0`；本 run 已完整落库。
+
+#### 切换 IR_NO_STRUCTURED_CHUNKING 与第三个 50 文档正式 run 计划（2026-07-31）
+
+执行身份：
+
+- 策略/revision/config SHA：`IR_NO_STRUCTURED_CHUNKING` / `document-ir-flat-chunk-v1` / `8f6b43d67b587f9156c5a81377c3f2637e30a35d775394e589d09e60df979058`
+- Git revision：`3dbea30d5ea48d6804a688d2c279d7b456bdd37a`
+- PDF runId：`pdf-ir-no-structured-chunking-50-20260731-023138`
+- application JAR、benchmark JAR、dataset manifest/tree 继续使用已冻结值；不重新构建、不修改代码或数据。
+
+执行步骤：
+
+1. 使用独立 `/private/tmp` runtime 与 screen 名称启动同一 application JAR，只把 `AI_RAG_WORKER_PREPROCESSING_STRATEGY` 从 `IR_NO_CLEANER` 改为 `IR_NO_STRUCTURED_CHUNKING`；benchmark preprocessing 仍为 true，MySQL/Qdrant endpoint 和连接池参数不变。先正常终止旧 screen，再确认旧 PID/8091 已释放，防止两个策略进程抢占端口。
+2. 新 JVM 监听 8091 后，从 `ps eww` 核验真实策略，执行 MySQL、Qdrant、登录和知识库 API 健康门禁；应用启动失败时保留控制台日志并恢复旧策略，不启动正式 run。
+3. 从空目录执行 50 PDF、20 warmup、200 query，参数继续为 poll=1s、ingest=1800s、request=120s、transient retry=600s。门禁仍为 50 个唯一文档与 SHA 全匹配、200 唯一组合、0 最终错误/降级/空结果。
+4. 完成后独立验证 manifest/file hash、质量和阶段延迟，再事务落库并回读 `1/50/200/4/0`；实际结果追加计划并中文提交。随后以同一 JVM 运行 DOCX，不在两个格式间重启。
+
+策略切换启动门禁诊断计划：
+
+- 旧 `IR_NO_CLEANER` screen 已正常终止并释放 8091；新 screen 启动命令未得到监听 PID，第三个正式输出目录尚未创建。
+- 先读取新 runtime 的控制台日志、screen 存活状态和 Java 进程；区分脚本提前退出、MySQL 密码解析为空、Spring 配置绑定拒绝策略枚举或应用启动超时。
+- 若脚本问题，仅修正 `/private/tmp` 启动脚本并重启；若枚举不支持计划中的值，则以源码和已有 benchmark profile 的实际可用值为准，重新计算 config hash 并在启动正式 run 前更新本计划。禁止退回旧策略却沿用新策略标签。
+
+启动诊断实际结果：
+
+- `screen -X quit` 只移除了旧 screen socket，旧 JVM PID 3938 仍存活并继续占用 8091，导致启动门禁脚本在“端口未释放”处按预期停止；新应用脚本实际上尚未执行，不是策略枚举或数据库配置失败。
+- 对 PID 3938 发送 SIGTERM 后 JVM 正常退出；新 screen 启动 PID 70258，同一 JAR 在 7.294 秒内启动。真实进程环境为 benchmark preprocessing=true、`IR_NO_STRUCTURED_CHUNKING`。
+- MySQL `SELECT 1`、Qdrant `/collections`、动态登录和知识库 API 均成功；新策略枚举有效。第三个正式 run 按冻结身份启动，无需修改 config hash。
+
+PDF / IR_NO_STRUCTURED_CHUNKING 实际执行结果：
+
+- `2026-07-30T18:34:32Z` 左右开始，`2026-07-30T19:08:19.098416Z` 完成，总耗时 2,026,319 ms；0 次/0 ms 瞬态重试。
+- 独立文档门禁：50/50、50 唯一 source/document/task、source SHA 50/50、0 无效，共 81 chunks。摄取 mean/p50/p95/max=`21,229/19,653/33,221/43,707 ms`；COMPLEX/MEDIUM/SIMPLE 平均=`24,013/19,729/20,695 ms`，分块=`25/29/27`。
+- 20 warmup 和 200/200 查询组合全部通过，四变体各 50，0 error/degraded/empty；run/document SHA=`1531cef1cd2b7810c0bd3c64683307a5a4558591c1bf3877b9e155bc58ffbde7` / `97a9d2426386abd8178c8958f0f3856f0ff69387dbccf3a0e97a8483e8e0348b`，均与 manifest 一致。
+- 质量：dense Recall@1/5/10=`0.96/1.00/1.00`、MRR/nDCG/MAP=`0.976667/0.982619/0.976667`；sparse=`0.80/0.88/0.88`、`0.825667/0.838969/0.825667`；hybrid_rrf=`0.86/0.94/1.00`、`0.897079/0.921087/0.897079`；hybrid_rrf_rerank=`0.94/1.00/1.00`、`0.960667/0.970356/0.960667`。
+- 检索 mean/p50/p95/max：dense=`2,122/2,005/2,688/3,313 ms`，sparse=`1,820/1,750/2,290/2,556 ms`，hybrid_rrf=`2,155/2,020/2,873/3,358 ms`，hybrid_rrf_rerank=`11,459/10,680/18,319/25,730 ms`；rerank 阶段平均 9,232 ms。
+- 与同集 PDF / IR_NO_CLEANER 对比：chunks 81 vs 137（-40.9%），摄取平均时延 -21.1%；dense Recall@1/MRR/nDCG `+0.06/+0.035000/+0.026149`，hybrid+rerank `+0.12/+0.070667/+0.057520`，Recall@10 达到 1.00。当前 SciFact 派生文档本质是短科学摘要，粗切块减少碎片化并改善排序；该结果不能外推为“长文档也应关闭结构化切块”。
+- JDBC 与独立回读均通过，run/document/query/aggregate/failure=`1/50/200/4/0`，已完整落库。

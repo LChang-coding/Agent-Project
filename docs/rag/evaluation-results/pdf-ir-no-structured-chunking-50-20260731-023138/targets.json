@@ -1,0 +1,10 @@
+{
+  "sourceRunId" : "pdf-ir-no-structured-chunking-50-20260731-023138",
+  "schemaVersion" : 1,
+  "targets" : {
+    "dense" : "wf_4f24ca41-94e3-497a-88c5-60ff94a72c6f",
+    "sparse" : "wf_fd3b9db8-59bb-4cfe-bfbd-0243af1ecbf7",
+    "hybrid_rrf" : "wf_a858caad-10a3-4c41-a613-d6f05fdcc44d",
+    "hybrid_rrf_rerank" : "wf_5bf1c2c7-fee5-4c64-9d25-5b49d8123b57"
+  }
+}
