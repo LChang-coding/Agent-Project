@@ -469,3 +469,31 @@ DOCX `LEGACY_MARKDOWN_FLATTEN` 实际结果与落库诊断结论：
 - 相对 PDF 旧压平，纯文本只少 2 chunks（-0.46%），摄取平均仅快 30.300 ms（-0.22%）；两种扁平策略在该数据上的摄取规模与成本几乎一致。Dense Recall@10 低 0.010，Hybrid/Rerank Recall@10 各低 0.005，Sparse 相同。相对 `IR_FULL`，Dense Recall@10 高 0.010，但 Hybrid/Rerank 各低 0.020，说明结构/Cleaner 的影响与召回组件存在交互。
 - 本轮检索耗时高于旧压平，但两轮发生在不同时间窗口且调用远端模型，不能把全部延迟差直接归因于预处理；质量与 chunk 是本策略消融的主要因果指标，延迟差作为生产观测保留。
 - `persist-evaluation` 明确退出码 0 后，真实 MySQL 回读为 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；格式、策略/revision、config hash 和 completed 状态全部一致。
+
+第七批第二阶段执行计划——DOCX `RAW_TEXT_CHUNK`：
+
+1. 复用 PID 92494 的同一前台持久 JVM；启动前再次确认 8091 监听、benchmark mode=true、策略为 `RAW_TEXT_CHUNK`，不重建或重启，从而保持与 PDF 相同的 JAR 和进程配置。
+2. 使用独立 runId `docx-raw-text-20260730-082725`，同一 config SHA-256 `4059e93db18b442727d9b518f8b0200a3140552c2798f94e76a6806c88b9ffcc`，从 0 摄取 200 份 DOCX。
+3. 门禁保持为 200 个唯一文档/任务、SHA 200/200、分块完整、20 warmup 健康、800 个唯一查询组合、四变体各 200、0 错误、0 降级、0 空结果；任一失败停止且不拼接。
+4. 完成后校验 hash、汇总质量和阶段延迟，与同策略 PDF、旧压平及 `IR_FULL` 做事实对照；等待 JDBC 命令明确退出后回读 1/200/800/4/0。
+5. 把真实结果追加到本计划并中文本地提交；双格式闭环后才切换 `IR_NO_CLEANER`。
+
+第七批第二阶段实际结果——DOCX `RAW_TEXT_CHUNK`：
+
+- 正式 run `docx-raw-text-20260730-082725` 复用 PID 92494 的同一策略进程，JAR/revision/config hash 与 PDF 一致，从 0 独立执行。
+- 200/200 份 DOCX 摄取完成，源文档、内部 documentId、taskId 各 200 个唯一值，源 SHA 200/200 一致；495 chunks、0 失败。摄取 mean/p50/p95/p99/max 为 9,822.955/9,376/12,668/13,793/16,415 ms。
+- 20 条 warmup 全部健康；800 个唯一 `queryId × variant`、每变体 200 条，0 错误、0 降级、0 空结果。`run.jsonl` SHA-256 `dd0af42ef676b55847179ac270271e1674e7af6ae7b43848789a84d9a5f25c99`，`document-results.jsonl` SHA-256 `d8c88359f47fb154f4e62905c3308bba02e8ab56a6cda20ca8052716098cc243`，均与 manifest 相符。
+- 真实质量：
+  - dense：Recall@1/5/10 = 0.820/0.960/0.965，MRR@10 = 0.878375，nDCG@10 = 0.900058，MAP@10 = 0.878375。
+  - sparse：Recall@1/5/10 = 0.635/0.800/0.830，MRR@10 = 0.700609，nDCG@10 = 0.732073，MAP@10 = 0.700609。
+  - hybrid_rrf：Recall@1/5/10 = 0.785/0.890/0.910，MRR@10 = 0.833262，nDCG@10 = 0.852340，MAP@10 = 0.833262。
+  - hybrid_rrf_rerank：Recall@1/5/10 = 0.845/0.910/0.910，MRR@10 = 0.870583，nDCG@10 = 0.880477，MAP@10 = 0.870583。
+- 端到端检索 mean/p50/p95/p99/max（ms）：
+  - dense：1,728.695/1,678/2,205/2,489/2,530。
+  - sparse：1,511.190/1,468/1,852/2,033/2,329。
+  - hybrid_rrf：1,853.160/1,781/2,334/3,249/4,064。
+  - hybrid_rrf_rerank：8,696.750/8,431/11,893/14,356/15,056；Rerank 阶段平均 6,800.140 ms，占端到端约 78.2%。
+- 相对 DOCX 旧压平，纯文本少 6 chunks（-1.2%），摄取平均慢 339.775 ms（+3.6%）；Dense Recall@10 高 0.005、Sparse 高 0.010，但 Hybrid/Rerank 各低 0.010。相对 DOCX `IR_FULL`，Dense 高 0.005、Sparse相同，Hybrid/Rerank 各低 0.010；融合覆盖损失再次证明单路局部提升不能替代最终策略评估。
+- 同策略格式差异：DOCX 比 PDF 多 61 chunks（+14.1%），摄取平均快 3,713.655 ms（-27.4%）；DOCX Dense Recall@10 高 0.005、Sparse高 0.005、Hybrid/Rerank 各高 0.005，差异较小但可复核。
+- 检索延迟较此前时间窗口继续上升，尤其 Rerank；由于预处理只影响离线索引内容、检索调用远端共享模型，跨时间延迟不作清洗策略因果结论，但保留为容量/稳定性证据。
+- JDBC 明确完成后，真实 MySQL 回读 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；格式、策略/revision、config hash 和 completed 状态一致。
