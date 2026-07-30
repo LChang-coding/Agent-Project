@@ -93,6 +93,7 @@ public final class RagFormatBenchmarkRunner {
             manifest.put("degradedCount", 0);
             manifest.put("emptyResultCount", 0);
             manifest.put("durationMs", Duration.between(startedAt, Instant.now()).toMillis());
+            putRetryStats(manifest);
             manifest.put("runRecordsSha256", sha256(configuration.outputDirectory().resolve("run.jsonl")));
             manifest.put("documentResultsSha256",
                     sha256(configuration.outputDirectory().resolve("document-results.jsonl")));
@@ -104,6 +105,7 @@ public final class RagFormatBenchmarkRunner {
             manifest.put("finishedAt", Instant.now().toString());
             manifest.put("errorType", error.getClass().getSimpleName());
             manifest.put("errorCode", errorCode(error));
+            putRetryStats(manifest);
             writeAtomic(manifestPath, manifest);
             throw error;
         }
@@ -143,6 +145,7 @@ public final class RagFormatBenchmarkRunner {
                         null, elapsedMs(started)));
                 completed++;
                 runManifest.put("completedDocumentCount", completed);
+                putRetryStats(runManifest);
                 writeAtomic(runManifestPath, runManifest);
             } catch (Exception error) {
                 appendJson(results, new DocumentResult(source.sourceDocumentId(), source.formatDocumentId(),
@@ -163,11 +166,25 @@ public final class RagFormatBenchmarkRunner {
     private RagBenchmarkHttpClient.IngestTask waitForTask(String taskId, Configuration configuration)
             throws IOException, InterruptedException {
         long deadline = System.nanoTime() + configuration.ingestTimeout().toNanos();
+        long transientRetryDeadline = 0L;
         RagBenchmarkHttpClient.IngestTask latest = null;
         while (System.nanoTime() < deadline) {
             latest = client.getTask(taskId);
             if (latest.completed()) return latest;
             if (latest.terminalFailure()) {
+                if (!configuration.transientRetryTimeout().isZero()
+                        && RagBenchmarkHttpClient.transientCode(latest.errorCode())) {
+                    if (transientRetryDeadline == 0L) {
+                        transientRetryDeadline = System.nanoTime()
+                                + configuration.transientRetryTimeout().toNanos();
+                    }
+                    if (System.nanoTime() < transientRetryDeadline) {
+                        client.recordTaskRetry(latest.errorCode());
+                        latest = client.retryTask(taskId);
+                        Thread.sleep(configuration.pollInterval().toMillis());
+                        continue;
+                    }
+                }
                 throw new RagBenchmarkHttpClient.BenchmarkProtocolException("RAG_BENCHMARK_INGEST_FAILED",
                         "格式文档摄取失败: " + latest.status() + "/" + latest.stage() + "/"
                                 + String.valueOf(latest.errorCode()));
@@ -268,7 +285,8 @@ public final class RagFormatBenchmarkRunner {
     private void validateMeasured(List<RagBenchmarkRunIO.RunRecord> records, Dataset dataset,
                                   Set<String> variants, String runId) {
         int expected = dataset.queries().size() * variants.size();
-        if (records.size() != expected) throw new IllegalStateException("格式评测记录数不等于200×4");
+        if (records.size() != expected) throw new IllegalStateException(
+                "格式评测记录数不等于" + dataset.queries().size() + "×" + variants.size());
         Set<String> unique = new LinkedHashSet<>();
         for (RagBenchmarkRunIO.RunRecord record : records) {
             if (!runId.equals(record.runId()) || !variants.contains(record.variant())
@@ -307,7 +325,9 @@ public final class RagFormatBenchmarkRunner {
             }
         }
         documents.sort(Comparator.comparing(FormatDocument::sourceDocumentId));
-        if (documents.size() != 200) throw new IllegalArgumentException("每种格式必须恰好200份文档");
+        if (documents.size() != manifest.pairedDocumentCount()) {
+            throw new IllegalArgumentException("格式文档数不等于manifest");
+        }
         List<Query> queries = readQueries(configuration.datasetDirectory().resolve(manifest.queriesPath()));
         Map<String, Map<String, Integer>> qrels = new BeirDatasetLoader(mapper).loadQrels(
                 configuration.datasetDirectory().resolve(manifest.qrelsPath()), BeirDatasetLoader.Limits.defaults());
@@ -315,7 +335,8 @@ public final class RagFormatBenchmarkRunner {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         Set<String> documentIds = documents.stream().map(FormatDocument::sourceDocumentId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (queries.size() != 200 || qrels.size() != 200 || !qrels.keySet().equals(queryIds)
+        if (queries.size() != manifest.queryCount() || qrels.size() != manifest.qrelCount()
+                || !qrels.keySet().equals(queryIds)
                 || qrels.values().stream().flatMap(value -> value.keySet().stream())
                 .anyMatch(id -> !documentIds.contains(id))) {
             throw new IllegalArgumentException("格式评测问题、qrels和文档身份不闭合");
@@ -360,7 +381,16 @@ public final class RagFormatBenchmarkRunner {
         values.put("expectedQueryResultCount", dataset.queries().size() * 4);
         values.put("completedQueryResultCount", 0);
         values.put("credentialSource", configuration.credentialSource());
+        values.put("transientRetrySeconds", configuration.transientRetryTimeout().toSeconds());
+        values.put("transientRetryCount", 0);
+        values.put("transientRetryDelayMs", 0);
         return values;
+    }
+
+    private void putRetryStats(Map<String, Object> manifest) {
+        RagBenchmarkHttpClient.RetrySnapshot retry = client.retrySnapshot();
+        manifest.put("transientRetryCount", retry.count());
+        manifest.put("transientRetryDelayMs", retry.delayMs());
     }
 
     private void prepareEmptyDirectory(Path directory) throws IOException {
@@ -433,7 +463,8 @@ public final class RagFormatBenchmarkRunner {
                                 String codeRevision, Path datasetDirectory, String format,
                                 String preprocessingStrategy, String preprocessingRevision,
                                 String configSha256, Path outputDirectory, long seed, int warmupQueries,
-                                Duration pollInterval, Duration ingestTimeout) {
+                                Duration pollInterval, Duration ingestTimeout,
+                                Duration transientRetryTimeout) {
         public Configuration {
             if (runId == null || !runId.matches("[A-Za-z0-9_.-]{1,64}") || baseUrl == null
                     || credentialSource == null || credentialSource.isBlank()
@@ -444,7 +475,8 @@ public final class RagFormatBenchmarkRunner {
                     || configSha256 == null || !configSha256.matches("[0-9a-f]{64}")
                     || outputDirectory == null || warmupQueries < 0
                     || pollInterval == null || pollInterval.isZero() || pollInterval.isNegative()
-                    || ingestTimeout == null || ingestTimeout.isZero() || ingestTimeout.isNegative()) {
+                    || ingestTimeout == null || ingestTimeout.isZero() || ingestTimeout.isNegative()
+                    || transientRetryTimeout == null || transientRetryTimeout.isNegative()) {
                 throw new IllegalArgumentException("格式评测运行配置非法");
             }
         }

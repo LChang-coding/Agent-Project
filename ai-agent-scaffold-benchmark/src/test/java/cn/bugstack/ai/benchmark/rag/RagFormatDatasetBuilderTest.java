@@ -84,6 +84,32 @@ class RagFormatDatasetBuilderTest {
         assertEquals(sourceDocumentIds, qrelDocuments);
         assertEquals(200, jsonLines(first.resolve("gold/queries.jsonl")).size());
         assertEquals(200, jsonLines(first.resolve("gold/gold.jsonl")).size());
+
+        Path subset = temporaryDirectory.resolve("subset");
+        Path repeatedSubset = temporaryDirectory.resolve("repeated-subset");
+        RagFormatDatasetSubsetBuilder subsetBuilder = new RagFormatDatasetSubsetBuilder(new ObjectMapper());
+        RagFormatDatasetSubsetBuilder.Result subsetResult = subsetBuilder.build(
+                new RagFormatDatasetSubsetBuilder.Configuration("test-format-subset", first, subset,
+                        20260731L, 20, 17, 13));
+        RagFormatDatasetSubsetBuilder.Result repeatedSubsetResult = subsetBuilder.build(
+                new RagFormatDatasetSubsetBuilder.Configuration("test-format-subset", second, repeatedSubset,
+                        20260731L, 20, 17, 13));
+        RagFormatDatasetValidator.Report subsetValidation = new RagFormatDatasetValidator(new ObjectMapper())
+                .validate(subset);
+
+        assertEquals(50, subsetResult.manifest().pairedDocumentCount());
+        assertEquals(20, subsetResult.manifest().complexityCountsPerFormat().get("SIMPLE"));
+        assertEquals(17, subsetResult.manifest().complexityCountsPerFormat().get("MEDIUM"));
+        assertEquals(13, subsetResult.manifest().complexityCountsPerFormat().get("COMPLEX"));
+        assertEquals(50, subsetResult.selectedSourceDocumentIds().size());
+        assertEquals(subsetResult.manifest().treeSha256(), repeatedSubsetResult.manifest().treeSha256());
+        assertTrue(subsetValidation.valid(), subsetValidation.failures().toString());
+        assertEquals(100, subsetValidation.formatDocumentCount());
+        assertEquals(50, subsetValidation.queryCount());
+        assertEquals(50, subsetValidation.qrelCount());
+        assertThrows(IllegalArgumentException.class, () -> subsetBuilder.build(
+                new RagFormatDatasetSubsetBuilder.Configuration("test-format-subset", first, subset,
+                        20260731L, 20, 17, 13)));
     }
 
     @Test

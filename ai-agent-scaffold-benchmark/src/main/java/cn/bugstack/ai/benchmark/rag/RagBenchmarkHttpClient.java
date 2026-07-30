@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** 只用于 benchmark 的生产 HTTP API 客户端；不记录或返回 Bearer 凭证。 */
 public final class RagBenchmarkHttpClient {
@@ -32,28 +34,38 @@ public final class RagBenchmarkHttpClient {
     private final BearerTokenProvider tokenProvider;
     private final Duration timeout;
     private final int maxResponseBytes;
+    private final Duration transientRetryTimeout;
+    private final AtomicInteger transientRetryCount = new AtomicInteger();
+    private final AtomicLong transientRetryDelayMs = new AtomicLong();
 
     public RagBenchmarkHttpClient(HttpClient httpClient, ObjectMapper objectMapper, URI baseUri,
                                   String bearerToken, Duration timeout, int maxResponseBytes) {
-        if (httpClient == null || objectMapper == null || baseUri == null || bearerToken == null
-                || bearerToken.isBlank() || timeout == null || timeout.isZero() || timeout.isNegative()
-                || maxResponseBytes < 1024) {
-            throw new IllegalArgumentException("benchmark HTTP客户端参数非法");
-        }
-        this.httpClient = httpClient;
-        this.objectMapper = objectMapper;
-        this.baseUri = URI.create(baseUri.toString().replaceAll("/+$", ""));
-        this.tokenProvider = BearerTokenProvider.fixed(bearerToken);
-        this.timeout = timeout;
-        this.maxResponseBytes = maxResponseBytes;
+        this(httpClient, objectMapper, baseUri, BearerTokenProvider.fixed(bearerToken), timeout,
+                maxResponseBytes, Duration.ZERO);
+    }
+
+    public RagBenchmarkHttpClient(HttpClient httpClient, ObjectMapper objectMapper, URI baseUri,
+                                  String bearerToken, Duration timeout, int maxResponseBytes,
+                                  Duration transientRetryTimeout) {
+        this(httpClient, objectMapper, baseUri, BearerTokenProvider.fixed(bearerToken), timeout,
+                maxResponseBytes, transientRetryTimeout);
     }
 
     RagBenchmarkHttpClient(HttpClient httpClient, ObjectMapper objectMapper, URI baseUri,
                            BearerTokenProvider tokenProvider, Duration timeout, int maxResponseBytes) {
+        this(httpClient, objectMapper, baseUri, tokenProvider, timeout, maxResponseBytes, Duration.ZERO);
+    }
+
+    RagBenchmarkHttpClient(HttpClient httpClient, ObjectMapper objectMapper, URI baseUri,
+                           BearerTokenProvider tokenProvider, Duration timeout, int maxResponseBytes,
+                           Duration transientRetryTimeout) {
         if (httpClient == null || objectMapper == null || baseUri == null || tokenProvider == null
                 || tokenProvider.currentToken() == null || tokenProvider.currentToken().isBlank()
                 || timeout == null || timeout.isZero() || timeout.isNegative() || maxResponseBytes < 1024) {
             throw new IllegalArgumentException("benchmark HTTP客户端参数非法");
+        }
+        if (transientRetryTimeout == null || transientRetryTimeout.isNegative()) {
+            throw new IllegalArgumentException("benchmark瞬态重试时间非法");
         }
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -61,6 +73,7 @@ public final class RagBenchmarkHttpClient {
         this.tokenProvider = tokenProvider;
         this.timeout = timeout;
         this.maxResponseBytes = maxResponseBytes;
+        this.transientRetryTimeout = transientRetryTimeout;
     }
 
     public KnowledgeBase createKnowledgeBase(String name, String description) throws IOException, InterruptedException {
@@ -83,7 +96,7 @@ public final class RagBenchmarkHttpClient {
                 HttpRequest.BodyPublishers.ofFile(file), bytes("\r\n--" + boundary + "--\r\n"));
         HttpRequest request = request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents")
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary).POST(body).build();
-        JsonNode data = send(request).data();
+        JsonNode data = sendRetryable(request, "uploadDocument").data();
         return new Upload(requiredText(data, "documentId"), requiredText(data, "taskId"),
                 requiredText(data, "status"), data.path("deduplicated").asBoolean(false));
     }
@@ -99,15 +112,27 @@ public final class RagBenchmarkHttpClient {
     }
 
     public IngestTask getTask(String taskId) throws IOException, InterruptedException {
-        JsonNode data = send(request("/v1/rag/ingest-tasks/" + encodePath(taskId)).GET().build()).data();
+        JsonNode data = sendRetryable(request("/v1/rag/ingest-tasks/" + encodePath(taskId)).GET().build(),
+                "getIngestTask").data();
+        return ingestTask(data);
+    }
+
+    public IngestTask retryTask(String taskId) throws IOException, InterruptedException {
+        JsonNode data = postJsonDetailedRetryable("/v1/rag/ingest-tasks/" + encodePath(taskId) + "/retry",
+                Map.of(), "retryIngestTask").data();
+        return ingestTask(data);
+    }
+
+    private IngestTask ingestTask(JsonNode data) {
         return new IngestTask(requiredText(data, "taskId"), requiredText(data, "status"),
                 requiredText(data, "stage"), data.path("processedChunks").asInt(),
                 data.path("totalChunks").asInt(), optionalText(data, "errorCode"), data.path("revision").asLong());
     }
 
     public Document getDocument(String knowledgeBaseId, String documentId) throws IOException, InterruptedException {
-        JsonNode data = send(request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents")
-                .GET().build()).data();
+        JsonNode data = sendRetryable(
+                request("/v1/rag/knowledge-bases/" + encodePath(knowledgeBaseId) + "/documents").GET().build(),
+                "getDocument").data();
         if (!data.isArray()) throw new BenchmarkProtocolException("RAG_BENCHMARK_RESPONSE_INVALID", "文档列表不是数组");
         for (JsonNode value : data) {
             if (documentId.equals(optionalText(value, "documentId"))) {
@@ -167,8 +192,9 @@ public final class RagBenchmarkHttpClient {
     }
 
     public DebugResult debug(String targetId, String query) throws IOException, InterruptedException {
-        ApiResponse response = postJsonDetailed("/v1/rag/retrieval-debug", Map.of("targetType", "workflow",
-                "targetId", targetId, "query", query, "maxContextTokens", 32768));
+        ApiResponse response = postJsonDetailedRetryable("/v1/rag/retrieval-debug",
+                Map.of("targetType", "workflow", "targetId", targetId, "query", query,
+                        "maxContextTokens", 32768), "retrievalDebug");
         JsonNode data = response.data();
         Set<String> uniqueDocuments = new LinkedHashSet<>();
         List<String> headings = new ArrayList<>();
@@ -225,7 +251,46 @@ public final class RagBenchmarkHttpClient {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build());
     }
 
+    private ApiResponse postJsonDetailedRetryable(String path, Object payload, String operation)
+            throws IOException, InterruptedException {
+        byte[] body = objectMapper.writeValueAsBytes(payload);
+        return sendRetryable(request(path).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(), operation);
+    }
+
     private ApiResponse send(HttpRequest request) throws IOException, InterruptedException {
+        return send(request, false, "nonRetryable");
+    }
+
+    private ApiResponse sendRetryable(HttpRequest request, String operation)
+            throws IOException, InterruptedException {
+        return send(request, true, operation);
+    }
+
+    private ApiResponse send(HttpRequest request, boolean retryable, String operation)
+            throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + transientRetryTimeout.toNanos();
+        int attempt = 1;
+        while (true) {
+            try {
+                return sendOnce(request);
+            } catch (IOException | BenchmarkApiException | BenchmarkProtocolException error) {
+                if (!retryable || !isTransient(error) || transientRetryTimeout.isZero()
+                        || System.nanoTime() >= deadline) {
+                    throw error;
+                }
+                long delayMs = Math.min(500L << Math.min(attempt - 1, 4), 5_000L);
+                long remainingMs = Math.max(0L, (deadline - System.nanoTime()) / 1_000_000L);
+                delayMs = Math.min(delayMs, remainingMs);
+                if (delayMs <= 0) throw error;
+                recordRetry(operation, attempt, errorCode(error), delayMs);
+                Thread.sleep(delayMs);
+                attempt++;
+            }
+        }
+    }
+
+    private ApiResponse sendOnce(HttpRequest request) throws IOException, InterruptedException {
         HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
         byte[] body = readBounded(response.body());
         if (response.statusCode() == 401) {
@@ -259,6 +324,47 @@ public final class RagBenchmarkHttpClient {
                     response.statusCode(), body.length);
         }
         return new ApiResponse(data, response.statusCode(), body.length);
+    }
+
+    void recordTaskRetry(String errorCode) {
+        recordRetry("retryIngestTaskTerminalState", 1, errorCode, 0);
+    }
+
+    public RetrySnapshot retrySnapshot() {
+        return new RetrySnapshot(transientRetryCount.get(), transientRetryDelayMs.get());
+    }
+
+    private void recordRetry(String operation, int attempt, String errorCode, long delayMs) {
+        transientRetryCount.incrementAndGet();
+        transientRetryDelayMs.addAndGet(delayMs);
+        System.out.printf("benchmark瞬态重试 operation=%s attempt=%d errorCode=%s delayMs=%d%n",
+                operation, attempt, errorCode, delayMs);
+    }
+
+    private boolean isTransient(Throwable error) {
+        if (error instanceof IOException) return true;
+        if (error instanceof BenchmarkProtocolException protocol) {
+            Integer status = protocol.httpStatus();
+            return status != null && (status == 429 || status >= 500);
+        }
+        if (error instanceof BenchmarkApiException api) return transientCode(api.code());
+        return false;
+    }
+
+    static boolean transientCode(String code) {
+        if (code == null || code.isBlank()) return false;
+        return code.contains("TRANSIENT") || Set.of(
+                "RAG_INGEST_LEASE_LOST", "RAG_INGEST_LEASE_EXPIRED", "RAG_INGEST_IO_TRANSIENT",
+                "RAG_DATABASE_UNAVAILABLE", "RAG_OBJECT_STORAGE_UNAVAILABLE",
+                "RAG_DOCLING_UNAVAILABLE", "RAG_EMBEDDING_UNAVAILABLE", "RAG_EMBEDDING_TIMEOUT",
+                "RAG_QDRANT_UNAVAILABLE", "RAG_QDRANT_TIMEOUT",
+                "RAG_RERANK_UNAVAILABLE", "RAG_RERANK_TIMEOUT").contains(code);
+    }
+
+    private String errorCode(Throwable error) {
+        if (error instanceof BenchmarkApiException api) return api.code();
+        if (error instanceof BenchmarkProtocolException protocol) return protocol.code();
+        return error.getClass().getSimpleName();
     }
 
     private HttpRequest.Builder request(String path) {
@@ -337,6 +443,8 @@ public final class RagBenchmarkHttpClient {
                                       Double fusionScore, Double rerankScore, String outcome) {}
 
     private record ApiResponse(JsonNode data, int httpStatus, int responseBytes) {}
+
+    public record RetrySnapshot(int count, long delayMs) {}
 
     interface BearerTokenProvider {
         String currentToken();

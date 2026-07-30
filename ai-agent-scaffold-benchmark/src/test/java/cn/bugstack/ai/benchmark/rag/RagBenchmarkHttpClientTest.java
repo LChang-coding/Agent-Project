@@ -115,10 +115,66 @@ class RagBenchmarkHttpClientTest {
         assertEquals(1, refreshes.get());
     }
 
+    @Test
+    void shouldRetryTransientHttpFailuresAndStopAtBudget() throws Exception {
+        server.removeContext("/api/v1/rag/retrieval-debug");
+        AtomicInteger requests = new AtomicInteger();
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> {
+            int attempt = requests.incrementAndGet();
+            if (attempt < 3) {
+                respond(exchange, 503, "{}");
+            } else {
+                respond(exchange, 200, success("""
+                        {"retrievalId":"ret-recovered","degraded":false,"degradationReasons":[],
+                         "metrics":{},"citations":[{"headingPath":"%s — title"}]}
+                        """.formatted(RagBenchmarkArtifactWriter.marker("doc-1"))));
+            }
+        });
+        RagBenchmarkHttpClient client = retryingClient(Duration.ofSeconds(3));
+
+        assertEquals("ret-recovered", client.debug("target-1", "query").retrievalId());
+        assertEquals(3, requests.get());
+        assertEquals(2, client.retrySnapshot().count());
+
+        server.removeContext("/api/v1/rag/retrieval-debug");
+        AtomicInteger exhaustedRequests = new AtomicInteger();
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> {
+            exhaustedRequests.incrementAndGet();
+            respond(exchange, 503, "{}");
+        });
+        RagBenchmarkHttpClient exhausted = retryingClient(Duration.ofMillis(20));
+        assertThrows(RagBenchmarkHttpClient.BenchmarkProtocolException.class,
+                () -> exhausted.debug("target-1", "query"));
+        assertTrue(exhaustedRequests.get() <= 2);
+    }
+
+    @Test
+    void shouldNotRetryPermanentBusinessFailure() {
+        server.removeContext("/api/v1/rag/retrieval-debug");
+        AtomicInteger requests = new AtomicInteger();
+        server.createContext("/api/v1/rag/retrieval-debug", exchange -> {
+            requests.incrementAndGet();
+            respond(exchange, 200,
+                    "{\"code\":\"RAG_QDRANT_SCHEMA_MISMATCH\",\"info\":\"schema mismatch\",\"data\":{}}");
+        });
+        RagBenchmarkHttpClient client = retryingClient(Duration.ofSeconds(2));
+
+        assertThrows(RagBenchmarkHttpClient.BenchmarkApiException.class,
+                () -> client.debug("target-1", "query"));
+        assertEquals(1, requests.get());
+        assertEquals(0, client.retrySnapshot().count());
+    }
+
     private RagBenchmarkHttpClient client(int maxBytes) {
         URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
         return new RagBenchmarkHttpClient(HttpClient.newHttpClient(), new ObjectMapper(), base,
                 "secret-token", Duration.ofSeconds(5), maxBytes);
+    }
+
+    private RagBenchmarkHttpClient retryingClient(Duration retryTimeout) {
+        URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
+        return new RagBenchmarkHttpClient(HttpClient.newHttpClient(), new ObjectMapper(), base,
+                "secret-token", Duration.ofSeconds(5), 1024 * 1024, retryTimeout);
     }
 
     private void respond(HttpExchange exchange, int status, String body) throws IOException {

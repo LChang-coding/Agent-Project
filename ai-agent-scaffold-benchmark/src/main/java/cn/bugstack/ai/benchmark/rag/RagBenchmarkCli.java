@@ -32,6 +32,7 @@ public final class RagBenchmarkCli {
         switch (args[0].toLowerCase()) {
             case "prepare" -> prepare(options);
             case "prepare-formats" -> prepareFormats(options);
+            case "subset-formats" -> subsetFormats(options);
             case "validate-formats" -> validateFormats(options);
             case "prepare-format-failure-inputs" -> prepareFormatFailureInputs(options);
             case "run-format" -> runFormat(options);
@@ -117,6 +118,17 @@ public final class RagBenchmarkCli {
                 manifest.treeSha256(), path(options, "out"));
     }
 
+    private static void subsetFormats(Map<String, String> options) throws IOException {
+        RagFormatDatasetSubsetBuilder.Result result = new RagFormatDatasetSubsetBuilder(new ObjectMapper()).build(
+                new RagFormatDatasetSubsetBuilder.Configuration(required(options, "dataset"),
+                        path(options, "source"), path(options, "out"), number(options, "seed", 20260731L),
+                        integer(options, "simple-count", 20), integer(options, "medium-count", 17),
+                        integer(options, "complex-count", 13)));
+        System.out.printf("prepared format subset dataset=%s pairedDocuments=%d queries=%d treeSha256=%s out=%s%n",
+                result.manifest().datasetName(), result.manifest().pairedDocumentCount(),
+                result.manifest().queryCount(), result.manifest().treeSha256(), path(options, "out"));
+    }
+
     private static void runFormat(Map<String, String> options) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Remote remote = remote(options, objectMapper);
@@ -129,7 +141,8 @@ public final class RagBenchmarkCli {
                 sha256Value(options, "config-sha256"), path(options, "out"),
                 number(options, "seed", 20260729L), nonNegativeInteger(options, "warmup-queries", 5),
                 Duration.ofMillis(integer(options, "poll-ms", 1000)),
-                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 1800)));
+                Duration.ofSeconds(integer(options, "ingest-timeout-seconds", 1800)),
+                Duration.ofSeconds(nonNegativeInteger(options, "transient-retry-seconds", 0)));
         RagFormatBenchmarkRunner.Result result = new RagFormatBenchmarkRunner(objectMapper, remote.client())
                 .run(configuration);
         System.out.printf("completed format runId=%s knowledgeBaseId=%s documents=%d queryResults=%d out=%s%n",
@@ -302,6 +315,8 @@ public final class RagBenchmarkCli {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(
                 connectTimeoutSeconds)).build();
         Duration requestTimeout = Duration.ofSeconds(integer(options, "request-timeout-seconds", 120));
+        Duration transientRetryTimeout = Duration.ofSeconds(
+                nonNegativeInteger(options, "transient-retry-seconds", 0));
         int maxResponseBytes = integer(options, "max-response-bytes", 8 * 1024 * 1024);
         String usernameEnvironment = options.getOrDefault("username-env", "RAG_BENCHMARK_USERNAME");
         String passwordEnvironment = options.getOrDefault("password-env", "RAG_BENCHMARK_PASSWORD");
@@ -311,9 +326,9 @@ public final class RagBenchmarkCli {
         RagBenchmarkHttpClient client = refreshEnabled
                 ? new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl,
                 new RefreshingLoginTokenProvider(httpClient, objectMapper, baseUrl, token, username, password,
-                        requestTimeout, maxResponseBytes), requestTimeout, maxResponseBytes)
+                        requestTimeout, maxResponseBytes), requestTimeout, maxResponseBytes, transientRetryTimeout)
                 : new RagBenchmarkHttpClient(httpClient, objectMapper, baseUrl, token,
-                requestTimeout, maxResponseBytes);
+                requestTimeout, maxResponseBytes, transientRetryTimeout);
         return new Remote(baseUrl, "environment:" + tokenEnvironment
                 + (refreshEnabled ? ";refresh=enabled" : ";refresh=disabled"), client,
                 Math.toIntExact(requestTimeout.toSeconds()), connectTimeoutSeconds);
@@ -414,6 +429,8 @@ public final class RagBenchmarkCli {
         lines.add("        [--max-documents N --max-queries N --seed N --shard-max-bytes N]");
         lines.add("prepare-formats --corpus corpus.jsonl --queries queries.jsonl --qrels test.tsv --out DIR");
         lines.add("        --dataset NAME --source-url URL --source-revision REV --license LICENSE [--seed N]");
+        lines.add("subset-formats --source FORMAT_DATASET_DIR --out EMPTY_DIR --dataset NAME");
+        lines.add("        [--seed 20260731 --simple-count 20 --medium-count 17 --complex-count 13]");
         lines.add("validate-formats --prepared DIR");
         lines.add("prepare-format-failure-inputs --gold gold.jsonl --documents-manifest documents.jsonl --out DIR");
         lines.add("run-format --base-url http://HOST:PORT/api --dataset DIR --format PDF|DOCX");
@@ -421,6 +438,7 @@ public final class RagBenchmarkCli {
         lines.add("        --preprocessing-strategy NAME --preprocessing-revision REV --config-sha256 SHA256");
         lines.add("        [--token-env RAG_BENCHMARK_ACCESS_TOKEN --warmup-queries 5 --seed 20260729]");
         lines.add("        [--poll-ms 1000 --ingest-timeout-seconds 1800 --request-timeout-seconds 120]");
+        lines.add("        [--transient-retry-seconds 600]");
         lines.add("persist-evaluation --dataset-manifest FILE --run-manifest FILE");
         lines.add("        --document-results document-results.jsonl --run-records run.jsonl");
         lines.add("        --qrels FILE --format PDF|DOCX --preprocessing-strategy NAME");

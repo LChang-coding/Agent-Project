@@ -614,3 +614,130 @@ DOCX `LEGACY_MARKDOWN_FLATTEN` 实际结果与落库诊断结论：
 - 当前移动网络可以完成 TCP 和 SSH banner，但在客户端发送 KEXINIT 后丢包；使用 `IPQoS=none` 关闭 OpenSSH 默认 QoS 标记后，密码认证立即成功。远端 MySQL/Qdrant 均为 running/healthy、restart=0。
 - 修复前先停止两条重连任务；随后把现有本机 ED25519 公钥幂等写入 RAG 服务器 authorized_keys，在 `RAG-Server` Host 与两份 LaunchAgent 参数中加入 `IPQoS=none`，保持 BatchMode、ExitOnForwardFailure 和 ServerAlive。
 - 重新加载后要求两条隧道均监听、密钥登录不提示密码、LaunchAgent 在跨保活周期内 runs 不再快速增长；再执行 100 次 MySQL 查询和 100 次 Qdrant 请求。
+
+修复验证结果与 r5 执行计划：
+
+- 现有 ED25519 公钥已幂等加入 RAG 服务器，`BatchMode=yes` 密钥认证成功；`~/.ssh/config` 与两份 LaunchAgent 均使用 `IPQoS=none`。
+- 两条 LaunchAgent 重载后各自 runs=1、last exit=never exited，13306/16333 均持续监听；MySQL 100/100 次独立连接查询成功，Qdrant 100/100 次请求成功，平均 0.399 秒、最大 1.288 秒。
+- 应用 Hikari 已重新建立连接，认证事务成功；r4 失败文件 `056-scifact-10300888.pdf` 在新知识库定点复测为 `completed/completed`、1/1 chunk、无错误码。
+- 隧道配置与诊断计划已提交为 `f272253`（`修复：稳定RAG评测SSH隧道`）。失败 r1-r4 目录和运行日志未提交。
+- 第五次正式 runId 固定为 `pdf-ir-no-cleaner-20260731-000507-r5`。继续使用同一 JAR/策略/config hash，从 0 执行；运行中同时把 13306、16333 监听和 LaunchAgent runs 作为外部门禁。
+
+#### 第八批 PDF r5 文档门禁失败诊断与第六次执行计划（2026-07-31）
+
+事实边界：`pdf-ir-no-cleaner-20260731-000507-r5` 在完成 42 份文档后，第 43 份文档触发门禁；manifest 已标记 `failed`，`document-results.jsonl` 为 43 行且恰有 1 条无效记录，查询阶段尚未开始。r5 立即作废，不落库、不复制前 42 条成功记录。
+
+1. 冻结 r5 目录，先读取唯一失败行的 sourceDocumentId、taskId、stage、errorCode 与错误信息，并通过同一 taskId/traceId 检索应用日志；同时核验 8091、13306、16333、应用 PID、两个 LaunchAgent 的 PID/runs/last-exit，区分解析、Embedding、Qdrant、MySQL和执行托管故障。
+2. 若属于外部链路故障，先在不修改 JAR、策略、数据集和模型参数的前提下恢复并做连续探测；若属于确定性文档故障，则保存对应 PDF、解析产物和失败分块证据，修复代码前另行追加代码变更计划。不得通过提高重试次数或超时掩盖根因。
+3. 使用 r5 的失败源文件建立全新临时知识库做定点复测；必须得到 completed、processedChunks=totalChunks>0、无错误码，并确认失败阶段日志闭环。临时结果不进入正式统计。
+4. 只有在数据库、Qdrant、应用和定点复测全部通过后，才使用全新 runId 从第 1 份 PDF 开始第六次正式执行；保持 `IR_NO_CLEANER/document-ir-no-cleaner-v1`、config SHA-256 `3c4ecb1b9715fb7142b4c87749008e0a5385e3e7b04562c04f913fa16fff5fd4` 及全部评测门禁不变。
+5. 第六次执行仍要求 200/200 文档、20 条 warmup、800 个唯一查询组合、0 错误、0 降级、0 空结果；只有完整校验和 JDBC 明确提交、数据库独立回读 1/200/800/4/0 后，才追加真实结果并中文提交。
+
+诊断与恢复实际结果：
+
+- r5 唯一失败源为复杂 PDF `prepared/pdf/196-scifact-13906581.pdf`（SHA-256 `cbb5e2cf027a3533f403046b8f37d91e25e3577f04330999f347cbd1e26a86e2`），task `ragtask_8eec305744984da499501c5b57d46915`；benchmark 在轮询阶段收到 HTTP 500。任务最终记录为 `failed/embedding`、0/6 chunks、`RAG_INGEST_LEASE_LOST`。
+- 同一任务日志证明 Docling 已在 20,094 ms 内返回 HTTP 200；随后 Hikari 连续发现 MySQL 连接已关闭，任务轮询接口因无法取得 JDBC 连接而返回 500。因此 r5 失败发生在数据库转发瞬断及 lease 持久化阶段，不属于 PDF 解析、Cleaner 或切块算法失败。
+- RAG 服务器 `rag-mysql` 容器持续 healthy、restart=0，MySQL `wait_timeout=28800`，排除容器重启和空闲超时；公网 `103.205.240.84:3306` 同口径 20/20 建连失败，不能作为替代链路。
+- 两个 SSH LaunchAgent 的 `ServerAliveInterval` 从 15 秒收紧到 5 秒、`ServerAliveCountMax` 从 3 收紧到 2；应用使用 `MYSQL_POOL_KEEPALIVE_MS=30000`、`MYSQL_POOL_CONNECTION_TIMEOUT_MS=30000` 重启，JAR 和 RAG 策略未变。
+- 主动杀死 MySQL tunnel PID 3892 后，LaunchAgent 自动启动 PID 4904，runs 1→2；故障窗口中的知识库 API 在 2,908 ms 内仍返回 HTTP 200/业务码 0000，随后 30/30 个 API 请求成功。
+- 在全新知识库 `kb_4fecbe18384e4ae5a5414efc263fbb13` 对原失败 PDF 定点复测，task `ragtask_1378a508c9d9419f8a6c42b9bfe7ca04` 最终 `completed/completed`、6/6 chunks、无错误码。恢复后 MySQL 和 Qdrant 各 100 次独立探测均 100/100 成功；MySQL avg/max 479/1,454 ms，Qdrant avg/max 163/411 ms。
+
+第六次正式执行身份：
+
+1. 正式 runId 固定为 `pdf-ir-no-cleaner-20260731-004138-r6`，输出目录 `docs/rag/evaluation-results/pdf-ir-no-cleaner-20260731-004138-r6`，必须从空目录和第 1 份 PDF 开始。
+2. 复用 PID 3938 的 JVM；实际环境必须为 benchmark mode=true、`IR_NO_CLEANER`、Qdrant `http://127.0.0.1:16333`、MySQL `127.0.0.1:13306`，JAR SHA、Git SHA、数据集 SHA、config SHA 继续使用冻结值。
+3. 运行中同时监控文档门禁、查询门禁、8091/13306/16333 监听和两个 LaunchAgent 的 PID/runs；除上述主动故障注入造成的 MySQL runs=2 外，任何新增重启或业务失败均立即终止。
+4. r6 完成前不落库、不复用 r1-r5 的任何结果；完成后执行 200 文档、800 查询、唯一组合、hash、0 错误/降级/空结果校验，再事务落库并独立回读。
+
+#### 第八批 PDF r6 Qdrant 隧道门禁失败诊断计划（2026-07-31）
+
+事实边界：r6 摄取到 7 份文档且业务门禁仍为 0 时，Qdrant LaunchAgent runs 从基线 1 增至 3，违反执行前约定的外部门禁。runner 已终止；r6 属于基础设施不稳定下的不完整 run，禁止落库或续跑。
+
+1. 保存 r6 当前 manifest/document-results 只作诊断，读取 Qdrant tunnel 当前 PID、runs、last-exit、stderr mtime 和重启窗口；检查 RAG 服务器 sshd、Qdrant 容器 restart/health/OOM 与同时间日志，区分 SSH 主连接掉线和 Qdrant 服务故障。
+2. 验证收紧到 5 秒的 SSH keepalive 是否因移动网络短暂抖动导致过度重启；MySQL 与 Qdrant 分别评估，不因一个通道的问题盲目同时修改。所有改动先保留业务级健康证明。
+3. 对 Qdrant tunnel 做一次可控故障注入，验证 LaunchAgent 重启、应用 Qdrant HTTP 调用和现有 Hikari 链路都能恢复；随后执行不少于 10 分钟的连续 Qdrant/MySQL/API 探测，要求 0 失败且非注入期间 runs 不再增长。
+4. 基础设施稳定门禁通过后，追加全新 r7 精确 runId，从第 1 份 PDF 开始，不使用 r6 的 7 条成功记录；策略、模型、JAR、数据集和 config hash 均不得变化。
+
+Qdrant 隧道诊断事实与联合隧道验证计划：
+
+- r6 冻结时为 7/200 文档、18 chunks、业务失败 0；manifest 因 runner 被外部门禁终止仍为 running，仅作不完整诊断产物。
+- Qdrant tunnel stderr 在 00:45–00:46 更新，包含 `Timeout, server 103.205.240.84 not responding`；LaunchAgent runs 由 1 连续增长到 4、last exit=255。同期 MySQL tunnel 保持 PID 4904/runs=2，没有自然重启。
+- 远端 `rag-qdrant` 持续 healthy、restart=0、OOM=false；故障窗口前后的 PUT/count/scroll 均有 HTTP 200 记录。故障属于独立 SSH 会话掉线，不归因于 Qdrant 容器或向量写入逻辑。
+- 当前本地需同时维持 MySQL、Qdrant 两条到同一 RAG 服务器的 SSH 长连接；移动网络对两条并行会话表现不同。为减少连接数并复用已证明稳定的 MySQL 通道，下一步由一个 LaunchAgent/SSH 进程同时承载 `127.0.0.1:13306→3306` 与 `127.0.0.1:16333→6333`，停用独立 Qdrant tunnel；不改变服务器或项目部署。
+
+联合隧道执行与验收：
+
+1. 在 `rag-mysql-tunnel.plist` 的同一 ssh 命令增加第二个 `-L 127.0.0.1:16333:127.0.0.1:6333`，卸载独立 Qdrant LaunchAgent，只启动联合隧道。
+2. 确认单一 PID 同时监听 13306、16333；MySQL 查询、Qdrant `/collections` 和应用知识库 API 各做独立成功验证。
+3. 主动终止联合 tunnel 一次，要求 LaunchAgent runs 仅增加 1、两个端口都恢复，故障窗口 API 请求仍成功；随后连续 10 分钟并行探测 MySQL、Qdrant 与应用 API，0 失败且 runs 不再增加。
+4. 验收后重启应用一次清空旧 TCP 连接，复测原失败 PDF；再追加 r7 的精确执行身份并从 0 正式运行。
+
+### 2026-07-31：后续正式评测缩减为 50 文档的口径变更
+
+用户要求后续每个格式直接改为 50 文档，避免 200 文档批次耗时过长。此前已经完成并落库的 6 个 200 文档 run 保持不变；r1-r6 等失败或不完整 run 仍不落库。
+
+为避免候选语料规模不同导致伪因果结论，后续采用独立的 50 文档配对队列：
+
+1. 从冻结的 `pdf-docx-200` 中按固定种子 `20260731` 和 complexity 分层选择 50 个唯一 sourceDocumentId；按原 80/70/50 分布取 SIMPLE/MEDIUM/COMPLEX=20/17/13，避免只保留两端而漏掉中等复杂度。组内按 `SHA-256("20260731:"+sourceDocumentId)` 升序固定抽样；同一 source 集同时生成 PDF、DOCX，保持 query、qrels、gold、source SHA 和证据标记一一对应。
+2. 新数据集单独落在 `docs/rag/evaluation-data/pdf-docx-50/`，生成自己的 dataset manifest/hash/资源清单；原始 200 数据集不修改。执行前必须验证 50 个唯一 source、50 PDF、50 DOCX、50 query、50 qrel，格式文件 SHA 与派生 manifest 100% 一致。
+3. 按用户最新指示，不重跑前面已完成的 `IR_FULL`、旧压平和纯文本批次；后续只跑 `IR_NO_CLEANER` 与 `IR_NO_STRUCTURED_CHUNKING`，每个策略按 PDF→DOCX 串行。因此后续共 2×2=4 个正式 run，每 run 为 50 文档、5×4=20 warmup、50×4=200 条正式查询。
+4. 每个 50 文档 run 的门禁改为：document-results=50、唯一 source/internalDocumentId/taskId=50、分块完整且 source SHA 50/50；run.jsonl=200、`queryId|variant` 唯一组合=200、每变体=50、0 错误、0 降级、0 空排名；manifest、prepared、targets 和配置 hash 全部一致。
+5. 50 文档 run 使用新 dataset identity 落库，每次独立回读 1/50/200/4/失败数；不得写入原 200 文档 dataset 身份。最终报告分列“200 文档历史队列”和“50 文档后续队列”；前 6 组不重跑，因此跨 200/50 队列只作方向性观察，不声称严格同集因果对照。两个剩余策略在同一 50 集上的差异可直接比较。
+6. 先完成当前联合 SSH 隧道的故障注入及 10 分钟稳定性门禁，再生成 50 数据集和启动正式批次；基础设施失败不得被缩小数据量掩盖。
+
+50 文档子集工具实现计划：
+
+1. 在 benchmark Java CLI 增加 `subset-formats` 命令；输入冻结的格式数据集、输出空目录、seed 和 SIMPLE/MEDIUM/COMPLEX 配额，拒绝重复 source、缺失配对、配额不足和非空输出。
+2. 工具按计划中的稳定哈希抽样，复制对应 PDF/DOCX 与 license，过滤 queries/qrels/gold/documents manifest，重新生成 dataset name、数量、源文件哈希和 tree SHA；不重写二进制文档。
+3. 增加单元测试覆盖确定性、三档配额、双格式配对、查询/qrels/gold 闭包、tree hash 可被现有 `validate-formats` 通过，以及相同输出目录拒绝覆盖。
+4. 先执行 benchmark 定向测试与打包，再用正式 200 集生成 50 集；记录命令、seed、配额、所有哈希和验证输出。遵循 benchmark 技能的 before/after 口径，但因用户明确要求不重跑既有基线，报告必须显式披露跨队列限制，不构造不存在的 50 文档 `IR_FULL` 数据。
+
+10 分钟瞬态重试实现计划：
+
+1. `run-format` 增加可配置的 `--transient-retry-seconds`，后续固定为 600 秒；重试预算覆盖网络异常、HTTP 429/5xx、MySQL/Qdrant 短暂不可用和可重试的 ingest lease/embedding/indexing 错误。
+2. GET 轮询、文档读取和检索请求可在预算内使用有上限的退避重试；上传请求只有在后端幂等/去重语义能确认时才重发。任务进入明确瞬态失败终态时，调用现有 retry API，并继续跟踪同一文档。
+3. 永久解析/格式/数据错误、哈希不一致、未激活文档、查询降级、空排名、未知文档和无效 Rerank 不重试，仍立即触发门禁。
+4. 每次重试记录 operation、attempt、errorCode、elapsedMs 和最终 outcome；manifest 汇总瞬态重试次数与耗时，使最终性能报告能区分正常路径和基础设施恢复成本。
+5. 增加 HTTP 5xx 后恢复、任务 lease 丢失后 retry 成功、超过 600 秒失败、永久错误不重试的单元测试；通过后重新打包 benchmark JAR，新的 JAR SHA 写入后续 run 身份。
+
+#### 联合 SSH 隧道业务健康门禁失败与自愈计划（2026-07-31）
+
+事实边界：联合 tunnel 故障注入后，PID 11110→11505、runs 1→2；故障窗口知识库 API 2,671 ms 内成功，Qdrant 1,172 ms 内恢复，两个端口由同一 PID 监听。但随后的 10 分钟门禁在第 9/60 次、累计 106 秒时失败：MySQL 新建连接失败，Qdrant 和知识库 API 成功，PID/runs 均未变化。
+
+1. 读取本次 MySQL 客户端错误、同秒 SSH verbose/服务端 MySQL状态，确认是单 channel 握手丢包、MySQL拒绝还是认证问题；不因 API 使用旧池连接成功而判定新连接健康。
+2. 联合 SSH 主进程的 keepalive 只能检测会话，不能检测每个转发目标；增加本地业务健康守护：固定周期分别执行真实 MySQL `SELECT 1` 和 Qdrant `/collections`，连续失败达到阈值时重启整个联合 tunnel，并记录时间、目标、连续失败数和重启计数。
+3. 守护不得把凭据写进 plist 或脚本；运行时只从 `codex.md` 读取，日志不得输出密码。重启必须带互斥与冷却，避免网络故障时形成 restart storm。
+4. 先用故障注入证明守护能重启并恢复两个端口，再重新执行完整 10 分钟稳定性门禁；门禁以业务探测 0 失败为目标，若发生自愈则延长观察并重新计时，直到连续 10 分钟无失败/无重启。
+5. 只有该门禁通过，才运行新的 50 文档正式评测；当前联合 tunnel 结果和 r6 均不作为正式数据。
+
+SSH 传输端口 A/B 验证计划：
+
+- 当前 22 端口独立 SSH 命令 8 次均最终成功，但延迟为 0.888–24.203 秒，出现多次 8–24 秒停顿；这与 tunnel channel 丢包、MySQL查询长尾一致。服务器 443 当前无监听，sshd 只监听 22。
+
+1. 在 RAG 服务器新增独立 sshd drop-in，让 SSH 同时监听 22 和 443；执行 `sshd -t` 后仅 reload，不关闭 22，避免现有入口中断。UFW 只新增 443/tcp。
+2. 本地使用同一密钥、相同 `IPQoS=none` 对 22/443 各做不少于 20 次串行连接，统计成功率、p50/p95/max；443 未达到 0 失败或长尾没有实质改善则不切换。
+3. 若 443 明显更稳定，更新本地 `RAG-Server` SSH config 的 Port 和联合 tunnel，重新加载并执行故障注入及连续 10 分钟 MySQL/Qdrant/API 业务门禁；22 继续保留为人工回退入口。
+4. 若云防火墙阻断 443 或效果无改善，撤回 443 监听/UFW规则，回到业务健康守护方案；不得为赶进度降低正式评测门禁。
+
+端口 A/B 与最新重试口径实际结论：
+
+- 22/443 各 20 次交错 SSH 建连：22 为 19/20 成功，avg/p50/p95/max=7,715.9/858/17,654/120,362 ms；443 为 20/20 成功，avg/p50/p95/max=1,068.0/821/1,688/3,799 ms。服务器保留 22，并新增 443；本地 `RAG-Server` 和联合 tunnel 已切到 443。
+- 443 联合 tunnel 能由同一 PID 同时提供 13306/16333，MySQL、Qdrant 首次功能探测成功；但严格 10 分钟零失败门禁在第 4 次、100 秒处仍出现一次 MySQL initial communication packet 丢失，Qdrant和应用 API 同时成功。
+- 随后 10 次 MySQL 独立新连接仅 5 次成功，成功延迟 3,125–11,852 ms；失败来自当前移动网络到服务器的 TCP/SSH channel 抖动，而非容器、认证或数据集。端口 443 显著改善但不能保证底层每次握手 0 丢包。
+- 用户随后明确允许瞬态故障重试窗口为 10 分钟。因此正式门禁调整为“单次底层失败允许在 600 秒预算内恢复”，不再要求原始网络探测 0 失败；最终仍必须 50/50 文档、200/200 查询、0 最终错误、0 降级、0 空结果。manifest 的重试次数/等待耗时必须单独披露，超过 600 秒仍失败。
+
+50 文档工具与重试闭环实际结果：
+
+- 新增 benchmark Java CLI `subset-formats`，按 `SHA-256(seed+":"+sourceDocumentId)` 分层抽样，拒绝覆盖、配对不闭包、源 tree hash 不一致和配额不足；复制二进制原件并重新生成 queries/qrels/gold/documents manifest/dataset manifest/tree hash。
+- `run-format` 已去除 200 文档硬编码，按 dataset manifest 的 pairedDocumentCount/queryCount 动态校验；新增 `--transient-retry-seconds`。上传、任务轮询、文档读取、检索 debug 对网络异常、429/5xx 和明确瞬态业务码做有上限退避；lease 丢失等瞬态终态调用现有 retry API；永久错误、降级和空结果不重试。
+- run manifest 新增 `transientRetrySeconds`、`transientRetryCount`、`transientRetryDelayMs`，日志逐次记录 operation/attempt/errorCode/delayMs。单测覆盖 503 两次后恢复、20 ms 预算耗尽、永久 Qdrant schema 错误不重试、ingest lease lost 后 retry 成功。
+- `mvn -pl ai-agent-scaffold-benchmark clean package` 完成：62 tests、0 failures、0 errors、0 skipped。新 benchmark fat JAR SHA-256 为 `5ab05b5d357823374f925bd34b108518d4bef95ab6c9f7d8d9149a6b7bda3251`。
+- 正式派生数据集为 `docs/rag/evaluation-data/pdf-docx-50/`：PDF=50、DOCX=50、唯一 source=50、queries/qrels/gold=50/50/50，复杂度 SIMPLE/MEDIUM/COMPLEX=20/17/13。`validate-formats` 为 valid=true、failures=0。
+- 50 数据集 manifest SHA-256 `fb7ac5f910990a52b0634ebbadea0d75854d830cd2b754ffae4a3bf4ea6cb37d`，tree SHA-256 `6059f64d4c7f09237255b747407cd554607624127a99d83d606f69e17067a060`；原 200 数据集未修改。
+
+最终收口校验（以本段为准）：
+
+- 瞬态错误识别已从宽泛后缀判断收紧为明确基础设施错误码白名单，并保留包含 `TRANSIENT` 的后端显式可重试码；未知永久错误不会因名称以 `UNAVAILABLE/TIMEOUT` 结尾而被误重试。
+- 收紧后重新执行 `mvn -pl ai-agent-scaffold-benchmark clean package`：62 tests、0 failures、0 errors、0 skipped，BUILD SUCCESS。移除一个无效 import 后又从最终源码执行同一完整构建并再次通过；正式 run 使用的最终 benchmark fat JAR SHA-256 为 `5784af267df845cf24cb1c9322f374a200940e428f8649a0e83332aaa2f9812d`。该值取代上文修改过程中的临时 JAR hash。
+- 使用最终 JAR 再次执行 `validate-formats --prepared docs/rag/evaluation-data/pdf-docx-50`：valid=true、formatDocuments=100、pairedDocuments=50、queries=50、qrels=50、failures=0，实际 tree SHA-256 仍为 `6059f64d4c7f09237255b747407cd554607624127a99d83d606f69e17067a060`。
+- 后续只执行四个尚未完成的 50 文档 run，均显式传入 `--transient-retry-seconds 600`；已完成的六个 200 文档 run 不重跑。

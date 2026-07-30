@@ -1,0 +1,30 @@
+{
+  "schemaVersion" : 1,
+  "datasetName" : "scifact-paired-pdf-docx-50-v1",
+  "derivation" : "scifact-paired-format-layout-v1+stratified-subset-v1(parentTree=4b6d97580c7f84d2e43f5ddcd3793c59b973540f114f5eaf1396a7648334d463)",
+  "seed" : 20260731,
+  "generatedAt" : "2026-07-29T00:00:00Z",
+  "sourceUrl" : "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip",
+  "sourceRevision" : "beir-scifact-2021-03-19",
+  "license" : "CC-BY-4.0_annotations_ODC-By-1.0_S2ORC",
+  "pairedDocumentCount" : 50,
+  "queryCount" : 50,
+  "qrelCount" : 50,
+  "complexityCountsPerFormat" : {
+    "SIMPLE" : 20,
+    "MEDIUM" : 17,
+    "COMPLEX" : 13
+  },
+  "formatCounts" : {
+    "PDF" : 50,
+    "DOCX" : 50
+  },
+  "corpusSha256" : "dec31c8182f3d744c7d2c09423756fd1d17cbef75808db13ba01cc0aab4d1ac6",
+  "queriesSha256" : "91eb0724efa964c6d95c0da25edb0f74a0ebefdbdca0ec982ca9ef27ac12ae31",
+  "qrelsSha256" : "c3a1cd04e97834a8047a0fecfb95c4dc699fea67346c986aea5f6c04ce8d894a",
+  "queriesPath" : "gold/queries.jsonl",
+  "qrelsPath" : "gold/qrels.tsv",
+  "goldPath" : "gold/gold.jsonl",
+  "documentManifestPath" : "manifests/documents.jsonl",
+  "treeSha256" : "6059f64d4c7f09237255b747407cd554607624127a99d83d606f69e17067a060"
+}

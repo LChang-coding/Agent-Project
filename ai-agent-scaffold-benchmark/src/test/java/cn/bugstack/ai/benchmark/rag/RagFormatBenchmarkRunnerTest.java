@@ -37,6 +37,8 @@ class RagFormatBenchmarkRunnerTest {
     private final AtomicInteger profileSequence = new AtomicInteger();
     private final AtomicInteger bindingSequence = new AtomicInteger();
     private final AtomicInteger workflowSequence = new AtomicInteger();
+    private final AtomicInteger taskPollSequence = new AtomicInteger();
+    private final AtomicInteger taskRetrySequence = new AtomicInteger();
     private HttpServer server;
 
     @AfterEach
@@ -55,11 +57,11 @@ class RagFormatBenchmarkRunnerTest {
         server.start();
         URI base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/api");
         RagBenchmarkHttpClient client = new RagBenchmarkHttpClient(HttpClient.newHttpClient(), mapper, base,
-                "test-token", Duration.ofSeconds(10), 8 * 1024 * 1024);
+                "test-token", Duration.ofSeconds(10), 8 * 1024 * 1024, Duration.ofSeconds(2));
         RagFormatBenchmarkRunner.Configuration configuration = new RagFormatBenchmarkRunner.Configuration(
                 "format-pdf-test", base, "environment:TEST", "0".repeat(40), dataset, "PDF",
                 "IR_FULL", "document-ir-full-v1", "1".repeat(64), temporary.resolve("run"),
-                20260729L, 0, Duration.ofMillis(1), Duration.ofSeconds(5));
+                20260729L, 0, Duration.ofMillis(1), Duration.ofSeconds(5), Duration.ofSeconds(2));
 
         RagFormatBenchmarkRunner.Result result = new RagFormatBenchmarkRunner(mapper, client).run(configuration);
 
@@ -69,6 +71,8 @@ class RagFormatBenchmarkRunnerTest {
                 .resolve("document-results.jsonl")).size());
         assertEquals(800, Files.readAllLines(configuration.outputDirectory().resolve("run.jsonl")).size());
         result.quality().values().forEach(metrics -> assertEquals(1.0, metrics.recallAt10()));
+        assertEquals(1, taskRetrySequence.get());
+        assertEquals(1, client.retrySnapshot().count());
     }
 
     private void readGold(Path path) throws IOException {
@@ -103,8 +107,22 @@ class RagFormatBenchmarkRunnerTest {
         }
         if (path.contains("/ingest-tasks/") && "GET".equals(method)) {
             String task = path.substring(path.lastIndexOf('/') + 1);
+            if (taskPollSequence.incrementAndGet() == 1) {
+                respond(exchange, Map.of("taskId", task, "status", "failed", "stage", "embedding",
+                        "processedChunks", 0, "totalChunks", 1, "errorCode", "RAG_INGEST_LEASE_LOST",
+                        "revision", 1));
+                return;
+            }
             respond(exchange, Map.of("taskId", task, "status", "completed", "stage", "indexed",
                     "processedChunks", 1, "totalChunks", 1, "revision", 1));
+            return;
+        }
+        if (path.contains("/ingest-tasks/") && path.endsWith("/retry") && "POST".equals(method)) {
+            taskRetrySequence.incrementAndGet();
+            String[] fields = path.split("/");
+            String task = fields[fields.length - 2];
+            respond(exchange, Map.of("taskId", task, "status", "pending", "stage", "received",
+                    "processedChunks", 0, "totalChunks", 1, "revision", 2));
             return;
         }
         if (path.endsWith("/documents") && "GET".equals(method)) {
