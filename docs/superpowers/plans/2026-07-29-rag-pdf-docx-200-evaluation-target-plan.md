@@ -783,3 +783,21 @@ PDF / IR_NO_CLEANER 实际执行结果：
   - hybrid_rrf_rerank：`0.82/0.96/0.98`，MRR@10=`0.890000`，nDCG@10=`0.912836`，MAP@10=`0.890000`。本数据上 rerank 没有超过 dense，且相对 hybrid RRF 降低 Recall@1 0.04；该现象保留为后续失败 case 因果分析对象。
 - 检索端到端 mean/p50/p95/max：dense=`2,474/2,125/3,521/9,240 ms`，sparse=`1,917/1,801/2,902/2,997 ms`，hybrid_rrf=`2,623/2,328/3,616/12,882 ms`，hybrid_rrf_rerank=`12,043/10,339/23,609/30,075 ms`；rerank 阶段本身平均 9,444 ms，是当前最明确的检索时延瓶颈。
 - JDBC 明确输出 `documents=50 queryResults=200 aggregates=4`；随后独立数据库回读 run/document/query/aggregate/failure=`1/50/200/4/0`。本 run 已完整落库。
+
+#### 第二个 50 文档正式 run：DOCX / IR_NO_CLEANER 执行计划（2026-07-31）
+
+1. runId 固定为 `docx-ir-no-cleaner-50-20260731-020024`，输出目录同名；使用刚完成闭环提交 `a889f9b2c7351729d1c0e79480f31a49c10f65b1`。application/benchmark JAR、50 数据集 manifest/tree、策略 revision 和 config SHA 继续分别为 `16123df...aff2c9`、`5784af...f9812d`、`fb7ac5...6cb37d`/`6059f6...7a060`、`document-ir-no-cleaner-v1`、`082c20...1b0ab`。
+2. 启动前重新执行 MySQL、Qdrant、知识库 API 和实际 JVM 环境门禁；token 动态登录刷新，任何敏感值不写入产物。保持当前 JVM，不重启、不切换策略，以减少 PDF/DOCX 同策略对比中的环境变量。
+3. 从空目录摄取同一 50 个 source 的 DOCX 原件；运行参数与 PDF 完全一致：5 个 warmup query、20 条 warmup、200 条正式查询、poll 1 秒、ingest timeout 1800 秒、request timeout 120 秒、transient retry 600 秒。
+4. 文档、查询、hash 和质量门禁仍为 50/200/0/0/0；完成后对 PDF/DOCX 的 chunk 数、摄取延迟和四种检索指标作同集比较，但本阶段只落真实单 run，不提前生成缺失策略结论。
+5. 全部门禁通过后事务落库并独立回读 `1/50/200/4/0`，将真实结果追加到计划并中文提交。
+
+DOCX / IR_NO_CLEANER 实际执行结果：
+
+- run 于 `2026-07-30T18:01:23Z` 左右开始，`2026-07-30T18:29:28.152168Z` 完成，总耗时 1,684,942 ms；transient retry=0 次/0 ms。
+- 独立文档校验为 50/50、50 唯一 source/document/task、source SHA 50/50、无无效状态，共 167 chunks。摄取 mean/p50/p95/max=`15,928/13,854/28,205/38,728 ms`；COMPLEX/MEDIUM/SIMPLE 平均=`21,629/15,170/12,865 ms`，分块=`81/55/31`。
+- 独立查询校验为 20 warmup、200 行/200 唯一组合、各变体 50，0 error/degraded/empty。run/document SHA 分别为 `571016620ba3e1d99d5d1213fafd9dd19ea2309f2e4aabaeb1aa19d6bffdba78`、`dde54e1dd06b302dd7c120443ffee81dc4ea47f49eca5374c3d26725dd87b805`，均与 manifest 一致。
+- 真实质量：dense Recall@1/5/10=`0.90/1.00/1.00`、MRR/nDCG/MAP=`0.945000/0.959088/0.945000`；sparse=`0.78/0.84/0.90`、`0.813667/0.833880/0.813667`；hybrid_rrf=`0.86/0.96/0.98`、`0.899833/0.919284/0.899833`；hybrid_rrf_rerank=`0.86/0.96/0.98`、`0.909524/0.927141/0.909524`。
+- 检索 mean/p50/p95/max：dense=`2,262/2,081/3,254/3,898 ms`，sparse=`1,798/1,772/2,256/2,458 ms`，hybrid_rrf=`2,355/2,246/3,116/3,825 ms`，hybrid_rrf_rerank=`9,518/8,938/13,343/18,447 ms`；rerank 阶段平均 6,993 ms，仍为主瓶颈。
+- 与同策略 PDF 的同集差异：DOCX chunks 167 vs 137（+30，+21.9%），摄取平均时延 15,928 vs 26,912 ms（-40.8%）；dense Recall@10 相同为 1.00。DOCX hybrid+rerank 的 Recall@1/MRR/nDCG 比 PDF 高 `+0.04/+0.019524/+0.014305`，但仍未超过 DOCX dense；这支持“格式结构影响候选/重排排序”，不支持“更多分块必然提高 dense 召回”的结论。
+- JDBC 输出 50/200/4，独立数据库回读 run/document/query/aggregate/failure=`1/50/200/4/0`；本 run 已完整落库。

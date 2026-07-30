@@ -1,0 +1,10 @@
+{
+  "schemaVersion" : 1,
+  "targets" : {
+    "dense" : "wf_e069f3fb-73e1-4fbc-8833-4487ebd50472",
+    "sparse" : "wf_30a259b1-d1df-499e-8b88-6350b3222edf",
+    "hybrid_rrf" : "wf_e5635e9a-687d-4b26-89ad-2eee4a9edc9e",
+    "hybrid_rrf_rerank" : "wf_4816d182-ac18-4d74-9f1f-23ced37e74ac"
+  },
+  "sourceRunId" : "docx-ir-no-cleaner-50-20260731-020024"
+}
