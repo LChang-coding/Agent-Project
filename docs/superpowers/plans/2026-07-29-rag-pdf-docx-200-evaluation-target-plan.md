@@ -741,3 +741,45 @@ SSH 传输端口 A/B 验证计划：
 - 收紧后重新执行 `mvn -pl ai-agent-scaffold-benchmark clean package`：62 tests、0 failures、0 errors、0 skipped，BUILD SUCCESS。移除一个无效 import 后又从最终源码执行同一完整构建并再次通过；正式 run 使用的最终 benchmark fat JAR SHA-256 为 `5784af267df845cf24cb1c9322f374a200940e428f8649a0e83332aaa2f9812d`。该值取代上文修改过程中的临时 JAR hash。
 - 使用最终 JAR 再次执行 `validate-formats --prepared docs/rag/evaluation-data/pdf-docx-50`：valid=true、formatDocuments=100、pairedDocuments=50、queries=50、qrels=50、failures=0，实际 tree SHA-256 仍为 `6059f64d4c7f09237255b747407cd554607624127a99d83d606f69e17067a060`。
 - 后续只执行四个尚未完成的 50 文档 run，均显式传入 `--transient-retry-seconds 600`；已完成的六个 200 文档 run 不重跑。
+
+#### 第一个 50 文档正式 run：PDF / IR_NO_CLEANER 执行计划（2026-07-31）
+
+执行身份冻结：
+
+- runId：`pdf-ir-no-cleaner-50-20260731-011534`
+- 输出目录：`docs/rag/evaluation-results/pdf-ir-no-cleaner-50-20260731-011534`
+- Git revision：`907bb67622282cac05cad7afb7cc90bf6be09c30`
+- application JAR SHA-256：`16123df8ce18d0ae4af84ff47175fc5172eb2fe3dbb3b0c1c28b44279aaff2c9`
+- benchmark fat JAR SHA-256：`5784af267df845cf24cb1c9322f374a200940e428f8649a0e83332aaa2f9812d`
+- dataset manifest SHA-256：`fb7ac5f910990a52b0634ebbadea0d75854d830cd2b754ffae4a3bf4ea6cb37d`
+- dataset tree SHA-256：`6059f64d4c7f09237255b747407cd554607624127a99d83d606f69e17067a060`
+- preprocessing strategy/revision：`IR_NO_CLEANER` / `document-ir-no-cleaner-v1`
+- config SHA-256：`082c20776696745bd04d00a843f1afad0958dc8643dd18ecb19d420b26d1b0ab`
+
+执行步骤与门禁：
+
+1. 核验 8091 JVM 的实际环境为 benchmark preprocessing=true、strategy=`IR_NO_CLEANER`、Qdrant=`127.0.0.1:16333`；核验同一 SSH PID 同时监听 13306/16333，并以真实 MySQL、Qdrant、知识库 API 请求完成启动前健康检查。
+2. 从空输出目录运行 50 份 PDF；参数固定为 warmup=5、poll=1 秒、ingest timeout=1800 秒、HTTP request timeout=120 秒、transient retry=600 秒。不得读取 r1-r6 或任一 200 文档 run 的中间结果。
+3. 摄取阶段要求 50 条文档结果、50 个唯一 source/document/task、50/50 source SHA 一致、全部 active 且 processedChunks=totalChunks>0。瞬态失败可在 600 秒总预算内重试，所有尝试和等待时间必须写入 manifest；预算耗尽或永久错误立即停止。
+4. 查询阶段要求 20 条 warmup 通过，再产生 200 个 `queryId|variant` 唯一组合；最终 0 errorCode、0 degraded、0 空 rankedDocumentIds，各变体恰好 50 条。
+5. 全部门禁通过后才执行 JDBC 事务落库，独立回读必须为 run/document/query/aggregate/failure=`1/50/200/4/0`。执行实际结果、重试统计、质量指标和阶段延迟追加到本计划后再中文提交。
+
+启动前认证门禁诊断计划：
+
+- MySQL `SELECT 1` 与 Qdrant `/collections` 已成功，但使用冻结在权限 600 环境文件中的 access token 调用知识库 API 返回 HTTP 401。正式输出目录尚未创建，故本次不构成失败 run，也没有复用或消耗任何文档结果。
+- 先从 `codex.md` 已有本地账户配置读取凭据，通过项目现有登录接口获取新 token；只更新 `/private/tmp/rag-format-auth-c9b1693.env`，继续保持 mode 600，命令和日志不得输出密码或 token。
+- 使用新 token 再执行知识库 API 健康检查；只有 HTTP 200 且业务码 `0000`，才启动上述冻结 runId。若登录失败，则读取应用认证日志诊断，不通过关闭鉴权绕过门禁。
+
+PDF / IR_NO_CLEANER 实际执行结果：
+
+- 旧 token 确认过期；使用同一权限 600 环境文件中的本地测试账户动态调用现有 `/api/v1/auth/login` 成功，知识库 API 返回 HTTP 200/业务码 `0000`。正式 runner 每次启动时动态刷新 token，不把新 token 写入项目或日志。
+- run 于 `2026-07-30T17:17:27.237256Z` 开始，`2026-07-30T17:57:35.402356Z` 完成，总耗时 2,408,160 ms。manifest 为 completed，transientRetryCount=0、transientRetryDelayMs=0。
+- 独立文档校验：50/50 行、50 唯一 source、50 唯一 internalDocumentId、50 唯一 taskId、source SHA 与冻结 manifest 50/50 匹配、无无效状态；共生成 137 chunks，全部 `processedChunks=totalChunks>0`。摄取 elapsed mean/p50/p95/max=26,912/23,295/46,209/57,410 ms；COMPLEX/MEDIUM/SIMPLE 分别 13/17/20 份，平均摄取 36,465/21,472/25,328 ms，分块 70/42/25。
+- 独立查询校验：warmup=20；正式结果 200 行、200 个唯一 `queryId|variant`，dense/sparse/hybrid_rrf/hybrid_rrf_rerank 各 50；0 errorCode、0 degraded、0 空 rankedDocumentIds。`run.jsonl` 与 `document-results.jsonl` 实际 SHA 分别等于 manifest 的 `27b74b1994930def4ef447ef82de5f80f804e375eb29ee0badb334549b8feead`、`8e7edf41f9fa4ce21202fc28aa087af5531b244f5a3ffe928452345c90bc2485`。
+- 真实质量指标：
+  - dense：Recall@1/5/10=`0.90/1.00/1.00`，MRR@10=`0.941667`，nDCG@10=`0.956469`，MAP@10=`0.941667`。
+  - sparse：`0.78/0.86/0.88`，MRR@10=`0.814000`，nDCG@10=`0.830098`，MAP@10=`0.814000`。
+  - hybrid_rrf：`0.86/0.94/0.98`，MRR@10=`0.893690`，nDCG@10=`0.914208`，MAP@10=`0.893690`。
+  - hybrid_rrf_rerank：`0.82/0.96/0.98`，MRR@10=`0.890000`，nDCG@10=`0.912836`，MAP@10=`0.890000`。本数据上 rerank 没有超过 dense，且相对 hybrid RRF 降低 Recall@1 0.04；该现象保留为后续失败 case 因果分析对象。
+- 检索端到端 mean/p50/p95/max：dense=`2,474/2,125/3,521/9,240 ms`，sparse=`1,917/1,801/2,902/2,997 ms`，hybrid_rrf=`2,623/2,328/3,616/12,882 ms`，hybrid_rrf_rerank=`12,043/10,339/23,609/30,075 ms`；rerank 阶段本身平均 9,444 ms，是当前最明确的检索时延瓶颈。
+- JDBC 明确输出 `documents=50 queryResults=200 aggregates=4`；随后独立数据库回读 run/document/query/aggregate/failure=`1/50/200/4/0`。本 run 已完整落库。
