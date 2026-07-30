@@ -497,3 +497,120 @@ DOCX `LEGACY_MARKDOWN_FLATTEN` 实际结果与落库诊断结论：
 - 同策略格式差异：DOCX 比 PDF 多 61 chunks（+14.1%），摄取平均快 3,713.655 ms（-27.4%）；DOCX Dense Recall@10 高 0.005、Sparse高 0.005、Hybrid/Rerank 各高 0.005，差异较小但可复核。
 - 检索延迟较此前时间窗口继续上升，尤其 Rerank；由于预处理只影响离线索引内容、检索调用远端共享模型，跨时间延迟不作清洗策略因果结论，但保留为容量/稳定性证据。
 - JDBC 明确完成后，真实 MySQL 回读 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；格式、策略/revision、config hash 和 completed 状态一致。
+
+### 2026-07-30：第八批执行计划——`IR_NO_CLEANER` 双格式消融
+
+目标：保留 Document IR 和结构感知分块，只关闭 Cleaner，直接量化去页眉页脚、断词/空白修复、重复内容处置等清洗对 PDF/DOCX chunk、召回与排序的真实影响。
+
+执行计划与门禁：
+
+1. 固定策略 `IR_NO_CLEANER`、revision `document-ir-no-cleaner-v1`，按第七批相同规范 JSON 计算 config SHA-256 `3c4ecb1b9715fb7142b4c87749008e0a5385e3e7b04562c04f913fa16fff5fd4`。
+2. 正常终止当前前台 JVM，会话确认退出后，以相同 JAR、数据库/Nacos 配置、单 Worker 和 benchmark mode 前台启动新策略；等待 8091，核验实际进程环境并完成一份真实 PDF 冒烟。
+3. 冒烟必须 completed、分块完整、无错误码；随后按 PDF → DOCX 串行执行，每格式 200 文档、20 warmup、800 查询，保持相同数据集、随机种子、四个检索变体与请求超时。
+4. 严格门禁为 200 个唯一源/内部文档/任务、SHA 200/200、0 摄取失败、800 唯一组合、每变体 200、0 查询错误、0 降级、0 空结果、manifest/hash 一致。
+5. 每格式完成后等待 JDBC 明确退出并回读 1/200/800/4/0；追加 Cleaner 开/关的 PDF、DOCX 配对差异和性能事实后中文提交。
+6. 任一失败停止扩大运行，先追加诊断计划；失败 run 不落库、不拼接、不覆盖。
+
+第八批 PDF 正式 runId 固定为 `pdf-ir-no-cleaner-20260730-095323`；只在上述真实 PDF 冒烟 completed、1/1 chunk、无错误后启动。
+
+#### 第八批 PDF 失败诊断与重跑计划（2026-07-30）
+
+事实门禁：
+
+- `pdf-ir-no-cleaner-20260730-095323` 在第 45 份文档终止；完成态 manifest 为 `failed`，错误码 `RAG_BENCHMARK_HTTP_500`，仅 44/200 文档成功，0/800 查询执行。
+- 唯一失败输入为 `prepared/pdf/173-scifact-14079881.pdf`，源文档 ID `14079881`，任务 `ragtask_9d71835274d74530a63e48a1f4365e13`；结果停在 `upload_or_poll`，0/0 chunks。
+- 应用日志同时出现 JDBC `Communications link failure`、`Connection refused`、Hikari `total=0`，说明本机到 MySQL 的 13306 隧道已经中断；本轮不是可接受的策略质量结果，不落库、不拼接、不覆盖。
+
+处理计划：
+
+1. 保留失败目录作为诊断证据，确认评测进程已终止；检查 13306 监听、SSH 隧道进程、MySQL 握手和一次只读查询，不迁移 MySQL、不修改远端数据。
+2. 若隧道丢失，使用 `codex.md` 既有 SSH 配置和数据库身份重建本机端口转发；敏感值只从本地配置读取，不写入命令输出、评测产物或提交。
+3. 隧道恢复后观察 Hikari 重新建连；执行应用健康检查，并重新摄取同一失败 PDF，必须得到 completed、chunks 完整、无错误码，证明故障已解除。
+4. 使用全新 runId 从第 1 份文档开始重跑 PDF `IR_NO_CLEANER`；不得复用前 44 份结果。仍执行 200 文档、20 warmup、800 查询及全部 hash/唯一性/错误门禁。
+5. 仅当新 run 全部门禁通过后持久化并独立回读 1/200/800/4/0，再追加真实结果并中文提交；若同一文档再次失败，则转为解析/策略级根因诊断，不继续扩大。
+
+诊断处理结果与重跑执行计划：
+
+- 13306 SSH 转发进程仍在，但故障窗口内远端转发目标短暂拒绝连接；随后本机经同一隧道完成 MySQL 握手和 `SELECT 1`，没有迁移或修改数据库。
+- 重新认证后，对原失败知识库与同一文件 `173-scifact-14079881.pdf` 定点复测：上传接口 200，任务 `ragtask_9d71835274d74530a63e48a1f4365e13` 最终为 `completed/completed`，7/7 chunks、无错误码。该事实表明文档解析和 `IR_NO_CLEANER` 本身可完成，第一次失败来自数据库链路瞬断期间的 HTTP 500。
+- 新正式 runId 固定为 `pdf-ir-no-cleaner-20260730-214250-r2`。从 0 创建新知识库并摄取全部 200 份 PDF，失败 run 的 44 条成功记录不得复制；执行前再次确认 8091、13306 和 MySQL 查询正常。
+- 运行中持续门禁 `document-results.jsonl`；任何非 completed/stage completed、错误码、0 chunk 或 chunk 数不一致立即停止。摄取通过后再检查 warmup 与 800 查询门禁，最终才允许落库。
+
+#### 第八批 PDF 执行托管中断与第三次执行计划（2026-07-30）
+
+- `pdf-ir-no-cleaner-20260730-214250-r2` 在 114/200 文档处停止；已有 114 条均 completed、chunks 完整、0 错误，尚未执行 warmup 和正式查询。
+- 停止时 8091 应用 JVM 与 benchmark JVM 均不存在，应用日志最后停在正常 Docling 200 响应；13306 和 MySQL 仍健康。根因是前台统一命令会话随任务回合结束被执行环境回收，不是 RAG 业务、输入文档或数据库门禁失败。
+- 该未完成 run 不落库、不拼接、不覆盖。为避免再次被回合生命周期回收，应用与评测改由本机 `screen` 独立会话托管；会话只运行本地 Java 项目和 benchmark，不上传项目、不修改远端中间件。
+
+第三次执行步骤：
+
+1. 使用 `screen` 启动 `IR_NO_CLEANER` 应用，敏感数据库值仍从 `codex.md` 运行时读取；日志写入新的 `/private/tmp/rag-app-ir-no-cleaner-screen-20260730`，核验 8091、实际策略环境和 MySQL。
+2. 重新对单 PDF 做健康摄取门禁；然后以新 runId `pdf-ir-no-cleaner-20260730-225435-r3` 从 0 执行 200 文档、20 warmup、800 查询。
+3. 独立监控进程、manifest 和结果文件；运行期间即使当前交互回合结束，`screen` 会话必须继续。任何业务门禁失败仍立即终止并诊断。
+4. 只有 r3 完整通过 hash、唯一性、0 错误/降级/空结果后才持久化；前两次失败/中断目录只作为可审计证据。
+
+第三次执行阶段性事实：
+
+- `screen` 托管后的 r3 已越过 45/200 关键位置；第 45 份正是第一次失败的 `prepared/pdf/173-scifact-14079881.pdf`。
+- 该文档本次为 `completed/completed`、7/7 chunks、无错误码，耗时 45,395 ms；随后第 46 份也已完成，累计 46 个唯一源文档、内部文档和任务，0 无效记录。
+- 同一输入、同一策略在数据库链路健康时稳定完成，进一步证实第一次 `RAG_BENCHMARK_HTTP_500` 不是确定性解析失败。正式结论仍以 200 文档与 800 查询全部完成为准。
+
+#### 第八批 PDF r3 向量库故障诊断计划（2026-07-30）
+
+事实门禁：
+
+- r3 在 57/200 成功后终止；第 58 份为 `prepared/pdf/079-scifact-16056514.pdf`，任务 `ragtask_bc8beda0d84a4d5b9a0f7845ede3be85`。
+- 任务最终为 `dead/indexing/RAG_QDRANT_UNAVAILABLE`，benchmark 对应 `RAG_BENCHMARK_INGEST_FAILED`；0/0 chunks，单任务等待 220,869 ms。57 份成功记录和该失败记录均不落库。
+- 线程证据显示 Docling 已返回 200，失败前 Worker 停在 Qdrant `countVersion` 校验；因此本次门禁失败位于向量写入/版本计数阶段，不归因于 PDF 解析或 Cleaner 消融。
+- 同时观察到 Hikari 剔除服务端关闭的旧连接，但 MySQL 独立查询正常；该现象单独保留为连接池配置风险，不与明确的 `RAG_QDRANT_UNAVAILABLE` 错误码混为同一根因。
+
+处理计划：
+
+1. 保留 r3 失败目录并确认 benchmark 已退出；只读检查 Qdrant HTTP/collections/节点资源与容器日志，核对故障时间窗，不修改向量数据。
+2. 定点检查该任务的 checkpoint、向量写入与文档版本状态，确认是否已经部分写入；依赖既有幂等和代际隔离清理/重试，禁止手工伪造 completed。
+3. 若 Qdrant 已恢复，使用新知识库重摄取同一 `079-scifact-16056514.pdf`，必须 completed、chunks 完整、无错误；若仍失败则继续向量库容量/连接诊断，不启动全量。
+4. 针对 Hikari 关闭连接警告，读取当前 MySQL `wait_timeout` 与应用池 `maxLifetime/keepaliveTime` 的真实配置；如池寿命不短于服务端超时，则先按现有配置规范修正并验证，不通过盲目重启掩盖问题。
+5. 所有依赖门禁恢复后，使用全新 runId 从 0 重跑；不得拼接 r3 的 57 条。只有 200/200、20 warmup、800 查询及 hash 门禁通过才落库。
+
+诊断结果与恢复执行计划：
+
+- Qdrant 容器已连续运行 12 天，restart=0、OOM=false、health=healthy；诊断时仅使用约 231 MiB/6 GiB、CPU 0.21%、36 PIDs，服务器磁盘 43%，不存在容量或进程重启证据。
+- 服务器本机 20 次 `/collections` 探测全部 200，耗时 2–31 ms；开发机直连公网 10 次探测中 2 次为空响应，其余尾延迟最高 3.84 秒，超过应用 `AI_RAG_QDRANT_TIMEOUT=3s`。Qdrant 服务日志中的绝大多数请求为毫秒级，故障窗口有一次 upsert 服务端耗时 17.08 秒，且开发机公网出口在运行中发生变化。
+- 使用持久 SSH 转发 `127.0.0.1:16333 -> RAG服务器127.0.0.1:6333` 后，30/30 探测成功，最大 0.68 秒。后续应用改用该本机端点，仍保留单请求 3 秒、2 次重试、总时限 30 秒，不通过放宽超时掩盖故障；本地项目仍不上传服务器。
+- 失败任务 checkpoint 表明解析、1 个 chunk 的 Embedding 和向量 upsert 均已推进，最终死于索引校验。文档 active generation 仍为 0、版本 failed、索引未激活；临时 chunk 记录均 deleted，证明失败代次没有污染可检索数据。
+- MySQL `wait_timeout/interactive_timeout=28800s`，Hikari `maxLifetime=1200s`、keepalive=300s，不存在池寿命长于服务端超时；关闭连接警告作为 SSH 转发切换/旧连接剔除风险记录，不调整正式参数。
+
+恢复执行步骤：
+
+1. 以 `AI_RAG_QDRANT_ENDPOINT=http://127.0.0.1:16333` 重启同一 JAR、同一 `IR_NO_CLEANER` 策略应用，确认隧道、8091、MySQL 和真实进程环境。
+2. 在新知识库重摄取 `079-scifact-16056514.pdf`，要求 completed、分块完整、无错误；再连续执行 Qdrant 读探测，验证 3 秒门禁下无瞬断。
+3. 定点门禁通过后再记录全新正式 runId，并从 0 运行；最终报告必须披露前六组使用公网直连、后续组使用 SSH 转发，因此跨时间摄取延迟只作生产观测，清洗策略因果主要依据质量和 chunk 差异。
+
+恢复验证结果与 r4 执行计划：
+
+- 新进程 PID 71510 的实际环境已核验为 benchmark mode=true、`IR_NO_CLEANER`、Qdrant endpoint=`http://127.0.0.1:16333`；8091、16333 和 MySQL 均正常。
+- 原失败文件 `079-scifact-16056514.pdf` 在新知识库定点复测完成：任务 `ragtask_083cb0eba8524483ae73c1509ab6ea1f` 为 `completed/completed`、1/1 chunk、无错误码。
+- 隧道端点随后连续探测 100 次，100/100 返回 200，平均 0.188 秒、最大 0.616 秒，均低于保留的 3 秒单请求超时。
+- 第四次正式 runId 固定为 `pdf-ir-no-cleaner-20260730-235002-r4`。r4 从 0 创建知识库、摄取 200 份 PDF；不得读取或复制 r1/r2/r3 的文档结果。执行中继续检查 Qdrant 隧道进程，隧道消失或任一文档门禁失败立即停止。
+
+#### 第八批 PDF r4 MySQL 转发故障诊断计划（2026-07-30）
+
+事实门禁：
+
+- r4 的第 1 份文档完成，第 2 份 `prepared/pdf/056-scifact-10300888.pdf` 在上传事务前失败，未生成 documentId/taskId；benchmark 等待 91,231 ms 后收到业务码 `0001`。
+- 同一时间应用 Hikari 为 total=0，创建连接重试三次均收到 `ConnectException: Connection refused`，文档上传事务被回滚异常覆盖；该失败发生在业务记录创建阶段，与已经稳定的 Qdrant 隧道无关。
+- r4 只完成 1/200、0 查询，不落库、不拼接。
+
+处理计划：
+
+1. 检查 13306 监听进程、SSH 转发父进程与远端 MySQL 容器/127.0.0.1:3306，区分本机转发进程退出、SSH 会话断开和远端容器拒绝。
+2. 读取现有本机 LaunchAgent/SSH 保活配置；若 13306 不是由可自动重启的持久任务托管，修复为 `ExitOnForwardFailure`、keepalive 和自动重启的本机任务。不得迁移或重建 MySQL。
+3. 连续执行至少 100 次本机 13306 `SELECT 1` 并跨越一次保活周期；同时验证应用 Hikari 能重建连接。
+4. MySQL 稳定后在新知识库重传 r4 失败 PDF，必须产生 task 并 completed；再启动全新 run。不得靠增大上传 HTTP 超时掩盖数据库不可达。
+
+转发根因与修复步骤：
+
+- 两个 LaunchAgent 均配置 `BatchMode=yes + KeepAlive`，但当前密钥认证不可用；故障后累计约 8.7 万次退出码 255 的快速重启，13306/16333 均无稳定监听。
+- 当前移动网络可以完成 TCP 和 SSH banner，但在客户端发送 KEXINIT 后丢包；使用 `IPQoS=none` 关闭 OpenSSH 默认 QoS 标记后，密码认证立即成功。远端 MySQL/Qdrant 均为 running/healthy、restart=0。
+- 修复前先停止两条重连任务；随后把现有本机 ED25519 公钥幂等写入 RAG 服务器 authorized_keys，在 `RAG-Server` Host 与两份 LaunchAgent 参数中加入 `IPQoS=none`，保持 BatchMode、ExitOnForwardFailure 和 ServerAlive。
+- 重新加载后要求两条隧道均监听、密钥登录不提示密码、LaunchAgent 在跨保活周期内 runs 不再快速增长；再执行 100 次 MySQL 查询和 100 次 Qdrant 请求。

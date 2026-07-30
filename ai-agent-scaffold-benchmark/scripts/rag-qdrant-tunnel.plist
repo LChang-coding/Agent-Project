@@ -11,6 +11,8 @@
         <string>-o</string>
         <string>BatchMode=yes</string>
         <string>-o</string>
+        <string>IPQoS=none</string>
+        <string>-o</string>
         <string>ExitOnForwardFailure=yes</string>
         <string>-o</string>
         <string>ConnectTimeout=10</string>
