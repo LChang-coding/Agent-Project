@@ -1,0 +1,10 @@
+{
+  "schemaVersion" : 1,
+  "sourceRunId" : "docx-ir-no-structured-chunking-50-20260731-031011",
+  "targets" : {
+    "dense" : "wf_4f4cf557-5993-49aa-9d50-5a9bfdc0d01d",
+    "sparse" : "wf_6a98dc04-81f6-4d36-93d0-56b125cf486f",
+    "hybrid_rrf" : "wf_5793386c-bb48-48ad-a47e-937520ea9323",
+    "hybrid_rrf_rerank" : "wf_fb4a2920-0f61-495a-a96f-0d6596293349"
+  }
+}

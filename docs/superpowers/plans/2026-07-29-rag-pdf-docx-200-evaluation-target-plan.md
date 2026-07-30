@@ -839,3 +839,28 @@ PDF / IR_NO_STRUCTURED_CHUNKING 实际执行结果：
 - 检索 mean/p50/p95/max：dense=`2,122/2,005/2,688/3,313 ms`，sparse=`1,820/1,750/2,290/2,556 ms`，hybrid_rrf=`2,155/2,020/2,873/3,358 ms`，hybrid_rrf_rerank=`11,459/10,680/18,319/25,730 ms`；rerank 阶段平均 9,232 ms。
 - 与同集 PDF / IR_NO_CLEANER 对比：chunks 81 vs 137（-40.9%），摄取平均时延 -21.1%；dense Recall@1/MRR/nDCG `+0.06/+0.035000/+0.026149`，hybrid+rerank `+0.12/+0.070667/+0.057520`，Recall@10 达到 1.00。当前 SciFact 派生文档本质是短科学摘要，粗切块减少碎片化并改善排序；该结果不能外推为“长文档也应关闭结构化切块”。
 - JDBC 与独立回读均通过，run/document/query/aggregate/failure=`1/50/200/4/0`，已完整落库。
+
+#### 第四个 50 文档正式 run：DOCX / IR_NO_STRUCTURED_CHUNKING 计划（2026-07-31）
+
+1. 最后一个 runId 固定为 `docx-ir-no-structured-chunking-50-20260731-031011`，Git revision=`7080d6165b53c88a207020a1d65cbd3fde1923e3`；策略/revision/config 和所有 JAR、数据集 hash 与上一 PDF run 完全一致。
+2. 不重启当前 PID 70258，先核验真实环境仍为 benchmark=true、`IR_NO_STRUCTURED_CHUNKING`，并执行 MySQL/Qdrant/API 健康门禁；从空目录运行同一 50 source 的 DOCX。
+3. 参数与前三个 50 文档 run 完全相同：50 文档、20 warmup、200 查询、600 秒瞬态预算；最终必须 0 error/degraded/empty，hash 和唯一性全通过。
+4. 事务落库并独立回读 `1/50/200/4/0` 后，生成四个 50 文档 run 的同集汇总、问题级失败/退化排序 case 与因果分析；再恢复应用至生产默认 `IR_FULL`、benchmark=false，执行最终测试和中文提交。
+
+DOCX / IR_NO_STRUCTURED_CHUNKING 实际执行结果：
+
+- `2026-07-30T19:11:08Z` 左右开始，`2026-07-30T19:37:36.461729Z` 完成，总耗时 1,587,873 ms；0 次/0 ms 瞬态重试。
+- 文档门禁 50/50、50 唯一 source/document/task、SHA 50/50、0 无效，共 98 chunks。摄取 mean/p50/p95/max=`13,493/12,466/22,394/23,670 ms`；COMPLEX/MEDIUM/SIMPLE 平均=`14,669/12,168/13,856 ms`，分块=`42/29/27`。
+- 查询门禁 20 warmup、200/200 唯一组合、四变体各 50，0 error/degraded/empty；run/document SHA=`c384989fa06c13a964de8c35b6711b5e53d4f24d4e193b79f7f7181f2c750dab` / `4f5b8198fa605336d3d8298a6728482f23eba8acef3a766ee3ea2484b718a196`。
+- 质量：dense Recall@1/5/10=`0.90/1.00/1.00`、MRR/nDCG/MAP=`0.946667/0.960474/0.946667`；sparse=`0.78/0.88/0.90`、`0.815833/0.836155/0.815833`；hybrid_rrf=`0.84/0.94/0.96`、`0.886190/0.904522/0.886190`；hybrid_rrf_rerank=`0.92/0.96/0.96`、`0.936667/0.942619/0.936667`。
+- 检索 mean/p50/p95/max：dense=`2,103/1,968/2,701/2,964 ms`，sparse=`1,805/1,746/2,239/2,477 ms`，hybrid_rrf=`2,116/2,049/2,477/3,077 ms`，hybrid_rrf_rerank=`10,456/9,854/15,570/17,948 ms`；rerank 平均 8,276 ms。
+- 与 DOCX / IR_NO_CLEANER 对比：chunks 98 vs 167（-41.3%），摄取平均时延 -15.3%；dense 基本持平（Recall@1 相同，MRR +0.001667），hybrid+rerank Recall@1 `+0.06`、MRR `+0.027143`，但 Recall@10 `-0.02`。粗切块改善头部排序的同时丢失两个问题的 Top10 命中，必须在失败 case 中显示具体问题、gold 文档和排名。
+- JDBC 与独立回读通过，run/document/query/aggregate/failure=`1/50/200/4/0`，四个剩余正式 run 至此全部落库。
+
+#### 四组 50 文档汇总、失败 case 与生产恢复计划
+
+1. 使用现有 `compare-formats` 分别生成 `IR_NO_CLEANER` 和 `IR_NO_STRUCTURED_CHUNKING` 的 PDF/DOCX 同集对比产物；另生成四 run 总表，逐项列出数据身份、chunks、复杂度摄取时延、Recall/MRR/nDCG/MAP、检索分阶段时延与 delta。禁止把 200 队列和 50 队列混算显著性。
+2. 对每个 run/variant 找出 Recall@10=0、gold 排名下降和 rerank 将正确文档移出 Top10 的 query。把 query 文本、gold sourceDocumentId、格式原文件相对路径、复杂度、对应 internalDocumentId、分块数和 rankedDocumentIds 写入可审计 JSON/Markdown。
+3. 对代表 case 调用现有诊断链路获取候选、融合、rerank 和 chunk 文本证据；若运行时诊断不支持历史知识库或返回不完整，至少从 run/document map、数据库 chunk 表和原始派生文档恢复真实证据，明确缺失边界，不编造阶段分数。
+4. 将上述真实结果写入新的最终报告并追加本计划；四个 run 结果和报告中文提交。
+5. 最后正常停止 benchmark JVM，启动同一 JAR 的生产默认配置：benchmark preprocessing=false、策略 `IR_FULL`（或不注入 benchmark 策略，以配置默认值为准），验证 8091、MySQL、Qdrant、登录及一次真实 RAG 检索；执行 benchmark 62 项测试与相关模块测试。恢复事实追加计划并中文提交。
