@@ -1,0 +1,10 @@
+{
+  "targets" : {
+    "dense" : "wf_7cf95cd3-50b4-4525-aba2-c54ea7828853",
+    "sparse" : "wf_846d2f55-67c0-4639-857f-7d88ccea3c99",
+    "hybrid_rrf" : "wf_b239a455-8be5-4645-bd79-aff2aab8b908",
+    "hybrid_rrf_rerank" : "wf_3dc60114-2f72-4c99-a356-ad8cc511b249"
+  },
+  "sourceRunId" : "pdf-raw-text-20260730-065633",
+  "schemaVersion" : 1
+}

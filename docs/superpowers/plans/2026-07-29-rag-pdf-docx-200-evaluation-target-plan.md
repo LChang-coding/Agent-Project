@@ -435,3 +435,37 @@ DOCX `LEGACY_MARKDOWN_FLATTEN` 实际结果与落库诊断结论：
 - 同策略格式差异：DOCX 比 PDF 多 65 chunks（+14.9%），但摄取平均耗时少 4,083.730 ms（-30.1%）。PDF 的 dense Recall@10 高 0.020，DOCX 的 hybrid/rerank Recall@10 高 0.010；该差异来自解析/分块与索引内容交互，不能仅凭 chunk 数解释，需在最终跨策略失败转移中下钻。
 - 首次“落库失败”是监控误判：异步执行器在 JDBC 事务仍运行时提前向上层返回，数据库被过早回读为 0 行；不存在 SQL 异常或回滚。改用直接命令会话等待约 44 秒后，CLI 明确返回 persisted，退出码 0。
 - 最终真实 MySQL 独立回读为 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；run 身份、DOCX 格式、策略/revision、Git SHA、config hash 和 completed 状态全部一致。
+
+### 2026-07-30：第七批执行计划——`RAW_TEXT_CHUNK` 双格式消融
+
+目标：保持应用 JAR、数据集、模型/检索配置、随机种子和串行负载不变，只把预处理策略切换为 `RAW_TEXT_CHUNK`，完成 PDF/DOCX 各 200 文档与 800 查询，用于隔离“直接纯文本切块”相对旧式 Markdown 压平和完整 Document IR 的质量、chunk 与性能差异。
+
+执行计划与门禁：
+
+1. config 身份使用无空白、键排序的 UTF-8 JSON：`applicationJarSha256`、`benchmarkPreprocessingEnabled=true`、`datasetManifestSha256`、`preprocessingRevision`、`preprocessingStrategy`，不含格式和 runId，保证同策略 PDF/DOCX 相同。`RAW_TEXT_CHUNK/raw-text-chunk-v1` 的 config SHA-256 固定为 `4059e93db18b442727d9b518f8b0200a3140552c2798f94e76a6806c88b9ffcc`。
+2. 只停止本机 8091 Java 进程，以原 JAR SHA-256 `16123df8ce18d0ae4af84ff47175fc5172eb2fe3dbb3b0c1c28b44279aaff2c9` 重启；设置 benchmark mode 与 `RAW_TEXT_CHUNK`，不上传项目、不修改远端中间件、不迁移 MySQL。
+3. 通过实际进程环境、端口和生产 API 登录/小文档摄取确认策略进程健康；任一启动、认证、解析、Embedding 或索引错误先诊断，不扩大到 200 文档。
+4. 按 PDF 后 DOCX 串行运行；每个格式均要求 200 个唯一文档/任务、源文件 SHA 200/200、分块完整、20 warmup 健康、800 个唯一查询组合、每变体 200 条、0 错误、0 降级、0 空结果。
+5. 每个格式完成后校验 manifest 与结果 hash，汇总摄取/chunk、Recall/MRR/nDCG/MAP、端到端及阶段 P50/P95/P99，事务落库并独立回读 1/200/800/4/0，随后追加真实结果和中文提交。
+6. 任一门禁失败不进入下一格式或策略；保留失败 run，先追加诊断计划并使用新 runId 从 0 重跑，禁止拼接。
+
+第七批第一阶段实际结果——PDF `RAW_TEXT_CHUNK`：
+
+- 策略切换前置校验最初错误地要求模型端点必须来自进程环境；实际模型/中间件配置由 Nacos `ai-agent-scaffold-app-dev.yml` 提供。校验在停止旧 PID 之前安全退出，旧 8091 未中断。修正为按真实环境来源校验后再切换。
+- 第一次用后台子进程启动的新 JVM 已成功运行到 Tomcat 8091，但命令会话结束时被执行器回收；未开始正式 run、未产生有效评测记录。随后改用前台持久会话托管 JVM，独立日志目录为 `/private/tmp/rag-app-raw-text-20260730`。
+- 实际进程 PID 92494，环境核验为 benchmark mode=true、`RAW_TEXT_CHUNK`；真实单 PDF 冒烟任务 `ragtask_cd9a91b27bca4c55821e6cc2f6a8efb5` 完成，1/1 chunk、无错误码。Java 项目未上传服务器，远端中间件拓扑未改。
+- 正式 run 为 `pdf-raw-text-20260730-065633`。200/200 份 PDF 摄取成功，源文档、内部 documentId、taskId 各 200 个唯一值，源 SHA 200/200 一致；434 chunks、0 失败。摄取 mean/p50/p95/p99/max 为 13,536.610/12,889/17,396/21,131/26,950 ms。
+- 20 条 warmup 全部健康；正式运行形成 800 个唯一 `queryId × variant`、每变体 200 条，0 错误、0 降级、0 空结果。`run.jsonl` SHA-256 `5071990bda94c8a10dff7067a3a395c8b87b55729e6697b1a779a527b2a46b78`，`document-results.jsonl` SHA-256 `f1d3cede817d797a4bb6a60ef2c99d138d3f63d01578bf42cdff4754e37e3b17`，均与 manifest 相符。
+- 真实质量：
+  - dense：Recall@1/5/10 = 0.840/0.955/0.970，MRR@10 = 0.888548，nDCG@10 = 0.908683，MAP@10 = 0.888548。
+  - sparse：Recall@1/5/10 = 0.635/0.795/0.825，MRR@10 = 0.701720，nDCG@10 = 0.731890，MAP@10 = 0.701720。
+  - hybrid_rrf：Recall@1/5/10 = 0.775/0.900/0.905，MRR@10 = 0.827964，nDCG@10 = 0.847419，MAP@10 = 0.827964。
+  - hybrid_rrf_rerank：Recall@1/5/10 = 0.825/0.905/0.905，MRR@10 = 0.860583，nDCG@10 = 0.871943，MAP@10 = 0.860583。
+- 端到端检索 mean/p50/p95/p99/max（ms）：
+  - dense：1,662.795/1,604/2,097/2,863/3,500。
+  - sparse：1,410.270/1,388/1,642/2,004/2,342。
+  - hybrid_rrf：1,740.170/1,685/2,207/2,874/3,142。
+  - hybrid_rrf_rerank：7,716.640/7,139/10,714/17,230/24,497；Rerank 阶段平均 5,922.895 ms，占端到端约 76.8%，并出现被原样保留的尾延迟。
+- 相对 PDF 旧压平，纯文本只少 2 chunks（-0.46%），摄取平均仅快 30.300 ms（-0.22%）；两种扁平策略在该数据上的摄取规模与成本几乎一致。Dense Recall@10 低 0.010，Hybrid/Rerank Recall@10 各低 0.005，Sparse 相同。相对 `IR_FULL`，Dense Recall@10 高 0.010，但 Hybrid/Rerank 各低 0.020，说明结构/Cleaner 的影响与召回组件存在交互。
+- 本轮检索耗时高于旧压平，但两轮发生在不同时间窗口且调用远端模型，不能把全部延迟差直接归因于预处理；质量与 chunk 是本策略消融的主要因果指标，延迟差作为生产观测保留。
+- `persist-evaluation` 明确退出码 0 后，真实 MySQL 回读为 run 1、document_result 200、query_result 800、aggregate 4、failure_case 0；格式、策略/revision、config hash 和 completed 状态全部一致。
