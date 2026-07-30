@@ -52,11 +52,16 @@ public final class RagFormatComparisonReporter {
         }
         ResourceEvidence resources = resourceEvidence(configuration.resourceEvidenceDirectory());
         Map<String, String> hashes = inputHashes(configuration);
-        Report report = new Report(new Manifest(1, "rag-format-paired-comparison-v1",
+        List<String> limitations = new ArrayList<>(List.of(
+                "PDF与DOCX使用同一" + qrels.size() + "问题、同一qrels、同一源正文与同一检索配置。",
+                "当前预处理策略为" + pdf.summary().preprocessingStrategy() + "。",
+                "该数据集是确定性派生版面压力集，不等价于真实世界原生Office/PDF分布。"));
+        if (resources.localSampleCount() == 0) {
+            limitations.add("本次运行未同步采集操作系统/容器资源序列；瓶颈判断仅使用请求阶段计时，不能补写事后资源数据。");
+        }
+        Report report = new Report(new Manifest(1, "rag-format-paired-comparison-v2",
                 pdf.runId(), docx.runId(), qrels.size(), hashes,
-                List.of("PDF与DOCX使用同一200问题、同一qrels、同一源正文与同一检索配置。",
-                        "该数据集是确定性派生版面压力集，不等价于真实世界原生Office/PDF分布。",
-                        "资源采样覆盖两次串行IR_FULL运行，不能拆分成每个格式各自独立资源分布。")),
+                List.copyOf(limitations)),
                 pdf.summary(), docx.summary(), Map.copyOf(pairs), resources,
                 conclusions(pdf, docx, pairs, resources));
         Path json = configuration.outputDirectory().resolve("comparison.json");
@@ -75,8 +80,8 @@ public final class RagFormatComparisonReporter {
         JsonNode manifest = mapper.readTree(directory.resolve("run-manifest.json").toFile());
         if (!"completed".equals(manifest.path("status").asText())
                 || !expectedFormat.equals(manifest.path("format").asText())
-                || !"IR_FULL".equals(manifest.path("preprocessingStrategy").asText())
-                || manifest.path("completedDocumentCount").asInt() != 200
+                || manifest.path("preprocessingStrategy").asText().isBlank()
+                || manifest.path("completedDocumentCount").asInt() != qrels.size()
                 || manifest.path("completedQueryResultCount").asInt() != qrels.size() * 4) {
             throw new IllegalArgumentException("格式正式运行manifest门禁失败: " + expectedFormat);
         }
@@ -97,7 +102,9 @@ public final class RagFormatComparisonReporter {
             }
         });
         List<JsonNode> documents = readJsonLines(directory.resolve("document-results.jsonl"));
-        if (documents.size() != 200) throw new IllegalArgumentException("格式逐文档结果不是200: " + expectedFormat);
+        if (documents.size() != qrels.size()) {
+            throw new IllegalArgumentException("格式逐文档结果数量与问题数不一致: " + expectedFormat);
+        }
         Map<String, FormatVariantSummary> variants = new LinkedHashMap<>();
         Map<String, RagBenchmarkRunStatistics.VariantStatistics> performance =
                 new RagBenchmarkRunStatistics().aggregate(records);
@@ -136,7 +143,10 @@ public final class RagFormatComparisonReporter {
                 throw new IllegalArgumentException("PDF/DOCX配对运行身份不一致: " + field);
             }
         }
-        if (qrels.size() != 200) throw new IllegalArgumentException("配对问题数必须为200");
+        if (qrels.isEmpty()) throw new IllegalArgumentException("配对问题不能为空");
+        if (!pdf.summary().preprocessingStrategy().equals(docx.summary().preprocessingStrategy())) {
+            throw new IllegalArgumentException("PDF/DOCX预处理策略不一致");
+        }
     }
 
     private PairComparison compare(String variant, Map<String, Map<String, Integer>> qrels,
@@ -168,6 +178,15 @@ public final class RagFormatComparisonReporter {
     }
 
     private ResourceEvidence resourceEvidence(Path directory) throws IOException {
+        if (!Files.isRegularFile(directory.resolve("local-process.jsonl"))
+                || !Files.isRegularFile(directory.resolve("remote-containers.jsonl"))
+                || !Files.isRegularFile(directory.resolve("remote-inspect-before.txt"))
+                || !Files.isRegularFile(directory.resolve("remote-inspect-after.txt"))
+                || !Files.isRegularFile(directory.resolve("remote-sampler.err.log"))) {
+            return new ResourceEvidence(0, 0, 0, false,
+                    new DoubleDistribution(0, 0, 0), new Distribution(0, 0, 0, 0, 0, 0),
+                    new Distribution(0, 0, 0, 0, 0, 0), Map.of());
+        }
         List<JsonNode> local = readJsonLines(directory.resolve("local-process.jsonl"));
         List<JsonNode> remote = readJsonLines(directory.resolve("remote-containers.jsonl"));
         if (local.isEmpty() || remote.isEmpty()
@@ -221,17 +240,21 @@ public final class RagFormatComparisonReporter {
         double pdfHybrid = pdf.summary().variants().get("hybrid_rrf").performance().elapsedMs().mean();
         double docxRerank = docx.summary().variants().get("hybrid_rrf_rerank").performance().elapsedMs().mean();
         double docxHybrid = docx.summary().variants().get("hybrid_rrf").performance().elapsedMs().mean();
-        return List.of(
-                "Dense在两种格式的Recall@10均为0.960，格式没有改变Top10总召回上限。",
+        double pdfDense = pdf.summary().variants().get("dense").quality().get("Recall@10");
+        double docxDense = docx.summary().variants().get("dense").quality().get("Recall@10");
+        List<String> result = new ArrayList<>(List.of(
+                String.format(Locale.ROOT, "Dense Recall@10：PDF %.3f，DOCX %.3f。", pdfDense, docxDense),
                 "DOCX生成" + docx.summary().totalChunks() + "个chunk，PDF生成" + pdf.summary().totalChunks()
                         + "个，DOCX多" + (docx.summary().totalChunks() - pdf.summary().totalChunks()) + "个。",
                 String.format(Locale.ROOT, "Rerank平均端到端耗时相对Hybrid：PDF %.2fx，DOCX %.2fx。",
                         pdfRerank / pdfHybrid, docxRerank / docxHybrid),
                 "Dense格式独占命中：PDF " + pairs.get("dense").pdfOnlyHit()
                         + "，DOCX " + pairs.get("dense").docxOnlyHit() + "；同为未命中 "
-                        + pairs.get("dense").bothMiss() + "。",
-                "资源峰值显示Reranker与Embedding为主要计算热点；容器inspect前后完全一致="
-                        + resources.inspectUnchanged() + "。");
+                        + pairs.get("dense").bothMiss() + "。"));
+        result.add(resources.localSampleCount() == 0
+                ? "未同步采集系统资源序列；资源瓶颈不作推断。"
+                : "容器inspect前后完全一致=" + resources.inspectUnchanged() + "。");
+        return List.copyOf(result);
     }
 
     private String render(Report report) {
@@ -266,11 +289,16 @@ public final class RagFormatComparisonReporter {
                     .append(number(value.mean())).append(" | ").append(value.p50()).append(" | ")
                     .append(value.p95()).append(" | ").append(value.max()).append(" |\n");
         }
-        out.append("\n## 资源瓶颈\n\n| 容器 | CPU mean% | CPU max% | 内存mean% | 内存max% | PIDs max |\n|---|---:|---:|---:|---:|---:|\n");
-        report.resources().containers().forEach((name, value) -> out.append("| ").append(name).append(" | ")
-                .append(number(value.cpuPercent().mean())).append(" | ").append(number(value.cpuPercent().max()))
-                .append(" | ").append(number(value.memoryPercent().mean())).append(" | ")
-                .append(number(value.memoryPercent().max())).append(" | ").append(value.pids().max()).append(" |\n"));
+        out.append("\n## 资源瓶颈\n\n");
+        if (report.resources().containers().isEmpty()) {
+            out.append("本轮未同步采集系统资源序列；不使用事后样本替代。\n");
+        } else {
+            out.append("| 容器 | CPU mean% | CPU max% | 内存mean% | 内存max% | PIDs max |\n|---|---:|---:|---:|---:|---:|\n");
+            report.resources().containers().forEach((name, value) -> out.append("| ").append(name).append(" | ")
+                    .append(number(value.cpuPercent().mean())).append(" | ").append(number(value.cpuPercent().max()))
+                    .append(" | ").append(number(value.memoryPercent().mean())).append(" | ")
+                    .append(number(value.memoryPercent().max())).append(" | ").append(value.pids().max()).append(" |\n"));
+        }
         out.append("\n## 格式独占与共同失败样本\n");
         report.pairs().forEach((variant, value) -> {
             out.append("\n### ").append(variant).append("\n");
@@ -294,15 +322,15 @@ public final class RagFormatComparisonReporter {
         examples.forEach(value -> out.append("- queryId=`").append(value.queryId()).append("`，PDF rank=")
                 .append(rank(value.pdfRank())).append("，DOCX rank=").append(rank(value.docxRank()))
                 .append("，问题：").append(value.question()).append("；源文件 ")
-                .append(value.sourcePaths().entrySet().stream().map(entry -> "[" + entry.getKey() + "]("
-                        + "../../evaluation-data/pdf-docx-200/" + entry.getValue() + ")")
+                .append(value.sourcePaths().entrySet().stream().map(entry -> entry.getKey() + "=`"
+                        + entry.getValue() + "`")
                         .reduce((a, b) -> a + " / " + b).orElse("无")).append("\n"));
     }
 
     private Map<String, String> readQueries(Path path) throws IOException {
         Map<String, String> result = new LinkedHashMap<>();
         for (JsonNode value : readJsonLines(path)) {
-            String id = value.path("queryId").asText();
+            String id = value.path("queryId").asText(value.path("_id").asText());
             String text = value.path("text").asText();
             if (id.isBlank() || text.isBlank() || result.putIfAbsent(id, text) != null) {
                 throw new IllegalArgumentException("问题输入非法");
@@ -399,7 +427,8 @@ public final class RagFormatComparisonReporter {
         result.put("documentManifest", sha256(value.documentManifest()));
         for (String name : List.of("local-process.jsonl", "remote-containers.jsonl",
                 "remote-inspect-before.txt", "remote-inspect-after.txt", "remote-sampler.err.log")) {
-            result.put(name, sha256(value.resourceEvidenceDirectory().resolve(name)));
+            Path resource = value.resourceEvidenceDirectory().resolve(name);
+            if (Files.isRegularFile(resource)) result.put(name, sha256(resource));
         }
         return Map.copyOf(result);
     }

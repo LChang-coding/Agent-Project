@@ -864,3 +864,35 @@ DOCX / IR_NO_STRUCTURED_CHUNKING 实际执行结果：
 3. 对代表 case 调用现有诊断链路获取候选、融合、rerank 和 chunk 文本证据；若运行时诊断不支持历史知识库或返回不完整，至少从 run/document map、数据库 chunk 表和原始派生文档恢复真实证据，明确缺失边界，不编造阶段分数。
 4. 将上述真实结果写入新的最终报告并追加本计划；四个 run 结果和报告中文提交。
 5. 最后正常停止 benchmark JVM，启动同一 JAR 的生产默认配置：benchmark preprocessing=false、策略 `IR_FULL`（或不注入 benchmark 策略，以配置默认值为准），验证 8091、MySQL、Qdrant、登录及一次真实 RAG 检索；执行 benchmark 62 项测试与相关模块测试。恢复事实追加计划并中文提交。
+
+汇总工具输入门禁诊断计划：
+
+- `compare-formats` 在读取 `gold/queries.jsonl` 时立即抛出“问题输入非法”，未生成有效比较结果，四个正式 run 及数据库不受影响。
+- 对照 `RagFormatComparisonReporter.readQueries` 的字段契约、50 数据集 queries/gold 的实际 schema 和此前 200 队列调用方式，确认应该传 `queries.jsonl`、`gold.jsonl` 还是需要兼容 `queryId/query` 与 `_id/text` 两套键。
+- 若存在已有正确输入文件，删除本次空/半成品 comparison 目录后以正确文件重试；若 reporter 与本项目正式数据集 schema 不兼容，则先补兼容性单测和最小代码修复、完整重打包并记录新 benchmark JAR hash，再生成报告。不得手工伪造比较指标。
+
+汇总工具修复与最终证据整理实际结果：
+
+- 根因确认：`compare-formats` 只接受旧 `queryId/text` schema，并硬编码 200 个问题、`IR_FULL` 策略、旧数据源链接、固定结论和强制资源样本；这会拒绝当前正式 `_id/text` 50 问题数据，且即使绕过也会生成错误结论。
+- 已使 reporter 同时兼容 `_id/text` 与旧 schema，按 qrels/manifest 动态校验问题和文档数，允许比较任意相同预处理策略；资源样本缺失时明确写“未采集”，不以事后样本替代；结论和数据路径改为由实际输入生成。
+- 新增 2 问题、无资源样本的动态单测；目标测试 2/2 通过，随后 `mvn -pl ai-agent-scaffold-benchmark clean package` 为 63 tests、0 failures、0 errors、0 skipped。汇总工具源码对应 benchmark fat JAR SHA-256 为 `b70ce5609c08eb480cada7a11ca58f91e568ecff0e8ca20542ff20ad58e31fd2`；四个正式 run 仍使用冻结的 `5784af...f9812d`，没有重跑。
+- 已生成 `comparison-ir-no-cleaner-50-20260731/` 与 `comparison-ir-no-structured-chunking-50-20260731/`，各包含 `comparison.json`、`comparison.md`、`evidence-manifest.json`。
+- 数据库核验代表金标的 parent/child 块、正文和 metadata：parent-child 相同内容是短文多粒度快照设计，worker 仅向量化 child，检索端按 content hash 去重；不能把数据库两行错误解释为重复向量。
+- 发现并保留真实 PDF 解析缺口：gold/DOCX 中的 `TGF-β` 在两个 PDF 策略的实际数据库子块中均为 `TGF- `。同时通过四策略排名证明 query 560 的 DOCX 扁平块失败发生在融合阶段而非解析/Dense 阶段，避免把相关性误写成因果性。
+- 最终细粒度报告已写入 `docs/rag/RAG-PDF-DOCX-50-细粒度评测报告-2026-07-31.md`：包含 16 组质量指标、四 run 摄取/检索时延、策略 delta、确定性瓶颈、三个问题的原文件/实际切块/逐阶段排名和因果边界。
+
+#### 生产配置恢复与最终验收计划（2026-07-31）
+
+1. 核验当前 8091 PID 和真实环境；以 SIGTERM 正常终止 benchmark JVM，确认端口释放。不得修改数据库或删除四个 benchmark 知识库。
+2. 使用同一 application JAR 启动生产配置：`AI_RAG_WORKER_BENCHMARK_PREPROCESSING_ENABLED=false`，不注入 benchmark strategy，使用项目默认 `IR_FULL`；保留现有 MySQL 13306、Qdrant 16333 和最小连接池参数。
+3. 核验新 JVM 环境、8091、MySQL、Qdrant、动态登录和知识库 API；对既有已激活 benchmark 知识库执行一次真实 retrieval-debug，要求 HTTP 200、业务码 `0000`、非降级且命中非空。
+4. 复核最终 benchmark 63 项测试结果、comparison/report hash、Git scoped diff；只提交 reporter、单测、两个 comparison 目录、本报告和本计划，不提交日志、已有业务代码改动或无关未跟踪文件。
+
+生产配置恢复与最终验收实际结果：
+
+- 正常终止 benchmark JVM PID 70258 并确认 8091 释放；新 screen `rag-production-ir-full` 启动 PID 15540。真实进程环境只有 `AI_RAG_WORKER_BENCHMARK_PREPROCESSING_ENABLED=false`，未注入 `AI_RAG_WORKER_PREPROCESSING_STRATEGY`，因此使用 `RagProperties.Worker` 默认 `IR_FULL`。
+- MySQL `127.0.0.1:13306` 的 `SELECT 1`、Qdrant `127.0.0.1:16333/collections` 均成功；动态登录成功。复用已激活 benchmark 知识库执行真实 retrieval-debug：HTTP 200、业务码 `0000`、traceId=`481fb58c-38f6-4fb9-bfb1-e792804470d4`、retrievalId=`ret_9e3358775e454d1b9a2065ce54fd1e93`、citations=10、degraded=false、totalMs=13,386。
+- 最终使用项目目标 JDK 17 执行 benchmark clean package：63 tests、0 failures、0 errors、0 skipped，BUILD SUCCESS；当前构建产物 SHA-256=`e74c03561e32cfaa19c8a788f215e3b1676d8103bd481d11050f5402ae9325a5`。JAR 含构建时间元数据，故该 hash 与修复过程中的临时构建 hash 不同；正式四 run 的冻结 JAR hash 不变。
+- App 相关测试首次由 Homebrew Maven 默认 JDK 25 启动，Mockito/Byte Buddy 明确报 Java 25 class version 69 超出其支持的 68；这属于测试运行时不匹配，不是业务断言失败。切换项目 JDK 17 后重新执行 `RagRetrievalServiceTest`、`DocumentPreprocessingPipelineTest`、`RagIngestWorkerTest`、`DocumentIrCleanerTest`、`DocumentPreprocessingStrategyExecutorTest`：46 tests、0 failures、0 errors、0 skipped，BUILD SUCCESS。
+- 最终报告 SHA-256=`204319925b45a3f77b7e5d828f35a1ac51a821e5bf58026bae4b5973449c6a76`；两个 comparison.json SHA-256 分别为 `bcf7736017190c8a8b57a4d0d63c5177630788a3217b0c9dca04eecdd97eefcc`、`bbe4a94c21c0a9959b7fdc63d304728f5581e3acfcb204ca13d46f3c482c6caa`。
+- 四个新增 50 文档 run、两个配对 comparison、细粒度失败 case、生产恢复与测试验收至此闭环；此前已完成的 200 文档 run 未重跑。

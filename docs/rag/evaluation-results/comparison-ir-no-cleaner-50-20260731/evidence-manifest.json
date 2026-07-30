@@ -1,0 +1,41 @@
+{
+  "resources" : {
+    "localSampleCount" : 0,
+    "remoteSampleCount" : 0,
+    "inspectedContainerCount" : 0,
+    "inspectUnchanged" : false,
+    "localCpuPercent" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "max" : 0.0
+    },
+    "localRssKiB" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "localThreads" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "containers" : { }
+  },
+  "generator" : "rag-resource-evidence-v1",
+  "inputs" : {
+    "pdfDocuments" : "8e7edf41f9fa4ce21202fc28aa087af5531b244f5a3ffe928452345c90bc2485",
+    "pdfRun" : "27b74b1994930def4ef447ef82de5f80f804e375eb29ee0badb334549b8feead",
+    "queries" : "91eb0724efa964c6d95c0da25edb0f74a0ebefdbdca0ec982ca9ef27ac12ae31",
+    "docxDocuments" : "dde54e1dd06b302dd7c120443ffee81dc4ea47f49eca5374c3d26725dd87b805",
+    "qrels" : "c3a1cd04e97834a8047a0fecfb95c4dc699fea67346c986aea5f6c04ce8d894a",
+    "documentManifest" : "e83cce34a3eaf60f6c3411166530e2b3431edbe68534baebf719bb1249d6ebbe",
+    "docxRun" : "571016620ba3e1d99d5d1213fafd9dd19ea2309f2e4aabaeb1aa19d6bffdba78"
+  },
+  "schemaVersion" : 1
+}

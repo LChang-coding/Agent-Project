@@ -59,17 +59,58 @@ class RagFormatComparisonReporterTest {
         assertTrue(Files.readString(result.markdown()).contains("PDF/DOCX 同源RAG配对评测报告"));
     }
 
+    @Test
+    void shouldAcceptBeirQuerySchemaAndDynamicDocumentCountWithoutResourceSamples() throws Exception {
+        Path qrels = temp.resolve("dynamic-qrels.tsv");
+        Path queries = temp.resolve("dynamic-queries.jsonl");
+        Path documents = temp.resolve("dynamic-documents.jsonl");
+        Files.writeString(qrels, "query-id\tcorpus-id\tscore\nq0\td0\t1\nq1\td1\t1\n");
+        Files.writeString(queries, "{\"_id\":\"q0\",\"text\":\"question 0\"}\n"
+                + "{\"_id\":\"q1\",\"text\":\"question 1\"}\n");
+        StringBuilder documentText = new StringBuilder();
+        for (int index = 0; index < 2; index++) {
+            for (String format : List.of("PDF", "DOCX")) {
+                String extension = format.toLowerCase();
+                documentText.append(mapper.writeValueAsString(Map.of(
+                        "formatDocumentId", format + ":d" + index, "sourceDocumentId", "d" + index,
+                        "queryId", "q" + index, "format", format, "complexity", "SIMPLE",
+                        "relativePath", "prepared/" + extension + "/d" + index + "." + extension,
+                        "bytes", 1, "sha256", "a".repeat(64), "evidenceMarker", "M" + index,
+                        "canonicalTextChars", 10))).append('\n');
+            }
+        }
+        Files.writeString(documents, documentText);
+        Path resources = temp.resolve("missing-resources");
+        Files.createDirectories(resources);
+
+        RagFormatComparisonReporter.Result result = new RagFormatComparisonReporter(mapper).generate(
+                new RagFormatComparisonReporter.Configuration(
+                        run("PDF", false, 2, "IR_NO_CLEANER"),
+                        run("DOCX", false, 2, "IR_NO_CLEANER"),
+                        qrels, queries, documents, resources, temp.resolve("dynamic-comparison")));
+
+        assertEquals(2, result.report().manifest().queryCount());
+        assertEquals("IR_NO_CLEANER", result.report().pdf().preprocessingStrategy());
+        assertEquals(0, result.report().resources().localSampleCount());
+        assertTrue(result.report().manifest().limitations().stream()
+                .anyMatch(value -> value.contains("未同步采集")));
+    }
+
     private Path run(String format, boolean missFirst) throws Exception {
+        return run(format, missFirst, 200, "IR_FULL");
+    }
+
+    private Path run(String format, boolean missFirst, int count, String strategy) throws Exception {
         Path directory = temp.resolve(format.toLowerCase() + "-run");
         Files.createDirectories(directory);
         mapper.writeValue(directory.resolve("run-manifest.json").toFile(), Map.of(
-                "status", "completed", "format", format, "preprocessingStrategy", "IR_FULL",
-                "completedDocumentCount", 200, "completedQueryResultCount", 800,
+                "status", "completed", "format", format, "preprocessingStrategy", strategy,
+                "completedDocumentCount", count, "completedQueryResultCount", count * 4,
                 "datasetTreeSha256", "t".repeat(64), "datasetManifestSha256", "m".repeat(64),
                 "configSha256", "c".repeat(64)));
         StringBuilder records = new StringBuilder();
         for (String variant : RagFailureCaseReporter.VARIANTS) {
-            for (int index = 0; index < 200; index++) {
+            for (int index = 0; index < count; index++) {
                 String document = missFirst && index == 0 ? "d1" : "d" + index;
                 RagBenchmarkRunIO.RunRecord record = new RagBenchmarkRunIO.RunRecord(
                         format.toLowerCase() + "-run", variant, "q" + index, "hash",
@@ -81,7 +122,7 @@ class RagFormatComparisonReporterTest {
         }
         Files.writeString(directory.resolve("run.jsonl"), records);
         StringBuilder documentResults = new StringBuilder();
-        for (int index = 0; index < 200; index++) {
+        for (int index = 0; index < count; index++) {
             documentResults.append(mapper.writeValueAsString(Map.of(
                     "sourceDocumentId", "d" + index, "formatDocumentId", format + ":d" + index,
                     "complexity", "SIMPLE", "status", "completed", "stage", "completed",

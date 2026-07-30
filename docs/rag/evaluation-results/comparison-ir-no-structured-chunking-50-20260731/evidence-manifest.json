@@ -1,0 +1,41 @@
+{
+  "inputs" : {
+    "qrels" : "c3a1cd04e97834a8047a0fecfb95c4dc699fea67346c986aea5f6c04ce8d894a",
+    "documentManifest" : "e83cce34a3eaf60f6c3411166530e2b3431edbe68534baebf719bb1249d6ebbe",
+    "docxRun" : "c384989fa06c13a964de8c35b6711b5e53d4f24d4e193b79f7f7181f2c750dab",
+    "pdfDocuments" : "97a9d2426386abd8178c8958f0f3856f0ff69387dbccf3a0e97a8483e8e0348b",
+    "pdfRun" : "1531cef1cd2b7810c0bd3c64683307a5a4558591c1bf3877b9e155bc58ffbde7",
+    "queries" : "91eb0724efa964c6d95c0da25edb0f74a0ebefdbdca0ec982ca9ef27ac12ae31",
+    "docxDocuments" : "4f5b8198fa605336d3d8298a6728482f23eba8acef3a766ee3ea2484b718a196"
+  },
+  "schemaVersion" : 1,
+  "resources" : {
+    "localSampleCount" : 0,
+    "remoteSampleCount" : 0,
+    "inspectedContainerCount" : 0,
+    "inspectUnchanged" : false,
+    "localCpuPercent" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "max" : 0.0
+    },
+    "localRssKiB" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "localThreads" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "containers" : { }
+  },
+  "generator" : "rag-resource-evidence-v1"
+}

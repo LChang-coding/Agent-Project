@@ -1,0 +1,1614 @@
+{
+  "manifest" : {
+    "schemaVersion" : 1,
+    "generator" : "rag-format-paired-comparison-v2",
+    "pdfRunId" : "pdf-ir-no-structured-chunking-50-20260731-023138",
+    "docxRunId" : "docx-ir-no-structured-chunking-50-20260731-031011",
+    "queryCount" : 50,
+    "inputSha256" : {
+      "qrels" : "c3a1cd04e97834a8047a0fecfb95c4dc699fea67346c986aea5f6c04ce8d894a",
+      "documentManifest" : "e83cce34a3eaf60f6c3411166530e2b3431edbe68534baebf719bb1249d6ebbe",
+      "docxRun" : "c384989fa06c13a964de8c35b6711b5e53d4f24d4e193b79f7f7181f2c750dab",
+      "pdfDocuments" : "97a9d2426386abd8178c8958f0f3856f0ff69387dbccf3a0e97a8483e8e0348b",
+      "pdfRun" : "1531cef1cd2b7810c0bd3c64683307a5a4558591c1bf3877b9e155bc58ffbde7",
+      "queries" : "91eb0724efa964c6d95c0da25edb0f74a0ebefdbdca0ec982ca9ef27ac12ae31",
+      "docxDocuments" : "4f5b8198fa605336d3d8298a6728482f23eba8acef3a766ee3ea2484b718a196"
+    },
+    "limitations" : [ "PDF与DOCX使用同一50问题、同一qrels、同一源正文与同一检索配置。", "当前预处理策略为IR_NO_STRUCTURED_CHUNKING。", "该数据集是确定性派生版面压力集，不等价于真实世界原生Office/PDF分布。", "本次运行未同步采集操作系统/容器资源序列；瓶颈判断仅使用请求阶段计时，不能补写事后资源数据。" ]
+  },
+  "pdf" : {
+    "format" : "PDF",
+    "preprocessingStrategy" : "IR_NO_STRUCTURED_CHUNKING",
+    "documentCount" : 50,
+    "totalChunks" : 81,
+    "ingestByComplexity" : {
+      "ALL" : {
+        "count" : 50,
+        "elapsedMs" : {
+          "count" : 50,
+          "mean" : 21229.26,
+          "p50" : 19653,
+          "p95" : 33221,
+          "p99" : 43707,
+          "max" : 43707
+        },
+        "chunks" : {
+          "count" : 50,
+          "mean" : 1.62,
+          "p50" : 1,
+          "p95" : 3,
+          "p99" : 3,
+          "max" : 3
+        }
+      },
+      "COMPLEX" : {
+        "count" : 13,
+        "elapsedMs" : {
+          "count" : 13,
+          "mean" : 24013.153846153848,
+          "p50" : 22208,
+          "p95" : 43707,
+          "p99" : 43707,
+          "max" : 43707
+        },
+        "chunks" : {
+          "count" : 13,
+          "mean" : 1.9230769230769231,
+          "p50" : 2,
+          "p95" : 3,
+          "p99" : 3,
+          "max" : 3
+        }
+      },
+      "MEDIUM" : {
+        "count" : 17,
+        "elapsedMs" : {
+          "count" : 17,
+          "mean" : 19728.764705882353,
+          "p50" : 18862,
+          "p95" : 28898,
+          "p99" : 28898,
+          "max" : 28898
+        },
+        "chunks" : {
+          "count" : 17,
+          "mean" : 1.7058823529411764,
+          "p50" : 1,
+          "p95" : 3,
+          "p99" : 3,
+          "max" : 3
+        }
+      },
+      "SIMPLE" : {
+        "count" : 20,
+        "elapsedMs" : {
+          "count" : 20,
+          "mean" : 20695.15,
+          "p50" : 18731,
+          "p95" : 33221,
+          "p99" : 35238,
+          "max" : 35238
+        },
+        "chunks" : {
+          "count" : 20,
+          "mean" : 1.35,
+          "p50" : 1,
+          "p95" : 2,
+          "p99" : 3,
+          "max" : 3
+        }
+      }
+    },
+    "variants" : {
+      "sparse" : {
+        "quality" : {
+          "Success@1" : 0.8,
+          "Recall@10" : 0.88,
+          "Precision@10" : 0.08800000000000001,
+          "Success@10" : 0.88,
+          "Success@5" : 0.88,
+          "Recall@5" : 0.88,
+          "nDCG@10" : 0.8389691823775878,
+          "MAP@10" : 0.8256666666666667,
+          "MRR@10" : 0.8256666666666667,
+          "Recall@1" : 0.8
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 1819.92,
+            "p50" : 1750,
+            "p95" : 2290,
+            "p99" : 2556,
+            "max" : 2556
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 207.78,
+              "p50" : 191,
+              "p95" : 302,
+              "p99" : 448,
+              "max" : 448
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.6,
+              "p50" : 7,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 490.26,
+              "p50" : 472,
+              "p95" : 661,
+              "p99" : 859,
+              "max" : 859
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1240.68,
+              "p50" : 1189,
+              "p95" : 1575,
+              "p99" : 1707,
+              "max" : 1707
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 875.9,
+              "p50" : 840,
+              "p95" : 1136,
+              "p99" : 1262,
+              "max" : 1262
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 147.02,
+              "p50" : 124,
+              "p95" : 258,
+              "p99" : 317,
+              "max" : 317
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 1731.56,
+              "p50" : 1676,
+              "p95" : 2213,
+              "p99" : 2449,
+              "max" : 2449
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          }
+        }
+      },
+      "dense" : {
+        "quality" : {
+          "Success@1" : 0.96,
+          "Recall@10" : 1.0,
+          "Precision@10" : 0.1,
+          "Success@10" : 1.0,
+          "Success@5" : 1.0,
+          "Recall@5" : 1.0,
+          "nDCG@10" : 0.9826185950714291,
+          "MAP@10" : 0.9766666666666667,
+          "MRR@10" : 0.9766666666666667,
+          "Recall@1" : 0.96
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 2121.78,
+            "p50" : 2005,
+            "p95" : 2688,
+            "p99" : 3313,
+            "max" : 3313
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 219.62,
+              "p50" : 213,
+              "p95" : 297,
+              "p99" : 415,
+              "max" : 415
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.94,
+              "p50" : 7,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 478.76,
+              "p50" : 468,
+              "p95" : 662,
+              "p99" : 713,
+              "max" : 713
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 218.36,
+              "p50" : 213,
+              "p95" : 352,
+              "p99" : 513,
+              "max" : 513
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1545.42,
+              "p50" : 1501,
+              "p95" : 2007,
+              "p99" : 2262,
+              "max" : 2262
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 891.52,
+              "p50" : 854,
+              "p95" : 1112,
+              "p99" : 1188,
+              "max" : 1188
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 2024.86,
+              "p50" : 1948,
+              "p95" : 2543,
+              "p99" : 2727,
+              "max" : 2727
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 205.32,
+              "p50" : 160,
+              "p95" : 441,
+              "p99" : 768,
+              "max" : 768
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            }
+          }
+        }
+      },
+      "hybrid_rrf_rerank" : {
+        "quality" : {
+          "Success@1" : 0.94,
+          "Recall@10" : 1.0,
+          "Precision@10" : 0.1,
+          "Success@10" : 1.0,
+          "Success@5" : 1.0,
+          "Recall@5" : 1.0,
+          "nDCG@10" : 0.97035565121612,
+          "MAP@10" : 0.9606666666666667,
+          "MRR@10" : 0.9606666666666667,
+          "Recall@1" : 0.94
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 11458.7,
+            "p50" : 10680,
+            "p95" : 18319,
+            "p99" : 25730,
+            "max" : 25730
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 9231.78,
+              "p50" : 8282,
+              "p95" : 16050,
+              "p99" : 23104,
+              "max" : 23104
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 203.22,
+              "p50" : 189,
+              "p95" : 268,
+              "p99" : 357,
+              "max" : 357
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.8,
+              "p50" : 7,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 502.12,
+              "p50" : 474,
+              "p95" : 788,
+              "p99" : 886,
+              "max" : 886
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 140.8,
+              "p50" : 132,
+              "p95" : 189,
+              "p99" : 243,
+              "max" : 243
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 10868.82,
+              "p50" : 10121,
+              "p95" : 17809,
+              "p99" : 24865,
+              "max" : 24865
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 968.94,
+              "p50" : 929,
+              "p95" : 1239,
+              "p99" : 1253,
+              "max" : 1253
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 119.18,
+              "p50" : 112,
+              "p95" : 185,
+              "p99" : 204,
+              "max" : 204
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 11371.68,
+              "p50" : 10610,
+              "p95" : 18260,
+              "p99" : 25674,
+              "max" : 25674
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 192.88,
+              "p50" : 164,
+              "p95" : 359,
+              "p99" : 669,
+              "max" : 669
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            }
+          }
+        }
+      },
+      "hybrid_rrf" : {
+        "quality" : {
+          "Success@1" : 0.86,
+          "Recall@10" : 1.0,
+          "Precision@10" : 0.1,
+          "Success@10" : 1.0,
+          "Success@5" : 0.94,
+          "Recall@5" : 0.94,
+          "nDCG@10" : 0.9210871581777331,
+          "MAP@10" : 0.8970793650793651,
+          "MRR@10" : 0.8970793650793651,
+          "Recall@1" : 0.86
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 2154.72,
+            "p50" : 2020,
+            "p95" : 2873,
+            "p99" : 3358,
+            "max" : 3358
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 214.92,
+              "p50" : 202,
+              "p95" : 299,
+              "p99" : 486,
+              "max" : 486
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.66,
+              "p50" : 7,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 474.8,
+              "p50" : 449,
+              "p95" : 655,
+              "p99" : 794,
+              "max" : 794
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 149.84,
+              "p50" : 140,
+              "p95" : 226,
+              "p99" : 315,
+              "max" : 315
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1603.84,
+              "p50" : 1486,
+              "p95" : 2274,
+              "p99" : 2476,
+              "max" : 2476
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 880.86,
+              "p50" : 846,
+              "p95" : 1124,
+              "p99" : 1380,
+              "max" : 1380
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 119.88,
+              "p50" : 114,
+              "p95" : 161,
+              "p99" : 207,
+              "max" : 207
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 2079.28,
+              "p50" : 1944,
+              "p95" : 2812,
+              "p99" : 3270,
+              "max" : 3270
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 227.12,
+              "p50" : 166,
+              "p95" : 600,
+              "p99" : 730,
+              "max" : 730
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 81.0,
+              "p50" : 81,
+              "p95" : 81,
+              "p99" : 81,
+              "max" : 81
+            }
+          }
+        }
+      }
+    }
+  },
+  "docx" : {
+    "format" : "DOCX",
+    "preprocessingStrategy" : "IR_NO_STRUCTURED_CHUNKING",
+    "documentCount" : 50,
+    "totalChunks" : 98,
+    "ingestByComplexity" : {
+      "ALL" : {
+        "count" : 50,
+        "elapsedMs" : {
+          "count" : 50,
+          "mean" : 13493.26,
+          "p50" : 12466,
+          "p95" : 22394,
+          "p99" : 23670,
+          "max" : 23670
+        },
+        "chunks" : {
+          "count" : 50,
+          "mean" : 1.96,
+          "p50" : 1,
+          "p95" : 5,
+          "p99" : 5,
+          "max" : 5
+        }
+      },
+      "COMPLEX" : {
+        "count" : 13,
+        "elapsedMs" : {
+          "count" : 13,
+          "mean" : 14668.846153846154,
+          "p50" : 14645,
+          "p95" : 22394,
+          "p99" : 22394,
+          "max" : 22394
+        },
+        "chunks" : {
+          "count" : 13,
+          "mean" : 3.230769230769231,
+          "p50" : 3,
+          "p95" : 5,
+          "p99" : 5,
+          "max" : 5
+        }
+      },
+      "MEDIUM" : {
+        "count" : 17,
+        "elapsedMs" : {
+          "count" : 17,
+          "mean" : 12167.588235294117,
+          "p50" : 12353,
+          "p95" : 13898,
+          "p99" : 13898,
+          "max" : 13898
+        },
+        "chunks" : {
+          "count" : 17,
+          "mean" : 1.7058823529411764,
+          "p50" : 1,
+          "p95" : 3,
+          "p99" : 3,
+          "max" : 3
+        }
+      },
+      "SIMPLE" : {
+        "count" : 20,
+        "elapsedMs" : {
+          "count" : 20,
+          "mean" : 13855.95,
+          "p50" : 12442,
+          "p95" : 22805,
+          "p99" : 23670,
+          "max" : 23670
+        },
+        "chunks" : {
+          "count" : 20,
+          "mean" : 1.35,
+          "p50" : 1,
+          "p95" : 2,
+          "p99" : 3,
+          "max" : 3
+        }
+      }
+    },
+    "variants" : {
+      "sparse" : {
+        "quality" : {
+          "Success@1" : 0.78,
+          "Recall@10" : 0.9,
+          "Precision@10" : 0.09,
+          "Success@10" : 0.9,
+          "Success@5" : 0.88,
+          "Recall@5" : 0.88,
+          "nDCG@10" : 0.8361549549300794,
+          "MAP@10" : 0.8158333333333333,
+          "MRR@10" : 0.8158333333333333,
+          "Recall@1" : 0.78
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 1805.0,
+            "p50" : 1746,
+            "p95" : 2239,
+            "p99" : 2477,
+            "max" : 2477
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 203.78,
+              "p50" : 185,
+              "p95" : 299,
+              "p99" : 320,
+              "max" : 320
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.38,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 470.4,
+              "p50" : 451,
+              "p95" : 593,
+              "p99" : 726,
+              "max" : 726
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1243.9,
+              "p50" : 1203,
+              "p95" : 1534,
+              "p99" : 1656,
+              "max" : 1656
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 873.2,
+              "p50" : 842,
+              "p95" : 1150,
+              "p99" : 1201,
+              "max" : 1201
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 157.12,
+              "p50" : 132,
+              "p95" : 274,
+              "p99" : 339,
+              "max" : 339
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 1715.06,
+              "p50" : 1675,
+              "p95" : 2078,
+              "p99" : 2383,
+              "max" : 2383
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            }
+          }
+        }
+      },
+      "dense" : {
+        "quality" : {
+          "Success@1" : 0.9,
+          "Recall@10" : 1.0,
+          "Precision@10" : 0.1,
+          "Success@10" : 1.0,
+          "Success@5" : 1.0,
+          "Recall@5" : 1.0,
+          "nDCG@10" : 0.9604743802857166,
+          "MAP@10" : 0.9466666666666668,
+          "MRR@10" : 0.9466666666666668,
+          "Recall@1" : 0.9
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 2102.56,
+            "p50" : 1968,
+            "p95" : 2701,
+            "p99" : 2964,
+            "max" : 2964
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 212.74,
+              "p50" : 194,
+              "p95" : 300,
+              "p99" : 312,
+              "max" : 312
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.38,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 9,
+              "max" : 9
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 480.26,
+              "p50" : 462,
+              "p95" : 723,
+              "p99" : 742,
+              "max" : 742
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 219.16,
+              "p50" : 205,
+              "p95" : 328,
+              "p99" : 536,
+              "max" : 536
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1527.32,
+              "p50" : 1441,
+              "p95" : 2014,
+              "p99" : 2147,
+              "max" : 2147
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 897.16,
+              "p50" : 847,
+              "p95" : 1182,
+              "p99" : 1312,
+              "max" : 1312
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 2008.28,
+              "p50" : 1876,
+              "p95" : 2599,
+              "p99" : 2872,
+              "max" : 2872
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 188.34,
+              "p50" : 160,
+              "p95" : 420,
+              "p99" : 464,
+              "max" : 464
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            }
+          }
+        }
+      },
+      "hybrid_rrf_rerank" : {
+        "quality" : {
+          "Success@1" : 0.92,
+          "Recall@10" : 0.96,
+          "Precision@10" : 0.09600000000000002,
+          "Success@10" : 0.96,
+          "Success@5" : 0.96,
+          "Recall@5" : 0.96,
+          "nDCG@10" : 0.9426185950714292,
+          "MAP@10" : 0.9366666666666668,
+          "MRR@10" : 0.9366666666666668,
+          "Recall@1" : 0.92
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 10456.26,
+            "p50" : 9854,
+            "p95" : 15570,
+            "p99" : 17948,
+            "max" : 17948
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 8276.42,
+              "p50" : 7592,
+              "p95" : 12912,
+              "p99" : 15557,
+              "max" : 15557
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 208.9,
+              "p50" : 194,
+              "p95" : 287,
+              "p99" : 341,
+              "max" : 341
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.16,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 475.2,
+              "p50" : 453,
+              "p95" : 672,
+              "p99" : 748,
+              "max" : 748
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 155.12,
+              "p50" : 142,
+              "p95" : 247,
+              "p99" : 402,
+              "max" : 402
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 9883.06,
+              "p50" : 9046,
+              "p95" : 14793,
+              "p99" : 17423,
+              "max" : 17423
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 946.38,
+              "p50" : 916,
+              "p95" : 1176,
+              "p99" : 1450,
+              "max" : 1450
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 125.62,
+              "p50" : 121,
+              "p95" : 170,
+              "p99" : 175,
+              "max" : 175
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 10358.84,
+              "p50" : 9795,
+              "p95" : 15467,
+              "p99" : 17889,
+              "max" : 17889
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 159.38,
+              "p50" : 152,
+              "p95" : 248,
+              "p99" : 303,
+              "max" : 303
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            }
+          }
+        }
+      },
+      "hybrid_rrf" : {
+        "quality" : {
+          "Success@1" : 0.84,
+          "Recall@10" : 0.96,
+          "Precision@10" : 0.09600000000000002,
+          "Success@10" : 0.96,
+          "Success@5" : 0.94,
+          "Recall@5" : 0.94,
+          "nDCG@10" : 0.9045224518809541,
+          "MAP@10" : 0.8861904761904762,
+          "MRR@10" : 0.8861904761904762,
+          "Recall@1" : 0.84
+        },
+        "performance" : {
+          "requestCount" : 50,
+          "errorCount" : 0,
+          "errorRate" : 0.0,
+          "degradedCount" : 0,
+          "degradedRate" : 0.0,
+          "emptyResultCount" : 0,
+          "emptyResultRate" : 0.0,
+          "elapsedMs" : {
+            "count" : 50,
+            "mean" : 2116.08,
+            "p50" : 2049,
+            "p95" : 2477,
+            "p99" : 3077,
+            "max" : 3077
+          },
+          "stageTimingsMs" : {
+            "rerankMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "configurationMs" : {
+              "count" : 50,
+              "mean" : 209.72,
+              "p50" : 192,
+              "p95" : 294,
+              "p99" : 371,
+              "max" : 371
+            },
+            "fusionMs" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "assemblyMs" : {
+              "count" : 50,
+              "mean" : 6.46,
+              "p50" : 6,
+              "p95" : 8,
+              "p99" : 8,
+              "max" : 8
+            },
+            "auditMs" : {
+              "count" : 50,
+              "mean" : 470.58,
+              "p50" : 454,
+              "p95" : 696,
+              "p99" : 738,
+              "max" : 738
+            },
+            "denseMs" : {
+              "count" : 50,
+              "mean" : 154.78,
+              "p50" : 145,
+              "p95" : 215,
+              "p99" : 401,
+              "max" : 401
+            },
+            "totalMs" : {
+              "count" : 50,
+              "mean" : 1553.92,
+              "p50" : 1483,
+              "p95" : 1855,
+              "p99" : 2262,
+              "max" : 2262
+            },
+            "hydrationMs" : {
+              "count" : 50,
+              "mean" : 884.62,
+              "p50" : 859,
+              "p95" : 1160,
+              "p99" : 1320,
+              "max" : 1320
+            },
+            "sparseMs" : {
+              "count" : 50,
+              "mean" : 122.76,
+              "p50" : 120,
+              "p95" : 166,
+              "p99" : 194,
+              "max" : 194
+            },
+            "serviceMs" : {
+              "count" : 50,
+              "mean" : 2025.1,
+              "p50" : 1965,
+              "p95" : 2347,
+              "p99" : 3001,
+              "max" : 3001
+            },
+            "embeddingMs" : {
+              "count" : 50,
+              "mean" : 170.92,
+              "p50" : 150,
+              "p95" : 286,
+              "p99" : 446,
+              "max" : 446
+            }
+          },
+          "candidateCounts" : {
+            "fusionCandidateCount" : {
+              "count" : 50,
+              "mean" : 10.0,
+              "p50" : 10,
+              "p95" : 10,
+              "p99" : 10,
+              "max" : 10
+            },
+            "sparseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            },
+            "rerankCandidateCount" : {
+              "count" : 50,
+              "mean" : 0.0,
+              "p50" : 0,
+              "p95" : 0,
+              "p99" : 0,
+              "max" : 0
+            },
+            "denseCandidateCount" : {
+              "count" : 50,
+              "mean" : 98.0,
+              "p50" : 98,
+              "p95" : 98,
+              "p99" : 98,
+              "max" : 98
+            }
+          }
+        }
+      }
+    }
+  },
+  "pairs" : {
+    "sparse" : {
+      "variant" : "sparse",
+      "bothHit" : 44,
+      "bothMiss" : 5,
+      "pdfOnlyHit" : 0,
+      "docxOnlyHit" : 1,
+      "pdfBetterRank" : 1,
+      "docxBetterRank" : 2,
+      "sameRank" : 47,
+      "pdfOnlyExamples" : [ ],
+      "docxOnlyExamples" : [ {
+        "queryId" : "690",
+        "question" : "Less than 10% of the gabonese children with Schimmelpenning-Feuerstein-Mims syndrome (SFM) had a plasma lactate of more than 5mmol/L.",
+        "goldDocumentIds" : [ "18750453" ],
+        "pdfRank" : 11,
+        "docxRank" : 8,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/190-scifact-18750453.docx",
+          "PDF" : "prepared/pdf/190-scifact-18750453.pdf"
+        }
+      } ],
+      "bothMissExamples" : [ {
+        "queryId" : "198",
+        "question" : "CCL19 is absent within dLNs.",
+        "goldDocumentIds" : [ "2177022" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/117-scifact-2177022.docx",
+          "PDF" : "prepared/pdf/117-scifact-2177022.pdf"
+        }
+      }, {
+        "queryId" : "535",
+        "question" : "Hypertension is frequently observed in type 1 diabetes patients.",
+        "goldDocumentIds" : [ "39368721" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/192-scifact-39368721.docx",
+          "PDF" : "prepared/pdf/192-scifact-39368721.pdf"
+        }
+      }, {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx",
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf"
+        }
+      }, {
+        "queryId" : "914",
+        "question" : "PPAR-RXRs can be activated by PPAR ligands.",
+        "goldDocumentIds" : [ "3203590" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/067-scifact-3203590.docx",
+          "PDF" : "prepared/pdf/067-scifact-3203590.pdf"
+        }
+      }, {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 11,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx",
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf"
+        }
+      } ]
+    },
+    "dense" : {
+      "variant" : "dense",
+      "bothHit" : 50,
+      "bothMiss" : 0,
+      "pdfOnlyHit" : 0,
+      "docxOnlyHit" : 0,
+      "pdfBetterRank" : 3,
+      "docxBetterRank" : 0,
+      "sameRank" : 47,
+      "pdfOnlyExamples" : [ ],
+      "docxOnlyExamples" : [ ],
+      "bothMissExamples" : [ ]
+    },
+    "hybrid_rrf_rerank" : {
+      "variant" : "hybrid_rrf_rerank",
+      "bothHit" : 48,
+      "bothMiss" : 0,
+      "pdfOnlyHit" : 2,
+      "docxOnlyHit" : 0,
+      "pdfBetterRank" : 4,
+      "docxBetterRank" : 1,
+      "sameRank" : 45,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 5,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx",
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf"
+        }
+      }, {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 1,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx",
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf"
+        }
+      } ],
+      "docxOnlyExamples" : [ ],
+      "bothMissExamples" : [ ]
+    },
+    "hybrid_rrf" : {
+      "variant" : "hybrid_rrf",
+      "bothHit" : 48,
+      "bothMiss" : 0,
+      "pdfOnlyHit" : 2,
+      "docxOnlyHit" : 0,
+      "pdfBetterRank" : 3,
+      "docxBetterRank" : 2,
+      "sameRank" : 45,
+      "pdfOnlyExamples" : [ {
+        "queryId" : "560",
+        "question" : "Immune responses result in the development of inflammatory Th17 cells and anti-inflammatory iTregs.",
+        "goldDocumentIds" : [ "40096222" ],
+        "pdfRank" : 7,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/011-scifact-40096222.docx",
+          "PDF" : "prepared/pdf/011-scifact-40096222.pdf"
+        }
+      }, {
+        "queryId" : "830",
+        "question" : "NF2 (Merlin) causes phosphorylation and subsequent cytoplasmic sequestration of YAP in Drosophila by activating LATS1/2 kinases.",
+        "goldDocumentIds" : [ "1897324" ],
+        "pdfRank" : 10,
+        "docxRank" : 11,
+        "sourcePaths" : {
+          "DOCX" : "prepared/docx/026-scifact-1897324.docx",
+          "PDF" : "prepared/pdf/026-scifact-1897324.pdf"
+        }
+      } ],
+      "docxOnlyExamples" : [ ],
+      "bothMissExamples" : [ ]
+    }
+  },
+  "resources" : {
+    "localSampleCount" : 0,
+    "remoteSampleCount" : 0,
+    "inspectedContainerCount" : 0,
+    "inspectUnchanged" : false,
+    "localCpuPercent" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "max" : 0.0
+    },
+    "localRssKiB" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "localThreads" : {
+      "count" : 0,
+      "mean" : 0.0,
+      "p50" : 0,
+      "p95" : 0,
+      "p99" : 0,
+      "max" : 0
+    },
+    "containers" : { }
+  },
+  "conclusions" : [ "Dense Recall@10：PDF 1.000，DOCX 1.000。", "DOCX生成98个chunk，PDF生成81个，DOCX多17个。", "Rerank平均端到端耗时相对Hybrid：PDF 5.32x，DOCX 4.94x。", "Dense格式独占命中：PDF 0，DOCX 0；同为未命中 0。", "未同步采集系统资源序列；资源瓶颈不作推断。" ]
+}
