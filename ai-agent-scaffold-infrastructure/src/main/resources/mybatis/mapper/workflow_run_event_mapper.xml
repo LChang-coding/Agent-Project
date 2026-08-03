@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao">
+
+    <resultMap id="RunMap" type="cn.bugstack.ai.infrastructure.dao.po.IntelligentWorkflowRunPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="run_id" property="runId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="status" property="status"/>
+        <result column="workflow_id" property="workflowId"/>
+        <result column="workflow_version" property="workflowVersion"/>
+        <result column="definition_hash" property="definitionHash"/>
+        <result column="current_node_id" property="currentNodeId"/>
+        <result column="next_sequence" property="nextSequence"/>
+        <result column="executed_steps" property="executedSteps"/>
+        <result column="used_tokens" property="usedTokens"/>
+        <result column="max_steps" property="maxSteps"/>
+        <result column="token_budget" property="tokenBudget"/>
+        <result column="variables_json" property="variablesJson"/>
+        <result column="revision" property="revision"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="finished_at" property="finishedAt"/>
+    </resultMap>
+
+    <sql id="RunColumns">
+        id, tenant_id, user_id, run_id, workflow_id, workflow_version, definition_hash, trace_id, status,
+        current_node_id, next_sequence, executed_steps, used_tokens, max_steps, token_budget, variables_json,
+        revision, started_at, finished_at
+    </sql>
+
+    <insert id="insertRun" parameterType="cn.bugstack.ai.infrastructure.dao.po.IntelligentWorkflowRunPO">
+        INSERT INTO intelligent_workflow_run
+        (tenant_id, user_id, run_id, workflow_id, workflow_version, definition_hash, trace_id, status,
+         current_node_id, next_sequence, executed_steps, used_tokens, max_steps, token_budget, variables_json,
+         revision, started_at, finished_at)
+        VALUES
+        (#{tenantId}, #{userId}, #{runId}, #{workflowId}, #{workflowVersion}, #{definitionHash}, #{traceId}, #{status},
+         #{currentNodeId}, #{nextSequence}, #{executedSteps}, #{usedTokens}, #{maxSteps}, #{tokenBudget}, #{variablesJson},
+         #{revision}, #{startedAt}, #{finishedAt})
+    </insert>
+
+    <select id="queryRun" resultMap="RunMap">
+        SELECT <include refid="RunColumns"/>
+        FROM intelligent_workflow_run
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId} AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <update id="updateRunState">
+        UPDATE intelligent_workflow_run
+        SET status = #{run.status}, current_node_id = #{run.currentNodeId},
+            executed_steps = #{run.executedSteps}, used_tokens = #{run.usedTokens},
+            variables_json = #{run.variablesJson}, finished_at = #{run.finishedAt}, revision = revision + 1
+        WHERE tenant_id = #{run.tenantId} AND user_id = #{run.userId} AND run_id = #{run.runId}
+          AND revision = #{expectedRevision} AND deleted = 0
+    </update>
+
+    <resultMap id="EventMap" type="cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="run_id" property="runId"/>
+        <result column="event_id" property="eventId"/>
+        <result column="sequence" property="sequence"/>
+        <result column="schema_version" property="schemaVersion"/>
+        <result column="event_type" property="eventType"/>
+        <result column="node_execution_id" property="nodeExecutionId"/>
+        <result column="node_id" property="nodeId"/>
+        <result column="payload_json" property="payloadJson"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="occurred_at" property="occurredAt"/>
+        <result column="expires_at" property="expiresAt"/>
+    </resultMap>
+
+    <!-- sequence 只能从同一运行状态行锁内分配，禁止 MAX(sequence)+1。 -->
+    <select id="lockRun" resultMap="RunMap">
+        SELECT <include refid="RunColumns"/>
+        FROM intelligent_workflow_run
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId} AND deleted = 0
+        LIMIT 1 FOR UPDATE
+    </select>
+
+    <update id="advanceSequence">
+        UPDATE intelligent_workflow_run
+        SET next_sequence = next_sequence + 1, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND run_id = #{runId} AND revision = #{expectedRevision} AND deleted = 0
+    </update>
+
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO">
+        INSERT INTO workflow_run_event
+        (tenant_id, user_id, run_id, event_id, sequence, schema_version, event_type,
+         node_execution_id, node_id, payload_json, trace_id, occurred_at, expires_at)
+        VALUES
+        (#{tenantId}, #{userId}, #{runId}, #{eventId}, #{sequence}, #{schemaVersion}, #{eventType},
+         #{nodeExecutionId}, #{nodeId}, #{payloadJson}, #{traceId}, #{occurredAt}, #{expiresAt})
+    </insert>
+
+    <select id="queryAfter" resultMap="EventMap">
+        SELECT id, tenant_id, user_id, run_id, event_id, sequence, schema_version, event_type,
+               node_execution_id, node_id, payload_json, trace_id, occurred_at, expires_at
+        FROM workflow_run_event
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
+          AND sequence &gt; #{afterSequence} AND deleted = 0 AND expires_at &gt; CURRENT_TIMESTAMP(3)
+        ORDER BY sequence ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="queryOldestSequence" resultType="java.lang.Long">
+        SELECT MIN(sequence)
+        FROM workflow_run_event
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
+          AND deleted = 0 AND expires_at &gt; CURRENT_TIMESTAMP(3)
+    </select>
+</mapper>

@@ -7,6 +7,10 @@ import io.reactivex.rxjava3.core.Flowable;
 
 import java.util.List;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
+import cn.bugstack.ai.domain.run.model.ChatRunEntity;
+import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
+import cn.bugstack.ai.domain.workflow.model.entity.WorkflowNodeInvocationResultEntity;
+import cn.bugstack.ai.domain.context.model.RagContextEvidence;
 
 /** Agent 与工作流会话、消息和运行流的领域入口。 */
 public interface IChatService {
@@ -83,5 +87,20 @@ public interface IChatService {
      * 发送复合消息；参数是聊天命令；返回模型回复列表。
      */
     List<String> handleMessage(ChatCommandEntity chatCommandEntity);
+
+    /** 供独立智能工作流运行时调用单个已编译节点；调用前仍执行权威 Run 取消门禁。 */
+    WorkflowNodeInvocationResultEntity invokeCompiledWorkflowNode(WorkflowDagPlanEntity.Node node,
+                                                                   ChatRunEntity run,
+                                                                   String sessionId,
+                                                                   String workflowId,
+                                                                   String prompt,
+                                                                   String traceId,
+                                                                   String roleCode,
+                                                                   Integer historyCutoffSequence,
+                                                                   String upstreamOutput);
+
+    /** 以智能路径真实累积的 RAG 证据完成最终回答与引用校验。 */
+    void completeCompiledWorkflowRun(ChatRunEntity run, String output, String traceId,
+                                     List<RagContextEvidence> evidence);
 
 }

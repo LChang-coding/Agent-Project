@@ -124,3 +124,23 @@
 2. 新增领域仓储端口和基础设施实现；事件 sequence 通过运行状态行锁分配，禁止 `MAX(sequence)+1`。
 3. 所有表必存根 `traceId`；任务、调用和路由写入必须携带 tenant/run 作用域。
 4. 增加 Mapper 加载、SQL 合同和领域事件序列测试；不宣称 XML 测试等价于真实 MySQL 事务测试。
+
+### 2026-08-04 持久化、运行时与 Trace 第一闭环结果
+
+- 新增非破坏性 MySQL 增量/回滚脚本，定义智能运行状态、节点执行、路由裁决、可续传事件、执行任务、调用账本和 Outbox 七类持久化对象。`chat_run` 继续是取消、会话归属和根 `traceId` 的权威真相；回滚只暂停任务，不删除表和历史证据。
+- `workflow_run_event` 使用 `(tenant_id, run_id, sequence)` 唯一键；事件仓储先 `SELECT ... FOR UPDATE` 锁 `intelligent_workflow_run`，再以 `next_sequence` 分配序号并同事务推进，明确禁止 `MAX(sequence)+1`。
+- 新增独立启动端点 `POST /api/v1/intelligent-workflow-runs` 与续传端点 `GET /api/v1/intelligent-workflow-runs/{runId}/stream?afterSequence=`。`STREAM_METADATA` 是不占序号的传输帧，持久业务事件使用 `workflow-event-v1`；SSE 断开只释放订阅，不取消后台 Run。
+- 新增单活动路径运行时：事务提交后在现有有界 coordinator 执行；每个节点都能根据表达式、节点建议 `[route:key]`、AI 路由键和 DEFAULT 选择下一跳；循环按 `maxVisits/maxSteps` 收口；最终回答仍复用既有 RAG 引用校验和消息终态事务。
+- 新增调用线性化门禁：模型网络调用前先锁同一 `chat_run`，确认状态可执行且未出现 `cancel_requested_at`，再写 `workflow_invocation`。取消已经提交时登记影响行数为 0 且不执行模型；同一次执行以幂等键拒绝重复调用。
+- 新增事件根 Trace 硬校验：扩展 Run、Event、Invocation、SSE metadata 和每个业务事件都携带同一个根 `traceId`；续传 HTTP 自身使用独立 `operationTraceId`，不会替换 Run 根链路。
+- 真实测试过程留痕：首次 Mapper 合同测试因测试源码把 XML 注释中的 `MAX(sequence)+1` 也当成 SQL 而出现 1 个断言失败；已把断言收紧为禁止 `SELECT MAX(sequence)` 后重跑通过。首次运行时测试在本机 Java 25 下因 Byte Buddy 只声明支持到 Java 24 而无法 mock `RunControlService`；按项目既有做法增加 `-Dnet.bytebuddy.experimental=true` 后重跑通过，生产目标仍是 Java 17。
+- 最终定向命令：`mvn -Dnet.bytebuddy.experimental=true -pl ai-agent-scaffold-app -am -DskipTests=false -Dtest=IntelligentWorkflowRuntimeServiceTest,WorkflowInvocationGuardServiceTest,IntelligentWorkflowRouterTest,WorkflowEventRepositoryTest,WorkflowEventMapperContractTest,MyBatisMapperLoadTest -Dsurefire.failIfNoSpecifiedTests=false test`。
+- 最终真实结果：11 tests，0 failures，0 errors，0 skipped；六个 reactor 模块全部成功，总耗时 7.948 秒。
+- 当前证据边界：上述测试证明编译、领域路由、调用门禁、Mapper 加载和 SQL 合同；尚不能代替真实 MySQL 8 的事务/锁竞争、重启接管和浏览器 E2E，后续阶段必须补齐后才能宣布最终交付。
+
+### 2026-08-04 阶段 3/4 本次执行计划
+
+1. 在前端新增智能工作流 Tab，保持旧标准工作流配置语义不变；智能模式显示 Token 成本提示、全局预算和节点路由配置。
+2. 新增 `workflow-event-v1` 类型、纯 reducer 和 fetch-SSE 客户端，严格校验 runId/traceId/schemaVersion，按 eventId/sequence 去重并处理断线续传。
+3. 在聊天主回答上方新增节点执行下拉面板；节点事件只进入面板，`FINAL_ANSWER_*` 只进入主回答。
+4. 增加前端单元测试基础和 reducer/SSE parser 测试，再执行类型检查、构建与浏览器验收。

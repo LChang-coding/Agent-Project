@@ -23,6 +23,7 @@ import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolRuntimeContextKeys;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRuntimeEntity;
+import cn.bugstack.ai.domain.workflow.model.entity.WorkflowNodeInvocationResultEntity;
 import cn.bugstack.ai.domain.workflow.service.IWorkflowService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
@@ -762,6 +763,33 @@ public class ChatService implements IChatService {
                 });
         return new NodeExecutionResult(output.toString(), ragInvocationEvidenceStore.snapshotInvocation(
                 tenantId, userId, sessionId, run.getRunId(), evidenceInvocationId));
+    }
+
+    /** 独立智能运行时复用节点 Agent/RAG/Tool 上下文装配，不复用旧 Kahn DAG 调度器。 */
+    @Override
+    public WorkflowNodeInvocationResultEntity invokeCompiledWorkflowNode(WorkflowDagPlanEntity.Node node,
+                                                                          ChatRunEntity run,
+                                                                          String sessionId,
+                                                                          String workflowId,
+                                                                          String prompt,
+                                                                          String traceId,
+                                                                          String roleCode,
+                                                                          Integer historyCutoffSequence,
+                                                                          String upstreamOutput) {
+        if (run == null) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能工作流运行不能为空");
+        }
+        NodeExecutionResult result = runDagNodeOnce(node, run.getTenantId(), run.getUserId(), sessionId,
+                workflowId, prompt, traceId, roleCode, historyCutoffSequence, upstreamOutput, run);
+        return WorkflowNodeInvocationResultEntity.builder().output(result.output()).evidence(result.evidence()).build();
+    }
+
+    /** 智能运行时与旧工作流共用同一最终消息、引用校验和 Run 终态事务。 */
+    @Override
+    public void completeCompiledWorkflowRun(ChatRunEntity run, String output, String traceId,
+                                            List<RagContextEvidence> evidence) {
+        completeRunWithAssistant(run.getTenantId(), run.getUserId(), run.getRunId(), output, traceId,
+                evidence == null ? List.of() : evidence);
     }
 
     /**

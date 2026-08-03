@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IWorkflowInvocationDao">
+    <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.WorkflowInvocationPO">
+        INSERT IGNORE INTO workflow_invocation
+        (tenant_id, run_id, invocation_id, idempotency_key, node_execution_id, invocation_type,
+         replay_class, status, downstream_request_id, trace_id, started_at)
+        VALUES
+        (#{tenantId}, #{runId}, #{invocationId}, #{idempotencyKey}, #{nodeExecutionId}, #{invocationType},
+         #{replayClass}, #{status}, #{downstreamRequestId}, #{traceId}, #{startedAt})
+    </insert>
+
+    <update id="finish">
+        UPDATE workflow_invocation
+        SET status = #{status}, downstream_request_id = COALESCE(#{downstreamRequestId}, downstream_request_id),
+            finished_at = CURRENT_TIMESTAMP(3)
+        WHERE tenant_id = #{tenantId} AND invocation_id = #{invocationId}
+          AND status = 'RUNNING' AND deleted = 0
+    </update>
+</mapper>
