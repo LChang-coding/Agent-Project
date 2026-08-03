@@ -13,6 +13,7 @@ public class IntelligentWorkflowRunResponseDTO {
     private String status;
     private String currentNodeId;
     private String traceId;
+    private String operationTraceId;
     private Integer maxSteps;
     private Long tokenBudget;
 }

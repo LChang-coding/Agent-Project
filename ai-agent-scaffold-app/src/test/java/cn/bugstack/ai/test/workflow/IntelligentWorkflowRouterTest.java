@@ -58,6 +58,23 @@ public class IntelligentWorkflowRouterTest {
         Assert.assertFalse(IntelligentWorkflowRouter.supportedExpression("output matches '.*'"));
     }
 
+    @Test
+    public void shouldChooseHigherPriorityThenStableEdgeIdWithinSameStrategy() {
+        WorkflowDagPlanEntity.Edge low = edge("DEFAULT", "node_low", null, null, 1);
+        low.setEdgeId("edge_z");
+        WorkflowDagPlanEntity.Edge high = edge("DEFAULT", "node_high", null, null, 9);
+        high.setEdgeId("edge_b");
+        WorkflowDagPlanEntity.Edge sameHigh = edge("DEFAULT", "node_same", null, null, 9);
+        sameHigh.setEdgeId("edge_a");
+
+        IntelligentWorkflowRouter.RouteDecision decision = router.decide(
+                context(false, false, "", null, null, 0, 20, 0, 100),
+                node(List.of("node_low", "node_high", "node_same")), List.of(low, high, sameHigh));
+
+        Assert.assertEquals("node_same", decision.targetNodeId());
+        Assert.assertEquals("edge_a", decision.edgeId());
+    }
+
     private WorkflowDagPlanEntity.Node node(List<String> allowedTargets) {
         return WorkflowDagPlanEntity.Node.builder().nodeId("node_a")
                 .enabledStrategies(List.of("EXPRESSION", "NODE_SUGGESTION", "DEFAULT"))

@@ -52,7 +52,8 @@ public class IntelligentWorkflowRunController {
         return Response.<IntelligentWorkflowRunResponseDTO>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo())
                 .data(IntelligentWorkflowRunResponseDTO.builder().runId(run.getRunId()).workflowId(run.getWorkflowId())
                         .workflowVersion(run.getWorkflowVersion()).status(run.getStatus()).currentNodeId(run.getCurrentNodeId())
-                        .traceId(run.getTraceId()).maxSteps(run.getMaxSteps()).tokenBudget(run.getTokenBudget()).build()).build();
+                        .traceId(run.getTraceId()).operationTraceId(TraceContext.ensureTraceId())
+                        .maxSteps(run.getMaxSteps()).tokenBudget(run.getTokenBudget()).build()).build();
     }
 
     @GetMapping(value = "/{runId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

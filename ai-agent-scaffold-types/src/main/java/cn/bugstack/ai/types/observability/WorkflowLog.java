@@ -86,6 +86,19 @@ public final class WorkflowLog {
                 .field(AiLogFields.SUCCESS, false);
     }
 
+    /** 记录单次路由裁决；可以按根 traceId 还原节点跳转。 */
+    public AiLogRecord routeDecided(String tenantId, String userId, String sessionId, String runId,
+                                    String workflowId, String nodeExecutionId, String sourceNodeId,
+                                    String targetNodeId, String strategy, String reason, boolean terminal) {
+        return AiLogRecord.event(AiLogEvent.WORKFLOW_ROUTE_DECIDED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("workflowId", workflowId).field("nodeExecutionId", nodeExecutionId)
+                .field("sourceNodeId", sourceNodeId).field("targetNodeId", targetNodeId)
+                .field("strategy", strategy).field("reason", reason).field("terminal", terminal)
+                .field(AiLogFields.STAGE, "route_decision").field(AiLogFields.SUCCESS, true);
+    }
+
     private AiLogRecord node(AiLogEvent event, String tenantId, String userId, String sessionId,
                              String runId, String workflowId, String nodeId,
                              Integer iteration, Integer totalIterations) {

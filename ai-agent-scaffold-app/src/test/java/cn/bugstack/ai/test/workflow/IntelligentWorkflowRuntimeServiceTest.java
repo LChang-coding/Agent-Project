@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.usage.model.ModelUsageSummaryEntity;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IIntelligentWorkflowRunRepository;
+import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowExecutionAuditRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.IntelligentWorkflowRunEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.IntelligentWorkflowStartCommandEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
@@ -47,6 +48,7 @@ public class IntelligentWorkflowRuntimeServiceTest {
         WorkflowEventStreamService events = mock(WorkflowEventStreamService.class);
         ModelUsageService usage = mock(ModelUsageService.class);
         WorkflowInvocationGuardService guard = mock(WorkflowInvocationGuardService.class);
+        IWorkflowExecutionAuditRepository audit = mock(IWorkflowExecutionAuditRepository.class);
         InMemoryRunRepository runs = new InMemoryRunRepository();
         WorkflowRuntimeEntity runtime = runtime();
         ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant_1").userId("user_1").sessionId("session_1")
@@ -70,7 +72,7 @@ public class IntelligentWorkflowRuntimeServiceTest {
         when(guard.register(eq(invocation), eq("user_1"))).thenReturn(true);
 
         IntelligentWorkflowRuntimeService service = new IntelligentWorkflowRuntimeService(workflowService, chatService,
-                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard,
+                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit,
                 new DirectExecutorService(), new ObjectMapper());
 
         IntelligentWorkflowRunEntity result = service.start(IntelligentWorkflowStartCommandEntity.builder()
@@ -84,6 +86,9 @@ public class IntelligentWorkflowRuntimeServiceTest {
         verify(chatService).completeCompiledWorkflowRun(eq(run), eq("审核通过"), eq("trace_root_1234"), any());
         verify(events).publish(eq("tenant_1"), eq("user_1"), eq("run_1"), eq("trace_root_1234"),
                 eq("WORKFLOW_COMPLETED"), any(), any(), anyString());
+        verify(audit).startNode(any());
+        verify(audit).completeNode(any());
+        verify(audit).decideRoute(any());
     }
 
     private WorkflowRuntimeEntity runtime() {

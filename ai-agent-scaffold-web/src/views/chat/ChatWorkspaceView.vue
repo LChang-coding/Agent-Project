@@ -188,6 +188,10 @@
                   {{ compactTraceId(message.traceId) }}
                 </button>
               </div>
+              <WorkflowNodeExecutionPanel
+                v-if="message.role === 'assistant' && message.runId && chatStore.workflowRuns[message.runId]"
+                :run="chatStore.workflowRuns[message.runId]"
+              />
               <p>{{ message.content || '...' }}</p>
             </article>
           </div>
@@ -425,6 +429,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue';
 
 import { createSessionShare } from '@/api/share';
+import WorkflowNodeExecutionPanel from '@/components/chat/WorkflowNodeExecutionPanel.vue';
 import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';

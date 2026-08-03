@@ -123,6 +123,7 @@ export interface ChatResponse {
 
 export interface ChatMessage {
   id: string;
+  runId?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: string;
@@ -438,6 +439,7 @@ export interface WorkflowSummary {
   defaultModelCode: string;
   currentVersion: number;
   publishedVersion: number;
+  workflowKind?: 'STATIC' | 'INTELLIGENT';
 }
 
 export interface WorkflowDeleteResponse {

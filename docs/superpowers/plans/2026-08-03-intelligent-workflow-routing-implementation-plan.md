@@ -144,3 +144,14 @@
 2. 新增 `workflow-event-v1` 类型、纯 reducer 和 fetch-SSE 客户端，严格校验 runId/traceId/schemaVersion，按 eventId/sequence 去重并处理断线续传。
 3. 在聊天主回答上方新增节点执行下拉面板；节点事件只进入面板，`FINAL_ANSWER_*` 只进入主回答。
 4. 增加前端单元测试基础和 reducer/SSE parser 测试，再执行类型检查、构建与浏览器验收。
+
+### 2026-08-04 阶段 3/4 当前实施与测试记录
+
+- 前端新增 `workflow-event-v1` 强类型、纯 reducer、SSE parser 和 fetch-SSE 客户端。启动响应明确区分 Run 根 `traceId` 与 HTTP `operationTraceId`；SSE 响应头、`STREAM_METADATA`、Run、sequence 和每条事件都会交叉校验，换号立即拒绝。
+- 聊天 Store 已使用独立智能工作流启动端点；断线后从最后 `sequence` 最多重连 3 次；终态事件到达后主动结束长连接。`NODE_*` 只更新节点面板，`FINAL_ANSWER_*` 只更新聊天主回答。
+- 新增聊天节点下拉面板，按 `nodeExecutionId` 展示循环中每次执行、运行动画、中间输出、路由去向、Token 和根 Trace ID；支持 `prefers-reduced-motion`。
+- 工作流编辑页新增“系统工作流 / 智能工作流”独立 Tab。智能模式可编辑总步数/Token 预算、节点路由指令、最大访问次数、允许目标、显式 END 路由和每条边的策略/键/表达式/优先级；标准工作流仍沿用旧 DAG 语义。
+- 后端异步执行改为显式携带 Run 根 Trace，不再捕获可能换号的触发请求 Trace。节点开始/完成/失败和路由裁决同时写入专用审计表与中文结构化日志，日志包含 `runId/nodeExecutionId/sourceNodeId/targetNodeId/strategy/traceId`。
+- 前端第一次单测命令失败：测试放在 `src` 导致生产类型检查缺 Node 声明，且 ESM bundle 误打包 Axios CommonJS 依赖。已把纯 SSE parser 下沉到无 HTTP 依赖的 domain 文件，测试移至 `tests/` 并用 esbuild + Node test runner。修正后 `npm run test:unit` 为 3 tests / 0 fail；`npm run build` 类型检查和生产构建成功。
+- 远端 MySQL 8.0.46 已执行非破坏性增量脚本，7 张新表和所有唯一索引实际存在。真实事务回滚验证返回 node/route/invocation/event=`1/1/1/2`、重复幂等写影响行 0、事件 Trace distinct=1、sequence=1..2，ROLLBACK 后 Run 剩余 0。首次手工 SQL 因遗漏必填 `replay_class` 失败，补齐后通过。
+- MySQL 公网 TLS 仍有间歇性问题：一次独立查询返回 `SSL routines::wrong version number`，第 2 次重试成功并确认 `TLSv1.3 / TLS_AES_128_GCM_SHA256`。这项不能记为网络稳定性门禁通过。

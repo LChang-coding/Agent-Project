@@ -12,6 +12,21 @@
       </template>
     </SectionHeader>
 
+    <nav class="workflow-kind-tabs" aria-label="工作流类型">
+      <button :class="{ active: graph.workflowKind !== 'INTELLIGENT' }" type="button" @click="setWorkflowKind('STATIC')">
+        <strong>系统工作流</strong><span>固定 DAG，执行更可预测</span>
+      </button>
+      <button :class="{ active: graph.workflowKind === 'INTELLIGENT' }" type="button" @click="setWorkflowKind('INTELLIGENT')">
+        <strong>智能工作流</strong><span>每个 Agent 可动态选路，但会消耗更多 Token</span>
+      </button>
+    </nav>
+
+    <section v-if="graph.workflowKind === 'INTELLIGENT'" class="intelligent-budget card">
+      <label>最大执行步数 <input v-model.number="graph.maxSteps" class="input" type="number" min="1" max="200" /></label>
+      <label>Token 总预算 <input v-model.number="graph.tokenBudget" class="input" type="number" min="1" max="10000000" /></label>
+      <span>超过任一预算都会在下一次模型调用前终止，防止无界循环。</span>
+    </section>
+
     <section class="workflow-shell">
       <aside class="workflow-list card">
         <div class="card__body">
@@ -185,6 +200,37 @@
               <label>节点提示词</label>
               <textarea v-model="activeNode.instruction" class="textarea" />
             </div>
+            <template v-if="graph.workflowKind === 'INTELLIGENT'">
+              <div class="field">
+                <label>路由指令</label>
+                <textarea v-model="activeNode.routeInstruction" class="textarea" placeholder="告诉节点何时输出 [route:key]" />
+              </div>
+              <div class="field">
+                <label>单节点最大访问次数</label>
+                <input v-model.number="activeNode.maxVisits" class="input" type="number" min="1" max="50" />
+              </div>
+              <div class="field">
+                <label>允许路由目标</label>
+                <div class="route-targets">
+                  <label v-for="node in graph.nodes.filter(item => item.nodeId !== activeNode?.nodeId)" :key="node.nodeId">
+                    <input :checked="activeNode.allowedTargetNodeIds?.includes(node.nodeId)" type="checkbox" @change="toggleAllowedTarget(node.nodeId)" /> {{ node.name }}
+                  </label>
+                  <label><input :checked="activeNode.allowedTargetNodeIds?.includes('END')" type="checkbox" @change="toggleAllowedTarget('END')" /> END</label>
+                </div>
+                <button v-if="!outgoingEdges.some(edge => edge.targetNodeId === 'END')" class="button button--soft" type="button" @click="addEndRoute">添加 END 终态路由</button>
+              </div>
+              <div v-for="edge in outgoingEdges" :key="edge.edgeId" class="route-edge-editor">
+                <strong>→ {{ nodeName(edge.targetNodeId) }}</strong>
+                <select v-model="edge.routeType" class="select">
+                  <option value="DEFAULT">DEFAULT 兜底</option><option value="FIXED">FIXED</option><option value="SUCCESS">SUCCESS</option>
+                  <option value="FAILURE">FAILURE</option><option value="EXPRESSION">EXPRESSION</option>
+                  <option value="NODE_SUGGESTION">NODE_SUGGESTION</option><option value="AI_ROUTER">AI_ROUTER</option>
+                </select>
+                <input v-if="edge.routeType === 'NODE_SUGGESTION' || edge.routeType === 'AI_ROUTER'" v-model="edge.routeKey" class="input" placeholder="route key" />
+                <input v-if="edge.routeType === 'EXPRESSION'" v-model="edge.conditionExpression" class="input" placeholder="output contains '关键词'" />
+                <input v-model.number="edge.priority" class="input" type="number" min="0" max="999" aria-label="路由优先级" />
+              </div>
+            </template>
             <div class="field">
               <label>自动加载工具</label>
               <div class="auto-tools">
@@ -280,6 +326,7 @@ const modelOptions = computed(() => {
 });
 
 const activeNode = computed(() => graph.value.nodes.find((node) => node.nodeId === selectedNodeId.value));
+const outgoingEdges = computed(() => graph.value.edges.filter((edge) => edge.sourceNodeId === selectedNodeId.value));
 const derivedMode = computed(() => inferGraphMode(graph.value));
 const modeReason = computed(() => inferModeReason(graph.value));
 const renderedEdges = computed(() => graph.value.edges.map(toRenderedEdge).filter(Boolean) as RenderedEdge[]);
@@ -395,6 +442,7 @@ function addLlmNode() {
   const index = graph.value.nodes.length;
   node.x = 120 + (index % 3) * 300;
   node.y = 120 + Math.floor(index / 3) * 190;
+  if (graph.value.workflowKind === 'INTELLIGENT') initializeIntelligentNode(node);
   graph.value.nodes.push(node);
   selectedNodeId.value = node.nodeId;
   applyGraphShape();
@@ -496,11 +544,20 @@ function createEdge(sourceNodeId: string, targetNodeId: string) {
     applyGraphShape();
     return;
   }
+  const existingOutgoing = graph.value.edges.filter((edge) => edge.sourceNodeId === sourceNodeId);
   graph.value.edges.push({
     edgeId: `edge_${sourceNodeId}_${targetNodeId}_${Date.now()}`,
     sourceNodeId,
     targetNodeId,
+    routeType: graph.value.workflowKind === 'INTELLIGENT' ? (existingOutgoing.length === 0 ? 'DEFAULT' : 'AI_ROUTER') : undefined,
+    routeKey: graph.value.workflowKind === 'INTELLIGENT' && existingOutgoing.length > 0 ? `route_${existingOutgoing.length + 1}` : undefined,
+    priority: existingOutgoing.length,
   });
+  const source = findNode(sourceNodeId);
+  if (graph.value.workflowKind === 'INTELLIGENT' && source) {
+    source.allowedTargetNodeIds = [...new Set([...(source.allowedTargetNodeIds || []), targetNodeId])];
+    source.defaultTargetNodeId ||= targetNodeId;
+  }
   applyGraphShape();
 }
 
@@ -581,9 +638,48 @@ function autoLayout() {
  * 应用画布结构；无参数；按箭头推导模式和根节点。
  */
 function applyGraphShape() {
-  graph.value.edges = graph.value.edges.filter((edge) => nodeExists(edge.sourceNodeId) && nodeExists(edge.targetNodeId));
+  graph.value.edges = graph.value.edges.filter((edge) => nodeExists(edge.sourceNodeId) && (edge.targetNodeId === 'END' || nodeExists(edge.targetNodeId)));
   graph.value.mode = inferGraphMode(graph.value);
   graph.value.rootNodeId = inferRootNodeId(graph.value);
+}
+
+function setWorkflowKind(kind: 'STATIC' | 'INTELLIGENT') {
+  graph.value.workflowKind = kind;
+  if (kind === 'INTELLIGENT') {
+    graph.value.maxSteps ||= 40;
+    graph.value.tokenBudget ||= 128000;
+    graph.value.nodes.forEach(initializeIntelligentNode);
+    const sources = new Set<string>();
+    graph.value.edges.forEach((edge, index) => {
+      edge.routeType ||= sources.has(edge.sourceNodeId) ? 'AI_ROUTER' : 'DEFAULT';
+      edge.priority ??= index;
+      sources.add(edge.sourceNodeId);
+      const source = findNode(edge.sourceNodeId);
+      if (source) {
+        source.allowedTargetNodeIds = [...new Set([...(source.allowedTargetNodeIds || []), edge.targetNodeId])];
+        if (edge.routeType === 'DEFAULT') source.defaultTargetNodeId = edge.targetNodeId;
+      }
+    });
+  }
+}
+
+function initializeIntelligentNode(node: WorkflowNode) {
+  node.enabledStrategies ||= ['FIXED', 'SUCCESS', 'EXPRESSION', 'NODE_SUGGESTION', 'AI_ROUTER', 'DEFAULT'];
+  node.allowedTargetNodeIds ||= [];
+  node.routeInstruction ||= '完成任务后，如需指定下一节点，在末尾单独输出 [route:key]。';
+  node.maxVisits ||= 3;
+}
+
+function toggleAllowedTarget(targetNodeId: string) {
+  if (!activeNode.value) return;
+  const targets = new Set(activeNode.value.allowedTargetNodeIds || []);
+  targets.has(targetNodeId) ? targets.delete(targetNodeId) : targets.add(targetNodeId);
+  activeNode.value.allowedTargetNodeIds = [...targets];
+}
+
+function addEndRoute() {
+  if (!activeNode.value) return;
+  createEdge(activeNode.value.nodeId, 'END');
 }
 
 /**
@@ -600,7 +696,8 @@ function normalizeGraphLayout(value: WorkflowGraph) {
     x: typeof node.x === 'number' ? node.x : 120 + (index % 3) * 300,
     y: typeof node.y === 'number' ? node.y : 120 + Math.floor(index / 3) * 190,
   }));
-  next.edges = (next.edges || []).filter((edge) => next.nodes.some((node) => node.nodeId === edge.sourceNodeId) && next.nodes.some((node) => node.nodeId === edge.targetNodeId));
+  next.edges = (next.edges || []).filter((edge) => next.nodes.some((node) => node.nodeId === edge.sourceNodeId)
+    && (edge.targetNodeId === 'END' || next.nodes.some((node) => node.nodeId === edge.targetNodeId)));
   next.mode = inferGraphMode(next);
   next.rootNodeId = inferRootNodeId(next);
   return next;
@@ -808,6 +905,7 @@ function clamp(value: number, min: number, max: number) {
 </script>
 
 <style scoped>
+.workflow-kind-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}.workflow-kind-tabs button{display:grid;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}.workflow-kind-tabs button.active{border-color:#6366f1;box-shadow:0 0 0 2px rgb(99 102 241/.12)}.workflow-kind-tabs span{color:var(--muted);font-size:12px}.intelligent-budget{display:flex;align-items:end;gap:16px;padding:14px;margin-bottom:14px}.intelligent-budget label{display:grid;gap:6px;font-size:12px}.intelligent-budget span{color:var(--muted);font-size:12px}.route-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.route-edge-editor{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:10px}.route-edge-editor strong{font-size:12px}@media(max-width:800px){.workflow-kind-tabs{grid-template-columns:1fr}.intelligent-budget{align-items:stretch;flex-direction:column}}
 .workflow-page {
   display: grid;
   gap: 16px;

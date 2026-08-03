@@ -36,6 +36,19 @@ public class TraceContextTest {
     }
 
     @Test
+    public void shouldUseExplicitRunTraceInsteadOfCurrentOperationTrace() {
+        TraceContext.setTraceId("operation-trace");
+        Runnable wrapped = TraceContext.wrap("run-root-trace", () ->
+                Assert.assertEquals("run-root-trace", TraceContext.getTraceId()));
+
+        TraceContext.setTraceId("worker-trace");
+        wrapped.run();
+
+        Assert.assertEquals("worker-trace", TraceContext.getTraceId());
+        TraceContext.clear();
+    }
+
+    @Test
     public void shouldPropagateTraceIdThroughTraceableThreadPoolExecutor() throws Exception {
         TraceableThreadPoolExecutor executor = new TraceableThreadPoolExecutor(
                 1, 1, 1, TimeUnit.SECONDS,

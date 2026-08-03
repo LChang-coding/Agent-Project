@@ -83,6 +83,13 @@ public final class TraceContext {
         return () -> runWithCapturedContext(capturedTraceId, capturedMdc, task);
     }
 
+    /** 将指定的 Run 根链路号带入异步任务，不继承可能已换号的触发请求。 */
+    public static Runnable wrap(String traceId, Runnable task) {
+        String capturedTraceId = normalizeOrNew(traceId);
+        Map<String, String> capturedMdc = MDC.getCopyOfContextMap();
+        return () -> runWithCapturedContext(capturedTraceId, capturedMdc, task);
+    }
+
     public static <T> Callable<T> wrap(Callable<T> task) {
         String capturedTraceId = getTraceId();
         Map<String, String> capturedMdc = MDC.getCopyOfContextMap();

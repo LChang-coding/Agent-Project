@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao">
+    <insert id="insertNode">
+        INSERT INTO workflow_node_execution
+        (tenant_id, run_id, node_execution_id, node_id, execution_index, attempt, status, trace_id, started_at)
+        VALUES
+        (#{tenantId}, #{runId}, #{nodeExecutionId}, #{nodeId}, #{executionIndex}, #{attempt}, #{status}, #{traceId}, #{startedAt})
+    </insert>
+    <update id="completeNode">
+        UPDATE workflow_node_execution
+        SET status=#{status}, display_output=#{displayOutput}, output_json=#{outputJson},
+            prompt_tokens=#{promptTokens}, candidate_tokens=#{candidateTokens}, total_tokens=#{totalTokens},
+            error_code=#{errorCode}, error_message=#{errorMessage}, finished_at=#{finishedAt}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND node_execution_id=#{nodeExecutionId}
+          AND trace_id=#{traceId} AND deleted=0
+    </update>
+    <insert id="insertRoute">
+        INSERT INTO workflow_route_decision
+        (tenant_id, run_id, route_decision_id, node_execution_id, source_node_id, target_node_id,
+         edge_id, strategy, reason, terminal, trace_id)
+        VALUES
+        (#{tenantId}, #{runId}, #{routeDecisionId}, #{nodeExecutionId}, #{sourceNodeId}, #{targetNodeId},
+         #{edgeId}, #{strategy}, #{reason}, #{terminal}, #{traceId})
+    </insert>
+</mapper>

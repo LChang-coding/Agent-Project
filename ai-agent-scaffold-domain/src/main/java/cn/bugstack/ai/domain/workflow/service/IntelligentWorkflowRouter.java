@@ -106,7 +106,9 @@ public class IntelligentWorkflowRouter {
 
     private List<WorkflowDagPlanEntity.Edge> ordered(List<WorkflowDagPlanEntity.Edge> candidateEdges) {
         List<WorkflowDagPlanEntity.Edge> edges = new ArrayList<>(candidateEdges == null ? List.of() : candidateEdges);
-        edges.sort(Comparator.comparingInt(edge -> edge.getPriority() == null ? 1000 : edge.getPriority()));
+        edges.sort(Comparator.<WorkflowDagPlanEntity.Edge>comparingInt(
+                        edge -> edge.getPriority() == null ? 0 : edge.getPriority()).reversed()
+                .thenComparing(edge -> safe(edge.getEdgeId())));
         return edges;
     }
 

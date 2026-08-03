@@ -8,8 +8,10 @@ import {
   sendChatMessageStream,
   steerChatRun,
 } from '@/api/agent';
+import { startIntelligentWorkflow, streamIntelligentWorkflow } from '@/api/intelligent-workflow';
 import { traceIdOfError } from '@/api/http';
-import { queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
+import { queryWorkflowDetail, queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
+import { createWorkflowRunState, reduceWorkflowEvent } from '@/domain/workflow-event-reducer';
 import {
   deleteChatSession,
   queryChatSessionMessages,
@@ -32,6 +34,7 @@ import type {
   WorkflowOption,
   WorkflowSummary,
 } from '@/types/api';
+import type { WorkflowRunViewState } from '@/types/intelligent-workflow';
 
 interface TypewriterController {
   push: (content: string) => void;
@@ -72,9 +75,11 @@ interface ChatState {
   activeSourceType: 'agent' | 'workflow';
   activeAgentId: string;
   activeWorkflowId: string;
+  activeWorkflowKind: 'STATIC' | 'INTELLIGENT';
   activeModelCode: string;
   sessionId: string;
   messages: ChatMessage[];
+  workflowRuns: Record<string, WorkflowRunViewState>;
   sessions: LocalChatSession[];
   loadingAgents: boolean;
   loadingWorkflows: boolean;
@@ -114,9 +119,11 @@ export const useChatStore = defineStore('chat', {
     activeSourceType: 'agent',
     activeAgentId: '',
     activeWorkflowId: '',
+    activeWorkflowKind: 'STATIC',
     activeModelCode: 'deepseek-v4-flash',
     sessionId: '',
     messages: [],
+    workflowRuns: {},
     sessions: [],
     loadingAgents: false,
     loadingWorkflows: false,
@@ -206,6 +213,8 @@ export const useChatStore = defineStore('chat', {
       await this.cancelActiveRun('切换工作流');
       this.activeSourceType = 'workflow';
       this.activeWorkflowId = workflowId;
+      const detail = await queryWorkflowDetail(workflowId);
+      this.activeWorkflowKind = detail.graph.workflowKind || 'STATIC';
       const workflow = this.workflows.find((item) => item.workflowId === workflowId);
       if (workflow?.defaultModelCode) {
         this.activeModelCode = workflow.defaultModelCode;
@@ -251,8 +260,11 @@ export const useChatStore = defineStore('chat', {
       if (this.activeSourceType === 'workflow') {
         this.activeWorkflowId = session.workflowId || session.agentId;
         this.activeModelCode = session.modelCode || this.activeModelCode;
+        const detail = await queryWorkflowDetail(this.activeWorkflowId);
+        this.activeWorkflowKind = detail.graph.workflowKind || 'STATIC';
       } else {
         this.activeAgentId = session.agentId;
+        this.activeWorkflowKind = 'STATIC';
       }
       this.sessionId = session.sessionId;
       this.contextRevision = session.contextRevision || 0;
@@ -396,8 +408,15 @@ export const useChatStore = defineStore('chat', {
       }
 
       const auth = useAuthStore();
+      if (this.activeSourceType === 'workflow' && !this.sessionId) {
+        const created = await createChatSession(this.buildChatPayload(auth.userId, ''));
+        this.sessionId = created.sessionId;
+        this.saveCurrentSession(message.trim());
+      }
+      const effectiveRunId = requestedRunId || createRunId();
       const userMessage: ChatMessage = {
         id: createId(),
+        runId: effectiveRunId,
         role: 'user',
         content: message.trim(),
         createdAt: new Date().toISOString(),
@@ -405,6 +424,7 @@ export const useChatStore = defineStore('chat', {
       };
       const assistantMessage: ChatMessage = {
         id: createId(),
+        runId: effectiveRunId,
         role: 'assistant',
         content: '',
         createdAt: new Date().toISOString(),
@@ -418,7 +438,6 @@ export const useChatStore = defineStore('chat', {
       const runReady = new Promise<void>((resolve) => {
         resolveRunReady = resolve;
       });
-      const effectiveRunId = requestedRunId || createRunId();
       const effectiveAttachmentIds = [...new Set(attachmentIds.filter(Boolean))];
       const request: ActiveChatRequest = {
         generation: ++requestGeneration,
@@ -442,6 +461,56 @@ export const useChatStore = defineStore('chat', {
       this.saveCurrentSession(userMessage.content);
 
       try {
+        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+          const workflow = this.activeWorkflow;
+          const started = await startIntelligentWorkflow({
+            workflowId: this.activeWorkflowId,
+            workflowVersion: workflow?.publishedVersion,
+            modelCode: this.activeModelCode,
+            sessionId: this.sessionId,
+            message: userMessage.content,
+            requestedRunId: effectiveRunId,
+            attachmentIds: effectiveAttachmentIds.length > 0 ? effectiveAttachmentIds : undefined,
+          });
+          if (!this.isRequestCurrent(request)) return;
+          request.runId = started.runId;
+          this.currentRunId = started.runId;
+          userMessage.runId = started.runId;
+          assistantMessage.runId = started.runId;
+          this.bindTrace(request, started.traceId);
+          request.resolveRunReady();
+          this.workflowRuns[started.runId] = createWorkflowRunState(started.runId, started.traceId);
+          let reconnectAttempt = 0;
+          while (this.workflowRuns[started.runId].status === 'running') {
+            try {
+              await streamIntelligentWorkflow(started.runId, started.traceId,
+                this.workflowRuns[started.runId].lastSequence, {
+                  signal: controller.signal,
+                  onEvent: (event) => {
+                    if (!this.isRequestCurrent(request)) return;
+                    const current = this.workflowRuns[started.runId];
+                    const next = reduceWorkflowEvent(current, event);
+                    this.workflowRuns[started.runId] = next;
+                    this.replaceMessageContent(assistantMessageId, next.finalAnswer);
+                    if (next.status === 'failed') this.errorMessage = next.errorMessage;
+                  },
+                });
+              reconnectAttempt = 0;
+            } catch (streamError) {
+              if (controller.signal.aborted || ++reconnectAttempt > 3) throw streamError;
+              await wait(250 * reconnectAttempt);
+            }
+          }
+          if (!this.isRequestWritable(request)) return;
+          const settled = this.workflowRuns[started.runId];
+          this.updateMessageStatus(assistantMessageId,
+            settled.status === 'completed' ? 'done' : settled.status === 'cancelled' ? 'canceled' : 'error');
+          if (!assistantMessage.content && settled.status !== 'completed') {
+            this.replaceMessageContent(assistantMessageId, settled.errorMessage || '工作流未生成最终回答。');
+          }
+          this.saveCurrentSession(userMessage.content);
+          return;
+        }
         if (this.streaming) {
           const typewriter = createTypewriter((content) => {
             if (this.isRequestWritable(request)) {
@@ -1054,6 +1123,7 @@ function createId() {
 function toChatMessage(message: SessionMessagePage['items'][number]): ChatMessage {
   return {
     id: message.messageId,
+    runId: message.runId,
     role: message.role,
     content: message.content,
     createdAt: message.createTime,

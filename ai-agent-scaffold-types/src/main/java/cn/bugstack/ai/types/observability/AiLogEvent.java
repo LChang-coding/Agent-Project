@@ -44,6 +44,7 @@ public enum AiLogEvent {
     WORKFLOW_NODE_STARTED(AiLogDomain.WORKFLOW, "workflow_node_started"),
     WORKFLOW_NODE_COMPLETED(AiLogDomain.WORKFLOW, "workflow_node_completed"),
     WORKFLOW_NODE_FAILED(AiLogDomain.WORKFLOW, "workflow_node_failed"),
+    WORKFLOW_ROUTE_DECIDED(AiLogDomain.WORKFLOW, "workflow_route_decided"),
     WORKFLOW_DAG_COMPLETED(AiLogDomain.WORKFLOW, "workflow_dag_completed"),
     WORKFLOW_RUN_FAILED(AiLogDomain.WORKFLOW, "workflow_run_failed"),
     MODEL_ROUTED(AiLogDomain.WORKFLOW, "model_routed"),
@@ -142,6 +143,7 @@ public enum AiLogEvent {
             case WORKFLOW_NODE_STARTED -> "工作流节点已开始";
             case WORKFLOW_NODE_COMPLETED -> "工作流节点已完成";
             case WORKFLOW_NODE_FAILED -> "工作流节点执行失败";
+            case WORKFLOW_ROUTE_DECIDED -> "工作流路由已裁决";
             case WORKFLOW_DAG_COMPLETED -> "工作流执行完成";
             case WORKFLOW_RUN_FAILED -> "工作流执行失败";
             case MODEL_ROUTED -> "模型路由完成";
