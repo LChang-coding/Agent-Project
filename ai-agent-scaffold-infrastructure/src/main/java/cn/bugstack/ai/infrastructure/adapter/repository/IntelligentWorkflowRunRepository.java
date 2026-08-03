@@ -31,6 +31,11 @@ public class IntelligentWorkflowRunRepository implements IIntelligentWorkflowRun
         return dao.updateRunState(toPO(run), expectedRevision);
     }
 
+    @Override
+    public int cancelActive(String tenantId, String userId, String runId, java.time.LocalDateTime finishedAt) {
+        return dao.cancelActiveRun(tenantId, userId, runId, finishedAt);
+    }
+
     private IntelligentWorkflowRunPO toPO(IntelligentWorkflowRunEntity value) {
         IntelligentWorkflowRunPO po = new IntelligentWorkflowRunPO();
         po.setTenantId(value.getTenantId()); po.setUserId(value.getUserId()); po.setRunId(value.getRunId());

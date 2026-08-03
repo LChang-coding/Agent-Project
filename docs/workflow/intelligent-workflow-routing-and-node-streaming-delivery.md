@@ -9,6 +9,8 @@
 
 `traceId` 完整性是本能力的上线硬门禁，不是可选的日志优化。
 
+> **当前交付边界（2026-08-04）**：已经真实闭环的是“单活动路径智能路由 + LLM 节点执行 + 显式 END + 中间节点事件面板 + 刷新后事件重放 + 完成/取消终态 + 根 Trace 反查”。本文第 2～12 章同时包含最终目标和上线前测试基线；其中 Human、SubWorkflow、并行 fan-out/Join、多实例接管、完整故障注入与性能稳定性尚未交付，不能把设计条目理解为已经实现。
+
 ## 2. 范围与非目标
 
 ### 2.1 本期范围
@@ -293,7 +295,7 @@ WORKFLOW_CANCELLED
 - 节点相关事件必须携带 `nodeId + nodeExecutionId + executionIndex`。
 - `displayScope` 只允许 `NODE_PANEL` 和 `FINAL_ANSWER`。`NODE_OUTPUT_DELTA/COMPLETED` 必须使用 `NODE_PANEL`；`FINAL_ANSWER_DELTA/COMPLETED` 必须使用 `FINAL_ANSWER`。
 - `NODE_OUTPUT_DELTA` 只追加 `displayOutput`，不得发送 `internalOutput`。不支持内容流式的节点仍必须产生生命周期事件，并在 `NODE_OUTPUT_COMPLETED` 中携带一次性可展示快照。
-- 最终回答由普通 Agent 节点产生，END 节点不产生回答。完整顺序为 `FINAL_ANSWER_DELTA* → FINAL_ANSWER_COMPLETED → ROUTE_DECIDED(指向 END) → NODE_COMPLETED(回答节点) → NODE_SCHEDULED(END) → NODE_STARTED(END) → NODE_COMPLETED(END) → WORKFLOW_COMPLETED`；最终回答不复制到节点面板。
+- 当前首期最终回答由普通 Agent 节点产生，END 是路由终点而非独立执行节点。真实顺序为 `NODE_STARTED → NODE_OUTPUT_DELTA → NODE_COMPLETED → ROUTE_DECIDED(指向 END) → FINAL_ANSWER_DELTA → FINAL_ANSWER_COMPLETED → WORKFLOW_COMPLETED`；最终回答不复制到节点面板。如后续把 END 升级为可执行节点，必须显式升级事件契约并补齐 END 生命周期测试。
 - 同一 Run 的 `sequence` 严格递增；客户端以 `eventId` 幂等去重。
 - 服务端在回放历史后才接入实时流，必须消除回放与实时事件之间的窗口丢失。
 
@@ -632,13 +634,17 @@ POST   /api/v1/intelligent-workflow-runs/{runId}/human-decisions
 
 | 层级 | 实际结果 |
 |---|---|
-| Java 定向回归 | 16 tests，0 failure、0 error、0 skipped；覆盖 TraceContext、智能图编译、路由优先级、显式 END、运行时、调用取消门禁、事件仓储、SQL 合同和 Mapper 加载 |
-| 前端单元与构建 | reducer/SSE parser 3 tests 全通过；`vue-tsc --noEmit` 和 Vite production build 通过，1923 modules transformed |
+| Java 定向回归 | 最终收口组 27 tests，0 failure、0 error、0 skipped；覆盖 TraceContext、中文结构化日志、智能图编译、显式 END、运行时取消收口、事件仓储/终态关闭、SQL/Mapper 合同、控制接口双 Trace 响应契约 |
+| 前端单元与构建 | reducer/SSE parser/历史恢复目标提取 4 tests 全通过；`vue-tsc --noEmit` 和 Vite production build 通过，1924 modules transformed |
 | 真实模型 API/SSE | 单节点智能工作流真实调用模型并完成；事件 1..8 连续，节点输出与最终回答为独立事件，DEFAULT 正确路由到 END |
 | MySQL 账本 | Run/Node/Route/Invocation/Event/Message=`1/1/1/1/8/2`；六类记录各自只有一个根 `traceId`，且全部等于 Run 根 Trace |
 | 断线重放 | `afterSequence=4` 只返回 5..8，类型、顺序和根 Trace 与首次流一致 |
 | 真实浏览器 | 登录、选择智能工作流、发送、主回答、展开节点面板均通过；面板可见节点状态、输出、路由、Token 和完整 Trace；控制台错误 0 |
 | Grafana/Loki | 用一个根 Trace 查询到 15 条完整中文链路日志；失败 0、降级 0、取消 0、未闭合阶段 0 |
+| 完成态 SSE | 已终止 Run 的历史回放发送终态后由服务端主动关闭；真实 `curl` 无需等待客户端超时，单元测试同时覆盖历史终态和实时终态 |
+| 刷新恢复 | 浏览器硬刷新后重新选择“数据库工作流”和原会话，最终消息与节点栏目均由数据库历史恢复；节点显示状态、输出、路由、Token 和原根 Trace，控制台错误 0 |
+| 真实立即取消 | ChatRun/智能 Run/运行中节点=`cancelled/CANCELLED/CANCELLED`，节点错误码 `RUN_CANCELLED`；取消后 Invocation/Route=`0/0`，事件为连续 1..3 且同一根 Trace |
+| 取消态 SSE/Loki | 取消历史 SSE 0.27 秒内返回并关闭；Loki 根 Trace 17 条业务日志、1 个 traceId、1 个 runId，含中文 `chat_run_cancelled` 和 `workflow_node_cancelled`，未闭合阶段 0 |
 
 真实通过样本：
 
@@ -646,22 +652,38 @@ POST   /api/v1/intelligent-workflow-runs/{runId}/human-decisions
 - API 根 Trace：`419639a5-5dc6-4925-9b89-c69aeff29722`
 - 浏览器根 Trace：`5e229942-213e-4088-80cd-ca8f8e365b1b`
 - 浏览器面板：`审核节点 / 第 1 次 / 已完成 / 审核通过 / DEFAULT → END / 163 Token`
+- 刷新恢复 Run：`run_39933228-dd7f-4bb4-8807-29eba6ff518c`
+- 刷新恢复根 Trace：`3e31430f-9ef4-4da1-8701-eff12788c9a8`
+- 最终取消 Run：`run_9dcbfc73-b65e-46f4-80d8-da8e3f2ebe4e`
+- 最终取消根 Trace：`787200c2-8f6a-47cd-a7d1-5392ab974359`
 
 ### 13.2 本轮发现并闭环的缺陷
 
 真实首轮 Run 在模型成功输出后以 `WORKFLOW_ROUTE_NOT_FOUND` 失败。原因是编译器把目标不是 LLM 节点的边全部过滤，合法 `END` 边也被误删。修复后仅智能工作流保留显式 END 边，并新增单节点 `DEFAULT → END` 回归测试；重跑真实链路进入 `COMPLETED`。
 
+阶段 6 的前三个取消样本又暴露了第二个问题：会话 Run 已取消，但异步执行线程不保证继续运行到节点/智能 Run 收口，导致数据库残留 `RUNNING`，Loki 也只有开始态。修复方式是在取消 HTTP 事务完成后同步协调智能运行和所有 `RUNNING` 节点，再发布唯一 `WORKFLOW_CANCELLED` 终态；异步执行线程仍保留兜底收口。最终样本证明数据库、SSE 和 Loki 三方一致，失败诊断样本没有被删除或覆盖。
+
+补充双 Trace 响应时，真实样本 `run_e4e4cc8b-5619-4cd5-850b-92fe859ae2e0` 暴露取消协调与后台节点推进竞争 `revision`，接口返回 `WORKFLOW_RUN_CONCURRENT_MODIFICATION`。根因是同步协调依赖乐观锁 revision，而事务内重复查询在 MySQL `REPEATABLE READ` 下不能可靠获得竞争方的新 revision。最终修复改为一条带“仅非终态”条件的原子 `UPDATE` 作为取消线性化点，不再依赖旧 revision；其他后台更新因旧 revision 自动失败，终态重复取消影响行数为 0。重跑真实样本后接口、数据库、SSE 和 Loki 全部通过。
+
 ### 13.3 尚未通过，禁止据此直接生产上线
 
 - 公网 MySQL TLS 稳定性：`103.205.240.84:3306` TCP 可达，但真实连接仍随机出现 `wrong version number` 和 `read timed out`。本轮业务 E2E 使用同一服务器的 SSH 转发隔离验证；公网直连稳定性仍未通过。
-- 真实取消竞态：已有调用门禁单测，但仍需在真实在途模型、Tool、RAG 场景验证取消提交后新 invocation/下一任务严格为 0。
+- 真实立即取消已验证取消后模型 Invocation 和 Route 均为 0；仍需补真实“调用已登记且正在途”的模型、Tool、RAG 取消分类，确认不可取消副作用只记账、不驱动后续路由。
 - 重启接管与分布式实时流：任务租约、Outbox、Worker 接管、多实例实时订阅尚未形成完整生产 E2E。
 - 首期运行时当前只闭环单活动路径 LLM 节点；Human、SubWorkflow、并行 fan-out/Join 不应声明已交付。
+- 前端刷新后会从数据库恢复消息和智能节点事件，但当前数据源类型/工作流选择未持久化；用户需要重新选择“数据库工作流”和原会话后才会触发节点面板重放。这是可用边界，不应描述成零操作恢复。
 - 仍需跑第 11.7 节其余规则、自主路由、AI Router、回退循环、RAG、Tool、人工、取消、跨租户 fixture，以及第 11.8–11.10 节故障注入、容量、稳定性和安全测试。
 
 ### 13.4 当前结论
 
 “智能工作流单活动路径 + 每节点路由 + 聊天节点事件面板 + 根 Trace 全链路”核心纵向切片已真实闭环；它可以进入下一轮扩展与回归测试，但在 13.3 的生产门禁完成前，结论是“功能验收通过，生产上线门禁未全部通过”。
+
+### 13.5 本轮 Trace 不变量结论
+
+- Run 根 Trace 在 `chat_run`、`intelligent_workflow_run`、`workflow_node_execution`、`workflow_route_decision`、`workflow_invocation`、`workflow_run_event`、节点事件和结构化日志中保持不变。
+- 启动响应数据体返回根 `traceId` 与启动 `operationTraceId`；取消/引导响应数据体同样返回根 `traceId` 与本次控制请求 `operationTraceId`。外层统一响应 Trace 仍代表当前 HTTP 操作，不能覆盖根 Trace。
+- SSE 的 `STREAM_METADATA` 和每条业务事件都携带根 Trace；前端发现 Run、metadata、事件任一换号时拒绝合并，避免把别的链路串入当前面板。
+- 当前真实完成样本与取消样本均满足：Trace 缺失数 0、同 Run 换号数 0、Loki 查询根 Trace 只出现一个 traceId。线程复用、Kafka Retry/DLT、进程重启接管和子工作流传播仍须按第 11.6 节补测后，才能对生产全局链路作无条件承诺。
 
 ## 14. 交付清单
 

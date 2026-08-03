@@ -18,6 +18,11 @@ public interface IWorkflowRunEventDao {
     int updateRunState(@Param("run") IntelligentWorkflowRunPO run,
                        @Param("expectedRevision") long expectedRevision);
 
+    int cancelActiveRun(@Param("tenantId") String tenantId,
+                        @Param("userId") String userId,
+                        @Param("runId") String runId,
+                        @Param("finishedAt") java.time.LocalDateTime finishedAt);
+
     IntelligentWorkflowRunPO lockRun(@Param("tenantId") String tenantId,
                                       @Param("userId") String userId,
                                       @Param("runId") String runId);

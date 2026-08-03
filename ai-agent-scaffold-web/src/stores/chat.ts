@@ -12,6 +12,7 @@ import { startIntelligentWorkflow, streamIntelligentWorkflow } from '@/api/intel
 import { traceIdOfError } from '@/api/http';
 import { queryWorkflowDetail, queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import { createWorkflowRunState, reduceWorkflowEvent } from '@/domain/workflow-event-reducer';
+import { workflowHistoryRunTargets } from '@/domain/workflow-history';
 import {
   deleteChatSession,
   queryChatSessionMessages,
@@ -67,6 +68,7 @@ let steerPromise: Promise<boolean> | null = null;
 let sessionSwitchGeneration = 0;
 let ragSettingGeneration = 0;
 const SESSION_MESSAGE_PAGE_SIZE = 50;
+const historyWorkflowControllers = new Map<string, AbortController>();
 
 interface ChatState {
   agents: AiAgentConfig[];
@@ -252,6 +254,7 @@ export const useChatStore = defineStore('chat', {
         return;
       }
       await this.cancelActiveRun('切换会话');
+      abortHistoryWorkflowStreams();
       const session = this.sessions.find((item) => item.sessionId === sessionId);
       if (!session) {
         return;
@@ -303,6 +306,10 @@ export const useChatStore = defineStore('chat', {
         this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
         this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         this.errorMessage = '';
+        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+          // 消息先恢复；节点事件在后台重放，避免活动 Run 阻塞会话页面可用性。
+          void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
+        }
       } catch (error) {
         if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
           this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
@@ -312,6 +319,41 @@ export const useChatStore = defineStore('chat', {
           this.loadingMessages = false;
         }
       }
+    },
+
+    /** 根据历史消息保存的 runId/traceId 重放节点事件，页面刷新后仍可展开执行面板。 */
+    async restoreIntelligentWorkflowHistory(sessionId: string, messages: ChatMessage[]) {
+      const targets = workflowHistoryRunTargets(messages);
+      await Promise.allSettled(targets.map(async ({ runId, traceId }) => {
+        if (this.workflowRuns[runId]) return;
+        this.workflowRuns[runId] = createWorkflowRunState(runId, traceId);
+        const controller = new AbortController();
+        historyWorkflowControllers.set(runId, controller);
+        try {
+          let attempts = 0;
+          while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running') {
+            try {
+              await streamIntelligentWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
+                signal: controller.signal,
+                onEvent: (event) => {
+                  if (this.sessionId !== sessionId) return;
+                  const current = this.workflowRuns[runId];
+                  if (current) this.workflowRuns[runId] = reduceWorkflowEvent(current, event);
+                },
+              });
+              attempts = 0;
+            } catch (error) {
+              if (controller.signal.aborted || ++attempts > 3) throw error;
+              await wait(250 * attempts);
+            }
+          }
+        } catch {
+          // 旧静态工作流没有 workflow-event-v1；保留消息，但不伪造节点面板。
+          if (this.workflowRuns[runId]?.status === 'running') delete this.workflowRuns[runId];
+        } finally {
+          if (historyWorkflowControllers.get(runId) === controller) historyWorkflowControllers.delete(runId);
+        }
+      }));
     },
 
     /**
@@ -335,6 +377,9 @@ export const useChatStore = defineStore('chat', {
         const existingIds = new Set(this.messages.map((message) => message.id));
         const earlierMessages = page.items.map(toChatMessage).filter((message) => !existingIds.has(message.id));
         this.messages = [...earlierMessages, ...this.messages];
+        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+          void this.restoreIntelligentWorkflowHistory(sessionId, earlierMessages);
+        }
         this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
         this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         this.historyMessage = earlierMessages.length > 0
@@ -357,6 +402,7 @@ export const useChatStore = defineStore('chat', {
     resetMessageHistoryState(invalidateRequests = true) {
       if (invalidateRequests) {
         sessionSwitchGeneration += 1;
+        abortHistoryWorkflowStreams();
       }
       this.nextBeforeSequence = null;
       this.hasMoreMessages = false;
@@ -1117,6 +1163,12 @@ export const useChatStore = defineStore('chat', {
  */
 function createId() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+}
+
+/** 会话切换时主动结束历史 SSE，防止旧页面后台占用连接。 */
+function abortHistoryWorkflowStreams() {
+  historyWorkflowControllers.forEach((controller) => controller.abort());
+  historyWorkflowControllers.clear();
 }
 
 /** 将服务端有效消息转换为聊天视图模型。 */

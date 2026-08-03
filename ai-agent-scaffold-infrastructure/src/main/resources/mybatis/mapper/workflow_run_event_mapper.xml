@@ -57,6 +57,13 @@
           AND revision = #{expectedRevision} AND deleted = 0
     </update>
 
+    <update id="cancelActiveRun">
+        UPDATE intelligent_workflow_run
+        SET status = 'CANCELLED', finished_at = #{finishedAt}, revision = revision + 1
+        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
+          AND status NOT IN ('CANCELLED', 'COMPLETED', 'FAILED') AND deleted = 0
+    </update>
+
     <resultMap id="EventMap" type="cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO">
         <id column="id" property="id"/>
         <result column="tenant_id" property="tenantId"/>

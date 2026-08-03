@@ -7,6 +7,8 @@ import cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao;
 import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+
 /** 将节点与路由事实写入不可替换的审计表。 */
 @Repository
 public class WorkflowExecutionAuditRepository implements IWorkflowExecutionAuditRepository {
@@ -22,6 +24,11 @@ public class WorkflowExecutionAuditRepository implements IWorkflowExecutionAudit
     @Override
     public void completeNode(WorkflowNodeExecutionEntity execution) {
         if (dao.completeNode(execution) != 1) throw new AppException("WORKFLOW_NODE_AUDIT_FAILED", "节点执行记录收口失败");
+    }
+
+    @Override
+    public int cancelRunningNodes(String tenantId, String runId, LocalDateTime finishedAt) {
+        return dao.cancelRunningNodes(tenantId, runId, finishedAt);
     }
 
     @Override

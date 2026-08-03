@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.workflow.model.entity.IntelligentWorkflowRunEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRunEventEntity;
 import cn.bugstack.ai.types.exception.AppException;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.functions.Predicate;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.ReplayProcessor;
 import org.springframework.stereotype.Service;
@@ -64,7 +65,9 @@ public class WorkflowEventStreamService {
         return Flowable.concat(Flowable.fromIterable(history), live.onBackpressureBuffer(LIVE_BUFFER_SIZE, false, true))
                 .filter(event -> run.getTraceId().equals(event.getTraceId()))
                 .filter(event -> event.getSequence() != null && event.getSequence() > cursor.get())
-                .doOnNext(event -> cursor.set(event.getSequence()));
+                .doOnNext(event -> cursor.set(event.getSequence()))
+                // 终态事件本身必须交付；交付后由服务端正常结束 SSE，释放订阅和浏览器连接。
+                .takeUntil((Predicate<WorkflowRunEventEntity>) event -> terminal(event.getEventType()));
     }
 
     public IntelligentWorkflowRunEntity requireRun(String tenantId, String userId, String runId) {
@@ -82,6 +85,12 @@ public class WorkflowEventStreamService {
 
     private String key(String tenantId, String runId) {
         return tenantId + "\u0000" + runId;
+    }
+
+    private boolean terminal(String eventType) {
+        return "WORKFLOW_COMPLETED".equals(eventType)
+                || "WORKFLOW_FAILED".equals(eventType)
+                || "WORKFLOW_CANCELLED".equals(eventType);
     }
 
     private void requireText(String value, String message) {

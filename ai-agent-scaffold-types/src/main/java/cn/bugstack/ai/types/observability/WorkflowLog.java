@@ -76,6 +76,15 @@ public final class WorkflowLog {
                 .field(AiLogFields.SUCCESS, true);
     }
 
+    public AiLogRecord nodeCancelled(String tenantId, String userId, String sessionId, String runId,
+                                     String workflowId, String nodeId, Integer iteration,
+                                     Integer totalIterations, Long costMs) {
+        return node(AiLogEvent.WORKFLOW_NODE_CANCELLED, tenantId, userId, sessionId, runId,
+                workflowId, nodeId, iteration, totalIterations)
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.STAGE, "node_execute")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
     public AiLogRecord nodeFailed(String tenantId, String userId, String sessionId, String runId,
                                   String workflowId, String nodeId, Integer iteration,
                                   Integer totalIterations, Long costMs, Throwable throwable) {

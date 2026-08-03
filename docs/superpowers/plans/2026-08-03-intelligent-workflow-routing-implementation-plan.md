@@ -203,3 +203,53 @@
 - 真实浏览器从登录开始选择“数据库工作流”，发送“请审核浏览器端到端消息”；主回答显示“审核通过”，节点下拉面板显示“审核节点 / 第 1 次 / 已完成 / 路由 DEFAULT → END / 163 Token / 完整 Trace ID”，浏览器控制台错误 0。
 - Grafana/Loki 使用浏览器 Run 根 Trace `5e229942-213e-4088-80cd-ca8f8e365b1b` 查询到 15 条日志，失败 0、降级 0、取消 0、未闭合阶段 0；覆盖运行开始、节点开始、模型调用、上下文组装、Token 记账、节点完成、路由裁决、消息保存和运行完成。
 - 未伪装通过的基础设施问题：公网 `103.205.240.84:3306` TCP 可达，但 MySQL TLS 仍随机出现 `wrong version number/read timed out`；本轮业务 E2E 通过同一主机 SSH 转发完成。公网 MySQL 稳定性仍是独立上线阻塞项。
+
+### 2026-08-04 阶段 6 终态流、刷新恢复与真实取消计划
+
+完成度复核确认上一阶段仍有三个直接缺口：服务端在持久历史包含终态事件后仍继续等待本实例 live processor，导致 `curl` 必须依赖超时结束；会话历史虽然已返回 `runId/traceId`，前端刷新后只恢复最终消息，没有重放节点面板；取消只有领域门禁单测，尚无真实竞态证据。
+
+本阶段按以下顺序执行：
+
+1. 让工作流事件流在包含 `WORKFLOW_COMPLETED/FAILED/CANCELLED` 的终态事件后包含该事件并正常完成，补领域服务测试，禁止依赖客户端主动断流才释放连接。
+2. 会话切换读取历史消息后，按 assistant 消息携带的 `runId + traceId` 重放智能工作流事件，恢复节点面板；失败的非智能旧 Run 不阻断消息历史。
+3. 扩充前端事件测试，验证完整历史重放与刷新恢复结果一致、最终回答不重复、根 Trace 换号仍拒绝。
+4. 重新打包，以真实浏览器刷新既有智能会话，确认节点面板仍可展开；再执行真实立即取消并回读 invocation、事件和下一节点状态。
+5. 用根 Trace 查询 Grafana/Loki，追加真实结果、失败因果和未通过门禁后再中文本地提交。
+
+#### 阶段 6 取消日志诊断与修复追加计划
+
+真实取消 Run `run_d1937ffc-bc1c-4485-a6a2-7f7d02d0cbfe` 的数据库门禁已通过，但 Loki 根 Trace `3dba6216-830d-48b6-b4dc-137787db37fd` 只有 5 条开始态日志，分析结果将 `run/node_execute` 判为未闭合。原因是取消事务只输出普通文本日志，没有带原 Run 根 Trace 的结构化取消终态。
+
+1. 增加稳定中文事件 `chat_run_cancelled/会话运行已取消`，由取消事务用数据库中的 Run 根 Trace 覆盖当前取消请求的操作 Trace，并记录 run/session/reason/cost/stage。
+2. 增加日志契约单测，验证事件编码、中文名、终态字段和显式根 Trace 可被 Loki 检索。
+3. 重新执行真实立即取消，再分别回读数据库与 Loki；门禁为取消后 invocation/route=0、唯一根 Trace、`chat_run_cancelled` 可见且 run 阶段不再未闭合。
+
+#### 阶段 6 交付文档与响应 Trace 收口计划
+
+最终验收发现运行启动响应已同时返回根 `traceId` 与 `operationTraceId`，但取消/引导响应数据体尚未显式返回这两个身份；外层统一响应的 `traceId` 仅代表本次控制请求，调用方容易误把它当成 Run 根链路号。
+
+1. 在运行控制响应数据体补充不可变的 Run 根 `traceId` 和本次 HTTP `operationTraceId`，取消、引导保持同一契约；外层响应 Trace 仍维持现有过滤器语义。
+2. 增加 Controller 契约测试，断言取消后数据体根 Trace 不换号、操作 Trace 可单独审计，且同步触发智能工作流取消终态收口。
+3. 修订交付文档中设计目标与当前实现混写的内容，用真实事件序列、真实测试数量和真实 Run/Trace 证据更新当前交付边界。
+4. 重跑后端定向测试、前端 reducer/构建、真实取消 API/DB/SSE/Loki，并逐项追加结果；未跑过的 Human/SubWorkflow/并行、故障注入、性能与稳定性继续明确列为上线前门禁。
+
+真实双 Trace 样本 `run_e4e4cc8b-5619-4cd5-850b-92fe859ae2e0` 首次返回 `WORKFLOW_RUN_CONCURRENT_MODIFICATION`。取消事务与后台节点启动同时推进智能 Run revision，同步取消协调读取后再更新时使用了过期 revision。该样本不得记为通过，追加修复步骤：
+
+1. 取消协调仅对并发修改错误做有限重新读取与重试；每次都以数据库最新 revision 更新，发现智能 Run 已是终态时按幂等成功结束。
+2. 其他数据库/业务异常不吞掉、不无限重试；重试耗尽仍返回明确失败。
+3. 单测模拟首次 revision 冲突、第二次成功，断言只产生一次节点取消审计和一次 `WORKFLOW_CANCELLED` 事件。
+4. 重新打包并运行新的真实立即取消样本，双 Trace 响应、数据库、SSE、Invocation/Route 和 Loki 门禁必须再次全部通过。
+
+#### 阶段 6 最终执行结果
+
+- 服务端 SSE 已在历史或实时流遇到 `WORKFLOW_COMPLETED/FAILED/CANCELLED` 后“包含终态再完成”，不再依赖客户端超时；新增 2 个服务单测覆盖历史终态与实时终态。
+- 前端会话历史加载后会从 assistant 消息提取唯一 `runId + traceId`，后台重放每个智能 Run；会话切换/重置会中止旧恢复连接，单个 Run 最多重试 3 次。新增历史恢复目标测试后前端共 4 tests / 4 pass，`vue-tsc --noEmit` 与 Vite 构建通过，1924 modules transformed。
+- 真实完成 Run `run_39933228-dd7f-4bb4-8807-29eba6ff518c` 根 Trace `3e31430f-9ef4-4da1-8701-eff12788c9a8`：SSE sequence 1..8 后由服务端结束；浏览器硬刷新并重新选择数据库工作流和原会话后，最终消息及“审核节点/第1次/已完成/审核通过/DEFAULT→END/178 Token/原 Trace”恢复，控制台错误 0。
+- 首轮取消 Run `run_d1937ffc-bc1c-4485-a6a2-7f7d02d0cbfe` 证明 Invocation/Route=`0/0`，但发现取消日志未闭合；后续多个样本证明只依赖异步线程收口会残留智能 Run/节点 `RUNNING`。修复为取消接口同步更新智能 Run、运行中节点并发布终态，同时增加中文 `chat_run_cancelled`、`workflow_node_cancelled` 日志。
+- 双 Trace 首个真实样本 `run_e4e4cc8b-5619-4cd5-850b-92fe859ae2e0` 又发现 revision 竞态，返回 `WORKFLOW_RUN_CONCURRENT_MODIFICATION`。原计划的“重新查询有限重试”在事务默认 `REPEATABLE READ` 下仍可能读取旧快照，因此最终采用单条 `status NOT IN ('CANCELLED','COMPLETED','FAILED')` 原子条件更新作为取消线性化点；重复取消幂等返回 0，后台旧 revision 更新自动失败。
+- 最终 Java 命令：`mvn -Dnet.bytebuddy.experimental=true -pl ai-agent-scaffold-app -am -DskipTests=false -Dtest=RunControlControllerTest,DomainLogTest,TraceContextTest,WorkflowEventStreamServiceTest,WorkflowEventRepositoryTest,IntelligentWorkflowRuntimeServiceTest,WorkflowDagCompilerTest,WorkflowEventMapperContractTest,MyBatisMapperLoadTest -Dsurefire.failIfNoSpecifiedTests=false test`。真实结果 27 tests，0 failures、0 errors、0 skipped，六个 reactor 模块全部 `BUILD SUCCESS`。
+- 最终 `mvn -DskipTests package` 八个 reactor 模块全部 `BUILD SUCCESS`；前端 `npm run test:unit` 4/4，通过；`npm run build` 成功。
+- 最终取消 Run `run_9dcbfc73-b65e-46f4-80d8-da8e3f2ebe4e`：启动根 Trace `787200c2-8f6a-47cd-a7d1-5392ab974359`，取消操作 Trace `80f375b6-af5f-4e2b-b8ca-a9a6d9ff19bb`；响应数据体同时返回两者且根 Trace 不换号。
+- 数据库最终门禁：ChatRun/智能 Run/节点=`cancelled/CANCELLED/CANCELLED`，节点 `RUN_CANCELLED`；Invocation/Route=`0/0`；事件为 sequence `1..3` 的 `WORKFLOW_STARTED → NODE_STARTED → WORKFLOW_CANCELLED`，所有记录根 Trace 唯一。
+- 取消历史 SSE 真实 0.30 秒返回并关闭。Grafana/Loki 根 Trace 分析为 17 条业务日志、1 个 traceId、1 个 runId，包含 `chat_run_cancelled` 与 `workflow_node_cancelled`，未返回 `incompleteStages`。
+- 明确剩余：Human/SubWorkflow/并行 Join、多实例重启接管、在途 Tool/RAG 副作用取消、跨租户全套、安全/故障注入、容量和 60 分钟稳定性尚未执行，不能宣布生产上线门禁全部通过；公网 MySQL TLS 随机失败也是独立阻塞项。

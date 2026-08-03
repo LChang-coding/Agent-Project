@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,6 +92,35 @@ public class IntelligentWorkflowRuntimeServiceTest {
         verify(audit).decideRoute(any());
     }
 
+    @Test
+    public void shouldSynchronouslyReconcileCancelledRunAndRunningNode() {
+        IWorkflowService workflowService = mock(IWorkflowService.class);
+        IChatService chatService = mock(IChatService.class);
+        RunControlService runControl = mock(RunControlService.class);
+        WorkflowEventStreamService events = mock(WorkflowEventStreamService.class);
+        ModelUsageService usage = mock(ModelUsageService.class);
+        WorkflowInvocationGuardService guard = mock(WorkflowInvocationGuardService.class);
+        IWorkflowExecutionAuditRepository audit = mock(IWorkflowExecutionAuditRepository.class);
+        InMemoryRunRepository runs = new InMemoryRunRepository();
+        runs.insert(IntelligentWorkflowRunEntity.builder().tenantId("tenant_1").userId("user_1").runId("run_1")
+                .workflowId("wf_1").workflowVersion(1).traceId("trace_root_1234").status("RUNNING")
+                .currentNodeId("review").executedSteps(0).usedTokens(0L).revision(0L).build());
+        when(audit.cancelRunningNodes(eq("tenant_1"), eq("run_1"), any())).thenReturn(1);
+        IntelligentWorkflowRuntimeService service = new IntelligentWorkflowRuntimeService(workflowService, chatService,
+                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit,
+                new DirectExecutorService(), new ObjectMapper());
+        ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant_1").userId("user_1").sessionId("session_1")
+                .runId("run_1").traceId("trace_root_1234").status(RunStatus.CANCELLED).build();
+
+        service.reconcileCancellation(run);
+        service.reconcileCancellation(run);
+
+        Assert.assertEquals("CANCELLED", runs.value.get().getStatus());
+        verify(audit).cancelRunningNodes(eq("tenant_1"), eq("run_1"), any());
+        verify(events).publish(eq("tenant_1"), eq("user_1"), eq("run_1"), eq("trace_root_1234"),
+                eq("WORKFLOW_CANCELLED"), isNull(), eq("review"), anyString());
+    }
+
     private WorkflowRuntimeEntity runtime() {
         WorkflowDagPlanEntity.Node node = WorkflowDagPlanEntity.Node.builder().nodeId("review").nodeName("审核")
                 .runtimeAgentId("agent_review").maxVisits(2).enabledStrategies(List.of("DEFAULT"))
@@ -111,6 +141,13 @@ public class IntelligentWorkflowRuntimeServiceTest {
         @Override public int updateState(IntelligentWorkflowRunEntity run, long expectedRevision) {
             if (run.getRevision() != expectedRevision) return 0;
             run.setRevision(expectedRevision + 1); value.set(run); return 1;
+        }
+        @Override public int cancelActive(String tenantId, String userId, String runId, java.time.LocalDateTime finishedAt) {
+            IntelligentWorkflowRunEntity current = value.get();
+            if (current == null || "CANCELLED".equals(current.getStatus()) || "COMPLETED".equals(current.getStatus())
+                    || "FAILED".equals(current.getStatus())) return 0;
+            current.setStatus("CANCELLED"); current.setFinishedAt(finishedAt);
+            current.setRevision(current.getRevision() + 1); value.set(current); return 1;
         }
     }
 

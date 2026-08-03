@@ -98,6 +98,17 @@ public final class ChatLog {
                 .field(AiLogFields.SUCCESS, true);
     }
 
+    /** 记录一次会话运行取消；根 Trace 由调用方使用运行记录中的 traceId 显式覆盖。 */
+    public AiLogRecord runCancelled(String tenantId, String userId, String sessionId, String runId,
+                                    Boolean ragEnabled, String reason, Long costMs) {
+        return AiLogRecord.event(AiLogEvent.CHAT_RUN_CANCELLED)
+                .field(AiLogFields.TENANT_ID, tenantId).field(AiLogFields.USER_ID, userId)
+                .field(AiLogFields.SESSION_ID, sessionId).field(AiLogFields.RUN_ID, runId)
+                .field("ragEnabled", ragEnabled).field("reason", reason)
+                .field(AiLogFields.COST_MS, costMs).field(AiLogFields.STAGE, "run")
+                .field(AiLogFields.SUCCESS, true);
+    }
+
     /** 记录一次会话运行失败。 */
     public AiLogRecord runFailed(String tenantId, String userId, String sessionId, String runId,
                                  Boolean ragEnabled, Long costMs, Throwable throwable) {

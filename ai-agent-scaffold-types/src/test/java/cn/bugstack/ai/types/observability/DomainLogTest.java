@@ -110,6 +110,32 @@ public class DomainLogTest {
         Assert.assertTrue(actual.contains("runId=run-1"));
     }
 
+    @Test
+    public void shouldBuildCancelledRunTerminalWithExplicitRootTrace() {
+        String actual = AiLog.chat().runCancelled("t1", "u1", "s1", "run-1", false,
+                        "用户主动取消", 23L)
+                .field(AiLogFields.TRACE_ID, "11111111-1111-1111-1111-111111111111")
+                .toLogfmt();
+
+        Assert.assertTrue(actual.contains("traceId=11111111-1111-1111-1111-111111111111"));
+        Assert.assertTrue(actual.contains("event=chat_run_cancelled"));
+        Assert.assertTrue(actual.contains("eventName=\"会话运行已取消\""));
+        Assert.assertTrue(actual.contains("runId=run-1"));
+        Assert.assertTrue(actual.contains("reason=\"用户主动取消\""));
+        Assert.assertTrue(actual.contains("stage=run success=true"));
+    }
+
+    @Test
+    public void shouldBuildCancelledWorkflowNodeTerminal() {
+        String actual = AiLog.workflow().nodeCancelled("t1", "u1", "s1", "run-1", "wf-1",
+                "review", 1, 3, 25L).toLogfmt();
+
+        Assert.assertTrue(actual.contains("event=workflow_node_cancelled"));
+        Assert.assertTrue(actual.contains("eventName=\"工作流节点已取消\""));
+        Assert.assertTrue(actual.contains("nodeId=review"));
+        Assert.assertTrue(actual.contains("stage=node_execute success=true"));
+    }
+
     private void assertTraceIdAndLogBody(String expectedBody, String actual) {
         Assert.assertTrue("logId and traceId should be the first fields: " + actual, LOG_TRACE_PREFIX.matcher(actual).find());
         String body = LOG_TRACE_PREFIX.matcher(actual).replaceFirst("")

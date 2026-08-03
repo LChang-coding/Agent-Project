@@ -13,6 +13,7 @@ public enum AiLogEvent {
     CHAT_RAG_SETTING_CHANGED(AiLogDomain.CHAT, "chat_rag_setting_changed"),
     CHAT_RUN_STARTED(AiLogDomain.CHAT, "chat_run_started"),
     CHAT_RUN_COMPLETED(AiLogDomain.CHAT, "chat_run_completed"),
+    CHAT_RUN_CANCELLED(AiLogDomain.CHAT, "chat_run_cancelled"),
     CHAT_RUN_FAILED(AiLogDomain.CHAT, "chat_run_failed"),
     CONTEXT_ASSEMBLY_STARTED(AiLogDomain.CHAT, "context_assembly_started"),
     CONTEXT_ASSEMBLY_COMPLETED(AiLogDomain.CHAT, "context_assembly_completed"),
@@ -43,6 +44,7 @@ public enum AiLogEvent {
     WORKFLOW_RUNTIME_LOADED(AiLogDomain.WORKFLOW, "workflow_runtime_loaded"),
     WORKFLOW_NODE_STARTED(AiLogDomain.WORKFLOW, "workflow_node_started"),
     WORKFLOW_NODE_COMPLETED(AiLogDomain.WORKFLOW, "workflow_node_completed"),
+    WORKFLOW_NODE_CANCELLED(AiLogDomain.WORKFLOW, "workflow_node_cancelled"),
     WORKFLOW_NODE_FAILED(AiLogDomain.WORKFLOW, "workflow_node_failed"),
     WORKFLOW_ROUTE_DECIDED(AiLogDomain.WORKFLOW, "workflow_route_decided"),
     WORKFLOW_DAG_COMPLETED(AiLogDomain.WORKFLOW, "workflow_dag_completed"),
@@ -116,6 +118,7 @@ public enum AiLogEvent {
             case CHAT_RAG_SETTING_CHANGED -> "会话RAG设置已更新";
             case CHAT_RUN_STARTED -> "会话运行已开始";
             case CHAT_RUN_COMPLETED -> "会话运行已完成";
+            case CHAT_RUN_CANCELLED -> "会话运行已取消";
             case CHAT_RUN_FAILED -> "会话运行失败";
             case CONTEXT_ASSEMBLY_STARTED -> "上下文组装已开始";
             case CONTEXT_ASSEMBLY_COMPLETED -> "上下文组装已完成";
@@ -142,6 +145,7 @@ public enum AiLogEvent {
             case WORKFLOW_RUNTIME_LOADED -> "工作流运行时已加载";
             case WORKFLOW_NODE_STARTED -> "工作流节点已开始";
             case WORKFLOW_NODE_COMPLETED -> "工作流节点已完成";
+            case WORKFLOW_NODE_CANCELLED -> "工作流节点已取消";
             case WORKFLOW_NODE_FAILED -> "工作流节点执行失败";
             case WORKFLOW_ROUTE_DECIDED -> "工作流路由已裁决";
             case WORKFLOW_DAG_COMPLETED -> "工作流执行完成";

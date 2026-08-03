@@ -15,6 +15,11 @@
         WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND node_execution_id=#{nodeExecutionId}
           AND trace_id=#{traceId} AND deleted=0
     </update>
+    <update id="cancelRunningNodes">
+        UPDATE workflow_node_execution
+        SET status='CANCELLED', error_code='RUN_CANCELLED', error_message='运行已取消', finished_at=#{finishedAt}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND status='RUNNING' AND deleted=0
+    </update>
     <insert id="insertRoute">
         INSERT INTO workflow_route_decision
         (tenant_id, run_id, route_decision_id, node_execution_id, source_node_id, target_node_id,

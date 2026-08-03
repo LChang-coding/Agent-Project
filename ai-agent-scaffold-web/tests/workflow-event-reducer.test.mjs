@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { parseWorkflowSseBlock } from '../src/domain/workflow-sse-parser.ts';
 import { createWorkflowRunState, reduceWorkflowEvent } from '../src/domain/workflow-event-reducer.ts';
+import { workflowHistoryRunTargets } from '../src/domain/workflow-history.ts';
 
 const runId = 'run_1';
 const traceId = 'trace_root';
@@ -40,4 +41,17 @@ test('SSE parser 支持多行 data 并拒绝非 JSON', () => {
   const parsed = parseWorkflowSseBlock('event: workflow_event\ndata: {"runId":"run_1",\ndata: "sequence":1}');
   assert.deepEqual(parsed, { eventName: 'workflow_event', data: { runId: 'run_1', sequence: 1 } });
   assert.throws(() => parseWorkflowSseBlock('event: workflow_event\ndata: nope'), /不是有效 JSON/);
+});
+
+test('刷新恢复只为带根 Trace 的 assistant Run 建立一次回放', () => {
+  assert.deepEqual(workflowHistoryRunTargets([
+    { role: 'user', runId: 'run_1', traceId: 'trace_1' },
+    { role: 'assistant', runId: 'run_1', traceId: 'trace_1' },
+    { role: 'assistant', runId: 'run_2' },
+    { role: 'assistant', runId: 'run_1', traceId: 'trace_1' },
+    { role: 'assistant', runId: 'run_3', traceId: 'trace_3' },
+  ]), [
+    { runId: 'run_3', traceId: 'trace_3' },
+    { runId: 'run_1', traceId: 'trace_1' },
+  ]);
 });

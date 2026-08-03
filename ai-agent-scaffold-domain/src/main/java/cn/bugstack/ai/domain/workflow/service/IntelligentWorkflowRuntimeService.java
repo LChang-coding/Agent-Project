@@ -20,6 +20,7 @@ import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.TraceContext;
 import cn.bugstack.ai.types.observability.AiLog;
+import cn.bugstack.ai.types.observability.AiLogFields;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -169,12 +170,21 @@ public class IntelligentWorkflowRuntimeService {
                     invocationGuardService.success(run.getTenantId(), invocation.getInvocationId(), null);
                 } catch (RuntimeException invocationError) {
                     invocationGuardService.failed(run.getTenantId(), invocation.getInvocationId(), null);
-                    executionAudit.setStatus("FAILED"); executionAudit.setErrorCode(errorCode(invocationError));
+                    boolean cancelledDuringInvocation = runControlService.cancelled(run.getTenantId(), run.getUserId(), run.getRunId());
+                    executionAudit.setStatus(cancelledDuringInvocation ? "CANCELLED" : "FAILED");
+                    executionAudit.setErrorCode(cancelledDuringInvocation ? "RUN_CANCELLED" : errorCode(invocationError));
                     executionAudit.setErrorMessage(safe(invocationError.getMessage())); executionAudit.setFinishedAt(LocalDateTime.now());
                     executionAuditRepository.completeNode(executionAudit);
-                    AiLog.error(AiLog.workflow().nodeFailed(run.getTenantId(), run.getUserId(), sessionId, run.getRunId(),
-                            runtime.getWorkflowId(), currentNodeId, executionIndex, safeMaxVisits(node.getMaxVisits()),
-                            elapsedMs(nodeStartedNanos), invocationError));
+                    if (cancelledDuringInvocation) {
+                        AiLog.info(AiLog.workflow().nodeCancelled(run.getTenantId(), run.getUserId(), sessionId,
+                                run.getRunId(), runtime.getWorkflowId(), currentNodeId, executionIndex,
+                                safeMaxVisits(node.getMaxVisits()), elapsedMs(nodeStartedNanos))
+                                .field(AiLogFields.TRACE_ID, run.getTraceId()));
+                    } else {
+                        AiLog.error(AiLog.workflow().nodeFailed(run.getTenantId(), run.getUserId(), sessionId, run.getRunId(),
+                                runtime.getWorkflowId(), currentNodeId, executionIndex, safeMaxVisits(node.getMaxVisits()),
+                                elapsedMs(nodeStartedNanos), invocationError));
+                    }
                     throw invocationError;
                 }
                 String output = safe(result.getOutput());
@@ -219,7 +229,7 @@ public class IntelligentWorkflowRuntimeService {
             updateState(run, "END", "COMPLETED", steps,
                     modelUsageService.summarizeSession(run.getTenantId(), run.getUserId(), sessionId, run.getRunId()).getTotalTokens(),
                     LocalDateTime.now());
-        } catch (RuntimeException exception) {
+        } catch (Throwable exception) {
             if (!runControlService.cancelled(run.getTenantId(), run.getUserId(), run.getRunId())) {
                 runControlService.failWithAssistantMessage(run.getTenantId(), run.getUserId(), run.getRunId(),
                         "[assistant_error] " + safe(exception.getMessage()), run.getTraceId(), safe(exception.getMessage()));
@@ -228,10 +238,29 @@ public class IntelligentWorkflowRuntimeService {
                                 "message", safe(exception.getMessage()), "executedSteps", steps));
                 updateState(run, currentNodeId, "FAILED", steps, 0L, LocalDateTime.now());
             } else {
-                publish(run, "WORKFLOW_CANCELLED", null, currentNodeId, Map.of("executedSteps", steps));
-                updateState(run, currentNodeId, "CANCELLED", steps, 0L, LocalDateTime.now());
+                reconcileCancellation(run);
             }
+            if (exception instanceof Error error) throw error;
         }
+    }
+
+    /** 取消请求成功后同步收口智能扩展状态；可重复调用，终态 Run 不重复写事件。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void reconcileCancellation(ChatRunEntity run) {
+        LocalDateTime finishedAt = LocalDateTime.now();
+        // 取消与后台节点推进会竞争 revision；以非终态条件更新作为唯一线性化点，避免旧 revision 误报失败。
+        if (intelligentRunRepository.cancelActive(run.getTenantId(), run.getUserId(), run.getRunId(), finishedAt) == 0) return;
+        IntelligentWorkflowRunEntity state = intelligentRunRepository.query(run.getTenantId(), run.getUserId(), run.getRunId());
+        if (state == null) throw new AppException("WORKFLOW_RUN_NOT_FOUND", "取消后无法读取智能工作流运行");
+        int cancelledNodes = executionAuditRepository.cancelRunningNodes(run.getTenantId(), run.getRunId(), finishedAt);
+        if (cancelledNodes > 0) {
+            AiLog.info(AiLog.workflow().nodeCancelled(run.getTenantId(), run.getUserId(), run.getSessionId(),
+                    run.getRunId(), state.getWorkflowId(), state.getCurrentNodeId(), null, null,
+                    elapsed(run.getStartedAt()))
+                    .field(AiLogFields.TRACE_ID, run.getTraceId()));
+        }
+        publish(run, "WORKFLOW_CANCELLED", null, state.getCurrentNodeId(),
+                Map.of("executedSteps", state.getExecutedSteps(), "cancelledNodes", cancelledNodes));
     }
 
     private void updateState(ChatRunEntity run, String nodeId, String status, int steps, long tokens, LocalDateTime finishedAt) {
@@ -309,4 +338,8 @@ public class IntelligentWorkflowRuntimeService {
     private <T> List<T> safeList(List<T> value) { return value == null ? List.of() : value; }
     private boolean blank(String value) { return value == null || value.isBlank(); }
     private String safe(String value) { return value == null ? "" : value; }
+
+    private long elapsed(LocalDateTime startedAt) {
+        return startedAt == null ? 0L : Math.max(0L, java.time.Duration.between(startedAt, LocalDateTime.now()).toMillis());
+    }
 }

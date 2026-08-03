@@ -401,6 +401,10 @@ public class RunControlService {
         modelUsageService.cancelRunning(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
                 blank(reason) ? "用户取消" : reason);
         interruptAfterCommit(runId);
+        AiLog.info(AiLog.chat().runCancelled(run.getTenantId(), run.getUserId(), run.getSessionId(), runId,
+                run.getRagEnabled(), blank(reason) ? "用户取消" : reason, elapsed(run))
+                // 取消 HTTP 有独立操作 Trace；运行终态必须归入被取消 Run 的根 Trace。
+                .field(AiLogFields.TRACE_ID, run.getTraceId()));
         log.info("会话运行已取消 tenantId:{} userId:{} sessionId:{} runId:{} revision:{}",
                 run.getTenantId(), run.getUserId(), run.getSessionId(), runId, revision);
         return require(run.getTenantId(), run.getUserId(), runId);

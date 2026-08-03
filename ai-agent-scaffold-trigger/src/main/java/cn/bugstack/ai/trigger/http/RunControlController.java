@@ -6,9 +6,11 @@ import cn.bugstack.ai.api.dto.SteerRunRequestDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
+import cn.bugstack.ai.domain.workflow.service.IntelligentWorkflowRuntimeService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.observability.TraceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,12 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class RunControlController {
 
     private final RunControlService runControlService;
+    private final IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService;
 
     /**
      * @param runControlService 负责运行状态机、消息失效和压缩任务回滚的领域服务
      */
-    public RunControlController(RunControlService runControlService) {
+    public RunControlController(RunControlService runControlService,
+                                IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService) {
         this.runControlService = runControlService;
+        this.intelligentWorkflowRuntimeService = intelligentWorkflowRuntimeService;
     }
 
     /**
@@ -48,6 +53,7 @@ public class RunControlController {
             // 身份只取服务端认证上下文，运行归属和可取消状态由领域服务原子校验。
             ChatRunEntity run = runControlService.cancel(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), runId, request == null ? null : request.getReason());
+            intelligentWorkflowRuntimeService.reconcileCancellation(run);
             return Response.<RunControlResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -100,6 +106,8 @@ public class RunControlController {
                 .status(run.getStatus().name().toLowerCase())
                 .contextRevision(run.getCurrentContextRevision())
                 .successorRunId(run.getSuccessorRunId())
+                .traceId(run.getTraceId())
+                .operationTraceId(TraceContext.ensureTraceId())
                 .build();
     }
 }
