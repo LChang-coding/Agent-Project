@@ -10,6 +10,15 @@ import java.util.List;
 @Data
 public class WorkflowGraphDTO {
 
+    /** STATIC 或 INTELLIGENT。 */
+    private String workflowKind;
+
+    /** 单次运行最大节点调度数。 */
+    private Integer maxSteps;
+
+    /** 单次运行 Token 预算。 */
+    private Long tokenBudget;
+
     /**
      * 编排模式：sequential/parallel/loop。
      */
@@ -81,6 +90,16 @@ public class WorkflowGraphDTO {
          */
         private Integer maxIterations;
 
+        private List<String> enabledStrategies;
+
+        private List<String> allowedTargetNodeIds;
+
+        private String defaultTargetNodeId;
+
+        private String routeInstruction;
+
+        private Integer maxVisits;
+
         /**
          * 画布横向坐标。
          */
@@ -112,5 +131,13 @@ public class WorkflowGraphDTO {
          * 终点节点ID。
          */
         private String targetNodeId;
+
+        private String routeType;
+
+        private String routeKey;
+
+        private String conditionExpression;
+
+        private Integer priority;
     }
 }

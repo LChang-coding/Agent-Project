@@ -260,6 +260,9 @@ public class WorkflowController implements IWorkflowApiService {
             return null;
         }
         return WorkflowGraphEntity.builder()
+                .workflowKind(dto.getWorkflowKind())
+                .maxSteps(dto.getMaxSteps())
+                .tokenBudget(dto.getTokenBudget())
                 .mode(dto.getMode())
                 .rootNodeId(dto.getRootNodeId())
                 .nodes(dto.getNodes() == null ? Collections.emptyList() : dto.getNodes().stream().map(this::toNodeEntity).collect(Collectors.toList()))
@@ -275,6 +278,9 @@ public class WorkflowController implements IWorkflowApiService {
             return null;
         }
         WorkflowGraphDTO dto = new WorkflowGraphDTO();
+        dto.setWorkflowKind(entity.getWorkflowKind());
+        dto.setMaxSteps(entity.getMaxSteps());
+        dto.setTokenBudget(entity.getTokenBudget());
         dto.setMode(entity.getMode());
         dto.setRootNodeId(entity.getRootNodeId());
         dto.setNodes(entity.getNodes() == null ? Collections.emptyList() : entity.getNodes().stream().map(this::toNodeDTO).collect(Collectors.toList()));
@@ -296,6 +302,11 @@ public class WorkflowController implements IWorkflowApiService {
                 .mcpIds(node.getMcpIds())
                 .skillIds(node.getSkillIds())
                 .maxIterations(node.getMaxIterations())
+                .enabledStrategies(node.getEnabledStrategies())
+                .allowedTargetNodeIds(node.getAllowedTargetNodeIds())
+                .defaultTargetNodeId(node.getDefaultTargetNodeId())
+                .routeInstruction(node.getRouteInstruction())
+                .maxVisits(node.getMaxVisits())
                 .x(node.getX())
                 .y(node.getY())
                 .build();
@@ -315,6 +326,11 @@ public class WorkflowController implements IWorkflowApiService {
         node.setMcpIds(entity.getMcpIds());
         node.setSkillIds(entity.getSkillIds());
         node.setMaxIterations(entity.getMaxIterations());
+        node.setEnabledStrategies(entity.getEnabledStrategies());
+        node.setAllowedTargetNodeIds(entity.getAllowedTargetNodeIds());
+        node.setDefaultTargetNodeId(entity.getDefaultTargetNodeId());
+        node.setRouteInstruction(entity.getRouteInstruction());
+        node.setMaxVisits(entity.getMaxVisits());
         node.setX(entity.getX());
         node.setY(entity.getY());
         return node;
@@ -328,6 +344,10 @@ public class WorkflowController implements IWorkflowApiService {
                 .edgeId(edge.getEdgeId())
                 .sourceNodeId(edge.getSourceNodeId())
                 .targetNodeId(edge.getTargetNodeId())
+                .routeType(edge.getRouteType())
+                .routeKey(edge.getRouteKey())
+                .conditionExpression(edge.getConditionExpression())
+                .priority(edge.getPriority())
                 .build();
     }
 
@@ -339,6 +359,10 @@ public class WorkflowController implements IWorkflowApiService {
         edge.setEdgeId(entity.getEdgeId());
         edge.setSourceNodeId(entity.getSourceNodeId());
         edge.setTargetNodeId(entity.getTargetNodeId());
+        edge.setRouteType(entity.getRouteType());
+        edge.setRouteKey(entity.getRouteKey());
+        edge.setConditionExpression(entity.getConditionExpression());
+        edge.setPriority(entity.getPriority());
         return edge;
     }
 

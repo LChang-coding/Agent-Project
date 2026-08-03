@@ -81,8 +81,12 @@ public class WorkflowRuntimeCompiler {
         if (llmNodes.isEmpty()) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流至少需要一个 LLM 节点");
         }
-        // 编译前拒绝非自循环环路，避免运行时 Join 永久等待。
-        validateDagGraph(graph, llmNodes);
+        // 静态 DAG 拒绝普通环；智能工作流允许受 maxSteps/maxVisits 约束的回路。
+        if (isIntelligent(graph)) {
+            validateIntelligentGraph(graph, llmNodes);
+        } else {
+            validateDagGraph(graph, llmNodes);
+        }
 
         String runtimeAgentId = runtimeAgentId(workflow.getWorkflowId(), version.getVersion(), requestModelCode);
         Map<String, WorkflowGraphEntity.Node> llmNodeMap = llmNodes.stream()
@@ -103,10 +107,18 @@ public class WorkflowRuntimeCompiler {
                     .runtimeAgentName(nodeRuntimeAgentName)
                     .modelCode(modelRouter.route(requestModelCode, node.getModelCode(), version.getDefaultModelCode()))
                     .maxIterations(loopIterations(node))
+                    .enabledStrategies(node.getEnabledStrategies())
+                    .allowedTargetNodeIds(node.getAllowedTargetNodeIds())
+                    .defaultTargetNodeId(node.getDefaultTargetNodeId())
+                    .routeInstruction(node.getRouteInstruction())
+                    .maxVisits(safeMaxVisits(node.getMaxVisits()))
                     .build());
         }
 
         WorkflowDagPlanEntity dagPlan = WorkflowDagPlanEntity.builder()
+                .workflowKind(isIntelligent(graph) ? "INTELLIGENT" : "STATIC")
+                .maxSteps(safeMaxSteps(graph.getMaxSteps()))
+                .tokenBudget(safeTokenBudget(graph.getTokenBudget()))
                 .workflowId(workflow.getWorkflowId())
                 .version(version.getVersion())
                 .rootNodeId(rootDagNodeId(graph, llmNodes))
@@ -532,6 +544,10 @@ public class WorkflowRuntimeCompiler {
                         .edgeId(defaultString(edge.getEdgeId(), "edge_" + edge.getSourceNodeId() + "_" + edge.getTargetNodeId()))
                         .sourceNodeId(edge.getSourceNodeId())
                         .targetNodeId(edge.getTargetNodeId())
+                        .routeType(edge.getRouteType())
+                        .routeKey(edge.getRouteKey())
+                        .conditionExpression(edge.getConditionExpression())
+                        .priority(edge.getPriority())
                         .build());
             }
         }
@@ -574,6 +590,65 @@ public class WorkflowRuntimeCompiler {
             return 3;
         }
         return Math.min(node.getMaxIterations(), 20);
+    }
+
+    /** 智能模式只使用单活动路径调度，不进入旧 DAG 的并行 Join。 */
+    private boolean isIntelligent(WorkflowGraphEntity graph) {
+        return graph != null && "INTELLIGENT".equalsIgnoreCase(graph.getWorkflowKind());
+    }
+
+    /** 校验智能图的路由闭包、有限预算与受限表达式，拒绝运行时才暴露的悬空配置。 */
+    private void validateIntelligentGraph(WorkflowGraphEntity graph, List<WorkflowGraphEntity.Node> nodes) {
+        Set<String> nodeIds = nodes.stream().map(WorkflowGraphEntity.Node::getNodeId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!nodeIds.contains(graph.getRootNodeId())) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能工作流必须指定有效入口节点");
+        }
+        if (graph.getMaxSteps() == null || graph.getMaxSteps() < 1 || graph.getMaxSteps() > 200) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能工作流 maxSteps 必须在 1 到 200 之间");
+        }
+        Map<String, List<WorkflowGraphEntity.Edge>> outgoing = graph.getEdges() == null
+                ? Collections.emptyMap()
+                : graph.getEdges().stream().collect(Collectors.groupingBy(
+                        WorkflowGraphEntity.Edge::getSourceNodeId, LinkedHashMap::new, Collectors.toList()));
+        for (WorkflowGraphEntity.Node node : nodes) {
+            int maxVisits = safeMaxVisits(node.getMaxVisits());
+            if (node.getMaxVisits() == null || maxVisits != node.getMaxVisits()) {
+                throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能节点 maxVisits 必须在 1 到 50 之间: " + node.getNodeId());
+            }
+            List<WorkflowGraphEntity.Edge> edges = outgoing.getOrDefault(node.getNodeId(), Collections.emptyList());
+            if (!edges.isEmpty() && edges.stream().noneMatch(edge -> "DEFAULT".equalsIgnoreCase(edge.getRouteType()))) {
+                throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能节点必须配置 DEFAULT 出口: " + node.getNodeId());
+            }
+            for (WorkflowGraphEntity.Edge edge : edges) {
+                if (!"END".equalsIgnoreCase(edge.getTargetNodeId()) && !nodeIds.contains(edge.getTargetNodeId())) {
+                    throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能路由目标不存在: " + edge.getTargetNodeId());
+                }
+                if ("EXPRESSION".equalsIgnoreCase(edge.getRouteType())
+                        && !IntelligentWorkflowRouter.supportedExpression(edge.getConditionExpression())) {
+                    throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能路由表达式不受支持: " + edge.getEdgeId());
+                }
+            }
+            if (node.getAllowedTargetNodeIds() != null) {
+                for (String target : node.getAllowedTargetNodeIds()) {
+                    if (!"END".equalsIgnoreCase(target) && !nodeIds.contains(target)) {
+                        throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "节点允许目标不存在: " + target);
+                    }
+                }
+            }
+        }
+    }
+
+    private int safeMaxSteps(Integer maxSteps) {
+        return maxSteps == null ? 40 : Math.max(1, Math.min(maxSteps, 200));
+    }
+
+    private int safeMaxVisits(Integer maxVisits) {
+        return maxVisits == null ? 3 : Math.max(1, Math.min(maxVisits, 50));
+    }
+
+    private long safeTokenBudget(Long tokenBudget) {
+        return tokenBudget == null || tokenBudget < 1 ? 128_000L : Math.min(tokenBudget, 10_000_000L);
     }
 
     /**

@@ -16,6 +16,15 @@ import java.util.List;
 @NoArgsConstructor
 public class WorkflowGraphEntity {
 
+    /** STATIC 沿用拓扑 DAG；INTELLIGENT 由每个节点完成后动态选择唯一下一跳。 */
+    private String workflowKind;
+
+    /** 单次智能运行允许调度的节点总数上限。 */
+    private Integer maxSteps;
+
+    /** 单次智能运行允许消耗的 Token 上限。 */
+    private Long tokenBudget;
+
     /** 旧式组合编排模式；DAG 执行以 edges 为准。 */
     private String mode;
 
@@ -82,6 +91,21 @@ public class WorkflowGraphEntity {
         /** 自循环节点的执行上限。 */
         private Integer maxIterations;
 
+        /** 节点可启用的路由策略；运行时按平台固定优先级执行，数组顺序不改变优先级。 */
+        private List<String> enabledStrategies;
+
+        /** 节点允许到达的目标；END 表示显式结束。 */
+        private List<String> allowedTargetNodeIds;
+
+        /** 没有其他策略命中时的目标。 */
+        private String defaultTargetNodeId;
+
+        /** AI_ROUTER 使用的业务路由说明；不得包含密钥或系统提示词。 */
+        private String routeInstruction;
+
+        /** 整个运行中该节点允许被访问的次数。 */
+        private Integer maxVisits;
+
         /**
          * 画布横向坐标。
          */
@@ -112,5 +136,17 @@ public class WorkflowGraphEntity {
 
         /** 下游节点ID；与起点相同时表示自循环。 */
         private String targetNodeId;
+
+        /** FIXED/SUCCESS/FAILURE/EXPRESSION/NODE_SUGGESTION/AI_ROUTER/DEFAULT。 */
+        private String routeType;
+
+        /** 节点建议或 AI 路由返回的稳定路由键。 */
+        private String routeKey;
+
+        /** 受限表达式；仅允许 status/output/suggestion 的比较和 contains。 */
+        private String conditionExpression;
+
+        /** 同一种策略内的数值优先级，数值越小越先匹配。 */
+        private Integer priority;
     }
 }

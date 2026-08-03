@@ -16,6 +16,15 @@ import java.util.List;
 @NoArgsConstructor
 public class WorkflowDagPlanEntity {
 
+    /** STATIC 或 INTELLIGENT；缺省按 STATIC 兼容旧版本。 */
+    private String workflowKind;
+
+    /** 智能工作流总步数硬上限。 */
+    private Integer maxSteps;
+
+    /** 智能工作流 Token 总预算。 */
+    private Long tokenBudget;
+
     /**
      * 工作流ID。
      */
@@ -85,6 +94,16 @@ public class WorkflowDagPlanEntity {
 
         /** 自循环节点的执行上限；防止无限迭代。 */
         private Integer maxIterations;
+
+        private List<String> enabledStrategies;
+
+        private List<String> allowedTargetNodeIds;
+
+        private String defaultTargetNodeId;
+
+        private String routeInstruction;
+
+        private Integer maxVisits;
     }
 
     /**
@@ -106,5 +125,13 @@ public class WorkflowDagPlanEntity {
 
         /** 下游节点ID；与起点相同时表示有限自循环。 */
         private String targetNodeId;
+
+        private String routeType;
+
+        private String routeKey;
+
+        private String conditionExpression;
+
+        private Integer priority;
     }
 }

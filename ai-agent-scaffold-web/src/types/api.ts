@@ -448,6 +448,9 @@ export interface WorkflowDeleteResponse {
 }
 
 export interface WorkflowGraph {
+  workflowKind?: 'STATIC' | 'INTELLIGENT';
+  maxSteps?: number;
+  tokenBudget?: number;
   mode: 'sequential' | 'parallel' | 'loop';
   rootNodeId: string;
   nodes: WorkflowNode[];
@@ -464,6 +467,11 @@ export interface WorkflowNode {
   mcpIds?: string[];
   skillIds?: string[];
   maxIterations?: number;
+  enabledStrategies?: WorkflowRouteStrategy[];
+  allowedTargetNodeIds?: string[];
+  defaultTargetNodeId?: string;
+  routeInstruction?: string;
+  maxVisits?: number;
   x?: number;
   y?: number;
 }
@@ -472,7 +480,19 @@ export interface WorkflowEdge {
   edgeId: string;
   sourceNodeId: string;
   targetNodeId: string;
+  routeType?: 'FIXED' | 'SUCCESS' | 'FAILURE' | 'EXPRESSION' | 'NODE_SUGGESTION' | 'AI_ROUTER' | 'DEFAULT';
+  routeKey?: string;
+  conditionExpression?: string;
+  priority?: number;
 }
+
+export type WorkflowRouteStrategy =
+  | 'FIXED'
+  | 'SUCCESS'
+  | 'EXPRESSION'
+  | 'NODE_SUGGESTION'
+  | 'AI_ROUTER'
+  | 'DEFAULT';
 
 export interface WorkflowDetail {
   workflow: WorkflowSummary;

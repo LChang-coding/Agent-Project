@@ -66,6 +66,27 @@ public class WorkflowDagCompilerTest {
         }
     }
 
+    @Test
+    public void shouldCompileBoundedIntelligentCycle() throws Exception {
+        WorkflowRuntimeCompiler compiler = compiler();
+        WorkflowGraphEntity graph = cycleGraph();
+        graph.setWorkflowKind("INTELLIGENT");
+        graph.setMaxSteps(12);
+        graph.setTokenBudget(20_000L);
+        graph.getNodes().forEach(node -> {
+            node.setMaxVisits(4);
+            node.setAllowedTargetNodeIds(List.of("node_a", "node_b", "END"));
+            node.setEnabledStrategies(List.of("DEFAULT"));
+        });
+        graph.getEdges().forEach(edge -> edge.setRouteType("DEFAULT"));
+
+        WorkflowDagCompileResultEntity result = compiler.compileDag(workflow(), version(graph), "deepseek-v4-flash");
+
+        Assert.assertEquals("INTELLIGENT", result.getDagPlan().getWorkflowKind());
+        Assert.assertEquals(Integer.valueOf(12), result.getDagPlan().getMaxSteps());
+        Assert.assertEquals(2, result.getDagPlan().getEdges().size());
+    }
+
     /**
      * 创建测试编译器；无参数；返回注入假依赖的编译器。
      */
