@@ -87,6 +87,34 @@ public class WorkflowDagCompilerTest {
         Assert.assertEquals(2, result.getDagPlan().getEdges().size());
     }
 
+    @Test
+    public void shouldKeepExplicitEndEdgeForSingleNodeIntelligentWorkflow() throws Exception {
+        WorkflowRuntimeCompiler compiler = compiler();
+        WorkflowGraphEntity.Node review = node("review", "审核节点", 1);
+        review.setMaxVisits(1);
+        review.setEnabledStrategies(List.of("DEFAULT"));
+        review.setAllowedTargetNodeIds(List.of("END"));
+        review.setDefaultTargetNodeId("END");
+        WorkflowGraphEntity.Edge end = edge("review", "END");
+        end.setRouteType("DEFAULT");
+        WorkflowGraphEntity graph = WorkflowGraphEntity.builder()
+                .workflowKind("INTELLIGENT")
+                .maxSteps(3)
+                .tokenBudget(4096L)
+                .mode("sequential")
+                .rootNodeId("review")
+                .nodes(List.of(review))
+                .edges(List.of(end))
+                .build();
+
+        WorkflowDagCompileResultEntity result = compiler.compileDag(workflow(), version(graph), "deepseek-v4-flash");
+
+        Assert.assertEquals(1, result.getDagPlan().getEdges().size());
+        Assert.assertEquals("review", result.getDagPlan().getEdges().get(0).getSourceNodeId());
+        Assert.assertEquals("END", result.getDagPlan().getEdges().get(0).getTargetNodeId());
+        Assert.assertEquals("DEFAULT", result.getDagPlan().getEdges().get(0).getRouteType());
+    }
+
     /**
      * 创建测试编译器；无参数；返回注入假依赖的编译器。
      */

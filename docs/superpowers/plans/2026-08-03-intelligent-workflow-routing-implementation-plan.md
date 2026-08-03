@@ -155,3 +155,51 @@
 - 前端第一次单测命令失败：测试放在 `src` 导致生产类型检查缺 Node 声明，且 ESM bundle 误打包 Axios CommonJS 依赖。已把纯 SSE parser 下沉到无 HTTP 依赖的 domain 文件，测试移至 `tests/` 并用 esbuild + Node test runner。修正后 `npm run test:unit` 为 3 tests / 0 fail；`npm run build` 类型检查和生产构建成功。
 - 远端 MySQL 8.0.46 已执行非破坏性增量脚本，7 张新表和所有唯一索引实际存在。真实事务回滚验证返回 node/route/invocation/event=`1/1/1/2`、重复幂等写影响行 0、事件 Trace distinct=1、sequence=1..2，ROLLBACK 后 Run 剩余 0。首次手工 SQL 因遗漏必填 `replay_class` 失败，补齐后通过。
 - MySQL 公网 TLS 仍有间歇性问题：一次独立查询返回 `SSL routines::wrong version number`，第 2 次重试成功并确认 `TLSv1.3 / TLS_AES_128_GCM_SHA256`。这项不能记为网络稳定性门禁通过。
+
+### 2026-08-04 阶段 5 端到端验收执行计划
+
+1. 停止 8091 上 2026-07-31 启动且 HTTP 请求持续超时的旧 Jar，打包并启动当前提交；不改动服务器中间件部署。
+2. 通过真实注册/登录身份创建一个最小智能工作流，保存、发布并从聊天启动；校验 Run 根 Trace、节点/路由/事件/调用账本和最终消息。
+3. 执行 SSE 事件顺序、`afterSequence` 重放、同 eventId 幂等、主回答/节点输出分流、取消后无新 invocation 与旧静态工作流回归。
+4. 启动前端并进行真实浏览器点击验收；截图/响应/数据库回读只记录真实结果。
+
+### 2026-08-04 阶段 5 首次端到端失败诊断与重试计划
+
+- 首次启动当前 Jar 后，应用端口 8091 可用，未认证请求返回 401 且响应头带 `X-Trace-Id`；但端到端脚本没有生成 `intelligent_workflow_run` 记录，因此本次不能计为业务 E2E 通过。
+- 同期真实日志显示开发环境默认开启历史 RAG Dispatcher/Worker/Kafka Listener。历史摄取任务占用仅 1 条连接的 Hikari 池，随后出现 `Connection is not available`、`Communications link failure` 和远端 MySQL TLS 读超时；智能工作流请求因此没有获得稳定数据库窗口。
+- 本轮失败归类为“测试进程未隔离无关后台任务 + 远端 MySQL 公网连接不稳定”，不是智能路由断言失败。保留该失败记录，不覆盖、不伪造成功结果。
+
+重试计划：
+
+1. 停止当前测试实例，以环境变量显式关闭 `AI_RAG_OUTBOX_ENABLED`、`AI_RAG_WORKER_ENABLED`、`AI_RAG_KAFKA_LISTENER_ENABLED`，同时继续关闭 Nacos 注册，只隔离本轮无关任务，不改默认生产配置。
+2. 确认 8091 健康、数据库连接可用后，重新执行注册、登录、创建/保存/发布智能工作流、创建会话、启动 Run、消费 SSE 的完整链路。
+3. 从 MySQL 回读 Run、节点执行、路由决定、调用账本、事件和最终消息，硬校验同一 Run 只有一个根 `traceId`、事件 sequence 连续且终态完整。
+4. 对同一 Run 执行 `afterSequence` 重放，并补充前端 reducer/页面验收；只有形成可复核证据后才追加“通过”。
+
+重试实况：关闭 RAG 三个后台开关后，注册、登录、创建、保存和发布智能工作流均成功；启动 Run 时仍在创建 `chat_session` 前失败。服务日志证实同一 JDBC 连接在约 15 秒后由 `socketTimeout=15000` 触发 `Read timed out`，随后事务回滚；独立 MySQL CLI 同期也出现一次 TLS `wrong version number`。因此继续把公网 MySQL 稳定性列为外部门禁，不将本次记为工作流业务通过。下一轮仅在测试进程覆盖 JDBC `connectTimeout/socketTimeout`，验证长等待是否可恢复；不迁移数据库、不修改默认部署配置。
+
+测试启动参数把 `socketTimeout` 提升到 600 秒后，新建连接仍在握手后的 `isReadOnly` 查询阶段于约 13 秒内断开，证明不是客户端 15 秒预算不足；`nc` 同时确认公网 22/3306 TCP 端口均开放。为区分公网 MySQL TLS 代理故障与业务实现，下一轮通过同一主机 `103.205.240.84` 的 SSH 本地端口转发访问服务器 MySQL，仅用于本机 E2E，不上传项目、不迁移数据；公网直连失败仍作为独立未通过基础设施门禁保留。
+
+### 2026-08-04 智能路由 END 失败诊断与修复计划
+
+- 经 SSH 转发后，真实 Run `run_d924119a-8280-4778-8b14-0cda99996832` 已成功落库并调用真实模型；根 Trace 为 `75986927-4c49-4af3-b580-d091148dda0b`。
+- 持久事件 sequence 1..4 依次为 `WORKFLOW_STARTED / NODE_STARTED / NODE_OUTPUT_DELTA / NODE_COMPLETED`，模型真实输出“审核通过。”；sequence 5 为 `WORKFLOW_FAILED`，错误码 `WORKFLOW_ROUTE_NOT_FOUND`。所有事件的根 Trace 一致。
+- 该样本证明节点执行和中间输出流已打通，但单节点智能工作流的 DEFAULT 边无法路由到显式 `END`，因此不能判定核心闭环通过。
+
+修复计划：
+
+1. 只读核对编译器对 END 边的保留规则、路由器 DEFAULT 匹配和允许目标校验，定位丢边或过滤条件。
+2. 先增加“单节点 DEFAULT → END”的领域回归测试，再做最小修复；同时覆盖 routeKey 缺省和允许目标包含 END。
+3. 重跑领域定向测试、完整前端测试和真实 API/SSE E2E；数据库必须出现路由审计、最终回答事件和 `COMPLETED` 终态。
+
+### 2026-08-04 阶段 5 修复与端到端闭环结果
+
+- 根因确认：`WorkflowRuntimeCompiler.dagEdges` 只保留目标也是 LLM 节点的边，导致智能图合法的显式 `END` 边在编译计划中丢失。已仅对 `INTELLIGENT` 图保留 `source LLM → END`，不改变旧静态 DAG 的边过滤语义。
+- 新增 `shouldKeepExplicitEndEdgeForSingleNodeIntelligentWorkflow` 回归用例。最终 Java 定向测试共 16 tests，0 failures、0 errors、0 skipped，六个 reactor 模块全部 `BUILD SUCCESS`。
+- 前端最终测试：`npm run test:unit` 为 3 tests / 3 pass / 0 fail；`npm run build` 的 `vue-tsc --noEmit` 与 Vite 生产构建通过，1923 modules transformed。
+- 真实 API/SSE Run `run_67471a3d-570c-49f2-ad68-b479d15daed9` 进入 `COMPLETED`，根 Trace `419639a5-5dc6-4925-9b89-c69aeff29722`。事件 sequence 严格为 1..8：`WORKFLOW_STARTED → NODE_STARTED → NODE_OUTPUT_DELTA → NODE_COMPLETED → ROUTE_DECIDED → FINAL_ANSWER_DELTA → FINAL_ANSWER_COMPLETED → WORKFLOW_COMPLETED`。
+- 数据库回读：Run/NodeExecution/RouteDecision/Invocation/Event/Message 行数分别为 `1/1/1/1/8/2`，各表 `COUNT(DISTINCT trace_id)=1`，值均等于 Run 根 Trace；节点 `COMPLETED`、路由 `review→END:DEFAULT`、调用 `SUCCEEDED`、消息角色为 `user,assistant`。
+- `afterSequence=4` 真实重放只返回 sequence `5,6,7,8`，类型和根 Trace 均与首次事件一致，无缺口、无换号。
+- 真实浏览器从登录开始选择“数据库工作流”，发送“请审核浏览器端到端消息”；主回答显示“审核通过”，节点下拉面板显示“审核节点 / 第 1 次 / 已完成 / 路由 DEFAULT → END / 163 Token / 完整 Trace ID”，浏览器控制台错误 0。
+- Grafana/Loki 使用浏览器 Run 根 Trace `5e229942-213e-4088-80cd-ca8f8e365b1b` 查询到 15 条日志，失败 0、降级 0、取消 0、未闭合阶段 0；覆盖运行开始、节点开始、模型调用、上下文组装、Token 记账、节点完成、路由裁决、消息保存和运行完成。
+- 未伪装通过的基础设施问题：公网 `103.205.240.84:3306` TCP 可达，但 MySQL TLS 仍随机出现 `wrong version number/read timed out`；本轮业务 E2E 通过同一主机 SSH 转发完成。公网 MySQL 稳定性仍是独立上线阻塞项。

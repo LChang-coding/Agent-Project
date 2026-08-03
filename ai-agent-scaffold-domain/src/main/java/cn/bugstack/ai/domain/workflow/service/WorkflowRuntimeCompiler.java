@@ -539,7 +539,9 @@ public class WorkflowRuntimeCompiler {
             if (edge.getSourceNodeId() == null || edge.getTargetNodeId() == null) {
                 continue;
             }
-            if (nodeMap.containsKey(edge.getSourceNodeId()) && nodeMap.containsKey(edge.getTargetNodeId())) {
+            boolean explicitIntelligentEnd = isIntelligent(graph) && "END".equalsIgnoreCase(edge.getTargetNodeId());
+            if (nodeMap.containsKey(edge.getSourceNodeId())
+                    && (nodeMap.containsKey(edge.getTargetNodeId()) || explicitIntelligentEnd)) {
                 edges.add(WorkflowDagPlanEntity.Edge.builder()
                         .edgeId(defaultString(edge.getEdgeId(), "edge_" + edge.getSourceNodeId() + "_" + edge.getTargetNodeId()))
                         .sourceNodeId(edge.getSourceNodeId())
