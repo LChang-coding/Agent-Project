@@ -57,6 +57,7 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/agent_schedule_execution_mapper.xml",
                 "mybatis/mapper/conversation_memory_snapshot_mapper.xml",
                 "mybatis/mapper/context_compaction_task_mapper.xml",
+                "mybatis/mapper/workflow_event_cursor_mapper.xml",
                 "mybatis/mapper/workflow_run_event_mapper.xml",
                 "mybatis/mapper/workflow_execution_audit_mapper.xml",
                 "mybatis/mapper/workflow_invocation_mapper.xml"
@@ -93,7 +94,8 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IContextCompactionTaskDao.queryLatest"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryMaxValidSequenceNo"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IChatMessageDao.queryValidMessage"));
-        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao.lockRun"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowEventCursorDao.lockCursor"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowEventCursorDao.advanceSequence"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao.queryAfter"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao.insertNode"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao.completeNode"));

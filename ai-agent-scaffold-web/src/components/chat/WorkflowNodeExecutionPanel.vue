@@ -12,6 +12,7 @@
           <strong>{{ node.nodeName }}</strong><small>第 {{ node.executionIndex }} 次</small><em>{{ nodeStatus(node.status) }}</em>
         </header>
         <pre v-if="node.output">{{ node.output }}</pre>
+        <p v-if="node.errorMessage" class="workflow-progress__error">{{ node.errorMessage }}</p>
         <footer v-if="node.routeTargetNodeId || node.totalTokens !== undefined">
           <span v-if="node.routeTargetNodeId">路由 {{ node.routeStrategy || '默认' }} → {{ node.routeTargetNodeId }}</span>
           <span v-if="node.totalTokens !== undefined">{{ node.totalTokens }} Token</span>
@@ -28,7 +29,7 @@ import { computed } from 'vue';
 import type { WorkflowRunViewState } from '@/types/intelligent-workflow';
 
 const props = defineProps<{ run: WorkflowRunViewState }>();
-const statusLabel = computed(() => ({ running: '智能工作流运行中', completed: '智能工作流已完成', failed: '智能工作流失败', cancelled: '智能工作流已取消' }[props.run.status]));
+const statusLabel = computed(() => ({ running: '工作流运行中', completed: '工作流已完成', failed: '工作流失败', cancelled: '工作流已取消' }[props.run.status]));
 function nodeStatus(status: string) { return ({ running: '执行中', completed: '已完成', failed: '失败', cancelled: '已取消' } as Record<string, string>)[status] || status; }
 async function copyTrace() { await navigator.clipboard.writeText(props.run.traceId); }
 </script>

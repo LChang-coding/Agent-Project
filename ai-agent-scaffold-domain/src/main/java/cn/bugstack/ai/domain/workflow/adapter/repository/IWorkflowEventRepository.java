@@ -4,7 +4,7 @@ import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRunEventEntity;
 
 import java.util.List;
 
-/** 分配严格递增序号并持久化智能工作流事件。 */
+/** 持久化并回放 workflow 类 chat_run 的通用业务事件。 */
 public interface IWorkflowEventRepository {
 
     WorkflowRunEventEntity append(WorkflowRunEventEntity event);
@@ -13,4 +13,6 @@ public interface IWorkflowEventRepository {
                                              long afterSequence, int limit);
 
     Long queryOldestSequence(String tenantId, String userId, String runId);
+
+    WorkflowRunEventEntity queryTerminal(String tenantId, String userId, String runId);
 }

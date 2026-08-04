@@ -8,7 +8,7 @@ import {
   sendChatMessageStream,
   steerChatRun,
 } from '@/api/agent';
-import { startIntelligentWorkflow, streamIntelligentWorkflow } from '@/api/intelligent-workflow';
+import { startIntelligentWorkflow, startStaticWorkflow, streamWorkflow } from '@/api/intelligent-workflow';
 import { traceIdOfError } from '@/api/http';
 import { queryWorkflowDetail, queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import { createWorkflowRunState, reduceWorkflowEvent } from '@/domain/workflow-event-reducer';
@@ -306,7 +306,7 @@ export const useChatStore = defineStore('chat', {
         this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
         this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         this.errorMessage = '';
-        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+        if (this.activeSourceType === 'workflow') {
           // 消息先恢复；节点事件在后台重放，避免活动 Run 阻塞会话页面可用性。
           void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
         }
@@ -326,6 +326,21 @@ export const useChatStore = defineStore('chat', {
       const targets = workflowHistoryRunTargets(messages);
       await Promise.allSettled(targets.map(async ({ runId, traceId }) => {
         if (this.workflowRuns[runId]) return;
+        let assistantMessage = this.messages.find((message) => message.role === 'assistant' && message.runId === runId);
+        const createdPlaceholder = !assistantMessage;
+        if (!assistantMessage) {
+          const source = this.messages.find((message) => message.runId === runId);
+          assistantMessage = {
+            id: `workflow-run-${runId}`,
+            runId,
+            role: 'assistant',
+            content: '',
+            createdAt: source?.createdAt || new Date().toISOString(),
+            traceId,
+            status: 'streaming',
+          };
+          this.messages.push(assistantMessage);
+        }
         this.workflowRuns[runId] = createWorkflowRunState(runId, traceId);
         const controller = new AbortController();
         historyWorkflowControllers.set(runId, controller);
@@ -333,12 +348,21 @@ export const useChatStore = defineStore('chat', {
           let attempts = 0;
           while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running') {
             try {
-              await streamIntelligentWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
+              await streamWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
                 signal: controller.signal,
                 onEvent: (event) => {
                   if (this.sessionId !== sessionId) return;
                   const current = this.workflowRuns[runId];
-                  if (current) this.workflowRuns[runId] = reduceWorkflowEvent(current, event);
+                  if (current) {
+                    const next = reduceWorkflowEvent(current, event);
+                    this.workflowRuns[runId] = next;
+                    if (assistantMessage) {
+                      assistantMessage.content = next.finalAnswer;
+                      assistantMessage.status = next.status === 'running' ? 'streaming'
+                        : next.status === 'completed' ? 'done'
+                          : next.status === 'cancelled' ? 'canceled' : 'error';
+                    }
+                  }
                 },
               });
               attempts = 0;
@@ -349,7 +373,12 @@ export const useChatStore = defineStore('chat', {
           }
         } catch {
           // 旧静态工作流没有 workflow-event-v1；保留消息，但不伪造节点面板。
-          if (this.workflowRuns[runId]?.status === 'running') delete this.workflowRuns[runId];
+          if (this.workflowRuns[runId]?.status === 'running') {
+            delete this.workflowRuns[runId];
+            if (createdPlaceholder) {
+              this.messages = this.messages.filter((message) => message.id !== `workflow-run-${runId}`);
+            }
+          }
         } finally {
           if (historyWorkflowControllers.get(runId) === controller) historyWorkflowControllers.delete(runId);
         }
@@ -377,7 +406,7 @@ export const useChatStore = defineStore('chat', {
         const existingIds = new Set(this.messages.map((message) => message.id));
         const earlierMessages = page.items.map(toChatMessage).filter((message) => !existingIds.has(message.id));
         this.messages = [...earlierMessages, ...this.messages];
-        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+        if (this.activeSourceType === 'workflow') {
           void this.restoreIntelligentWorkflowHistory(sessionId, earlierMessages);
         }
         this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
@@ -507,9 +536,9 @@ export const useChatStore = defineStore('chat', {
       this.saveCurrentSession(userMessage.content);
 
       try {
-        if (this.activeSourceType === 'workflow' && this.activeWorkflowKind === 'INTELLIGENT') {
+        if (this.activeSourceType === 'workflow') {
           const workflow = this.activeWorkflow;
-          const started = await startIntelligentWorkflow({
+          const payload = {
             workflowId: this.activeWorkflowId,
             workflowVersion: workflow?.publishedVersion,
             modelCode: this.activeModelCode,
@@ -517,7 +546,10 @@ export const useChatStore = defineStore('chat', {
             message: userMessage.content,
             requestedRunId: effectiveRunId,
             attachmentIds: effectiveAttachmentIds.length > 0 ? effectiveAttachmentIds : undefined,
-          });
+          };
+          const started = this.activeWorkflowKind === 'INTELLIGENT'
+            ? await startIntelligentWorkflow(payload)
+            : await startStaticWorkflow(payload);
           if (!this.isRequestCurrent(request)) return;
           request.runId = started.runId;
           this.currentRunId = started.runId;
@@ -529,7 +561,7 @@ export const useChatStore = defineStore('chat', {
           let reconnectAttempt = 0;
           while (this.workflowRuns[started.runId].status === 'running') {
             try {
-              await streamIntelligentWorkflow(started.runId, started.traceId,
+              await streamWorkflow(started.runId, started.traceId,
                 this.workflowRuns[started.runId].lastSequence, {
                   signal: controller.signal,
                   onEvent: (event) => {

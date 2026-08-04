@@ -81,20 +81,6 @@
         <result column="expires_at" property="expiresAt"/>
     </resultMap>
 
-    <!-- sequence 只能从同一运行状态行锁内分配，禁止 MAX(sequence)+1。 -->
-    <select id="lockRun" resultMap="RunMap">
-        SELECT <include refid="RunColumns"/>
-        FROM intelligent_workflow_run
-        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId} AND deleted = 0
-        LIMIT 1 FOR UPDATE
-    </select>
-
-    <update id="advanceSequence">
-        UPDATE intelligent_workflow_run
-        SET next_sequence = next_sequence + 1, revision = revision + 1
-        WHERE tenant_id = #{tenantId} AND run_id = #{runId} AND revision = #{expectedRevision} AND deleted = 0
-    </update>
-
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO">
         INSERT INTO workflow_run_event
         (tenant_id, user_id, run_id, event_id, sequence, schema_version, event_type,
@@ -105,19 +91,42 @@
     </insert>
 
     <select id="queryAfter" resultMap="EventMap">
-        SELECT id, tenant_id, user_id, run_id, event_id, sequence, schema_version, event_type,
-               node_execution_id, node_id, payload_json, trace_id, occurred_at, expires_at
-        FROM workflow_run_event
-        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
-          AND sequence &gt; #{afterSequence} AND deleted = 0 AND expires_at &gt; CURRENT_TIMESTAMP(3)
-        ORDER BY sequence ASC
+        SELECT event.id, event.tenant_id, event.user_id, event.run_id, event.event_id, event.sequence,
+               event.schema_version, event.event_type, event.node_execution_id, event.node_id,
+               event.payload_json, event.trace_id, event.occurred_at, event.expires_at
+        FROM workflow_run_event event
+        INNER JOIN chat_run run
+                ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
+               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+        WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
+          AND event.sequence &gt; #{afterSequence} AND event.deleted = 0
+          AND event.expires_at &gt; CURRENT_TIMESTAMP(3)
+        ORDER BY event.sequence ASC
         LIMIT #{limit}
     </select>
 
     <select id="queryOldestSequence" resultType="java.lang.Long">
-        SELECT MIN(sequence)
-        FROM workflow_run_event
-        WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
-          AND deleted = 0 AND expires_at &gt; CURRENT_TIMESTAMP(3)
+        SELECT MIN(event.sequence)
+        FROM workflow_run_event event
+        INNER JOIN chat_run run
+                ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
+               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+        WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
+          AND event.deleted = 0 AND event.expires_at &gt; CURRENT_TIMESTAMP(3)
+    </select>
+
+    <select id="queryTerminal" resultMap="EventMap">
+        SELECT event.id, event.tenant_id, event.user_id, event.run_id, event.event_id, event.sequence,
+               event.schema_version, event.event_type, event.node_execution_id, event.node_id,
+               event.payload_json, event.trace_id, event.occurred_at, event.expires_at
+        FROM workflow_run_event event
+        INNER JOIN chat_run run
+                ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
+               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+        WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
+          AND event.event_type IN ('WORKFLOW_COMPLETED', 'WORKFLOW_FAILED', 'WORKFLOW_CANCELLED')
+          AND event.deleted = 0
+        ORDER BY event.sequence DESC
+        LIMIT 1
     </select>
 </mapper>

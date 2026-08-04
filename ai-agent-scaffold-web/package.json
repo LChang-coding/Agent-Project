@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vue-tsc --noEmit && vite build",
-    "test:unit": "esbuild tests/workflow-event-reducer.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-event-test.cjs && node --test /tmp/ai-agent-workflow-event-test.cjs",
+    "test:unit": "esbuild tests/workflow-event-reducer.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-event-test.cjs && esbuild tests/workflow-templates.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-template-test.cjs && node --test /tmp/ai-agent-workflow-event-test.cjs /tmp/ai-agent-workflow-template-test.cjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

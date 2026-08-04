@@ -43,15 +43,27 @@ test('SSE parser 支持多行 data 并拒绝非 JSON', () => {
   assert.throws(() => parseWorkflowSseBlock('event: workflow_event\ndata: nope'), /不是有效 JSON/);
 });
 
-test('刷新恢复只为带根 Trace 的 assistant Run 建立一次回放', () => {
+test('刷新恢复为带根 Trace 的工作流 Run 建立一次回放，运行中只有 user 消息也可恢复', () => {
   assert.deepEqual(workflowHistoryRunTargets([
     { role: 'user', runId: 'run_1', traceId: 'trace_1' },
     { role: 'assistant', runId: 'run_1', traceId: 'trace_1' },
     { role: 'assistant', runId: 'run_2' },
     { role: 'assistant', runId: 'run_1', traceId: 'trace_1' },
     { role: 'assistant', runId: 'run_3', traceId: 'trace_3' },
+    { role: 'user', runId: 'run_4', traceId: 'trace_4' },
   ]), [
+    { runId: 'run_4', traceId: 'trace_4' },
     { runId: 'run_3', traceId: 'trace_3' },
     { runId: 'run_1', traceId: 'trace_1' },
   ]);
+});
+
+test('节点取消事件只收口对应并行执行实例', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'WORKFLOW_STARTED'));
+  state = reduceWorkflowEvent(state, event(2, 'NODE_STARTED', { nodeName: '分支甲' }, { nodeExecutionId: 'exec_a', nodeId: 'a' }));
+  state = reduceWorkflowEvent(state, event(3, 'NODE_STARTED', { nodeName: '分支乙' }, { nodeExecutionId: 'exec_b', nodeId: 'b' }));
+  state = reduceWorkflowEvent(state, event(4, 'NODE_CANCELLED', { message: '用户取消' }, { nodeExecutionId: 'exec_a', nodeId: 'a' }));
+  assert.equal(state.nodes[0].status, 'cancelled');
+  assert.equal(state.nodes[1].status, 'running');
 });

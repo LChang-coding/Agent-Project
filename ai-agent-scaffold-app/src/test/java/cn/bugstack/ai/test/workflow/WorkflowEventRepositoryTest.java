@@ -1,10 +1,9 @@
 package cn.bugstack.ai.test.workflow;
 
+import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventCursorRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRunEventEntity;
 import cn.bugstack.ai.infrastructure.adapter.repository.WorkflowEventRepository;
 import cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao;
-import cn.bugstack.ai.infrastructure.dao.po.IntelligentWorkflowRunPO;
-import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -13,7 +12,6 @@ import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,12 +21,11 @@ public class WorkflowEventRepositoryTest {
     @Test
     public void shouldAppendWithSequenceOwnedByLockedRun() {
         IWorkflowRunEventDao dao = mock(IWorkflowRunEventDao.class);
-        IntelligentWorkflowRunPO run = run("trace_root", 8L, 3L);
-        when(dao.lockRun("tenant_1", "user_1", "run_1")).thenReturn(run);
-        when(dao.advanceSequence("tenant_1", "run_1", 3L)).thenReturn(1);
+        IWorkflowEventCursorRepository cursor = mock(IWorkflowEventCursorRepository.class);
+        when(cursor.allocate("tenant_1", "user_1", "run_1", "trace_root", "NODE_STARTED")).thenReturn(8L);
         when(dao.insert(any())).thenReturn(1);
 
-        WorkflowRunEventEntity result = new WorkflowEventRepository(dao).append(event("trace_root"));
+        WorkflowRunEventEntity result = new WorkflowEventRepository(dao, cursor).append(event("trace_root"));
 
         Assert.assertEquals(Long.valueOf(8L), result.getSequence());
         ArgumentCaptor<cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO> captor =
@@ -39,23 +36,15 @@ public class WorkflowEventRepositoryTest {
     }
 
     @Test
-    public void shouldRejectEventWithDifferentTraceBeforeWriting() {
+    public void shouldDelegateScopeAndTraceValidationToGenericCursor() {
         IWorkflowRunEventDao dao = mock(IWorkflowRunEventDao.class);
-        when(dao.lockRun("tenant_1", "user_1", "run_1")).thenReturn(run("trace_root", 1L, 0L));
-        try {
-            new WorkflowEventRepository(dao).append(event("trace_other"));
-            Assert.fail("不同 trace 的事件不能进入同一个运行");
-        } catch (AppException exception) {
-            Assert.assertEquals("WORKFLOW_TRACE_MISMATCH", exception.getCode());
-        }
-        verify(dao, never()).insert(any());
-    }
+        IWorkflowEventCursorRepository cursor = mock(IWorkflowEventCursorRepository.class);
+        when(cursor.allocate("tenant_1", "user_1", "run_1", "trace_root", "NODE_STARTED")).thenReturn(1L);
+        when(dao.insert(any())).thenReturn(1);
 
-    private IntelligentWorkflowRunPO run(String traceId, long nextSequence, long revision) {
-        IntelligentWorkflowRunPO run = new IntelligentWorkflowRunPO();
-        run.setTenantId("tenant_1"); run.setUserId("user_1"); run.setRunId("run_1");
-        run.setTraceId(traceId); run.setNextSequence(nextSequence); run.setRevision(revision);
-        return run;
+        new WorkflowEventRepository(dao, cursor).append(event("trace_root"));
+
+        verify(cursor).allocate("tenant_1", "user_1", "run_1", "trace_root", "NODE_STARTED");
     }
 
     private WorkflowRunEventEntity event(String traceId) {

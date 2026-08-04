@@ -7,6 +7,7 @@ import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.workflow.service.IntelligentWorkflowRuntimeService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
@@ -29,14 +30,17 @@ public class RunControlController {
 
     private final RunControlService runControlService;
     private final IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService;
+    private final WorkflowRunFinalizationService workflowRunFinalizationService;
 
     /**
      * @param runControlService 负责运行状态机、消息失效和压缩任务回滚的领域服务
      */
     public RunControlController(RunControlService runControlService,
-                                IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService) {
+                                IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService,
+                                WorkflowRunFinalizationService workflowRunFinalizationService) {
         this.runControlService = runControlService;
         this.intelligentWorkflowRuntimeService = intelligentWorkflowRuntimeService;
+        this.workflowRunFinalizationService = workflowRunFinalizationService;
     }
 
     /**
@@ -53,6 +57,8 @@ public class RunControlController {
             // 身份只取服务端认证上下文，运行归属和可取消状态由领域服务原子校验。
             ChatRunEntity run = runControlService.cancel(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), runId, request == null ? null : request.getReason());
+            // 普通 DAG 即使尚未进入后台线程，也必须在取消响应前拥有唯一取消终态事件。
+            workflowRunFinalizationService.reconcileCancellation(run);
             intelligentWorkflowRuntimeService.reconcileCancellation(run);
             return Response.<RunControlResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())

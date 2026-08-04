@@ -21,6 +21,61 @@
       </button>
     </nav>
 
+    <section class="workflow-template-library card" aria-labelledby="workflow-template-title">
+      <div class="template-library__intro">
+        <div>
+          <span class="template-library__eyebrow">TEMPLATE LIBRARY</span>
+          <h2 id="workflow-template-title">工作流模板</h2>
+          <p>载入只会替换当前页面的草稿画布，不会自动保存或发布。</p>
+        </div>
+        <strong>{{ WORKFLOW_TEMPLATES.length }} 个</strong>
+      </div>
+      <div class="template-library__controls">
+        <label>
+          <span>用途</span>
+          <select v-model="templateCategoryFilter" class="select">
+            <option value="ALL">全部用途</option>
+            <option value="PRODUCTION">生产参考</option>
+            <option value="TEST">测试验证</option>
+          </select>
+        </label>
+        <label>
+          <span>类型</span>
+          <select v-model="templateKindFilter" class="select">
+            <option value="ALL">全部类型</option>
+            <option value="STATIC">系统工作流</option>
+            <option value="INTELLIGENT">智能工作流</option>
+          </select>
+        </label>
+        <label class="template-library__picker">
+          <span>模板</span>
+          <select v-model="selectedTemplateId" class="select">
+            <option v-for="template in filteredTemplates" :key="template.id" :value="template.id">
+              {{ template.name }} · {{ template.workflowKind === 'INTELLIGENT' ? '智能' : '系统' }}
+            </option>
+          </select>
+        </label>
+        <button class="button button--soft" type="button" :disabled="!selectedTemplate" @click="loadSelectedTemplate">
+          载入当前草稿
+        </button>
+      </div>
+      <div v-if="selectedTemplate" class="template-library__detail">
+        <div>
+          <span :class="['template-badge', `template-badge--${selectedTemplate.category.toLowerCase()}`]">
+            {{ selectedTemplate.category === 'PRODUCTION' ? '生产参考' : '测试验证' }}
+          </span>
+          <strong>{{ selectedTemplate.name }}</strong>
+          <p>{{ selectedTemplate.description }}</p>
+        </div>
+        <div class="template-library__meta">
+          <span>{{ selectedTemplate.graph.nodes.length }} 节点 / {{ selectedTemplate.graph.edges.length }} 条边</span>
+          <span v-for="tag in selectedTemplate.tags" :key="tag">{{ tag }}</span>
+          <span v-for="dependency in selectedTemplate.dependencyHints" :key="dependency" class="template-dependency">依赖：{{ dependency }}</span>
+          <span v-if="selectedTemplate.dependencyHints.length === 0" class="template-dependency">无必需外部依赖</span>
+        </div>
+      </div>
+    </section>
+
     <section v-if="graph.workflowKind === 'INTELLIGENT'" class="intelligent-budget card">
       <label>最大执行步数 <input v-model.number="graph.maxSteps" class="input" type="number" min="1" max="200" /></label>
       <label>Token 总预算 <input v-model.number="graph.tokenBudget" class="input" type="number" min="1" max="10000000" /></label>
@@ -273,6 +328,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
+import {
+  WORKFLOW_TEMPLATES,
+  cloneWorkflowTemplateGraph,
+  workflowTemplateById,
+} from '@/domain/workflow-templates';
 import { useChatStore } from '@/stores/chat';
 import {
   createDefaultLlmNode,
@@ -280,6 +340,7 @@ import {
   useWorkflowStore,
 } from '@/stores/workflow';
 import { useToolStore } from '@/stores/tools';
+import type { WorkflowTemplateCategory, WorkflowTemplateKind } from '@/domain/workflow-templates';
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode } from '@/types/api';
 
 interface DragState {
@@ -314,6 +375,10 @@ const linkingSourceId = ref('');
 const dragState = ref<DragState | null>(null);
 const dragMoved = ref(false);
 const graph = ref<WorkflowGraph>(createDefaultWorkflowGraph());
+const templateCategoryFilter = ref<'ALL' | WorkflowTemplateCategory>('ALL');
+const templateKindFilter = ref<'ALL' | WorkflowTemplateKind>('ALL');
+const selectedTemplateId = ref(WORKFLOW_TEMPLATES[0]?.id || '');
+const savedDraftFingerprint = ref('');
 const canvasSize = { width: CANVAS_WIDTH, height: CANVAS_HEIGHT };
 
 const modelOptions = computed(() => {
@@ -330,6 +395,14 @@ const outgoingEdges = computed(() => graph.value.edges.filter((edge) => edge.sou
 const derivedMode = computed(() => inferGraphMode(graph.value));
 const modeReason = computed(() => inferModeReason(graph.value));
 const renderedEdges = computed(() => graph.value.edges.map(toRenderedEdge).filter(Boolean) as RenderedEdge[]);
+const filteredTemplates = computed(() => WORKFLOW_TEMPLATES.filter((template) => {
+  const categoryMatches = templateCategoryFilter.value === 'ALL' || template.category === templateCategoryFilter.value;
+  const kindMatches = templateKindFilter.value === 'ALL' || template.workflowKind === templateKindFilter.value;
+  return categoryMatches && kindMatches;
+}));
+const selectedTemplate = computed(() => workflowTemplateById(selectedTemplateId.value));
+const hasUnsavedChanges = computed(() => Boolean(savedDraftFingerprint.value)
+  && savedDraftFingerprint.value !== currentDraftFingerprint());
 
 watch(
   () => workflowStore.detail,
@@ -340,7 +413,15 @@ watch(
   },
 );
 
+watch(filteredTemplates, (templates) => {
+  if (!templates.some((template) => template.id === selectedTemplateId.value)) {
+    selectedTemplateId.value = templates[0]?.id || '';
+  }
+});
+
 onMounted(async () => {
+  // 以初始画布为基线，新建态下的未保存修改也能在载入模板前被识别。
+  savedDraftFingerprint.value = currentDraftFingerprint();
   await Promise.all([workflowStore.loadOptions(), workflowStore.loadWorkflows(), toolStore.loadCatalog()]);
   if (workflowStore.activeWorkflowId) {
     await workflowStore.loadDetail(workflowStore.activeWorkflowId);
@@ -432,6 +513,7 @@ function syncFromDetail() {
   graph.value = normalizeGraphLayout(detail.graph || createDefaultWorkflowGraph(defaultModelCode.value));
   selectedNodeId.value = graph.value.nodes[0]?.nodeId || '';
   applyGraphShape();
+  savedDraftFingerprint.value = currentDraftFingerprint();
 }
 
 /**
@@ -467,12 +549,40 @@ function removeActiveNode() {
  */
 async function saveDraft() {
   applyGraphShape();
-  return workflowStore.saveDraft({
+  const result = await workflowStore.saveDraft({
     workflowName: workflowName.value.trim() || '未命名工作流',
     description: workflowDescription.value,
     defaultModelCode: defaultModelCode.value,
     visibility: visibility.value,
     graph: cloneGraph(graph.value),
+  });
+  if (result) savedDraftFingerprint.value = currentDraftFingerprint();
+  return result;
+}
+
+/** 将选中模板深拷贝到本地草稿，不触发后端写入。 */
+function loadSelectedTemplate() {
+  const template = selectedTemplate.value;
+  if (!template) return;
+  if (hasUnsavedChanges.value && !window.confirm('当前画布有未保存改动。继续载入模板将覆盖这些本地改动，是否继续？')) {
+    return;
+  }
+  graph.value = normalizeGraphLayout(cloneWorkflowTemplateGraph(template.id));
+  selectedNodeId.value = graph.value.rootNodeId || graph.value.nodes[0]?.nodeId || '';
+  linkingSourceId.value = '';
+  workflowDescription.value = template.description;
+  workflowStore.errorMessage = '';
+  workflowStore.operationMessage = `已载入模板“${template.name}”，当前仅是未保存草稿。`;
+}
+
+/** 生成用于判定未保存改动的稳定草稿快照。 */
+function currentDraftFingerprint() {
+  return JSON.stringify({
+    workflowName: workflowName.value.trim(),
+    workflowDescription: workflowDescription.value,
+    defaultModelCode: defaultModelCode.value,
+    visibility: visibility.value,
+    graph: graph.value,
   });
 }
 
@@ -906,6 +1016,122 @@ function clamp(value: number, min: number, max: number) {
 
 <style scoped>
 .workflow-kind-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}.workflow-kind-tabs button{display:grid;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}.workflow-kind-tabs button.active{border-color:#6366f1;box-shadow:0 0 0 2px rgb(99 102 241/.12)}.workflow-kind-tabs span{color:var(--muted);font-size:12px}.intelligent-budget{display:flex;align-items:end;gap:16px;padding:14px;margin-bottom:14px}.intelligent-budget label{display:grid;gap:6px;font-size:12px}.intelligent-budget span{color:var(--muted);font-size:12px}.route-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.route-edge-editor{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:10px}.route-edge-editor strong{font-size:12px}@media(max-width:800px){.workflow-kind-tabs{grid-template-columns:1fr}.intelligent-budget{align-items:stretch;flex-direction:column}}
+.workflow-template-library {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.template-library__intro,
+.template-library__controls,
+.template-library__detail,
+.template-library__meta {
+  display: flex;
+  align-items: center;
+}
+
+.template-library__intro,
+.template-library__detail {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.template-library__intro h2,
+.template-library__intro p,
+.template-library__detail p {
+  margin: 0;
+}
+
+.template-library__intro h2 {
+  margin-top: 2px;
+  font-size: 17px;
+}
+
+.template-library__intro p,
+.template-library__detail p,
+.template-library__meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.template-library__eyebrow {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.template-library__intro > strong {
+  min-width: max-content;
+  padding: 6px 9px;
+  color: var(--accent-deep);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 12px;
+}
+
+.template-library__controls {
+  align-items: end;
+  gap: 10px;
+}
+
+.template-library__controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.template-library__picker {
+  flex: 1;
+}
+
+.template-library__detail {
+  align-items: flex-start;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.template-library__detail > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.template-library__meta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 48%;
+}
+
+.template-library__meta span,
+.template-badge {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.template-badge {
+  width: max-content;
+  color: var(--accent-deep);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.template-badge--test {
+  color: #8a5a10;
+  background: #fff7df;
+}
+
+.template-library__meta .template-dependency {
+  color: #73551e;
+  border-color: rgba(173, 117, 37, 0.24);
+  background: rgba(255, 247, 223, 0.72);
+}
+
 .workflow-page {
   display: grid;
   gap: 16px;
@@ -1268,6 +1494,22 @@ function clamp(value: number, min: number, max: number) {
 }
 
 @media (max-width: 760px) {
+  .template-library__controls,
+  .template-library__detail {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .template-library__controls label,
+  .template-library__meta {
+    width: 100%;
+    max-width: none;
+  }
+
+  .template-library__meta {
+    justify-content: flex-start;
+  }
+
   .workflow-toolbar {
     grid-template-columns: 1fr;
   }

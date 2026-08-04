@@ -25,6 +25,8 @@ import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRuntimeEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowNodeInvocationResultEntity;
 import cn.bugstack.ai.domain.workflow.service.IWorkflowService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
@@ -62,6 +64,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -89,6 +92,14 @@ public class ChatService implements IChatService {
     /** 将工作流定义解析为本次运行不可变的 DAG 快照。 */
     @Resource
     private IWorkflowService workflowService;
+
+    /** 持久化并实时广播普通和智能工作流共用的节点事件。 */
+    @Resource
+    private WorkflowEventStreamService workflowEventStreamService;
+
+    /** 原子保存普通 DAG 最终消息和工作流终态事件。 */
+    @Resource
+    private WorkflowRunFinalizationService workflowRunFinalizationService;
 
     /** 消息落库后推进上下文快照与压缩任务。 */
     @Resource
@@ -312,8 +323,9 @@ public class ChatService implements IChatService {
                                                                    List<String> attachmentIds) {
         String tenantId = currentTenantId();
         String traceId = TraceContext.currentOrNewTraceId();
+        String roleCode = TenantContextHolder.getRoleCode();
         // 每次运行先解析并冻结 DAG、模型和内部 Agent，避免执行中配置漂移。
-        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, TenantContextHolder.getRoleCode(),
+        WorkflowRuntimeEntity runtime = workflowService.loadRuntime(tenantId, userId, roleCode,
                 workflowId, workflowVersion, modelCode);
         AiAgentRegisterVO rootAgent = requireWorkflowRuntimeAgent(runtime.getRuntimeAgentId());
         String actualSessionId = ensureWorkflowSessionId(tenantId, workflowId, userId, sessionId, rootAgent, runtime);
@@ -323,7 +335,7 @@ public class ChatService implements IChatService {
         // 真正的 DAG 执行发生在订阅后；HTTP 入口线程不直接跑节点。
         Flowable<String> stream = observeWorkflowCancellation(
                 scheduleWorkflow(() -> doHandleWorkflowDagMessage(runtime, tenantId, userId,
-                        actualSessionId, effectiveMessage, traceId, run, attachmentIds)),
+                        actualSessionId, effectiveMessage, traceId, run, attachmentIds, roleCode)),
                 tenantId, userId, run)
                 .doFinally(() -> {
                     if (runControlService.cancelled(tenantId, userId, run.getRunId())) clearEvidence(run);
@@ -584,36 +596,43 @@ public class ChatService implements IChatService {
      */
     private String doHandleWorkflowDagMessage(WorkflowRuntimeEntity runtime, String tenantId, String userId,
                                               String sessionId, String message, String traceId, ChatRunEntity run,
-                                              List<String> attachmentIds) {
+                                              List<String> attachmentIds, String roleCode) {
         // runtime 已在入口按权限编译；此处只接受非空、可执行的计划。
         WorkflowDagPlanEntity dagPlan = requireDagPlan(runtime);
         AiAgentRegisterVO rootAgent = requireWorkflowRuntimeAgent(runtime.getRuntimeAgentId());
         String actualSessionId = ensureWorkflowSessionId(tenantId, runtime.getWorkflowId(), userId, sessionId, rootAgent, runtime);
-        sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
-        conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
-        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId,
-                attachmentIds);
-        ChatMessageEntity userMessage = binding.getMessage();
-        ChatRunEntity activeRun = binding.getRun();
+        ChatRunEntity activeRun = run;
 
         try {
+            sessionDomain.assertSessionAccess(tenantId, userId, actualSessionId, runtime.getWorkflowId());
+            conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
+            RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId,
+                    attachmentIds);
+            ChatMessageEntity userMessage = binding.getMessage();
+            activeRun = binding.getRun();
+            publishWorkflowEvent(activeRun, "WORKFLOW_STARTED", null, null, Map.of(
+                    "workflowId", dagPlan.getWorkflowId(),
+                    "workflowVersion", dagPlan.getVersion(),
+                    "workflowKind", "STATIC",
+                    "rootNodeId", dagPlan.getRootNodeId()));
             // message 在 executeDagPlan 中被组合进每个就绪节点提示词，再交给节点 Agent。
             WorkflowExecutionResult execution = executeDagPlan(dagPlan, tenantId, userId, actualSessionId, message, traceId,
-                    TenantContextHolder.getRoleCode(), historyCutoff(userMessage), activeRun);
+                    roleCode, historyCutoff(userMessage), activeRun);
             String finalOutput = execution.output();
             AiLog.info(AiLog.workflow().dagCompleted(tenantId, userId, dagPlan.getWorkflowId(), dagPlan.getVersion(),
                     dagPlan.getNodes().size(), dagPlan.getEdges() == null ? 0 : dagPlan.getEdges().size(),
                     String.join(",", terminalNodeIds(dagPlan, outgoingEdges(dagPlan))), finalOutput.length()));
             runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
             // 只携带终点祖先证据完成运行，未影响最终答案的旁路证据被排除。
-            completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), finalOutput, traceId,
-                    execution.evidence());
+            completeWorkflowRunWithAssistant(activeRun, finalOutput, execution.evidence(), dagPlan.getNodes().size());
             return finalOutput;
         } catch (RuntimeException e) {
-            if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
-                failRunWithAssistantError(tenantId, userId, activeRun.getRunId(), traceId, e, "");
-            } else {
+            if (runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
+                workflowRunFinalizationService.reconcileCancellation(
+                        runControlService.require(tenantId, userId, activeRun.getRunId()));
                 clearEvidence(activeRun);
+            } else {
+                failWorkflowRunWithAssistantError(activeRun, e);
             }
             throw e;
         }
@@ -654,8 +673,18 @@ public class ChatService implements IChatService {
                             selfLoopNodeIds.contains(nodeId), outputs, provenance, tenantId, userId, sessionId, dagPlan.getWorkflowId(),
                             userMessage, traceId, roleCode, historyCutoffSequence, run), workflowNodeExecutor))
                     .collect(Collectors.toList());
+            List<NodeRunResult> levelResults = new ArrayList<>(futures.size());
+            RuntimeException levelFailure = null;
             for (CompletableFuture<NodeRunResult> future : futures) {
-                NodeRunResult result = joinNodeResult(future);
+                try {
+                    levelResults.add(joinNodeResult(future));
+                } catch (RuntimeException exception) {
+                    // 同层分支必须全部收敛后才能发布工作流终态，防止兄弟节点在 FAILED/CANCELLED 后继续写事件。
+                    if (levelFailure == null) levelFailure = exception;
+                }
+            }
+            if (levelFailure != null) throw levelFailure;
+            for (NodeRunResult result : levelResults) {
                 outputs.put(result.nodeId(), result.output());
                 provenance.put(result.nodeId(), result.evidence());
                 for (String targetNodeId : outgoing.getOrDefault(result.nodeId(), Collections.emptyList())) {
@@ -711,21 +740,40 @@ public class ChatService implements IChatService {
             runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
             // 每轮调用前再次过取消门禁，防止取消后产生新的模型/工具消费。
             String prompt = buildDagNodePrompt(userMessage, upstreamOutputs, previousOutput, index, runTimes);
+            String nodeExecutionId = "wne_" + UUID.randomUUID();
             long nodeStarted = System.nanoTime();
             AiLog.info(AiLog.workflow().nodeStarted(tenantId, userId, sessionId, run.getRunId(),
                     workflowId, node.getNodeId(), index, runTimes, upstreamNodeIds.size()));
+            publishWorkflowEvent(run, "NODE_STARTED", nodeExecutionId, node.getNodeId(), Map.of(
+                    "nodeName", node.getNodeName(),
+                    "executionIndex", index,
+                    "totalIterations", runTimes,
+                    "upstreamCount", upstreamNodeIds.size()));
             try {
                 NodeExecutionResult execution = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt,
-                        traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run);
+                        traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run,
+                        delta -> publishWorkflowEvent(run, "NODE_OUTPUT_DELTA", nodeExecutionId, node.getNodeId(),
+                                Map.of("delta", delta)));
                 previousOutput = execution.output();
                 accumulatedEvidence.addAll(execution.evidence());
                 AiLog.info(AiLog.workflow().nodeCompleted(tenantId, userId, sessionId, run.getRunId(),
                         workflowId, node.getNodeId(), index, runTimes, previousOutput.length(),
                         execution.evidence().size(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted)));
+                publishWorkflowEvent(run, "NODE_COMPLETED", nodeExecutionId, node.getNodeId(), Map.of(
+                        "displayOutput", previousOutput,
+                        "executionIndex", index,
+                        "costMs", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted)));
             } catch (RuntimeException exception) {
                 AiLog.error(AiLog.workflow().nodeFailed(tenantId, userId, sessionId, run.getRunId(),
                         workflowId, node.getNodeId(), index, runTimes,
                         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted), exception));
+                boolean cancelled = runControlService.cancelled(tenantId, userId, run.getRunId());
+                publishWorkflowEvent(run, cancelled ? "NODE_CANCELLED" : "NODE_FAILED", nodeExecutionId, node.getNodeId(), Map.of(
+                        "executionIndex", index,
+                        "errorCode", cancelled ? "RUN_CANCELLED"
+                                : exception instanceof AppException app ? app.getCode() : "WORKFLOW_NODE_FAILED",
+                        "message", safeMessage(exception),
+                        "costMs", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nodeStarted)));
                 throw exception;
             }
         }
@@ -739,6 +787,15 @@ public class ChatService implements IChatService {
                                                String sessionId, String workflowId, String prompt, String traceId,
                                                String roleCode, Integer historyCutoffSequence,
                                                String upstreamOutput, ChatRunEntity run) {
+        return runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode,
+                historyCutoffSequence, upstreamOutput, run, ignored -> { });
+    }
+
+    /** 执行节点并把供应商累计快照转换为可重放的安全文本增量。 */
+    private NodeExecutionResult runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId,
+                                               String sessionId, String workflowId, String prompt, String traceId,
+                                               String roleCode, Integer historyCutoffSequence,
+                                               String upstreamOutput, ChatRunEntity run, Consumer<String> outputDelta) {
         runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
         AiAgentRegisterVO agent = requireWorkflowRuntimeAgent(node.getRuntimeAgentId());
         InMemoryRunner runner = agent.getRunner();
@@ -759,7 +816,11 @@ public class ChatService implements IChatService {
                         state)
                 .blockingForEach(event -> {
                     runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
-                    appendContent(output, event.stringifyContent());
+                    String delta = contentDelta(output.toString(), event.stringifyContent());
+                    if (!delta.isEmpty()) {
+                        output.append(delta);
+                        outputDelta.accept(delta);
+                    }
                 });
         return new NodeExecutionResult(output.toString(), ragInvocationEvidenceStore.snapshotInvocation(
                 tenantId, userId, sessionId, run.getRunId(), evidenceInvocationId));
@@ -1142,6 +1203,26 @@ public class ChatService implements IChatService {
                 ragInvocationEvidenceStore.snapshot(run.getTenantId(), run.getUserId(), run.getSessionId(), runId));
     }
 
+    /** 引用校验完成后原子保存普通 DAG 的最终消息和事件终态。 */
+    private void completeWorkflowRunWithAssistant(ChatRunEntity run, String content,
+                                                   List<RagContextEvidence> evidence, int executedNodes) {
+        RagAnswerCitationValidation validation = ragAnswerCitationValidator.validate(content, evidence);
+        ChatMessageEntity message = workflowRunFinalizationService.complete(run, content,
+                citationMetadata(validation), executedNodes);
+        clearEvidence(run);
+        if (message != null) conversationMemoryService.onAssistantMessageSaved(message);
+    }
+
+    /** 原子保存普通 DAG 的失败消息与失败事件，再清理临时证据。 */
+    private void failWorkflowRunWithAssistantError(ChatRunEntity run, RuntimeException exception) {
+        String reason = safeMessage(exception);
+        ChatMessageEntity message = workflowRunFinalizationService.fail(run,
+                errorContent(exception, ""), reason,
+                exception instanceof AppException app ? app.getCode() : "WORKFLOW_EXECUTION_FAILED");
+        if (message != null) conversationMemoryService.onMessageSaved(message);
+        clearEvidence(run);
+    }
+
     /** 校验回答引用、原子写助手消息与成功终态，再清除临时证据。 */
     private void completeRunWithAssistant(String tenantId, String userId, String runId,
                                           String content, String traceId, List<RagContextEvidence> evidence) {
@@ -1242,6 +1323,33 @@ public class ChatService implements IChatService {
             return;
         }
         assistantContent.append(content);
+    }
+
+    /** 兼容增量和累计快照两类模型事件，返回本次尚未展示的后缀。 */
+    private String contentDelta(String current, String content) {
+        if (content == null || content.isBlank() || content.equals(current)) {
+            return "";
+        }
+        if (current != null && !current.isBlank() && content.startsWith(current)) {
+            return content.substring(current.length());
+        }
+        return content;
+    }
+
+    /** 将普通 DAG 事件写入统一账本；序号和根 Trace 由事件服务校验。 */
+    private void publishWorkflowEvent(ChatRunEntity run, String eventType, String nodeExecutionId,
+                                      String nodeId, Map<String, ?> payload) {
+        workflowEventStreamService.publish(run.getTenantId(), run.getUserId(), run.getRunId(), run.getTraceId(),
+                eventType, nodeExecutionId, nodeId, jsonPayload(payload));
+    }
+
+    /** 把节点展示字段序列化为稳定 JSON，不允许静默丢失事件正文。 */
+    private String jsonPayload(Map<String, ?> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload == null ? Map.of() : payload);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("工作流事件序列化失败", exception);
+        }
     }
 
     /**

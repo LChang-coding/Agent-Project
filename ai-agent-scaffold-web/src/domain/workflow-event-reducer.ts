@@ -62,6 +62,20 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
       completed.finishedAt = event.occurredAt;
       break;
     }
+    case 'NODE_FAILED': {
+      const failed = requireNode(node, event);
+      failed.status = 'failed';
+      failed.errorMessage = text(payload.message) || text(payload.errorCode) || '节点执行失败';
+      failed.finishedAt = event.occurredAt;
+      break;
+    }
+    case 'NODE_CANCELLED': {
+      const cancelled = requireNode(node, event);
+      cancelled.status = 'cancelled';
+      cancelled.errorMessage = text(payload.message) || '节点执行已取消';
+      cancelled.finishedAt = event.occurredAt;
+      break;
+    }
     case 'ROUTE_DECIDED': {
       const routed = requireNode(node, event);
       routed.routeTargetNodeId = text(payload.targetNodeId);

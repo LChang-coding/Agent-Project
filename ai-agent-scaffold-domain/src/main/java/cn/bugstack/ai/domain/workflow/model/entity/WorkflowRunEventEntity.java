@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** 可持久化、可重放的智能工作流业务事件。 */
+/** 可持久化、可重放的通用工作流业务事件。 */
 @Data
 @Builder
 @NoArgsConstructor

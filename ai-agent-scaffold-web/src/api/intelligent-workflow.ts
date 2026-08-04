@@ -4,6 +4,8 @@ import { parseWorkflowSseBlock } from '@/domain/workflow-sse-parser';
 import type {
   IntelligentWorkflowRunResponse,
   IntelligentWorkflowStartRequest,
+  StaticWorkflowRunResponse,
+  StaticWorkflowStartRequest,
   WorkflowRunEvent,
   WorkflowStreamMetadata,
 } from '@/types/intelligent-workflow';
@@ -25,6 +27,21 @@ export async function startIntelligentWorkflow(payload: IntelligentWorkflowStart
   return { ...response.data, traceId };
 }
 
+/** 启动与 HTTP 连接解耦的普通 DAG，节点和最终回答统一从持久事件流读取。 */
+export async function startStaticWorkflow(payload: StaticWorkflowStartRequest) {
+  const response = await requestWithTrace<StaticWorkflowRunResponse>({
+    url: '/v1/workflow-runs',
+    method: 'POST',
+    data: payload,
+  });
+  const traceId = response.data.traceId || response.traceId;
+  if (!traceId) throw new Error('普通工作流启动响应缺少根 Trace ID');
+  if (response.data.operationTraceId && response.traceId && response.data.operationTraceId !== response.traceId) {
+    throw new Error('普通工作流启动连接 Trace ID 不一致');
+  }
+  return { ...response.data, traceId };
+}
+
 export interface WorkflowStreamHandlers {
   onMetadata?: (metadata: WorkflowStreamMetadata) => void;
   onEvent: (event: WorkflowRunEvent) => void;
@@ -38,14 +55,25 @@ export async function streamIntelligentWorkflow(
   handlers: WorkflowStreamHandlers,
   canRefresh = true,
 ): Promise<void> {
+  return streamWorkflow(runId, rootTraceId, afterSequence, handlers, canRefresh);
+}
+
+/** 续传普通和智能工作流共用的 workflow-event-v1 事件。 */
+export async function streamWorkflow(
+  runId: string,
+  rootTraceId: string,
+  afterSequence: number,
+  handlers: WorkflowStreamHandlers,
+  canRefresh = true,
+): Promise<void> {
   const response = await fetch(
-    `${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/intelligent-workflow-runs/${encodeURIComponent(runId)}/stream?afterSequence=${Math.max(0, afterSequence)}`,
+    `${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/workflow-runs/${encodeURIComponent(runId)}/stream?afterSequence=${Math.max(0, afterSequence)}`,
     { headers: { Accept: 'text/event-stream', Authorization: `Bearer ${getAccessToken()}` }, signal: handlers.signal },
   );
   const responseTraceId = resolveTraceId(response.headers);
   if (response.status === 401 && canRefresh) {
     await refreshAccessToken();
-    return streamIntelligentWorkflow(runId, rootTraceId, afterSequence, handlers, false);
+    return streamWorkflow(runId, rootTraceId, afterSequence, handlers, false);
   }
   if (!response.ok || !response.body) throw new Error(`工作流事件流请求失败：HTTP ${response.status}`);
 

@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.workflow.service.IntelligentWorkflowRuntimeService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
 import cn.bugstack.ai.trigger.http.RunControlController;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
@@ -32,7 +33,8 @@ public class RunControlControllerTest {
     public void shouldReturnRootAndOperationTraceWhenCancelling() {
         RunControlService runControlService = mock(RunControlService.class);
         IntelligentWorkflowRuntimeService runtimeService = mock(IntelligentWorkflowRuntimeService.class);
-        RunControlController controller = new RunControlController(runControlService, runtimeService);
+        WorkflowRunFinalizationService finalizationService = mock(WorkflowRunFinalizationService.class);
+        RunControlController controller = new RunControlController(runControlService, runtimeService, finalizationService);
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         TraceContext.setTraceId("operation-trace-1");
         ChatRunEntity cancelled = ChatRunEntity.builder()
@@ -48,5 +50,6 @@ public class RunControlControllerTest {
         assertEquals("root-trace-1", response.getData().getTraceId());
         assertEquals("operation-trace-1", response.getData().getOperationTraceId());
         verify(runtimeService).reconcileCancellation(cancelled);
+        verify(finalizationService).reconcileCancellation(cancelled);
     }
 }

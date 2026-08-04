@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
-/** 智能工作流事件与运行序号 DAO。 */
+/** 智能运行扩展状态与通用工作流事件 DAO。 */
 public interface IWorkflowRunEventDao {
 
     int insertRun(IntelligentWorkflowRunPO run);
@@ -23,14 +23,6 @@ public interface IWorkflowRunEventDao {
                         @Param("runId") String runId,
                         @Param("finishedAt") java.time.LocalDateTime finishedAt);
 
-    IntelligentWorkflowRunPO lockRun(@Param("tenantId") String tenantId,
-                                      @Param("userId") String userId,
-                                      @Param("runId") String runId);
-
-    int advanceSequence(@Param("tenantId") String tenantId,
-                        @Param("runId") String runId,
-                        @Param("expectedRevision") long expectedRevision);
-
     int insert(WorkflowRunEventPO event);
 
     List<WorkflowRunEventPO> queryAfter(@Param("tenantId") String tenantId,
@@ -42,4 +34,8 @@ public interface IWorkflowRunEventDao {
     Long queryOldestSequence(@Param("tenantId") String tenantId,
                              @Param("userId") String userId,
                              @Param("runId") String runId);
+
+    WorkflowRunEventPO queryTerminal(@Param("tenantId") String tenantId,
+                                     @Param("userId") String userId,
+                                     @Param("runId") String runId);
 }

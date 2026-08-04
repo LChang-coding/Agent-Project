@@ -5,6 +5,8 @@ export type WorkflowEventType =
   | 'NODE_STARTED'
   | 'NODE_OUTPUT_DELTA'
   | 'NODE_COMPLETED'
+  | 'NODE_FAILED'
+  | 'NODE_CANCELLED'
   | 'ROUTE_DECIDED'
   | 'FINAL_ANSWER_DELTA'
   | 'FINAL_ANSWER_COMPLETED'
@@ -32,6 +34,17 @@ export interface IntelligentWorkflowRunResponse {
   operationTraceId?: string;
   maxSteps: number;
   tokenBudget: number;
+}
+
+export type StaticWorkflowStartRequest = IntelligentWorkflowStartRequest;
+
+export interface StaticWorkflowRunResponse {
+  runId: string;
+  sessionId: string;
+  workflowId: string;
+  status: string;
+  traceId: string;
+  operationTraceId?: string;
 }
 
 export interface WorkflowStreamMetadata {
@@ -65,6 +78,7 @@ export interface WorkflowNodeExecutionView {
   routeTargetNodeId?: string;
   routeStrategy?: string;
   totalTokens?: number;
+  errorMessage?: string;
   startedAt: string;
   finishedAt?: string;
 }
