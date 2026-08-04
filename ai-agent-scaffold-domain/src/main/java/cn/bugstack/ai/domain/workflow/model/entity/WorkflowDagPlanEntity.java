@@ -130,6 +130,8 @@ public class WorkflowDagPlanEntity {
 
         private String routeKey;
 
+        private List<String> routeAliases;
+
         private String conditionExpression;
 
         private Integer priority;

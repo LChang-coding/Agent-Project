@@ -22,6 +22,7 @@ type IntelligentEdgeInput = [
   routeType: NonNullable<WorkflowEdge['routeType']>,
   routeKey?: string,
   conditionExpression?: string,
+  routeAliases?: string[],
 ];
 
 const MODEL_CODE = 'deepseek-v4-flash';
@@ -104,8 +105,8 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
       ['technical', '技术支持', '输出可验证的故障排查步骤。'],
       ['manual', '人工升级摘要', '生成交给人工的事实摘要与已尝试动作。'],
     ]), [
-      ['classify', 'billing', 'AI_ROUTER', 'billing'],
-      ['classify', 'technical', 'AI_ROUTER', 'technical'],
+      ['classify', 'billing', 'AI_ROUTER', '账务', undefined, ['billing']],
+      ['classify', 'technical', 'AI_ROUTER', '技术', undefined, ['technical']],
       ['classify', 'manual', 'DEFAULT'],
       ['billing', 'END', 'DEFAULT'],
       ['technical', 'END', 'DEFAULT'],
@@ -342,10 +343,11 @@ function intelligentGraph(
   maxSteps: number,
   tokenBudget: number,
 ): WorkflowGraph {
-  const edges = inputs.map(([sourceNodeId, targetNodeId, routeType, routeKey, conditionExpression], index) => ({
+  const edges = inputs.map(([sourceNodeId, targetNodeId, routeType, routeKey, conditionExpression, routeAliases], index) => ({
     ...edge(sourceNodeId, targetNodeId, index),
     routeType,
     routeKey,
+    routeAliases: routeAliases || [],
     conditionExpression,
     priority: index,
   }));
@@ -357,7 +359,7 @@ function intelligentGraph(
       enabledStrategies: [...INTELLIGENT_STRATEGIES],
       allowedTargetNodeIds: [...new Set(outgoing.map((candidate) => candidate.targetNodeId))],
       defaultTargetNodeId: fallback?.targetNodeId,
-      routeInstruction: '只能在允许目标中建议下一节点；无法确定时交由 DEFAULT 兜底。',
+      routeInstruction: routeInstruction(outgoing, templateNodes),
       maxVisits: 4,
     } satisfies WorkflowNode;
   });
@@ -370,6 +372,24 @@ function intelligentGraph(
     nodes: nodesWithRouting,
     edges,
   };
+}
+
+/** 由模板边生成可执行的路由协议，避免节点提示词和 route key 分别维护。 */
+function routeInstruction(edges: WorkflowEdge[], templateNodes: WorkflowNode[]): string {
+  const lines = edges.flatMap((candidate) => {
+    const target = candidate.targetNodeId === 'END'
+      ? '结束工作流'
+      : templateNodes.find((node) => node.nodeId === candidate.targetNodeId)?.name || candidate.targetNodeId;
+    if (candidate.routeType === 'AI_ROUTER' || candidate.routeType === 'NODE_SUGGESTION') {
+      const aliases = candidate.routeAliases?.length ? `；兼容别名：${candidate.routeAliases.join('、')}` : '';
+      return [`需要进入“${target}”时，在正文末尾独立一行精确输出 [route:${candidate.routeKey}]${aliases}。`];
+    }
+    if (candidate.routeType === 'DEFAULT') {
+      return [`没有任何路由键适用时，由 DEFAULT 进入“${target}”；不要编造路由键。`];
+    }
+    return [];
+  });
+  return lines.length ? lines.join('\n') : '当前节点没有可建议的路由键。';
 }
 
 function edge(sourceNodeId: string, targetNodeId: string, index: number): WorkflowEdge {

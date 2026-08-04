@@ -484,6 +484,7 @@ export interface WorkflowEdge {
   targetNodeId: string;
   routeType?: 'FIXED' | 'SUCCESS' | 'FAILURE' | 'EXPRESSION' | 'NODE_SUGGESTION' | 'AI_ROUTER' | 'DEFAULT';
   routeKey?: string;
+  routeAliases?: string[];
   conditionExpression?: string;
   priority?: number;
 }

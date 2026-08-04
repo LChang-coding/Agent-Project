@@ -75,6 +75,26 @@ test('智能模板具有有界预算、允许目标和 DEFAULT 出口', () => {
   }
 });
 
+test('智能模板自动写入精确路由协议并支持中文主键和受控别名', () => {
+  for (const template of WORKFLOW_TEMPLATES.filter((item) => item.workflowKind === 'INTELLIGENT')) {
+    for (const node of template.graph.nodes) {
+      const outgoing = template.graph.edges.filter((edge) => edge.sourceNodeId === node.nodeId);
+      for (const edge of outgoing.filter((item) => ['AI_ROUTER', 'NODE_SUGGESTION'].includes(item.routeType))) {
+        assert.ok(node.routeInstruction.includes(`[route:${edge.routeKey}]`), `${template.id}: ${edge.edgeId} 未注入精确格式`);
+        for (const alias of edge.routeAliases || []) {
+          assert.ok(node.routeInstruction.includes(alias), `${template.id}: ${edge.edgeId} 未注入别名 ${alias}`);
+        }
+      }
+    }
+  }
+
+  const customer = workflowTemplateById('prod-intelligent-customer-router').graph;
+  const billing = customer.edges.find((edge) => edge.sourceNodeId === 'classify' && edge.targetNodeId === 'billing');
+  assert.equal(billing.routeKey, '账务');
+  assert.deepEqual(billing.routeAliases, ['billing']);
+  assert.match(customer.nodes.find((node) => node.nodeId === 'classify').routeInstruction, /\[route:账务]/);
+});
+
 test('深拷贝载入不会污染模板清单或其他载入实例', () => {
   const templateId = 'prod-intelligent-audit-revision';
   const first = cloneWorkflowTemplateGraph(templateId);

@@ -75,9 +75,25 @@ public class IntelligentWorkflowRouterTest {
         Assert.assertEquals("edge_a", decision.edgeId());
     }
 
+    @Test
+    public void shouldMatchChinesePrimaryKeyAndControlledEnglishAlias() {
+        WorkflowDagPlanEntity.Edge billing = edge("AI_ROUTER", "node_billing", "账务", null, 10);
+        billing.setRouteAliases(List.of("billing", "invoice"));
+
+        IntelligentWorkflowRouter.RouteDecision chinese = router.decide(
+                context(false, false, "", null, "账务", 0, 20, 0, 100),
+                node(List.of("node_billing", "END")), List.of(billing, edge("DEFAULT", "END", null, null, 0)));
+        IntelligentWorkflowRouter.RouteDecision alias = router.decide(
+                context(false, false, "", null, "BILLING", 0, 20, 0, 100),
+                node(List.of("node_billing", "END")), List.of(billing, edge("DEFAULT", "END", null, null, 0)));
+
+        Assert.assertEquals("node_billing", chinese.targetNodeId());
+        Assert.assertEquals("node_billing", alias.targetNodeId());
+    }
+
     private WorkflowDagPlanEntity.Node node(List<String> allowedTargets) {
         return WorkflowDagPlanEntity.Node.builder().nodeId("node_a")
-                .enabledStrategies(List.of("EXPRESSION", "NODE_SUGGESTION", "DEFAULT"))
+                .enabledStrategies(List.of("EXPRESSION", "NODE_SUGGESTION", "AI_ROUTER", "DEFAULT"))
                 .allowedTargetNodeIds(allowedTargets).build();
     }
 

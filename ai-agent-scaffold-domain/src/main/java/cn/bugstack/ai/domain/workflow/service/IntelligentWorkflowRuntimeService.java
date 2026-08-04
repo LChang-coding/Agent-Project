@@ -38,15 +38,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** 单活动路径智能工作流运行时；节点执行、路由裁决和最终回答均由服务端推进。 */
 @Service
 public class IntelligentWorkflowRuntimeService {
-
-    private static final Pattern ROUTE_MARKER = Pattern.compile("(?im)^\\s*\\[route:([A-Za-z0-9_.-]{1,64})]\\s*$");
 
     private final IWorkflowService workflowService;
     private final IChatService chatService;
@@ -158,7 +154,8 @@ public class IntelligentWorkflowRuntimeService {
                         runtime.getWorkflowId(), currentNodeId, executionIndex, safeMaxVisits(node.getMaxVisits()), 1));
                 publish(run, "NODE_STARTED", nodeExecutionId, currentNodeId,
                         Map.of("nodeName", safe(node.getNodeName()), "executionIndex", executionIndex, "attempt", 1));
-                String prompt = intelligentPrompt(userMessage, previousOutput, node.getRouteInstruction(), executionIndex);
+                String prompt = intelligentPrompt(userMessage, previousOutput, node.getRouteInstruction(),
+                        routeProtocol(outgoing.getOrDefault(currentNodeId, List.of()), nodes), executionIndex);
                 WorkflowInvocationEntity invocation = invocationGuardService.modelInvocation(run, nodeExecutionId);
                 if (!invocationGuardService.register(invocation, run.getUserId())) {
                     throw new AppException("WORKFLOW_INVOCATION_DUPLICATE", "节点模型调用已登记，拒绝重复执行");
@@ -288,18 +285,37 @@ public class IntelligentWorkflowRuntimeService {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
-    private String intelligentPrompt(String userMessage, String previousOutput, String routeInstruction, int executionIndex) {
+    private String intelligentPrompt(String userMessage, String previousOutput, String routeInstruction,
+                                     String routeProtocol, int executionIndex) {
         return "用户本轮输入：\n" + safe(userMessage) + "\n\n上一节点输出：\n" + safe(previousOutput)
                 + "\n\n当前执行次数：" + executionIndex
-                + "\n\n路由要求：\n" + safe(routeInstruction)
+                + "\n\n业务路由判断要求：\n" + safe(routeInstruction)
+                + "\n\n系统允许的精确路由键：\n" + safe(routeProtocol)
                 + "\n如需建议路由，只能在正文末尾单独输出 [route:路由键]；请完成当前节点任务，不要直接调用其他节点。";
     }
 
+    /** 从冻结出边生成不可省略的精确路由协议，避免提示词和 graph_json 漂移。 */
+    private String routeProtocol(List<WorkflowDagPlanEntity.Edge> edges,
+                                 Map<String, WorkflowDagPlanEntity.Node> nodes) {
+        List<String> lines = new ArrayList<>();
+        for (WorkflowDagPlanEntity.Edge edge : edges == null ? List.<WorkflowDagPlanEntity.Edge>of() : edges) {
+            String type = safe(edge.getRouteType()).toUpperCase(Locale.ROOT);
+            if ("NODE_SUGGESTION".equals(type) || "AI_ROUTER".equals(type)) {
+                WorkflowDagPlanEntity.Node target = nodes.get(edge.getTargetNodeId());
+                String targetName = target == null ? edge.getTargetNodeId() : safe(target.getNodeName());
+                String aliases = edge.getRouteAliases() == null || edge.getRouteAliases().isEmpty()
+                        ? "" : "；兼容别名：" + String.join("、", edge.getRouteAliases());
+                lines.add("- " + edge.getRouteKey() + " -> " + targetName + "（" + edge.getTargetNodeId()
+                        + "）；精确输出 [route:" + edge.getRouteKey() + "]" + aliases);
+            } else if ("DEFAULT".equals(type)) {
+                lines.add("- 未命中上述键 -> DEFAULT -> " + edge.getTargetNodeId());
+            }
+        }
+        return lines.isEmpty() ? "- 当前节点没有可建议的路由键。" : String.join("\n", lines);
+    }
+
     private String routeMarker(String output) {
-        Matcher matcher = ROUTE_MARKER.matcher(safe(output));
-        String result = null;
-        while (matcher.find()) result = matcher.group(1);
-        return result;
+        return WorkflowRouteKey.markerAtEnd(output);
     }
 
     private String hash(WorkflowDagPlanEntity plan) {

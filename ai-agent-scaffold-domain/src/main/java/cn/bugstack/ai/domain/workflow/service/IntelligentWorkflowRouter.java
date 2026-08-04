@@ -69,8 +69,8 @@ public class IntelligentWorkflowRouter {
             case "FIXED" -> true;
             case "SUCCESS" -> !context.failed();
             case "EXPRESSION" -> expressionMatches(edge.getConditionExpression(), context);
-            case "NODE_SUGGESTION" -> same(edge.getRouteKey(), context.nodeSuggestion());
-            case "AI_ROUTER" -> same(edge.getRouteKey(), context.aiRouteKey());
+            case "NODE_SUGGESTION" -> routeKeyMatches(edge, context.nodeSuggestion());
+            case "AI_ROUTER" -> routeKeyMatches(edge, context.aiRouteKey());
             case "DEFAULT" -> true;
             default -> false;
         };
@@ -132,6 +132,14 @@ public class IntelligentWorkflowRouter {
 
     private boolean same(String left, String right) {
         return safe(left).equalsIgnoreCase(safe(right));
+    }
+
+    /** 只对显式 marker 解析出的键做主键/别名精确匹配。 */
+    private boolean routeKeyMatches(WorkflowDagPlanEntity.Edge edge, String candidate) {
+        if (edge == null || !WorkflowRouteKey.valid(candidate)) return false;
+        if (WorkflowRouteKey.same(edge.getRouteKey(), candidate)) return true;
+        return edge.getRouteAliases() != null && edge.getRouteAliases().stream()
+                .anyMatch(alias -> WorkflowRouteKey.same(alias, candidate));
     }
 
     private String safe(String value) {

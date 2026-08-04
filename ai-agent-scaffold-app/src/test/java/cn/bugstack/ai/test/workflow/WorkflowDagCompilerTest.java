@@ -115,6 +115,41 @@ public class WorkflowDagCompilerTest {
         Assert.assertEquals("DEFAULT", result.getDagPlan().getEdges().get(0).getRouteType());
     }
 
+    @Test
+    public void shouldRejectNormalizedRouteAliasCollision() throws Exception {
+        WorkflowRuntimeCompiler compiler = compiler();
+        WorkflowGraphEntity.Node source = intelligentNode("source", List.of("billing", "technical"));
+        WorkflowGraphEntity.Node billing = intelligentNode("billing", Collections.emptyList());
+        WorkflowGraphEntity.Node technical = intelligentNode("technical", Collections.emptyList());
+        WorkflowGraphEntity.Edge billingEdge = intelligentEdge("edge_billing", "source", "billing", "AI_ROUTER", "账务", List.of("BILLING"));
+        WorkflowGraphEntity.Edge technicalEdge = intelligentEdge("edge_technical", "source", "technical", "AI_ROUTER", "ＢＩＬＬＩＮＧ", Collections.emptyList());
+        WorkflowGraphEntity.Edge fallback = intelligentEdge("edge_default", "source", "billing", "DEFAULT", null, Collections.emptyList());
+        WorkflowGraphEntity graph = WorkflowGraphEntity.builder().workflowKind("INTELLIGENT")
+                .maxSteps(10).tokenBudget(4096L).mode("sequential").rootNodeId("source")
+                .nodes(List.of(source, billing, technical)).edges(List.of(billingEdge, technicalEdge, fallback)).build();
+
+        try {
+            compiler.compileDag(workflow(), version(graph), "deepseek-v4-flash");
+            Assert.fail("标准化后重复的主键或别名不应通过编译");
+        } catch (AppException exception) {
+            Assert.assertEquals(ResponseCode.ILLEGAL_PARAMETER.getCode(), exception.getCode());
+        }
+    }
+
+    private WorkflowGraphEntity.Node intelligentNode(String nodeId, List<String> targets) {
+        WorkflowGraphEntity.Node node = node(nodeId, nodeId, 1);
+        node.setMaxVisits(2);
+        node.setEnabledStrategies(List.of("AI_ROUTER", "DEFAULT"));
+        node.setAllowedTargetNodeIds(targets);
+        return node;
+    }
+
+    private WorkflowGraphEntity.Edge intelligentEdge(String edgeId, String source, String target, String type,
+                                                       String routeKey, List<String> aliases) {
+        return WorkflowGraphEntity.Edge.builder().edgeId(edgeId).sourceNodeId(source).targetNodeId(target)
+                .routeType(type).routeKey(routeKey).routeAliases(aliases).priority(1).build();
+    }
+
     /**
      * 创建测试编译器；无参数；返回注入假依赖的编译器。
      */

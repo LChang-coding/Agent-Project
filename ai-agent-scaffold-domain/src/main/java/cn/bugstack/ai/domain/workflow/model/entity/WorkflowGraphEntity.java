@@ -143,6 +143,9 @@ public class WorkflowGraphEntity {
         /** 节点建议或 AI 路由返回的稳定路由键。 */
         private String routeKey;
 
+        /** 只匹配显式 route marker 的兼容键；不用于正文模糊推断。 */
+        private List<String> routeAliases;
+
         /** 受限表达式；仅允许 status/output/suggestion 的比较和 contains。 */
         private String conditionExpression;
 

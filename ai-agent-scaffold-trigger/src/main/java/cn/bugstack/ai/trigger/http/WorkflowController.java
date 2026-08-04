@@ -346,6 +346,7 @@ public class WorkflowController implements IWorkflowApiService {
                 .targetNodeId(edge.getTargetNodeId())
                 .routeType(edge.getRouteType())
                 .routeKey(edge.getRouteKey())
+                .routeAliases(edge.getRouteAliases())
                 .conditionExpression(edge.getConditionExpression())
                 .priority(edge.getPriority())
                 .build();
@@ -361,6 +362,7 @@ public class WorkflowController implements IWorkflowApiService {
         edge.setTargetNodeId(entity.getTargetNodeId());
         edge.setRouteType(entity.getRouteType());
         edge.setRouteKey(entity.getRouteKey());
+        edge.setRouteAliases(entity.getRouteAliases());
         edge.setConditionExpression(entity.getConditionExpression());
         edge.setPriority(entity.getPriority());
         return edge;

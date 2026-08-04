@@ -281,7 +281,11 @@
                   <option value="FAILURE">FAILURE</option><option value="EXPRESSION">EXPRESSION</option>
                   <option value="NODE_SUGGESTION">NODE_SUGGESTION</option><option value="AI_ROUTER">AI_ROUTER</option>
                 </select>
-                <input v-if="edge.routeType === 'NODE_SUGGESTION' || edge.routeType === 'AI_ROUTER'" v-model="edge.routeKey" class="input" placeholder="route key" />
+                <template v-if="edge.routeType === 'NODE_SUGGESTION' || edge.routeType === 'AI_ROUTER'">
+                  <input v-model="edge.routeKey" class="input" placeholder="路由键，例如：账务" />
+                  <input :value="routeAliasesText(edge)" class="input" placeholder="受控别名，例如：billing, invoice" @input="updateRouteAliases(edge, $event)" />
+                  <small>支持中文；别名仅做标准化后的精确匹配，不从回答正文猜测。</small>
+                </template>
                 <input v-if="edge.routeType === 'EXPRESSION'" v-model="edge.conditionExpression" class="input" placeholder="output contains '关键词'" />
                 <input v-model.number="edge.priority" class="input" type="number" min="0" max="999" aria-label="路由优先级" />
               </div>
@@ -660,6 +664,7 @@ function createEdge(sourceNodeId: string, targetNodeId: string) {
     sourceNodeId,
     targetNodeId,
     routeType: graph.value.workflowKind === 'INTELLIGENT' ? (existingOutgoing.length === 0 ? 'DEFAULT' : 'AI_ROUTER') : undefined,
+    routeAliases: [],
     routeKey: graph.value.workflowKind === 'INTELLIGENT' && existingOutgoing.length > 0 ? `route_${existingOutgoing.length + 1}` : undefined,
     priority: existingOutgoing.length,
   });
@@ -780,6 +785,15 @@ function initializeIntelligentNode(node: WorkflowNode) {
   node.maxVisits ||= 3;
 }
 
+function routeAliasesText(edge: WorkflowEdge) {
+  return (edge.routeAliases || []).join(', ');
+}
+
+function updateRouteAliases(edge: WorkflowEdge, event: Event) {
+  const input = event.target as HTMLInputElement;
+  edge.routeAliases = [...new Set(input.value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean))];
+}
+
 function toggleAllowedTarget(targetNodeId: string) {
   if (!activeNode.value) return;
   const targets = new Set(activeNode.value.allowedTargetNodeIds || []);
@@ -807,7 +821,8 @@ function normalizeGraphLayout(value: WorkflowGraph) {
     y: typeof node.y === 'number' ? node.y : 120 + Math.floor(index / 3) * 190,
   }));
   next.edges = (next.edges || []).filter((edge) => next.nodes.some((node) => node.nodeId === edge.sourceNodeId)
-    && (edge.targetNodeId === 'END' || next.nodes.some((node) => node.nodeId === edge.targetNodeId)));
+    && (edge.targetNodeId === 'END' || next.nodes.some((node) => node.nodeId === edge.targetNodeId)))
+    .map((edge) => ({ ...edge, routeAliases: edge.routeAliases || [] }));
   next.mode = inferGraphMode(next);
   next.rootNodeId = inferRootNodeId(next);
   return next;

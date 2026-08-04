@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -548,6 +549,7 @@ public class WorkflowRuntimeCompiler {
                         .targetNodeId(edge.getTargetNodeId())
                         .routeType(edge.getRouteType())
                         .routeKey(edge.getRouteKey())
+                        .routeAliases(edge.getRouteAliases() == null ? List.of() : List.copyOf(edge.getRouteAliases()))
                         .conditionExpression(edge.getConditionExpression())
                         .priority(edge.getPriority())
                         .build());
@@ -622,6 +624,7 @@ public class WorkflowRuntimeCompiler {
             if (!edges.isEmpty() && edges.stream().noneMatch(edge -> "DEFAULT".equalsIgnoreCase(edge.getRouteType()))) {
                 throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能节点必须配置 DEFAULT 出口: " + node.getNodeId());
             }
+            validateRouteKeys(node.getNodeId(), edges);
             for (WorkflowGraphEntity.Edge edge : edges) {
                 if (!"END".equalsIgnoreCase(edge.getTargetNodeId()) && !nodeIds.contains(edge.getTargetNodeId())) {
                     throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能路由目标不存在: " + edge.getTargetNodeId());
@@ -638,6 +641,35 @@ public class WorkflowRuntimeCompiler {
                     }
                 }
             }
+        }
+    }
+
+    /** 同一来源节点的主键和别名必须安全且标准化后唯一。 */
+    private void validateRouteKeys(String sourceNodeId, List<WorkflowGraphEntity.Edge> edges) {
+        Map<String, String> owners = new LinkedHashMap<>();
+        for (WorkflowGraphEntity.Edge edge : edges) {
+            String type = defaultString(edge.getRouteType(), "FIXED").toUpperCase(Locale.ROOT);
+            if (!"NODE_SUGGESTION".equals(type) && !"AI_ROUTER".equals(type)) continue;
+            registerRouteKey(sourceNodeId, edge, edge.getRouteKey(), "主键", owners);
+            if (edge.getRouteAliases() != null) {
+                for (String alias : edge.getRouteAliases()) {
+                    registerRouteKey(sourceNodeId, edge, alias, "别名", owners);
+                }
+            }
+        }
+    }
+
+    private void registerRouteKey(String sourceNodeId, WorkflowGraphEntity.Edge edge, String value,
+                                  String kind, Map<String, String> owners) {
+        if (!WorkflowRouteKey.valid(value)) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(),
+                    "智能路由" + kind + "不合法: " + edge.getEdgeId());
+        }
+        String normalized = WorkflowRouteKey.normalize(value);
+        String previous = owners.putIfAbsent(normalized, edge.getEdgeId());
+        if (previous != null) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(),
+                    "同一节点的路由主键或别名重复: " + sourceNodeId + " / " + value);
         }
     }
 
