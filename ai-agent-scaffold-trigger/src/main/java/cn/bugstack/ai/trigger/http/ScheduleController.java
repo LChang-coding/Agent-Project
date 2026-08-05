@@ -137,9 +137,29 @@ public class ScheduleController {
     }
 
     /**
-     * 把 Web 请求转换为调度领域配置并统一执行创建或更新。
+     * 把前端请求翻成调度领域配置，并统一执行创建或更新。
+     *
+     * <p>各层职责：
+     * 第一层：把用户消息包成固定结构的 JSON 载荷，为将来扩展参数留出兼容空间。
+     * 第二层：把执行身份写死成当前登录用户和角色，杜绝用低权限账号创建一个「以管理员身份运行」的任务。
+     * 第三层：交给领域层校验 Cron、时区、载荷、错过策略和重试上限，落库并立刻收敛运行态。
+     * 第四层：把落库结果翻成前端可编辑结构；两类异常分别翻译成业务错误码和系统错误码。</p>
+     *
+     * <p>数据流：
+     * 保存请求
+     * → 用户消息包成 JSON 载荷
+     * → 拼装配置实体（可信租户 / 所有者 / 执行身份 + Cron + 时区 + 错过策略 + 重试上限）
+     * → 领域层校验并落库
+     * → 立刻收敛成运行态并算出下次触发时间
+     * → 回读落库结果
+     * → 翻成前端可编辑结构返回</p>
+     *
+     * <p>会写数据库、会改变后续自动执行的行为。这里对两个可选字段做了兜底：enabled 不填按启用处理
+     * （用户新建任务的意图通常就是要它跑），maxRetries 不填按 3 次（能扛住偶发抖动又不至于无限重试）。
+     * 主要失败情形：Cron 或时区非法、消息为空或超过 2 万字、错过策略不受支持、指定的配置不属于当前用户。</p>
      */
     private Response<ScheduleResponseDTO> save(ScheduleSaveRequestDTO request) {
+        // 校验、落库、收敛任何一步失败都必须转成统一响应，不能把异常抛给前端。
         try {
             // 任务载荷以 JSON 保存，为后续扩展参数保留向后兼容空间。
             String payload = objectMapper.createObjectNode().put("message", request.getMessage()).toString();
@@ -152,30 +172,55 @@ public class ScheduleController {
                     .enabled(request.getEnabled() == null || request.getEnabled())
                     .misfirePolicy(request.getMisfirePolicy())
                     .maxRetries(request.getMaxRetries() == null ? 3 : request.getMaxRetries()).build());
+            // 落库成功，把数据库里的最终结果（含服务端生成的编号和收敛时间）翻成前端可编辑结构返回。
             return success(toResponse(result));
         } catch (AppException e) {
+            // Cron 非法、载荷不合规、无权修改等可预期拒绝，原样返回业务错误码。
             return fail(e);
         } catch (Exception e) {
+            // 未知故障，细节只留在日志里。
             log.error("保存定时任务失败", e);
+            // 对外统一成系统错误码，前端提示稍后重试。
             return systemFail();
         }
     }
 
-    /** 切换配置状态并返回数据库最终版本。 */
+    /**
+     * 切换配置的启停状态，并返回数据库里的最终结果。
+     *
+     * <p>为什么要回读而不是直接返回请求值：领域层改完状态还会重新收敛运行态、算出新的下次触发时间，
+     * 只有回读才能把这些派生结果一并给前端，否则界面上的「下次执行时间」会是过期的。</p>
+     *
+     * <p>会写数据库。配置不存在或不属于当前用户时返回业务错误码。</p>
+     */
     private Response<ScheduleResponseDTO> setEnabled(String configId, boolean enabled) {
+        // 归属校验失败和未知故障都要收敛成统一响应。
         try {
+            // 用可信身份切换状态；领域层顺带重新收敛运行态，返回的实体已包含新的下次触发时间。
             return success(toResponse(service.setEnabled(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), configId, enabled)));
         } catch (AppException e) {
+            // 配置不存在或无权操作，原样返回业务错误码。
             return fail(e);
         } catch (Exception e) {
+            // 未知故障，保留 configId 便于定位。
             log.error("切换定时任务状态失败 configId:{}", configId, e);
+            // 对外统一成系统错误码。
             return systemFail();
         }
     }
 
-    /** 将调度配置领域实体转换为前端可编辑结构。 */
+    /**
+     * 把调度配置实体翻成前端可编辑结构。
+     *
+     * <p>关键一步是把数据库里的 JSON 载荷还原成一行消息文本，让前端表单能直接编辑；
+     * 另外带上 configVersion 和 lastReconciledAt，前端据此判断这份配置有没有真正被收敛生效。</p>
+     *
+     * <p>不查库、不改状态，纯结构转换。</p>
+     */
     private ScheduleResponseDTO toResponse(ScheduleConfigEntity entity) {
+        // 逐字段搬运：配置与 Agent 身份、还原后的消息文本、Cron 与时区、启停与状态、
+         // 错过策略与重试上限、配置版本与最近收敛时间，最后是创建和更新时间。
         return ScheduleResponseDTO.builder().configId(entity.getConfigId()).agentId(entity.getAgentId())
                 .agentName(entity.getAgentName()).message(readMessage(entity.getTaskPayload()))
                 .cronExpr(entity.getCronExpr()).timezone(entity.getTimezone()).enabled(entity.isEnabled())
@@ -184,8 +229,17 @@ public class ScheduleController {
                 .createTime(entity.getCreateTime()).updateTime(entity.getUpdateTime()).build();
     }
 
-    /** 将执行账本转换为可观测历史记录。 */
+    /**
+     * 把执行账本记录翻成可观测的历史条目。
+     *
+     * <p>plannedTime 是「本该什么时候跑」，startTime 是「实际什么时候开始跑」，差得多说明调度延迟了；
+     * attemptNo 说明这是第几次尝试；traceId 用来把这条记录和详细日志对上。
+     * 定时任务没有人在旁边看着，排查全靠这几个字段。</p>
+     *
+     * <p>不查库、不改状态，纯结构转换。</p>
+     */
     private ScheduleExecutionResponseDTO toExecution(ScheduleExecutionEntity entity) {
+        // 逐字段搬运：执行编号与链路标识、计划时间与尝试序号、状态、起止时间与耗时，最后是失败原因。
         return ScheduleExecutionResponseDTO.builder().executionId(entity.getExecutionId()).traceId(entity.getTraceId())
                 .plannedTime(entity.getPlannedTime()).attemptNo(entity.getAttemptNo()).status(entity.getStatus())
                 .startTime(entity.getStartTime()).endTime(entity.getEndTime()).durationMs(entity.getDurationMs())
@@ -193,29 +247,38 @@ public class ScheduleController {
     }
 
     /**
-     * 从兼容 JSON 载荷中读取用户消息。
-     * <p>旧数据损坏时返回空文本，避免只读列表因单条历史载荷失败。</p>
+     * 从任务载荷 JSON 里取出用户消息。
+     *
+     * <p>为什么要吞掉异常：这只是给列表展示用的。历史数据里可能存在格式不合的老载荷，
+     * 如果让它抛异常，整个列表接口都会失败——用户连别的任务都看不到了。
+     * 所以解析不了就返回空文本，只是这一条显示为空，其余照常展示。</p>
      */
     private String readMessage(String payload) {
+        // 老数据可能不是合法 JSON，解析失败不能让整个只读列表跟着失败。
         try {
+            // 取出 message 字段；字段缺失时返回空串而不是 null，前端表单不必额外判空。
             return objectMapper.readTree(payload).path("message").asText("");
         } catch (Exception ignored) {
+            // 载荷损坏时以空文本兜底，只影响这一条的显示，不影响列表整体可用。
             return "";
         }
     }
 
-    /** 构造统一成功响应。 */
+    /** 用统一的成功码和文案包装数据，让所有接口的成功响应结构一致，前端只需写一套解析逻辑。 */
     private <T> Response<T> success(T data) {
+        // 成功码 + 成功文案 + 业务数据，三段固定结构。
         return Response.<T>builder().code(ResponseCode.SUCCESS.getCode()).info(ResponseCode.SUCCESS.getInfo()).data(data).build();
     }
 
-    /** 将领域异常映射为稳定业务错误。 */
+    /** 把领域层抛出的业务异常原样翻译成响应：错误码和文案都是设计好的，可直接展示给用户，不带 data。 */
     private <T> Response<T> fail(AppException e) {
+        // 只回错误码和文案，前端据此提示具体原因。
         return Response.<T>builder().code(e.getCode()).info(e.getInfo()).build();
     }
 
-    /** 将未分类异常收敛为统一系统错误。 */
+    /** 把未预料的故障统一收敛成系统错误码，绝不把内部异常信息推给浏览器。 */
     private <T> Response<T> systemFail() {
+        // 只回通用错误码和文案，具体原因已经记在日志里，靠日志排查。
         return Response.<T>builder().code(ResponseCode.UN_ERROR.getCode()).info(ResponseCode.UN_ERROR.getInfo()).build();
     }
 }

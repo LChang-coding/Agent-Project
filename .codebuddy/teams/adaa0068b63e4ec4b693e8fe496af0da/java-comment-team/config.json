@@ -1,0 +1,55 @@
+{
+  "name": "java-comment-team",
+  "mainConversationId": "adaa0068b63e4ec4b693e8fe496af0da",
+  "workspacePath": "/Users/liuchang/项目开发/ai项目/Agent-Project",
+  "createdAt": "2026-08-05T12:06:42.870Z",
+  "options": {
+    "workspacePath": "/Users/liuchang/项目开发/ai项目/Agent-Project",
+    "isAutoTeam": false
+  },
+  "isAutoTeam": false,
+  "members": [
+    {
+      "memberId": "trigger-layer@java-comment-team",
+      "name": "trigger-layer",
+      "role": "触发器层注释",
+      "sessionId": "6f578f14e57049edbd23363466189275"
+    },
+    {
+      "memberId": "domain-agent@java-comment-team",
+      "name": "domain-agent",
+      "role": "agent领域注释",
+      "sessionId": "371ec6dae0a74febac17aeeb3796022b"
+    },
+    {
+      "memberId": "domain-rag-service@java-comment-team",
+      "name": "domain-rag-service",
+      "role": "rag服务注释",
+      "sessionId": "6e98d68712ab4145b234ee63ec1c71be"
+    },
+    {
+      "memberId": "domain-rag-model@java-comment-team",
+      "name": "domain-rag-model",
+      "role": "rag模型注释",
+      "sessionId": "f5aedc1fcdc34f11b8b4b29de0725748"
+    },
+    {
+      "memberId": "domain-workflow@java-comment-team",
+      "name": "domain-workflow",
+      "role": "工作流领域注释",
+      "sessionId": "f7e3263a2d2542dca24fe583c6ca63eb"
+    },
+    {
+      "memberId": "domain-tool@java-comment-team",
+      "name": "domain-tool",
+      "role": "工具领域注释",
+      "sessionId": "dcdaa5774e354d5db977ab5928ba82b8"
+    },
+    {
+      "memberId": "domain-misc@java-comment-team",
+      "name": "domain-misc",
+      "role": "上下文等领域注释",
+      "sessionId": "ea2f55f2b05b44d1ade2746d10f3f15d"
+    }
+  ]
+}
