@@ -175,7 +175,7 @@ public class SessionController {
                 throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG设置不能为空");
             }
             return success(toRagSetting(ragSettingService.update(TenantContextHolder.getTenantId(),
-                    requireUserId(), sessionId, request.getMode(), request.getEnabled(),
+                    requireUserId(), sessionId, request.getMode(), request.getInvocationMode(), request.getEnabled(),
                     request.getSelectedBindingIds(), request.getExpectedRevision())));
         } catch (AppException exception) {
             return fail(exception);
@@ -211,6 +211,8 @@ public class SessionController {
                 .agentName(session.getAgentName()).appName(session.getAppName()).title(session.getTitle())
                 .sourceType(session.getSourceType()).workflowVersion(session.getWorkflowVersion()).modelCode(session.getModelCode())
                 .status(session.getStatus()).ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(session.getRagInvocationMode()).name())
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision()).build();
     }
@@ -237,6 +239,7 @@ public class SessionController {
                         binding.selected()))
                 .toList();
         return new SessionRagSettingResponseDTO(setting.sessionId(), setting.enabled(), setting.mode().name(),
+                setting.invocationMode().name(),
                 setting.revision(), setting.bindingConfigured(), setting.targetType().name(), setting.targetId(),
                 setting.selectedBindingIds(), eligibleBindings, message);
     }

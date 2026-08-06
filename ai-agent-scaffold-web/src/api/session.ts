@@ -1,4 +1,5 @@
 import { request } from '@/api/http';
+import { toSessionRagSettingRequest } from '@/api/session-rag-contract';
 import type {
   SessionDeleteResponse,
   SessionListPage,
@@ -52,10 +53,6 @@ export async function updateSessionRagSetting(sessionId: string, setting: Sessio
   return request<SessionRagSetting>({
     url: `/v1/sessions/${encodeURIComponent(sessionId)}/rag-setting`,
     method: 'PATCH',
-    data: {
-      ...setting,
-      // 兼容尚未移除布尔字段的服务端和链路观察者。
-      enabled: setting.mode !== 'OFF',
-    },
+    data: toSessionRagSettingRequest(setting),
   });
 }

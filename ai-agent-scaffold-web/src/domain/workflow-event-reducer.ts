@@ -33,7 +33,7 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     ...state,
     lastSequence: event.sequence,
     seenEventIds: [...state.seenEventIds, event.eventId],
-    nodes: state.nodes.map((node) => ({ ...node })),
+    nodes: state.nodes.map((node) => ({ ...node, toolCalls: node.toolCalls.map((call) => ({ ...call })) })),
   };
   const payload = parsePayload(event.payloadJson);
   const node = event.nodeExecutionId ? findNode(next.nodes, event.nodeExecutionId) : undefined;
@@ -48,6 +48,7 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
         executionIndex: number(payload.executionIndex, 1),
         status: 'running',
         output: '',
+        toolCalls: [],
         startedAt: event.occurredAt,
       });
       break;
@@ -76,10 +77,61 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
       cancelled.finishedAt = event.occurredAt;
       break;
     }
+    case 'TOOL_CALL_STARTED': {
+      const owner = requireNode(node, event);
+      const functionCallId = requiredText(payload.functionCallId, 'TOOL_CALL_STARTED 缺少 functionCallId');
+      owner.toolCalls.push({
+        functionCallId,
+        toolCode: text(payload.toolCode),
+        displayName: text(payload.displayName) || text(payload.toolCode) || '工具调用',
+        status: 'running',
+        startedAt: event.occurredAt,
+      });
+      break;
+    }
+    case 'TOOL_CALL_COMPLETED':
+    case 'TOOL_CALL_FAILED': {
+      const owner = requireNode(node, event);
+      const functionCallId = requiredText(payload.functionCallId, `${event.eventType} 缺少 functionCallId`);
+      const call = owner.toolCalls.find((candidate) => candidate.functionCallId === functionCallId);
+      if (!call) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
+      call.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
+      call.finishedAt = event.occurredAt;
+      call.success = boolean(payload.success, event.eventType === 'TOOL_CALL_COMPLETED');
+      assignOptional(call, 'costMs', number(payload.costMs, undefined));
+      assignOptional(call, 'retrievalId', optionalText(payload.retrievalId));
+      assignOptional(call, 'hits', number(payload.hits, undefined));
+      assignOptional(call, 'citations', number(payload.citations, undefined));
+      assignOptional(call, 'tokens', number(payload.tokens, undefined));
+      assignOptional(call, 'degraded', optionalBoolean(payload.degraded));
+      assignOptional(call, 'routeKey', optionalText(payload.routeKey));
+      assignOptional(call, 'reason', optionalText(payload.reason));
+      assignOptional(call, 'errorCode', optionalText(payload.errorCode));
+      assignOptional(call, 'retryable', optionalBoolean(payload.retryable));
+      break;
+    }
+    case 'ROUTE_REPAIR_STARTED':
+      requireNode(node, event).routeRepairStatus = 'running';
+      break;
+    case 'ROUTE_REPAIR_COMPLETED': {
+      const repaired = requireNode(node, event);
+      repaired.routeRepairStatus = 'completed';
+      repaired.routeRepairRouteKey = optionalText(payload.routeKey);
+      break;
+    }
     case 'ROUTE_DECIDED': {
       const routed = requireNode(node, event);
       routed.routeTargetNodeId = text(payload.targetNodeId);
       routed.routeStrategy = text(payload.strategy);
+      routed.routeKey = optionalText(payload.routeKey);
+      routed.routeTargetNodeName = optionalText(payload.targetNodeName);
+      routed.routeSource = optionalText(payload.source);
+      routed.routeReason = optionalText(payload.reason);
+      routed.routeFunctionCallId = optionalText(payload.functionCallId);
+      routed.routeCostMs = number(payload.costMs, undefined);
+      routed.routeCategory = routed.routeStrategy === 'FAILURE'
+        ? 'FAILURE'
+        : routed.routeStrategy === 'DEFAULT' ? 'DEFAULT' : 'BUSINESS';
       break;
     }
     case 'FINAL_ANSWER_DELTA':
@@ -134,6 +186,29 @@ function requireNode(node: WorkflowNodeExecutionView | undefined, event: Workflo
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : '';
+}
+
+function optionalText(value: unknown) {
+  const result = text(value);
+  return result || undefined;
+}
+
+function requiredText(value: unknown, message: string) {
+  const result = text(value);
+  if (!result) throw new Error(message);
+  return result;
+}
+
+function boolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function optionalBoolean(value: unknown) {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function assignOptional<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined) {
+  if (value !== undefined) target[key] = value;
 }
 
 function number<T extends number | undefined>(value: unknown, fallback: T): number | T {

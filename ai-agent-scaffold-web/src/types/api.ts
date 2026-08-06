@@ -145,6 +145,7 @@ export interface LocalChatSession {
   contextRevision?: number;
   ragEnabled?: boolean;
   ragMode?: SessionRagMode;
+  ragInvocationMode?: RagInvocationMode;
   ragRevision?: number;
 }
 
@@ -163,6 +164,7 @@ export interface SessionListPage {
     contextRevision: number;
     ragEnabled: boolean;
     ragMode?: SessionRagMode;
+    ragInvocationMode?: RagInvocationMode;
     ragRevision?: number;
   }>;
   nextCursor?: string;
@@ -192,6 +194,7 @@ export interface SessionDeleteResponse {
 }
 
 export type SessionRagMode = 'OFF' | 'AUTO' | 'MANUAL';
+export type RagInvocationMode = 'AUTO_CONTEXT' | 'AGENT_TOOL';
 
 export interface SessionRagEligibleBinding {
   bindingId: string;
@@ -214,6 +217,7 @@ export interface SessionRagSetting {
   targetId: string;
   message: string;
   mode?: SessionRagMode;
+  invocationMode?: RagInvocationMode;
   selectedBindingIds?: string[];
   eligibleBindings?: SessionRagEligibleBinding[];
   revision?: number;
@@ -221,6 +225,7 @@ export interface SessionRagSetting {
 
 export interface SessionRagSettingUpdate {
   mode: SessionRagMode;
+  invocationMode: RagInvocationMode;
   selectedBindingIds: string[];
   expectedRevision?: number;
 }
@@ -451,6 +456,7 @@ export interface WorkflowDeleteResponse {
 
 export interface WorkflowGraph {
   workflowKind?: 'STATIC' | 'INTELLIGENT';
+  routingProtocolVersion?: 'MARKER_V1' | 'TOOL_V2';
   maxSteps?: number;
   tokenBudget?: number;
   mode: 'sequential' | 'parallel' | 'loop';
@@ -474,6 +480,7 @@ export interface WorkflowNode {
   defaultTargetNodeId?: string;
   routeInstruction?: string;
   maxVisits?: number;
+  ragToolEnabled?: boolean;
   x?: number;
   y?: number;
 }

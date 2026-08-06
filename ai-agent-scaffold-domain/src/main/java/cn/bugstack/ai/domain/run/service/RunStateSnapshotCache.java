@@ -295,6 +295,7 @@ final class RunStateSnapshotCache {
         return ChatRunEntity.builder().runId(run.getRunId()).turnId(run.getTurnId()).tenantId(run.getTenantId())
                 .userId(run.getUserId()).sessionId(run.getSessionId()).sourceType(run.getSourceType())
                 .sourceId(run.getSourceId()).ragEnabled(run.getRagEnabled()).ragMode(run.getRagMode())
+                .ragInvocationMode(run.getRagInvocationMode())
                 .ragPolicyRevision(run.getRagPolicyRevision())
                 .ragBindingIds(run.getRagBindingIds() == null ? List.of() : List.copyOf(run.getRagBindingIds()))
                 .traceId(run.getTraceId())

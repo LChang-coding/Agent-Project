@@ -68,8 +68,9 @@ public class SessionRepository implements ISessionRepository {
 
     @Override
     public int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
-                               boolean enabled, long expectedRevision) {
-        return chatSessionDao.updateRagPolicy(tenantId, userId, sessionId, ragMode, enabled, expectedRevision);
+                               String ragInvocationMode, boolean enabled, long expectedRevision) {
+        return chatSessionDao.updateRagPolicy(tenantId, userId, sessionId, ragMode, ragInvocationMode,
+                enabled, expectedRevision);
     }
 
     /**
@@ -157,6 +158,8 @@ public class SessionRepository implements ISessionRepository {
                 .status(session.getStatus())
                 .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
                 .ragMode(session.getRagMode())
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(session.getRagInvocationMode()).name())
                 .ragRevision(session.getRagRevision() == null ? 0L : session.getRagRevision())
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())
@@ -184,6 +187,8 @@ public class SessionRepository implements ISessionRepository {
                 .status(session.getStatus())
                 .ragEnabled(Boolean.TRUE.equals(session.getRagEnabled()))
                 .ragMode(session.getRagMode())
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(session.getRagInvocationMode()).name())
                 .ragRevision(session.getRagRevision() == null ? 0L : session.getRagRevision())
                 .lastMessageTime(session.getLastMessageTime())
                 .contextRevision(session.getContextRevision() == null ? 0L : session.getContextRevision())

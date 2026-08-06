@@ -99,6 +99,8 @@ public class ChatRunRepository implements IChatRunRepository {
                 .runId(run.getRunId()).turnId(run.getTurnId()).tenantId(blankToNull(run.getTenantId()))
                 .userId(run.getUserId()).sessionId(run.getSessionId()).sourceType(run.getSourceType()).sourceId(run.getSourceId())
                 .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(run.getRagInvocationMode()).name())
                 .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIdsJson(writeBindingIds(run.getRagBindingIds()))
                 .traceId(run.getTraceId())
                 .status(value(run.getStatus())).version(run.getVersion()).baseContextRevision(run.getBaseContextRevision())
@@ -118,6 +120,8 @@ public class ChatRunRepository implements IChatRunRepository {
                 .runId(run.getRunId()).turnId(run.getTurnId()).tenantId(run.getTenantId()).userId(run.getUserId())
                 .sessionId(run.getSessionId()).sourceType(run.getSourceType()).sourceId(run.getSourceId())
                 .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(run.getRagInvocationMode()).name())
                 .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIds(readBindingIds(run.getRagBindingIdsJson()))
                 .traceId(run.getTraceId())
                 .status(RunStatus.valueOf(run.getStatus().toUpperCase(Locale.ROOT))).version(run.getVersion())

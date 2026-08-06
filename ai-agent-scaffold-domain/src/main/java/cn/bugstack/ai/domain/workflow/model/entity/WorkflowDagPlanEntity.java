@@ -16,6 +16,12 @@ import java.util.List;
 @NoArgsConstructor
 public class WorkflowDagPlanEntity {
 
+    /** 本次编译冻结的路由协议。 */
+    private String routingProtocolVersion;
+
+    /** 冻结定义的 SHA-256，用于工具意图与当前运行定义绑定。 */
+    private String definitionHash;
+
     /** STATIC 或 INTELLIGENT；缺省按 STATIC 兼容旧版本。 */
     private String workflowKind;
 
@@ -104,6 +110,30 @@ public class WorkflowDagPlanEntity {
         private String routeInstruction;
 
         private Integer maxVisits;
+
+        /** 当前节点是否没有任何后续出边。 */
+        private Boolean terminal;
+
+        /** 当前节点可供智能路由工具选择的业务路由。 */
+        private List<RouteDescriptor> routeDescriptors;
+    }
+
+    /** 冻结的节点业务路由描述符。 */
+    @Data
+    @Builder
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class RouteDescriptor {
+
+        private String routeKey;
+
+        private List<String> routeAliases;
+
+        private String edgeId;
+
+        private String targetNodeId;
+
+        private String targetNodeName;
     }
 
     /**

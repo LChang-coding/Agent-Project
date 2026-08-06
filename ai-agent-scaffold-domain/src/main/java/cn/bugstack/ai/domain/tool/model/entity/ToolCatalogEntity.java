@@ -67,4 +67,6 @@ public class ToolCatalogEntity {
      * 为空说明这个 MCP 还没测试过，模型会被提示先去测试。
      */
     private String schemaJson;
+    /** Fixed model function name; platform tools never derive this from tenant input. */
+    private String functionName;
 }

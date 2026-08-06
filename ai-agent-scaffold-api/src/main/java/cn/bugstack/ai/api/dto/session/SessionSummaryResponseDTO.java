@@ -21,6 +21,7 @@ public class SessionSummaryResponseDTO {
     private String title;
     private String status;
     private boolean ragEnabled;
+    private String ragInvocationMode;
     private LocalDateTime lastMessageTime;
     private Long contextRevision;
 }

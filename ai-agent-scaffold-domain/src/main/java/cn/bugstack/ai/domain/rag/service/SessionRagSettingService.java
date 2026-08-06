@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.rag.model.entity.SessionRagSettingEntity;
 import cn.bugstack.ai.domain.rag.model.entity.SessionRagRunSnapshotEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 import cn.bugstack.ai.domain.rag.model.valobj.RagVisibility;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
@@ -146,7 +147,8 @@ public class SessionRagSettingService {
         // 第三层：会话明确关掉了 RAG。
         if (setting.mode() == SessionRagMode.OFF) {
             // 返回一个空快照（模式 OFF、绑定列表为空），本轮不注入任何资料，也不算失败。
-            return new SessionRagRunSnapshotEntity(SessionRagMode.OFF, setting.revision(), List.of());
+            return new SessionRagRunSnapshotEntity(SessionRagMode.OFF,
+                    RagInvocationMode.resolve(session.getRagInvocationMode()), setting.revision(), List.of());
         }
         // 第四层：按模式决定本轮用哪些绑定——AUTO 展开成当前全部可用绑定的编号（管理员新加的库自动生效），
         // MANUAL 用用户自己勾选的那几个（新加的库不会自动进来）。
@@ -166,7 +168,8 @@ public class SessionRagSettingService {
                     "当前会话没有可用的RAG绑定，请关闭RAG或重新选择绑定");
         }
         // 校验通过，返回定格快照：模式 + 策略 revision（用于事后追溯当时用的是哪一版设置）+ 绑定编号列表。
-        return new SessionRagRunSnapshotEntity(setting.mode(), setting.revision(), effective);
+        return new SessionRagRunSnapshotEntity(setting.mode(),
+                RagInvocationMode.resolve(session.getRagInvocationMode()), setting.revision(), effective);
     }
 
     /**
@@ -216,6 +219,16 @@ public class SessionRagSettingService {
     public SessionRagSettingEntity update(String tenantId, String userId, String sessionId,
                                           String requestedMode, Boolean legacyEnabled,
                                           List<String> selectedBindingIds, Long expectedRevision) {
+        return update(tenantId, userId, sessionId, requestedMode, null, legacyEnabled,
+                selectedBindingIds, expectedRevision);
+    }
+
+    /** 更新绑定范围及其正交的调用方式；调用方式缺失时保留锁内当前值。 */
+    @Transactional(rollbackFor = Exception.class)
+    public SessionRagSettingEntity update(String tenantId, String userId, String sessionId,
+                                          String requestedMode, String requestedInvocationMode,
+                                          Boolean legacyEnabled, List<String> selectedBindingIds,
+                                          Long expectedRevision) {
         // 第一层：把新模式字段和旧布尔开关合并成一个确定的模式；两者冲突会在里面直接拒绝。
         SessionRagMode mode = resolveRequestedMode(requestedMode, legacyEnabled);
         // 第二层：加锁读取会话。加锁而不是普通读取，是为了让并发的两次设置修改串行化，
@@ -231,7 +244,8 @@ public class SessionRagSettingService {
         List<String> selected = validateSelections(mode, selectedBindingIds, eligible);
         // 第五层：推进会话上的 RAG 策略字段，预期版本作为乐观并发条件；不匹配会在会话域里抛冲突。
         // 返回的是更新后的会话实体，后面统一用它的字段而不是入参，确保写入和返回都基于同一份可信数据。
-        ChatSessionEntity session = sessionDomain.updateRagPolicy(tenantId, userId, sessionId, mode, expectedRevision);
+        ChatSessionEntity session = sessionDomain.updateRagPolicy(tenantId, userId, sessionId, mode,
+                requestedInvocationMode, expectedRevision);
         // 第六层：整体替换这个会话的勾选记录。用会话实体里的租户、用户、会话编号，
         // 而不是直接用入参，避免入参与实际会话归属不一致时把记录写到别处。
         selectionRepository.replaceSelections(session.getTenantId(), session.getUserId(), session.getSessionId(),
@@ -303,6 +317,7 @@ public class SessionRagSettingService {
         // 策略 revision（为 null 的历史会话按 0 处理，保证客户端拿到的乐观锁初值可用）、
         // 配置可用标记、目标类型与目标编号、当前勾选、可用绑定摘要。
         return new SessionRagSettingEntity(session.getSessionId(), mode.enabled(), mode,
+                RagInvocationMode.resolve(session.getRagInvocationMode()),
                 session.getRagRevision() == null ? 0L : session.getRagRevision(), configured,
                 targetType, session.getAgentId(), selected, summaries);
     }

@@ -18,6 +18,7 @@
         <result column="status" property="status"/>
         <result column="rag_enabled" property="ragEnabled"/>
         <result column="rag_mode" property="ragMode"/>
+        <result column="rag_invocation_mode" property="ragInvocationMode"/>
         <result column="rag_revision" property="ragRevision"/>
         <result column="last_message_time" property="lastMessageTime"/>
         <result column="context_revision" property="contextRevision"/>
@@ -28,23 +29,24 @@
     </resultMap>
 
     <sql id="ChatSessionColumns">
-        id, tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, rag_enabled, rag_mode, rag_revision, last_message_time, context_revision, metadata, create_time, update_time, deleted
+        id, tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, rag_enabled, rag_mode, rag_invocation_mode, rag_revision, last_message_time, context_revision, metadata, create_time, update_time, deleted
     </sql>
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, rag_enabled, rag_mode, rag_revision, last_message_time, context_revision, metadata)
-        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{sourceType}, #{workflowVersion}, #{modelCode}, #{appName}, #{title}, #{status}, #{ragEnabled}, #{ragMode}, #{ragRevision}, #{lastMessageTime}, #{contextRevision}, #{metadata})
+        INSERT INTO chat_session (tenant_id, user_id, session_id, agent_id, agent_name, source_type, workflow_version, model_code, app_name, title, status, rag_enabled, rag_mode, rag_invocation_mode, rag_revision, last_message_time, context_revision, metadata)
+        VALUES (#{tenantId}, #{userId}, #{sessionId}, #{agentId}, #{agentName}, #{sourceType}, #{workflowVersion}, #{modelCode}, #{appName}, #{title}, #{status}, #{ragEnabled}, #{ragMode}, #{ragInvocationMode}, #{ragRevision}, #{lastMessageTime}, #{contextRevision}, #{metadata})
     </insert>
 
     <update id="updateById" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatSessionPO">
         UPDATE chat_session
-        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, source_type = #{sourceType}, workflow_version = #{workflowVersion}, model_code = #{modelCode}, app_name = #{appName}, title = #{title}, status = #{status}, rag_enabled = #{ragEnabled}, rag_mode = #{ragMode}, rag_revision = #{ragRevision}, last_message_time = #{lastMessageTime}, context_revision = #{contextRevision}, metadata = #{metadata}
+        SET tenant_id = #{tenantId}, user_id = #{userId}, session_id = #{sessionId}, agent_id = #{agentId}, agent_name = #{agentName}, source_type = #{sourceType}, workflow_version = #{workflowVersion}, model_code = #{modelCode}, app_name = #{appName}, title = #{title}, status = #{status}, rag_enabled = #{ragEnabled}, rag_mode = #{ragMode}, rag_invocation_mode = #{ragInvocationMode}, rag_revision = #{ragRevision}, last_message_time = #{lastMessageTime}, context_revision = #{contextRevision}, metadata = #{metadata}
         WHERE id = #{id} AND deleted = 0
     </update>
 
     <update id="updateRagPolicy">
         UPDATE chat_session
-        SET rag_enabled = #{enabled}, rag_mode = #{ragMode}, rag_revision = rag_revision + 1
+        SET rag_enabled = #{enabled}, rag_mode = #{ragMode}, rag_invocation_mode = #{ragInvocationMode},
+            rag_revision = rag_revision + 1
         WHERE user_id = #{userId} AND session_id = #{sessionId}
           AND rag_revision = #{expectedRevision} AND deleted = 0
         <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>

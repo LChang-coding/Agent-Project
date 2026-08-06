@@ -77,6 +77,9 @@ public class ChatSessionPO extends BasePO {
     /** 会话RAG选择模式。 */
     private String ragMode;
 
+    /** 会话 RAG 调用方式。 */
+    private String ragInvocationMode;
+
     /** 会话RAG策略乐观锁版本。 */
     private Long ragRevision;
 

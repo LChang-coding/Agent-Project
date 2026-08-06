@@ -19,6 +19,7 @@ public final class ToolType {
     public static final String SKILL = "skill";
     /** 走 MCP 协议连接到外部服务器的工具集；调用它会真的建连并执行远程动作，是真正会产生外部副作用的一类。 */
     public static final String MCP = "mcp";
+    public static final String PLATFORM = "platform";
 
     /** 私有构造：这个类只是一袋常量，不允许被 new 出实例，防止有人误当业务对象注入使用。 */
     private ToolType() {

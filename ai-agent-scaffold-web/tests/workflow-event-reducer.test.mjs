@@ -67,3 +67,62 @@ test('节点取消事件只收口对应并行执行实例', () => {
   assert.equal(state.nodes[0].status, 'cancelled');
   assert.equal(state.nodes[1].status, 'running');
 });
+
+test('工具调用按 functionCallId 归并并保留 RAG 结果摘要', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'WORKFLOW_STARTED'));
+  state = reduceWorkflowEvent(state, event(2, 'NODE_STARTED', { nodeName: '证据检查' }, { nodeExecutionId: 'exec_rag', nodeId: 'retrieve' }));
+  state = reduceWorkflowEvent(state, event(3, 'TOOL_CALL_STARTED', {
+    toolCode: 'platform_rag_retrieve_v1', displayName: '知识库检索', functionCallId: 'call_rag_1',
+  }, { nodeExecutionId: 'exec_rag', nodeId: 'retrieve' }));
+  state = reduceWorkflowEvent(state, event(4, 'TOOL_CALL_COMPLETED', {
+    functionCallId: 'call_rag_1', success: true, costMs: 128, retrievalId: 'ret_1', hits: 6, citations: 2, tokens: 420, degraded: false,
+  }, { nodeExecutionId: 'exec_rag', nodeId: 'retrieve' }));
+
+  assert.deepEqual(state.nodes[0].toolCalls, [{
+    functionCallId: 'call_rag_1',
+    toolCode: 'platform_rag_retrieve_v1',
+    displayName: '知识库检索',
+    status: 'completed',
+    startedAt: '2026-08-03T00:00:03',
+    finishedAt: '2026-08-03T00:00:04',
+    success: true,
+    costMs: 128,
+    retrievalId: 'ret_1',
+    hits: 6,
+    citations: 2,
+    tokens: 420,
+    degraded: false,
+  }]);
+});
+
+test('工具失败、路由修复和扩展裁决保持权威来源及路由类别', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'WORKFLOW_STARTED'));
+  state = reduceWorkflowEvent(state, event(2, 'NODE_STARTED', { nodeName: '意图判定' }, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+  state = reduceWorkflowEvent(state, event(3, 'TOOL_CALL_STARTED', {
+    toolCode: 'platform_select_workflow_route_v1', displayName: '智能路由', functionCallId: 'call_route_1',
+  }, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+  state = reduceWorkflowEvent(state, event(4, 'TOOL_CALL_FAILED', {
+    functionCallId: 'call_route_1', errorCode: 'WORKFLOW_ROUTE_KEY_INVALID', retryable: false, costMs: 9,
+  }, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+  state = reduceWorkflowEvent(state, event(5, 'ROUTE_REPAIR_STARTED', {}, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+  state = reduceWorkflowEvent(state, event(6, 'ROUTE_REPAIR_COMPLETED', { success: true, routeKey: '账务' }, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+  state = reduceWorkflowEvent(state, event(7, 'ROUTE_DECIDED', {
+    routeKey: '账务', targetNodeId: 'billing', targetNodeName: '账务处理', strategy: 'DEFAULT', source: 'ROUTE_REPAIR',
+    reason: '账单金额存在疑问', functionCallId: 'repair_route_1', costMs: 32,
+  }, { nodeExecutionId: 'exec_route', nodeId: 'classify' }));
+
+  const node = state.nodes[0];
+  assert.equal(node.toolCalls[0].status, 'failed');
+  assert.equal(node.toolCalls[0].errorCode, 'WORKFLOW_ROUTE_KEY_INVALID');
+  assert.equal(node.routeRepairStatus, 'completed');
+  assert.equal(node.routeRepairRouteKey, '账务');
+  assert.equal(node.routeKey, '账务');
+  assert.equal(node.routeTargetNodeName, '账务处理');
+  assert.equal(node.routeSource, 'ROUTE_REPAIR');
+  assert.equal(node.routeReason, '账单金额存在疑问');
+  assert.equal(node.routeFunctionCallId, 'repair_route_1');
+  assert.equal(node.routeCostMs, 32);
+  assert.equal(node.routeCategory, 'DEFAULT');
+});

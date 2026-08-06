@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * 一次具体工具调用的完整身份与运行坐标，是「谁、在哪个会话、哪次运行、哪次模型函数调用」的答案。
  *
@@ -47,4 +49,19 @@ public class ToolInvokeContextEntity {
     private String functionCallId;
     /** 入口全链路追踪编号；从 HTTP 入口一路带到工具审计日志，用户报障时凭它把前端、编排、工具三段日志串起来。 */
     private String traceId;
+    private String ragInvocationMode;
+    private String ragMode;
+    private String ragEvidenceInvocationId;
+    private String ragTargetType;
+    private String ragTargetId;
+    private List<String> ragBindingIds;
+    private String workflowKind;
+    private String routingProtocolVersion;
+    private Boolean terminalNode;
+    private List<cn.bugstack.ai.domain.tool.service.PlatformToolResolver.RouteDescriptor> routeDescriptors;
+    private String nodeExecutionId;
+    private String sourceNodeId;
+    private String definitionHash;
+    private String workflowVersion;
+    private Boolean routeRepairOnly;
 }

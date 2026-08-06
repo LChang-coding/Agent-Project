@@ -1,0 +1,53 @@
+package cn.bugstack.ai.test.tool;
+
+import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
+import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
+import cn.bugstack.ai.domain.tool.service.PlatformToolResolver;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.List;
+
+public class PlatformToolResolverTest {
+
+    @Test
+    public void exposesRagToolOnlyForAgentToolModeWithoutRequiringBindings() {
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .ragInvocationMode("AGENT_TOOL").ragBindingIds(List.of())
+                .ragTargetType("WORKFLOW").ragTargetId("wf")
+                .build();
+
+        List<?> tools = new PlatformToolResolver(true, true).resolve(context);
+
+        Assert.assertTrue(tools.stream().anyMatch(tool ->
+                ToolType.PLATFORM.equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getToolCode())
+                        || "rag_retrieve".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getFunctionName())));
+    }
+
+    @Test
+    public void doesNotExposeRagForOffOrAutoContext() {
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .ragInvocationMode("AUTO_CONTEXT").ragBindingIds(List.of("binding"))
+                .build();
+
+        Assert.assertTrue(new PlatformToolResolver(true, true).resolve(context).stream()
+                .noneMatch(tool -> "rag_retrieve".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getFunctionName())));
+    }
+
+    @Test
+    public void exposesRouteToolOnlyFromFrozenToolV2NonTerminalDescriptors() {
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .workflowKind("INTELLIGENT").routingProtocolVersion("TOOL_V2")
+                .terminalNode(false).routeDescriptors(List.of(
+                        new PlatformToolResolver.RouteDescriptor("yes", "edge-1", "node-2")))
+                .build();
+
+        List<?> tools = new PlatformToolResolver(true, true).resolve(context);
+
+        Assert.assertTrue(tools.stream().anyMatch(tool ->
+                "select_workflow_route".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getFunctionName())));
+    }
+}

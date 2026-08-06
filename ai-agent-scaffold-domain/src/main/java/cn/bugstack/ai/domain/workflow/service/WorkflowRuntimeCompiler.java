@@ -17,8 +17,10 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -95,6 +97,7 @@ public class WorkflowRuntimeCompiler {
 
         List<AiAgentConfigTableVO> tables = new ArrayList<>();
         List<WorkflowDagPlanEntity.Node> planNodes = new ArrayList<>();
+        List<WorkflowDagPlanEntity.Edge> planEdges = dagEdges(graph, llmNodeMap);
         for (WorkflowGraphEntity.Node node : llmNodes) {
             // 每个节点单独装配，节点模型覆盖和调用证据互不串用。
             String nodeRuntimeAgentId = runtimeNodeAgentId(runtimeAgentId, node);
@@ -113,10 +116,13 @@ public class WorkflowRuntimeCompiler {
                     .defaultTargetNodeId(node.getDefaultTargetNodeId())
                     .routeInstruction(node.getRouteInstruction())
                     .maxVisits(safeMaxVisits(node.getMaxVisits()))
+                    .terminal(planEdges.stream().noneMatch(edge -> node.getNodeId().equals(edge.getSourceNodeId())))
+                    .routeDescriptors(routeDescriptors(node.getNodeId(), planEdges, llmNodeMap))
                     .build());
         }
 
         WorkflowDagPlanEntity dagPlan = WorkflowDagPlanEntity.builder()
+                .routingProtocolVersion(routingProtocolVersion(graph))
                 .workflowKind(isIntelligent(graph) ? "INTELLIGENT" : "STATIC")
                 .maxSteps(safeMaxSteps(graph.getMaxSteps()))
                 .tokenBudget(safeTokenBudget(graph.getTokenBudget()))
@@ -125,8 +131,9 @@ public class WorkflowRuntimeCompiler {
                 .rootNodeId(rootDagNodeId(graph, llmNodes))
                 .defaultModelCode(modelRouter.route(requestModelCode, null, version.getDefaultModelCode()))
                 .nodes(planNodes)
-                .edges(dagEdges(graph, llmNodeMap))
+                .edges(planEdges)
                 .build();
+        dagPlan.setDefinitionHash(definitionHash(dagPlan));
         return WorkflowDagCompileResultEntity.builder().tables(tables).dagPlan(dagPlan).build();
     }
 
@@ -556,6 +563,88 @@ public class WorkflowRuntimeCompiler {
             }
         }
         return edges;
+    }
+
+    /** 从冻结出边生成模型可选的业务路由，不把 DEFAULT/FAILURE 暴露为 route key。 */
+    private List<WorkflowDagPlanEntity.RouteDescriptor> routeDescriptors(
+            String nodeId,
+            List<WorkflowDagPlanEntity.Edge> edges,
+            Map<String, WorkflowGraphEntity.Node> nodeMap) {
+        return edges.stream()
+                .filter(edge -> nodeId.equals(edge.getSourceNodeId()))
+                .filter(edge -> "AI_ROUTER".equalsIgnoreCase(edge.getRouteType())
+                        || "NODE_SUGGESTION".equalsIgnoreCase(edge.getRouteType()))
+                .map(edge -> WorkflowDagPlanEntity.RouteDescriptor.builder()
+                        .routeKey(edge.getRouteKey())
+                        .routeAliases(edge.getRouteAliases() == null ? List.of() : List.copyOf(edge.getRouteAliases()))
+                        .edgeId(edge.getEdgeId())
+                        .targetNodeId(edge.getTargetNodeId())
+                        .targetNodeName(targetNodeName(edge.getTargetNodeId(), nodeMap))
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    private String targetNodeName(String targetNodeId, Map<String, WorkflowGraphEntity.Node> nodeMap) {
+        if ("END".equalsIgnoreCase(targetNodeId)) {
+            return "结束";
+        }
+        WorkflowGraphEntity.Node target = nodeMap.get(targetNodeId);
+        return target == null ? targetNodeId : defaultString(target.getName(), targetNodeId);
+    }
+
+    /** 缺字段和未知协议均保持旧 marker 行为，只有显式 TOOL_V2 才启用工具路由。 */
+    private String routingProtocolVersion(WorkflowGraphEntity graph) {
+        return graph != null && "TOOL_V2".equalsIgnoreCase(graph.getRoutingProtocolVersion())
+                ? "TOOL_V2"
+                : "MARKER_V1";
+    }
+
+    /** 对运行所需冻结定义生成稳定摘要，避免依赖对象序列化属性顺序。 */
+    private String definitionHash(WorkflowDagPlanEntity plan) {
+        StringBuilder canonical = new StringBuilder();
+        appendHashPart(canonical, plan.getWorkflowId());
+        appendHashPart(canonical, plan.getVersion());
+        appendHashPart(canonical, plan.getWorkflowKind());
+        appendHashPart(canonical, plan.getRoutingProtocolVersion());
+        appendHashPart(canonical, plan.getRootNodeId());
+        appendHashPart(canonical, plan.getMaxSteps());
+        appendHashPart(canonical, plan.getTokenBudget());
+        appendHashPart(canonical, plan.getDefaultModelCode());
+        for (WorkflowDagPlanEntity.Node node : plan.getNodes()) {
+            appendHashPart(canonical, node.getNodeId());
+            appendHashPart(canonical, node.getNodeName());
+            appendHashPart(canonical, node.getDescription());
+            appendHashPart(canonical, node.getModelCode());
+            appendHashPart(canonical, node.getMaxIterations());
+            appendHashPart(canonical, node.getEnabledStrategies());
+            appendHashPart(canonical, node.getAllowedTargetNodeIds());
+            appendHashPart(canonical, node.getDefaultTargetNodeId());
+            appendHashPart(canonical, node.getRouteInstruction());
+            appendHashPart(canonical, node.getMaxVisits());
+            appendHashPart(canonical, node.getTerminal());
+        }
+        for (WorkflowDagPlanEntity.Edge edge : plan.getEdges()) {
+            appendHashPart(canonical, edge.getEdgeId());
+            appendHashPart(canonical, edge.getSourceNodeId());
+            appendHashPart(canonical, edge.getTargetNodeId());
+            appendHashPart(canonical, edge.getRouteType());
+            appendHashPart(canonical, edge.getRouteKey());
+            appendHashPart(canonical, edge.getRouteAliases());
+            appendHashPart(canonical, edge.getConditionExpression());
+            appendHashPart(canonical, edge.getPriority());
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法生成工作流定义摘要", exception);
+        }
+    }
+
+    private void appendHashPart(StringBuilder canonical, Object value) {
+        String text = String.valueOf(value);
+        canonical.append(text.length()).append(':').append(text).append('|');
     }
 
     /**

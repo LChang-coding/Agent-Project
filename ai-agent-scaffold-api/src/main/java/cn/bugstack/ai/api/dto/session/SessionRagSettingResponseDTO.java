@@ -8,6 +8,7 @@ import java.util.List;
 public record SessionRagSettingResponseDTO(String sessionId,
                                            boolean enabled,
                                            String mode,
+                                           String invocationMode,
                                            long revision,
                                            boolean bindingConfigured,
                                            String targetType,

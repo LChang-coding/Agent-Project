@@ -115,7 +115,7 @@ export const WORKFLOW_TEMPLATES: readonly WorkflowTemplate[] = [
   productionIntelligent('prod-intelligent-rag-retry', 'RAG 质量自修复', '检索证据不足时改写问题并有界重试。',
     ['RAG', '重试', '有限回路'], ['已绑定知识库'],
     nodes([
-      ['retrieve', '证据检查', '评估检索结果是否足以回答；足够输出 [route:answer]，不足输出 [route:rewrite]。'],
+      ['retrieve', '证据检查', '评估检索结果是否足以回答；足够选择 answer，不足选择 rewrite。', { ragToolEnabled: true }],
       ['rewrite', '查询改写', '补充别名、时间和业务约束，生成新查询。'],
       ['answer', '有证据回答', '只使用已验证证据回答，缺失时明确说明。'],
     ]), [
@@ -330,6 +330,7 @@ function staticGraph(templateNodes: WorkflowNode[], inputs: EdgeInput[]): Workfl
   const edges = inputs.map(([sourceNodeId, targetNodeId], index) => edge(sourceNodeId, targetNodeId, index));
   return {
     workflowKind: 'STATIC',
+    routingProtocolVersion: 'MARKER_V1',
     mode: inferMode(edges),
     rootNodeId: rootNodeId(templateNodes, edges),
     nodes: templateNodes,
@@ -365,6 +366,7 @@ function intelligentGraph(
   });
   return {
     workflowKind: 'INTELLIGENT',
+    routingProtocolVersion: 'TOOL_V2',
     maxSteps,
     tokenBudget,
     mode: inferMode(edges),
@@ -374,7 +376,7 @@ function intelligentGraph(
   };
 }
 
-/** 由模板边生成可执行的路由协议，避免节点提示词和 route key 分别维护。 */
+/** 由模板边生成工具路由协议，避免节点提示词和 route key 分别维护。 */
 function routeInstruction(edges: WorkflowEdge[], templateNodes: WorkflowNode[]): string {
   const lines = edges.flatMap((candidate) => {
     const target = candidate.targetNodeId === 'END'
@@ -382,14 +384,14 @@ function routeInstruction(edges: WorkflowEdge[], templateNodes: WorkflowNode[]):
       : templateNodes.find((node) => node.nodeId === candidate.targetNodeId)?.name || candidate.targetNodeId;
     if (candidate.routeType === 'AI_ROUTER' || candidate.routeType === 'NODE_SUGGESTION') {
       const aliases = candidate.routeAliases?.length ? `；兼容别名：${candidate.routeAliases.join('、')}` : '';
-      return [`需要进入“${target}”时，在正文末尾独立一行精确输出 [route:${candidate.routeKey}]${aliases}。`];
+      return [`需要进入“${target}”时，调用 select_workflow_route，routeKey 传“${candidate.routeKey}”并提供简短 reason${aliases}。`];
     }
     if (candidate.routeType === 'DEFAULT') {
       return [`没有任何路由键适用时，由 DEFAULT 进入“${target}”；不要编造路由键。`];
     }
     return [];
   });
-  return lines.length ? lines.join('\n') : '当前节点没有可建议的路由键。';
+  return lines.length ? lines.join('\n') : '当前节点没有可调用 select_workflow_route 选择的业务路由键。';
 }
 
 function edge(sourceNodeId: string, targetNodeId: string, index: number): WorkflowEdge {

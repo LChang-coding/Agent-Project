@@ -4,15 +4,20 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolUserContextEntity;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolRuntimeContextKeys;
+import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
 import cn.bugstack.ai.types.observability.TraceContext;
 import com.google.adk.agents.ReadonlyContext;
 import com.google.adk.tools.BaseTool;
 import com.google.adk.tools.BaseToolset;
 import io.reactivex.rxjava3.core.Flowable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 每轮模型调用之前，负责把「这个用户现在能用的工具」交给 ADK 运行时。
@@ -48,6 +53,7 @@ public class GatewayToolset implements BaseToolset {
      * 所有的门禁、幂等和审计都在它内部依赖数据库完成，不依赖 Java 层的对象状态。
      */
     private final ToolGateway toolGateway;
+    private final PlatformToolResolver platformToolResolver;
 
     /**
      * 注入工具解析器和执行网关，完成构造。
@@ -55,10 +61,17 @@ public class GatewayToolset implements BaseToolset {
      * <p>只做依赖装配，不预热、不缓存任何工具清单，保证每轮解析拿到的都是最新状态。</p>
    */
     public GatewayToolset(ToolResolver toolResolver, ToolGateway toolGateway) {
+        this(toolResolver, toolGateway, new PlatformToolResolver(false, false));
+    }
+
+    @Autowired
+    public GatewayToolset(ToolResolver toolResolver, ToolGateway toolGateway,
+                          PlatformToolResolver platformToolResolver) {
         // 记住工具解析器，每轮都靠它现查一次可用工具，保证发布和停用立刻生效。
         this.toolResolver = toolResolver;
         // 记住执行网关，本轮所有工具包装器共用同一个实例。
         this.toolGateway = toolGateway;
+        this.platformToolResolver = platformToolResolver;
     }
 
     /**
@@ -104,9 +117,30 @@ public class GatewayToolset implements BaseToolset {
                 .runId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RUN_ID)))
                 .contextRevision(longValue(readonlyContext.state().get(ToolRuntimeContextKeys.CONTEXT_REVISION)))
                 .traceId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TRACE_ID)), TraceContext.currentOrNewTraceId()))
+                .ragInvocationMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)))
+                .ragMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_MODE)))
+                .ragEvidenceInvocationId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)))
+                .ragTargetType(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
+                .ragTargetId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TARGET_ID)))
+                .ragBindingIds(stringList(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_BINDING_IDS)))
+                .workflowKind(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_KIND)))
+                .routingProtocolVersion(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.ROUTING_PROTOCOL_VERSION)))
+                .terminalNode(booleanValue(readonlyContext.state().get(ToolRuntimeContextKeys.TERMINAL_NODE)))
+                .routeDescriptors(routeDescriptors(readonlyContext.state().get(ToolRuntimeContextKeys.ROUTE_DESCRIPTORS)))
+                .nodeExecutionId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.NODE_EXECUTION_ID)))
+                .sourceNodeId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.SOURCE_NODE_ID)))
+                .definitionHash(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.DEFINITION_HASH)))
+                .workflowVersion(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_VERSION)))
+                .routeRepairOnly(booleanValue(readonlyContext.state().get(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY)))
                 .build();
         // 每轮重新查询，发布、停用和权限变化无需重装配 Agent。
-        List<ToolCatalogEntity> tools = toolResolver.resolve(context);
+        List<ToolCatalogEntity> tools = new ArrayList<>(toolResolver.resolve(context));
+        tools.addAll(platformToolResolver.resolve(fallbackContext));
+        if (Boolean.TRUE.equals(fallbackContext.getRouteRepairOnly())) {
+            tools.removeIf(tool -> !ToolType.PLATFORM.equals(tool.getToolType())
+                    || !"select_workflow_route".equals(tool.getFunctionName()));
+        }
+        assertUniqueFunctionNames(tools);
       // 第四层：逐项包装成 ADK 函数工具。包装动作会冻结函数名、描述和入参 schema，
     // 并把执行网关与回退上下文一起交给每个包装器，模型点哪个就由哪个去走门禁。
         return Flowable.fromIterable(tools).map(tool -> new GatewayAdkTool(tool, toolGateway, fallbackContext));
@@ -172,6 +206,36 @@ public class GatewayToolset implements BaseToolset {
         } catch (NumberFormatException e) {
        // 解析不了就返回空，表示版本未知；绝不用 0 兜底，那会让版本校验得出错误结论。
             return null;
+        }
+    }
+
+    private Boolean booleanValue(Object value) {
+        return value instanceof Boolean result ? result : value == null ? null : Boolean.valueOf(String.valueOf(value));
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) return List.of();
+        return values.stream().filter(item -> item != null).map(String::valueOf)
+                .filter(item -> !item.isBlank()).toList();
+    }
+
+    private List<PlatformToolResolver.RouteDescriptor> routeDescriptors(Object value) {
+        if (!(value instanceof List<?> values)) return List.of();
+        return values.stream().filter(PlatformToolResolver.RouteDescriptor.class::isInstance)
+                .map(PlatformToolResolver.RouteDescriptor.class::cast).toList();
+    }
+
+    private void assertUniqueFunctionNames(List<ToolCatalogEntity> tools) {
+        Set<String> names = new HashSet<>();
+        for (ToolCatalogEntity tool : tools) {
+            String name = ToolType.PLATFORM.equals(tool.getToolType()) ? tool.getFunctionName()
+                    : (ToolType.MCP.equals(tool.getToolType()) ? "mcp_" : "skill_") + defaultString(tool.getToolCode(), tool.getToolId());
+            String normalized = name == null ? null : name.replaceAll("[^a-zA-Z0-9_]", "_");
+            if (normalized != null && !normalized.matches("^[a-zA-Z_].*")) normalized = "tool_" + normalized;
+            if (normalized != null && normalized.length() > 64) normalized = normalized.substring(0, 64);
+            if (normalized == null || normalized.isBlank() || !names.add(normalized)) {
+                throw new IllegalStateException("工具函数名冲突，已拒绝装配");
+            }
         }
     }
 }

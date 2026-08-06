@@ -120,6 +120,8 @@ public class ContextInjectionPlugin extends BasePlugin {
         String traceId = stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID));
         // 有 RAG 目标类型就说明本次运行启用了知识库；这个开关在运行创建时就固化了，中途改会话设置不影响。
         boolean ragEnabled = state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE) != null;
+        boolean automaticRag = ragEnabled && !"AGENT_TOOL".equalsIgnoreCase(
+                stringValue(state.get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)));
         // 打一条开始日志，和下面的完成/失败日志配对，便于统计成功率和耗时。
         AiLog.info(AiLog.chat().contextStarted(tenantId, userId, sessionId, runId, ragEnabled)
                 .field(AiLogFields.TRACE_ID, traceId));
@@ -135,10 +137,10 @@ public class ContextInjectionPlugin extends BasePlugin {
                             state.get(ToolRuntimeContextKeys.CONTEXT_ATTACHMENT_VISIBLE_THROUGH_SEQUENCE)))
                     .upstreamOutput(stringValue(state.get(ToolRuntimeContextKeys.CONTEXT_UPSTREAM_OUTPUT)))
                     .traceId(traceId)
-                    .ragTargetType(enumValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
-                    .ragTargetId(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_ID)))
-                    .ragBindingIds(stringList(state.get(ToolRuntimeContextKeys.RAG_BINDING_IDS)))
-                    .ragQuery(stringValue(state.get(ToolRuntimeContextKeys.RAG_QUERY)))
+                     .ragTargetType(automaticRag ? enumValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)) : null)
+                     .ragTargetId(automaticRag ? stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_ID)) : null)
+                     .ragBindingIds(automaticRag ? stringList(state.get(ToolRuntimeContextKeys.RAG_BINDING_IDS)) : List.of())
+                     .ragQuery(automaticRag ? stringValue(state.get(ToolRuntimeContextKeys.RAG_QUERY)) : null)
                     .runId(runId)
                     .build());
             // 第三层：组装出内容才注入；空指令说明这轮没有历史也没有检索结果。

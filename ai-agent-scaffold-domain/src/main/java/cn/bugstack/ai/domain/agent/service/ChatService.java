@@ -852,7 +852,7 @@ public class ChatService implements IChatService {
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT),
                         ragQuery(activeRun, describeContent(chatCommandEntity)),
-                        activeRun.getRagMode(), activeRun.getRagBindingIds()));
+                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
 
         // 收集模型输出的全部事件文本。
         List<String> outputs = new ArrayList<>();
@@ -946,7 +946,7 @@ public class ChatService implements IChatService {
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
-                        activeRun.getRagMode(), activeRun.getRagBindingIds()));
+                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
 
         // 收集模型输出的全部事件文本。
         List<String> outputs = new ArrayList<>();
@@ -1056,7 +1056,7 @@ public class ChatService implements IChatService {
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                                 ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
-                                activeRun.getRagMode(), activeRun.getRagBindingIds()))
+                                activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()))
                 // 跨实例取消靠数据库轮询，本实例事件处理靠 requireExecutable 即时拦截。
                 .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
                         .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
@@ -1395,7 +1395,7 @@ public class ChatService implements IChatService {
                 NodeExecutionResult execution = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt,
                         traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run,
                         delta -> publishWorkflowEvent(run, "NODE_OUTPUT_DELTA", nodeExecutionId, node.getNodeId(),
-                                Map.of("delta", delta)));
+                                Map.of("delta", delta)), null, nodeExecutionId, false);
                 // 记下本轮输出，它既是节点结果也是下一轮的反馈输入。
                 previousOutput = execution.output();
                 // 把本轮真实注入的证据追加进累积链。
@@ -1443,7 +1443,7 @@ public class ChatService implements IChatService {
                                                String upstreamOutput, ChatRunEntity run) {
         // 增量回调换成空操作，其余流程完全一致。
         return runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt, traceId, roleCode,
-                historyCutoffSequence, upstreamOutput, run, ignored -> { });
+                historyCutoffSequence, upstreamOutput, run, ignored -> { }, null, null, false);
     }
 
     /**
@@ -1478,7 +1478,9 @@ public class ChatService implements IChatService {
     private NodeExecutionResult runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId,
                                                String sessionId, String workflowId, String prompt, String traceId,
                                                String roleCode, Integer historyCutoffSequence,
-                                               String upstreamOutput, ChatRunEntity run, Consumer<String> outputDelta) {
+                                               String upstreamOutput, ChatRunEntity run, Consumer<String> outputDelta,
+                                               WorkflowDagPlanEntity plan, String nodeExecutionId,
+                                               boolean routeRepairOnly) {
         // 第一层：调用前过取消门禁，取消后一次模型调用都不发生。
         runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
         // 第二层：取出这个节点使用的运行时 Agent；未装配会抛异常。
@@ -1499,9 +1501,21 @@ public class ChatService implements IChatService {
         Map<String, Object> state = runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
                 historyCutoffSequence, upstreamOutput, run.getRunId(), run.getCurrentContextRevision(),
                 ragTargetType(run, RagBindingTargetType.WORKFLOW), ragQuery(run, prompt),
-                run.getRagMode(), run.getRagBindingIds());
+                run.getRagMode(), run.getRagBindingIds(), run.getRagInvocationMode());
         // 把证据绑定编号放进状态，上下文插件写证据时会用它。
         state.put(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID, evidenceInvocationId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.RAG_INVOCATION_MODE, run.getRagInvocationMode());
+        if (plan != null) {
+            putStateIfPresent(state, ToolRuntimeContextKeys.WORKFLOW_KIND, plan.getWorkflowKind());
+            putStateIfPresent(state, ToolRuntimeContextKeys.ROUTING_PROTOCOL_VERSION, plan.getRoutingProtocolVersion());
+            putStateIfPresent(state, ToolRuntimeContextKeys.NODE_EXECUTION_ID, nodeExecutionId);
+            putStateIfPresent(state, ToolRuntimeContextKeys.SOURCE_NODE_ID, node.getNodeId());
+            putStateIfPresent(state, ToolRuntimeContextKeys.DEFINITION_HASH, plan.getDefinitionHash());
+            if (plan.getVersion() != null) state.put(ToolRuntimeContextKeys.WORKFLOW_VERSION, plan.getVersion());
+            state.put(ToolRuntimeContextKeys.TERMINAL_NODE, Boolean.TRUE.equals(node.getTerminal()));
+            state.put(ToolRuntimeContextKeys.ROUTE_DESCRIPTORS, platformRouteDescriptors(node));
+            state.put(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY, routeRepairOnly);
+        }
         // 第五层：prompt 在这里作为 Content 进入节点 Agent，state 提供可信工作流和运行身份。
         runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
                         state)
@@ -1537,7 +1551,10 @@ public class ChatService implements IChatService {
      */
     @Override
     public WorkflowNodeInvocationResultEntity invokeCompiledWorkflowNode(WorkflowDagPlanEntity.Node node,
+                                                                          WorkflowDagPlanEntity plan,
                                                                           ChatRunEntity run,
+                                                                          String nodeExecutionId,
+                                                                          boolean routeRepairOnly,
                                                                           String sessionId,
                                                                           String workflowId,
                                                                           String prompt,
@@ -1552,9 +1569,23 @@ public class ChatService implements IChatService {
         }
         // 复用单节点执行逻辑，身份直接从运行记录里取，保证与权威状态一致。
         NodeExecutionResult result = runDagNodeOnce(node, run.getTenantId(), run.getUserId(), sessionId,
-                workflowId, prompt, traceId, roleCode, historyCutoffSequence, upstreamOutput, run);
+                workflowId, prompt, traceId, roleCode, historyCutoffSequence, upstreamOutput, run,
+                delta -> {}, plan, nodeExecutionId, routeRepairOnly);
         // 包成对外结果返回：节点输出 + 本次真实注入的证据。
         return WorkflowNodeInvocationResultEntity.builder().output(result.output()).evidence(result.evidence()).build();
+    }
+
+    private List<cn.bugstack.ai.domain.tool.service.PlatformToolResolver.RouteDescriptor> platformRouteDescriptors(
+            WorkflowDagPlanEntity.Node node) {
+        if (node == null || node.getRouteDescriptors() == null) return List.of();
+        List<cn.bugstack.ai.domain.tool.service.PlatformToolResolver.RouteDescriptor> result = new ArrayList<>();
+        for (WorkflowDagPlanEntity.RouteDescriptor descriptor : node.getRouteDescriptors()) {
+            if (descriptor == null) continue;
+            result.add(new cn.bugstack.ai.domain.tool.service.PlatformToolResolver.RouteDescriptor(
+                    descriptor.getRouteKey(), descriptor.getEdgeId(), descriptor.getTargetNodeId(),
+                    descriptor.getRouteAliases() == null ? List.of() : List.copyOf(descriptor.getRouteAliases())));
+        }
+        return List.copyOf(result);
     }
 
     /**
@@ -1886,7 +1917,7 @@ public class ChatService implements IChatService {
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput) {
         // 运行、版本和 RAG 参数全传空，插件据此按"无运行上下文"处理。
         return runtimeStateDelta(tenantId, userId, sessionId, workflowId, traceId, roleCode,
-                visibleThroughSequence, upstreamOutput, null, null, null, null, null, List.of());
+                visibleThroughSequence, upstreamOutput, null, null, null, null, null, List.of(), null);
     }
 
     /**
@@ -1923,7 +1954,8 @@ public class ChatService implements IChatService {
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput,
                                                   String runId, Long contextRevision,
                                                   RagBindingTargetType ragTargetType, String ragQuery,
-                                                  String ragMode, List<String> ragBindingIds) {
+                                                   String ragMode, List<String> ragBindingIds,
+                                                   String ragInvocationMode) {
         // 状态表交给 ADK 后由插件和工具读取。
         Map<String, Object> state = new HashMap<>();
         // 第一层：同时写 ADK 链路键和项目工具键，兼容日志插件与工具网关。
@@ -1940,6 +1972,7 @@ public class ChatService implements IChatService {
         putStateIfPresent(state, ToolRuntimeContextKeys.WORKFLOW_ID, workflowId);
         // 运行编号，取消门禁和证据绑定都靠它。
         putStateIfPresent(state, ToolRuntimeContextKeys.RUN_ID, runId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.RAG_INVOCATION_MODE, ragInvocationMode);
         // 第三层：上下文版本存在才写；它是版本冲突检测的基准。
         if (contextRevision != null) {
             // 上下文版本锁定本轮可见快照，压缩完成后也不能污染进行中的调用。

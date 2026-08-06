@@ -70,8 +70,12 @@ public final class ToolLog {
     public AiLogRecord callFailed(String tenantId, String userId, String sessionId, String runId,
                                   String toolType, String toolId, String toolName, String traceId,
                                   Long costMs, Throwable throwable) {
-        return call(AiLogEvent.TOOL_CALL_FAILED, tenantId, userId, sessionId, runId,
+        AiLogRecord record = call(AiLogEvent.TOOL_CALL_FAILED, tenantId, userId, sessionId, runId,
                 toolType, toolId, toolName, traceId, costMs, false).error(throwable);
+        if (throwable instanceof cn.bugstack.ai.types.exception.AppException exception) {
+            record.field("errorCode", exception.getCode());
+        }
+        return record;
     }
 
     /** 记录工具调用授权、幂等领取和路由等内部阶段。 */

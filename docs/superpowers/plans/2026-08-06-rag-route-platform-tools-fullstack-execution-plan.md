@@ -705,3 +705,56 @@ AI_RAG_TOOL_MAX_CALLS_PER_RUN=3
 
 - 文档已覆盖项目边界、现状、目标协议、数据模型、后端和前端逐阶段改造、取消/异常、Trace、测试、灰度、回滚和交付物。
 - 本轮只交付计划文档，不声称任何功能或测试已经实现。
+
+### 2026-08-06：正式执行记录（本轮）
+
+**基线与约束**
+
+- 当前分支：`main`；相对 `origin/main` 本地领先 1 个提交（计划文档提交）。
+- 工作区已有用户修改：日志文件、`RunControlService.java`、`RagKnowledgeBaseDeletionController.java`、RAG 评测/对象存储/文档目录；本轮不覆盖、不暂存、不提交这些无关改动。
+- 已完整阅读根目录 `codex.md`；不连接或修改共享服务器，不复制其中任何敏感连接信息。
+- 已确认前端单元基线命令 `npm --prefix ai-agent-scaffold-web run test:unit` 通过；后端测试和前端构建基线正在执行，结果待补记。
+
+**本轮计划**
+
+- 阶段 A：增加 `RagInvocationMode`、会话/run 冻结字段、路由 intent 领域及持久化模型、可信工具上下文和升级/回滚 SQL。
+- 阶段 B：建立 `ToolType.PLATFORM`、动态平台工具描述符/resolver、统一 registry/handler 分发和审计闸门。
+- 阶段 C：在不旁路 `RagRetrievalService` 的前提下接入 `rag_retrieve`、证据闭环和预算控制。
+- 阶段 D：接入 `select_workflow_route`、intent 幂等登记/消费、TOOL_V2 运行时裁决、repair/DEFAULT/FAILURE/取消及兼容 marker。
+- 阶段 E 与前端：补齐工具/SSE/trace 契约、事件 reducer、RAG 调用方式、智能工作流编辑器、模板和节点工具时间线。
+- 每个重大闭环先运行相关模块测试，更新本记录后创建中文本地提交；最终执行代码审查、验证技能和逐项验收，禁止 push。
+
+**预计重点文件与测试门禁**
+
+- 后端重点：`ai-agent-scaffold-types` 枚举/错误码，`ai-agent-scaffold-domain` 会话、run、tool、RAG、workflow 服务和仓储端口，`ai-agent-scaffold-infrastructure` PO/DAO/Mapper/Repository，`ai-agent-scaffold-api` DTO，`ai-agent-scaffold-trigger` Controller/SSE，`docs/dev-ops/mysql/sql` 升级与回滚 SQL。
+- 前端重点：`ai-agent-scaffold-web/src/services/api.ts`、`src/stores/chat.ts`、`src/domain/workflow-event-reducer.ts`、`src/domain/workflow-templates.ts`、`src/views/workflow/WorkflowBuilderView.vue`、`src/components/chat/WorkflowNodeExecutionPanel.vue` 及现有测试。
+- 门禁：对应 Maven 模块测试/编译、前端 `npm run test:unit` 与 `npm run build`；能运行的集成/E2E/迁移测试必须真实记录，依赖不足明确标注未完成。
+
+### 2026-08-07：并行团队实施与主控集成
+
+**实际操作**
+
+- 新增根目录 `AGENTS.md`，将共享工作树按工具网关、RAG、路由 handler、工作流协议、迁移和只读审查拆成互斥文件所有权；主控独占 `ChatService` 与 `IntelligentWorkflowRuntimeService`。
+- 通过 6 个并行 Agent 完成可信工具上下文、JSON Schema 边界、RAG handler/预算/证据、route intent handler、工作流协议冻结、幂等迁移和事件链审查；主控统一解决交叉接线。
+- `rag_retrieve` 已复用 `RagRetrievalService`，模型参数只允许 `query/maxContextTokens`；`AGENT_TOOL` 仅关闭自动 RAG，历史、附件和上游上下文继续组装。
+- `select_workflow_route` 已按可信节点描述符登记唯一 intent；`TOOL_V2` 运行时消费 intent，缺失时最多 repair 一次，DEFAULT、FAILURE、取消、预算和真实终点分别收口。
+- 工具调用通过 `ToolGateway` 持久发布 `TOOL_CALL_STARTED/COMPLETED/FAILED`；route repair 和扩展 `ROUTE_DECIDED` 进入现有 workflow event/SSE 链。
+- 工作流 graph/plan/compiler 冻结 `routingProtocolVersion/definitionHash/terminal/routeDescriptors`；历史缺字段继续按 `MARKER_V1`。
+- 升级和回滚 SQL 改为 MySQL 8 information_schema 守卫的可重复执行脚本；本轮未连接或执行共享数据库。
+- 平台工具开关通过 `AI_PLATFORM_RAG_TOOL_ENABLED` 和 `AI_PLATFORM_ROUTE_TOOL_ENABLED` 配置，默认开启，RAG OFF 时不暴露检索工具。
+
+**真实验证**
+
+- 后端定向综合测试：50 项通过，命令覆盖 RAG handler/presentation/budget、平台 resolver/registry/schema/gateway、workflow compiler、route handler/repository/mapper/migration 和智能运行时。
+- 审查修复后的核心回归：12 项通过，覆盖 Spring 工具装配相关类、RAG 暴露条件、route handler 与智能运行时。
+- 后端全量测试实际执行 535 项：519 项通过、16 项错误；其中本任务暴露的 2 项 Session RAG mock 回归已修复并在最终任务回归 19 项中通过。剩余 14 项为仓库既有外部模型/示例初始化测试（缺 Bean、缺租户上下文或外部 API 初始化），本轮没有把它们误记为通过。
+- 六模块 Maven `-DskipTests package`：成功，包含 142 个 app 测试源码的 testCompile。
+- 前端 `npm run test:unit`：15 项通过；`npm run build`：成功。
+- 非日志/评测目录 `git diff --check`：通过。
+
+**未闭环风险**
+
+- route intent consume、route decision、事件和运行状态推进仍是跨表多事务操作；进程恰在步骤之间崩溃时缺少 outbox/恢复 worker，不能宣称跨进程恰好一次恢复。
+- RAG 工具调用次数和 Token 预算当前为单 JVM 原子仓；多实例运行同一 run 需要共享原子存储。
+- 本轮没有连接真实 MySQL、模型、Qdrant 或服务器，因此未执行真实外部依赖端到端测试和迁移实跑。
+- 工具执行中途发生取消后，外部检索可能已经完成；现有门禁能阻止后续模型推进，但若要求 evidence/intent 与取消严格线性化，需要把最终副作用与 run 锁放入同一事务编排。

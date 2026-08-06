@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
@@ -61,6 +62,7 @@ public class SessionDomain {
                 .status(STATUS_ACTIVE)
                 .ragEnabled(false)
                 .ragMode(SessionRagMode.OFF.name())
+                .ragInvocationMode(RagInvocationMode.AUTO_CONTEXT.name())
                 .ragRevision(0L)
                 .lastMessageTime(now)
                 .contextRevision(0L)
@@ -307,20 +309,40 @@ public class SessionDomain {
     @Transactional(rollbackFor = Exception.class)
     public ChatSessionEntity updateRagPolicy(String tenantId, String userId, String sessionId,
                                              SessionRagMode mode, Long expectedRevision) {
+        return updateRagPolicy(tenantId, userId, sessionId, mode, null, expectedRevision);
+    }
+
+    /** 以同一 RAG revision 原子更新绑定模式和调用方式。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatSessionEntity updateRagPolicy(String tenantId, String userId, String sessionId,
+                                             SessionRagMode mode, String requestedInvocationMode,
+                                             Long expectedRevision) {
         if (mode == null || (expectedRevision != null && expectedRevision < 0)) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "RAG模式或版本不合法");
         }
         ChatSessionEntity session = lockSessionAccess(tenantId, userId, sessionId, null);
+        RagInvocationMode invocationMode = requestedInvocationMode == null || requestedInvocationMode.isBlank()
+                ? RagInvocationMode.resolve(session.getRagInvocationMode())
+                : parseInvocationMode(requestedInvocationMode);
         long currentRevision = session.getRagRevision() == null ? 0L : session.getRagRevision();
         if (expectedRevision != null && expectedRevision != currentRevision) {
             // 前端携带版本时拒绝覆盖他人或另一标签页刚完成的设置。
             throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置已更新，请刷新后重试");
         }
         if (sessionRepository.updateRagPolicy(session.getTenantId(), session.getUserId(),
-                session.getSessionId(), mode.name(), mode.enabled(), currentRevision) != 1) {
+                session.getSessionId(), mode.name(), invocationMode.name(), mode.enabled(), currentRevision) != 1) {
             throw new AppException("SESSION_RAG_UPDATE_CONFLICT", "会话RAG设置更新失败，请刷新后重试");
         }
         return sessionRepository.querySession(session.getTenantId(), session.getUserId(), session.getSessionId());
+    }
+
+    private RagInvocationMode parseInvocationMode(String value) {
+        try {
+            return RagInvocationMode.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(),
+                    "RAG调用方式仅支持AUTO_CONTEXT或AGENT_TOOL");
+        }
     }
 
     /**

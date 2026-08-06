@@ -89,7 +89,7 @@ String cursorSessionId, int limit);
      * @return 影响行数；0 表示版本已被别人推进，本次更新未生效
      */
     int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
- boolean enabled, long expectedRevision);
+                        String ragInvocationMode, boolean enabled, long expectedRevision);
 
     /**
      * 取这段会话当前最大的消息序号，用来给下一条消息算序号。

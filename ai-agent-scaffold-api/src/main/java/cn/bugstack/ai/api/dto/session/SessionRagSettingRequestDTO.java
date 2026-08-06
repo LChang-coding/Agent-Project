@@ -15,6 +15,9 @@ public class SessionRagSettingRequestDTO {
     /** 会话RAG模式：OFF/AUTO/MANUAL。 */
     private String mode;
 
+    /** RAG调用方式：AUTO_CONTEXT/AGENT_TOOL；缺失时保留当前值。 */
+    private String invocationMode;
+
     /** MANUAL模式选择的绑定ID。 */
     private List<String> selectedBindingIds;
 

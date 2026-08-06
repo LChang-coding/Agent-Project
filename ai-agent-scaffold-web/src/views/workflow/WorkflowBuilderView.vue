@@ -256,9 +256,21 @@
               <textarea v-model="activeNode.instruction" class="textarea" />
             </div>
             <template v-if="graph.workflowKind === 'INTELLIGENT'">
+              <div class="routing-tool-card">
+                <strong>智能路由工具 · 锁定能力</strong>
+                <code>select_workflow_route(routeKey, reason)</code>
+                <span>运行时按当前业务出边动态生成 route key，不能作为普通工具删除。裁决后服务端仍追加兼容 marker，但前端只消费 ROUTE_DECIDED。</span>
+                <div v-if="businessRoutePreview.length" class="routing-tool-card__routes">
+                  <span v-for="route in businessRoutePreview" :key="route">{{ route }}</span>
+                </div>
+              </div>
+              <label class="rag-tool-toggle">
+                <input v-model="activeNode.ragToolEnabled" type="checkbox" />
+                <span><strong>允许调用知识库工具</strong><small>运行时仍要求会话已开启 RAG 且目标存在有效知识库绑定。</small></span>
+              </label>
               <div class="field">
                 <label>路由指令</label>
-                <textarea v-model="activeNode.routeInstruction" class="textarea" placeholder="告诉节点何时输出 [route:key]" />
+                <textarea v-model="activeNode.routeInstruction" class="textarea" placeholder="说明何时调用 select_workflow_route" />
               </div>
               <div class="field">
                 <label>单节点最大访问次数</label>
@@ -396,6 +408,9 @@ const modelOptions = computed(() => {
 
 const activeNode = computed(() => graph.value.nodes.find((node) => node.nodeId === selectedNodeId.value));
 const outgoingEdges = computed(() => graph.value.edges.filter((edge) => edge.sourceNodeId === selectedNodeId.value));
+const businessRoutePreview = computed(() => outgoingEdges.value
+  .filter((edge) => edge.routeType === 'AI_ROUTER' || edge.routeType === 'NODE_SUGGESTION')
+  .map((edge) => `${edge.routeKey || '未设置 route key'} → ${nodeName(edge.targetNodeId)}`));
 const derivedMode = computed(() => inferGraphMode(graph.value));
 const modeReason = computed(() => inferModeReason(graph.value));
 const renderedEdges = computed(() => graph.value.edges.map(toRenderedEdge).filter(Boolean) as RenderedEdge[]);
@@ -761,6 +776,7 @@ function applyGraphShape() {
 function setWorkflowKind(kind: 'STATIC' | 'INTELLIGENT') {
   graph.value.workflowKind = kind;
   if (kind === 'INTELLIGENT') {
+    graph.value.routingProtocolVersion = 'TOOL_V2';
     graph.value.maxSteps ||= 40;
     graph.value.tokenBudget ||= 128000;
     graph.value.nodes.forEach(initializeIntelligentNode);
@@ -775,13 +791,15 @@ function setWorkflowKind(kind: 'STATIC' | 'INTELLIGENT') {
         if (edge.routeType === 'DEFAULT') source.defaultTargetNodeId = edge.targetNodeId;
       }
     });
+  } else {
+    graph.value.routingProtocolVersion = 'MARKER_V1';
   }
 }
 
 function initializeIntelligentNode(node: WorkflowNode) {
   node.enabledStrategies ||= ['FIXED', 'SUCCESS', 'EXPRESSION', 'NODE_SUGGESTION', 'AI_ROUTER', 'DEFAULT'];
   node.allowedTargetNodeIds ||= [];
-  node.routeInstruction ||= '完成任务后，如需指定下一节点，在末尾单独输出 [route:key]。';
+  node.routeInstruction ||= '完成任务后，如需指定下一节点，调用 select_workflow_route 并传入当前出边允许的 routeKey 和简短 reason。';
   node.maxVisits ||= 3;
 }
 
@@ -811,6 +829,7 @@ function addEndRoute() {
  */
 function normalizeGraphLayout(value: WorkflowGraph) {
   const next = cloneGraph(value);
+  next.routingProtocolVersion ||= 'MARKER_V1';
   next.nodes = (next.nodes || []).map((node, index) => ({
     ...node,
     nodeType: node.nodeType || 'llm',
@@ -1030,7 +1049,7 @@ function clamp(value: number, min: number, max: number) {
 </script>
 
 <style scoped>
-.workflow-kind-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}.workflow-kind-tabs button{display:grid;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}.workflow-kind-tabs button.active{border-color:#6366f1;box-shadow:0 0 0 2px rgb(99 102 241/.12)}.workflow-kind-tabs span{color:var(--muted);font-size:12px}.intelligent-budget{display:flex;align-items:end;gap:16px;padding:14px;margin-bottom:14px}.intelligent-budget label{display:grid;gap:6px;font-size:12px}.intelligent-budget span{color:var(--muted);font-size:12px}.route-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.route-edge-editor{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:10px}.route-edge-editor strong{font-size:12px}@media(max-width:800px){.workflow-kind-tabs{grid-template-columns:1fr}.intelligent-budget{align-items:stretch;flex-direction:column}}
+.workflow-kind-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}.workflow-kind-tabs button{display:grid;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}.workflow-kind-tabs button.active{border-color:#6366f1;box-shadow:0 0 0 2px rgb(99 102 241/.12)}.workflow-kind-tabs span{color:var(--muted);font-size:12px}.intelligent-budget{display:flex;align-items:end;gap:16px;padding:14px;margin-bottom:14px}.intelligent-budget label{display:grid;gap:6px;font-size:12px}.intelligent-budget span{color:var(--muted);font-size:12px}.routing-tool-card{display:grid;gap:7px;padding:12px;border:1px solid rgb(99 102 241/.35);border-radius:12px;background:rgb(99 102 241/.06)}.routing-tool-card code{font-size:12px}.routing-tool-card span,.rag-tool-toggle small{color:var(--muted);font-size:12px}.routing-tool-card__routes{display:flex;flex-wrap:wrap;gap:6px}.routing-tool-card__routes span{padding:4px 7px;border-radius:999px;background:var(--surface)}.rag-tool-toggle{display:flex;align-items:flex-start;gap:9px;padding:10px;border:1px solid var(--line);border-radius:10px}.rag-tool-toggle span{display:grid;gap:3px}.route-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.route-edge-editor{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:10px}.route-edge-editor strong{font-size:12px}@media(max-width:800px){.workflow-kind-tabs{grid-template-columns:1fr}.intelligent-budget{align-items:stretch;flex-direction:column}}
 .workflow-template-library {
   display: grid;
   gap: 14px;

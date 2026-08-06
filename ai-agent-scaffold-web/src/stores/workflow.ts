@@ -236,6 +236,8 @@ export const useWorkflowStore = defineStore('workflow', {
 export function createDefaultWorkflowGraph(modelCode = 'deepseek-v4-flash'): WorkflowGraph {
   const node = createDefaultLlmNode(modelCode, 1);
   return {
+    workflowKind: 'STATIC',
+    routingProtocolVersion: 'MARKER_V1',
     mode: 'sequential',
     rootNodeId: node.nodeId,
     nodes: [node],

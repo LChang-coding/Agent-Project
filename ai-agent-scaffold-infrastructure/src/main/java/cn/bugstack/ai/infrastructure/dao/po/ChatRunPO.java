@@ -36,6 +36,8 @@ public class ChatRunPO extends BasePO {
     private Boolean ragEnabled;
     /** 运行开始时冻结的 RAG 绑定选择模式。 */
     private String ragMode;
+    /** 运行冻结的 RAG 调用方式。 */
+    private String ragInvocationMode;
     /** 运行开始时冻结的会话 RAG 策略修订号。 */
     private Long ragPolicyRevision;
     /** 运行实际使用的绑定 ID 快照。 */

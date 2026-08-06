@@ -2,6 +2,7 @@ package cn.bugstack.ai.domain.rag.model.entity;
 
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 
 import java.util.List;
 
@@ -13,6 +14,7 @@ import java.util.List;
 public record SessionRagSettingEntity(String sessionId,
                                       boolean enabled,
                                       SessionRagMode mode,
+                                      RagInvocationMode invocationMode,
                                       long revision,
                                       boolean bindingConfigured,
                                       RagBindingTargetType targetType,
@@ -23,5 +25,13 @@ public record SessionRagSettingEntity(String sessionId,
     public SessionRagSettingEntity {
         selectedBindingIds = selectedBindingIds == null ? List.of() : List.copyOf(selectedBindingIds);
         eligibleBindings = eligibleBindings == null ? List.of() : List.copyOf(eligibleBindings);
+    }
+
+    public SessionRagSettingEntity(String sessionId, boolean enabled, SessionRagMode mode, long revision,
+                                   boolean bindingConfigured, RagBindingTargetType targetType, String targetId,
+                                   List<String> selectedBindingIds,
+                                   List<SessionRagEligibleBindingEntity> eligibleBindings) {
+        this(sessionId, enabled, mode, RagInvocationMode.AUTO_CONTEXT, revision, bindingConfigured,
+                targetType, targetId, selectedBindingIds, eligibleBindings);
     }
 }

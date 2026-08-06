@@ -60,7 +60,8 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/workflow_event_cursor_mapper.xml",
                 "mybatis/mapper/workflow_run_event_mapper.xml",
                 "mybatis/mapper/workflow_execution_audit_mapper.xml",
-                "mybatis/mapper/workflow_invocation_mapper.xml"
+                "mybatis/mapper/workflow_invocation_mapper.xml",
+                "mybatis/mapper/workflow_route_intent_mapper.xml"
         }) {
             new XMLMapperBuilder(
                     Resources.getResourceAsStream(mapperResource),
@@ -101,6 +102,9 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao.completeNode"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowExecutionAuditDao.insertRoute"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowInvocationDao.insertIgnore"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowRouteIntentDao.insertIgnore"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowRouteIntentDao.queryByNode"));
+        Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IWorkflowRouteIntentDao.consume"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IToolCallLogDao.summarizeBySessionId"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IArtifactAssetDao.countContextAssets"));
         Assert.assertTrue(configuration.hasStatement("cn.bugstack.ai.infrastructure.dao.IRagDocumentVersionDao.updateByTenantAndRevision"));

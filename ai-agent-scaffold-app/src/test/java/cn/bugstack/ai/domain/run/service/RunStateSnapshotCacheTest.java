@@ -155,6 +155,17 @@ public class RunStateSnapshotCacheTest {
         Assert.assertEquals(1, cache.size());
     }
 
+    @Test
+    public void shouldKeepRagInvocationModeInDetachedSnapshot() {
+        RunStateSnapshotCache cache = new RunStateSnapshotCache(100L, 2, () -> 0L);
+        ChatRunEntity source = run("run-1");
+        source.setRagInvocationMode("AGENT_TOOL");
+
+        ChatRunEntity cached = cache.get("tenant-1", "user-1", "run-1", () -> source).run();
+
+        Assert.assertEquals("AGENT_TOOL", cached.getRagInvocationMode());
+    }
+
     private RunControlService service(IChatRunRepository repository, SessionDomain sessionDomain,
                                       RunStateSnapshotCache cache) {
         return new RunControlService(repository, sessionDomain, mock(ActiveRunRegistry.class),

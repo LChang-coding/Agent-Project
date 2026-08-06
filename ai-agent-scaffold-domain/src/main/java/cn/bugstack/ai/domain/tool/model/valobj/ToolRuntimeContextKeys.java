@@ -50,6 +50,16 @@ public final class ToolRuntimeContextKeys {
     public static final String RAG_QUERY = "ragQuery";
     /** 证据归属编号在 state 中的 key；工作流节点没有 ADK 的 invocationId，需要显式指定一个编号把检索证据挂到这一次模型调用上。 */
     public static final String RAG_EVIDENCE_INVOCATION_ID = "ragEvidenceInvocationId";
+    public static final String RAG_INVOCATION_MODE = "ragInvocationMode";
+    public static final String WORKFLOW_KIND = "workflowKind";
+    public static final String ROUTING_PROTOCOL_VERSION = "routingProtocolVersion";
+    public static final String TERMINAL_NODE = "terminalNode";
+    public static final String ROUTE_DESCRIPTORS = "routeDescriptors";
+    public static final String NODE_EXECUTION_ID = "nodeExecutionId";
+    public static final String SOURCE_NODE_ID = "sourceNodeId";
+    public static final String DEFINITION_HASH = "definitionHash";
+    public static final String WORKFLOW_VERSION = "workflowVersion";
+    public static final String ROUTE_REPAIR_ONLY = "routeRepairOnly";
 
     /** 私有构造：纯常量类，不允许实例化，避免被误注入或误当作上下文对象使用。 */
     private ToolRuntimeContextKeys() {

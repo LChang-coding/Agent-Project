@@ -14,6 +14,7 @@
         <result column="source_id" property="sourceId"/>
         <result column="rag_enabled" property="ragEnabled"/>
         <result column="rag_mode" property="ragMode"/>
+        <result column="rag_invocation_mode" property="ragInvocationMode"/>
         <result column="rag_policy_revision" property="ragPolicyRevision"/>
         <result column="rag_binding_ids_json" property="ragBindingIdsJson"/>
         <result column="trace_id" property="traceId"/>
@@ -35,7 +36,7 @@
     </resultMap>
 
     <sql id="ChatRunColumns">
-        id, run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, rag_enabled, rag_mode,
+        id, run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, rag_enabled, rag_mode, rag_invocation_mode,
         rag_policy_revision, rag_binding_ids_json, trace_id, status, version,
         base_context_revision, current_context_revision, predecessor_run_id, successor_run_id, user_message_id,
         steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at, create_time, update_time, deleted
@@ -43,11 +44,11 @@
 
     <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ChatRunPO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO chat_run (run_id, turn_id, tenant_id, user_id, session_id, source_type, source_id, rag_enabled,
-                              rag_mode, rag_policy_revision, rag_binding_ids_json, trace_id, status, version,
+                              rag_mode, rag_invocation_mode, rag_policy_revision, rag_binding_ids_json, trace_id, status, version,
                               base_context_revision, current_context_revision, predecessor_run_id, successor_run_id,
                               user_message_id, steer_instruction, terminal_reason, cancel_requested_at, started_at, finished_at)
         VALUES (#{runId}, #{turnId}, #{tenantId}, #{userId}, #{sessionId}, #{sourceType}, #{sourceId}, #{ragEnabled},
-                #{ragMode}, #{ragPolicyRevision}, #{ragBindingIdsJson}, #{traceId}, #{status}, #{version},
+                #{ragMode}, #{ragInvocationMode}, #{ragPolicyRevision}, #{ragBindingIdsJson}, #{traceId}, #{status}, #{version},
                 #{baseContextRevision}, #{currentContextRevision}, #{predecessorRunId}, #{successorRunId},
                 #{userMessageId}, #{steerInstruction}, #{terminalReason}, #{cancelRequestedAt}, #{startedAt}, #{finishedAt})
     </insert>

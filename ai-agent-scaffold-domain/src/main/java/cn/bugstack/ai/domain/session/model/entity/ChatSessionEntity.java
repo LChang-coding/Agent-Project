@@ -113,6 +113,9 @@ private String agentId;
      */
     private String ragMode;
 
+    /** RAG 调用方式：AUTO_CONTEXT 自动注入，AGENT_TOOL 由 Agent 显式调用。 */
+    private String ragInvocationMode;
+
     /**
      * 检索策略的乐观锁版本号。
      *

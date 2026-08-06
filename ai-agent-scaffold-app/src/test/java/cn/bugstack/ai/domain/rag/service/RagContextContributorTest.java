@@ -26,7 +26,8 @@ public class RagContextContributorTest {
     @Test
     public void shouldSkipRetrievalWhenRagBudgetIsDisabled() {
         RagRetrievalService retrieval = Mockito.mock(RagRetrievalService.class);
-        RagContextContributor contributor = new RagContextContributor(retrieval);
+        RagContextContributor contributor = new RagContextContributor(retrieval,
+                new RagRetrievalPresentationService());
         ContextPolicyProperties properties = new ContextPolicyProperties();
         properties.setRagTokens(0);
 
@@ -39,7 +40,8 @@ public class RagContextContributorTest {
     @Test
     public void shouldUseTrustedTargetAndEscapeUntrustedDocumentContent() {
         RagRetrievalService retrieval = Mockito.mock(RagRetrievalService.class);
-        RagContextContributor contributor = new RagContextContributor(retrieval);
+        RagContextContributor contributor = new RagContextContributor(retrieval,
+                new RagRetrievalPresentationService());
         ContextPolicyProperties properties = new ContextPolicyProperties();
         properties.setRagTokens(512);
         RagRetrievalResult.Citation citation = new RagRetrievalResult.Citation("cite-a", 1, "kb-a", "doc-a",

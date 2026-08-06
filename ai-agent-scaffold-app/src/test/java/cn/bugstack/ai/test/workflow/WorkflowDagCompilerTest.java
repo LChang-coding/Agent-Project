@@ -15,6 +15,7 @@ import cn.bugstack.ai.domain.workflow.service.ModelRouter;
 import cn.bugstack.ai.domain.workflow.service.WorkflowRuntimeCompiler;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,6 +30,23 @@ import java.util.stream.Collectors;
  * 工作流 DAG 编译器测试。
  */
 public class WorkflowDagCompilerTest {
+
+    @Test
+    public void shouldDefaultHistoricalGraphWithoutRoutingProtocolToMarkerV1() throws Exception {
+        WorkflowGraphEntity graph = new ObjectMapper().readValue(
+                "{\"workflowKind\":\"INTELLIGENT\",\"nodes\":[],\"edges\":[]}", WorkflowGraphEntity.class);
+
+        Assert.assertEquals("MARKER_V1", graph.getRoutingProtocolVersion());
+    }
+
+    @Test
+    public void shouldPreserveExplicitToolV2ProtocolWhenParsingGraph() throws Exception {
+        WorkflowGraphEntity graph = new ObjectMapper().readValue(
+                "{\"workflowKind\":\"INTELLIGENT\",\"routingProtocolVersion\":\"TOOL_V2\",\"nodes\":[],\"edges\":[]}",
+                WorkflowGraphEntity.class);
+
+        Assert.assertEquals("TOOL_V2", graph.getRoutingProtocolVersion());
+    }
 
     /**
      * 校验混合 DAG 编译；无参数；验证自循环、并行和汇聚边会保留在执行计划中。
@@ -134,6 +152,59 @@ public class WorkflowDagCompilerTest {
         } catch (AppException exception) {
             Assert.assertEquals(ResponseCode.ILLEGAL_PARAMETER.getCode(), exception.getCode());
         }
+    }
+
+    @Test
+    public void shouldFreezeToolRoutingDefinitionAndNodeRouteDescriptors() throws Exception {
+        WorkflowRuntimeCompiler compiler = compiler();
+        WorkflowGraphEntity.Node source = intelligentNode("source", List.of("billing", "END"));
+        WorkflowGraphEntity.Node billing = intelligentNode("billing", Collections.emptyList());
+        WorkflowGraphEntity.Edge billingEdge = intelligentEdge(
+                "edge_billing", "source", "billing", "AI_ROUTER", "账务", List.of("BILLING"));
+        WorkflowGraphEntity.Edge fallback = intelligentEdge(
+                "edge_default", "source", "END", "DEFAULT", null, Collections.emptyList());
+        WorkflowGraphEntity graph = WorkflowGraphEntity.builder()
+                .workflowKind("INTELLIGENT")
+                .routingProtocolVersion("TOOL_V2")
+                .maxSteps(10)
+                .tokenBudget(4096L)
+                .mode("sequential")
+                .rootNodeId("source")
+                .nodes(List.of(source, billing))
+                .edges(List.of(billingEdge, fallback))
+                .build();
+
+        WorkflowDagPlanEntity plan = compiler.compileDag(workflow(), version(graph), "deepseek-v4-flash").getDagPlan();
+
+        Assert.assertEquals("TOOL_V2", plan.getRoutingProtocolVersion());
+        Assert.assertNotNull(plan.getDefinitionHash());
+        Assert.assertEquals(64, plan.getDefinitionHash().length());
+        WorkflowDagPlanEntity.Node sourcePlan = plan.getNodes().stream()
+                .filter(node -> "source".equals(node.getNodeId()))
+                .findFirst()
+                .orElseThrow();
+        Assert.assertFalse(sourcePlan.getTerminal());
+        Assert.assertEquals(1, sourcePlan.getRouteDescriptors().size());
+        Assert.assertEquals("账务", sourcePlan.getRouteDescriptors().get(0).getRouteKey());
+        Assert.assertEquals(List.of("BILLING"), sourcePlan.getRouteDescriptors().get(0).getRouteAliases());
+        Assert.assertEquals("edge_billing", sourcePlan.getRouteDescriptors().get(0).getEdgeId());
+        Assert.assertEquals("billing", sourcePlan.getRouteDescriptors().get(0).getTargetNodeId());
+        Assert.assertEquals("billing", sourcePlan.getRouteDescriptors().get(0).getTargetNodeName());
+        WorkflowDagPlanEntity.Node terminalPlan = plan.getNodes().stream()
+                .filter(node -> "billing".equals(node.getNodeId()))
+                .findFirst()
+                .orElseThrow();
+        Assert.assertTrue(terminalPlan.getTerminal());
+        Assert.assertTrue(terminalPlan.getRouteDescriptors().isEmpty());
+    }
+
+    @Test
+    public void shouldCompileMissingProtocolAsMarkerV1WithoutChangingStaticBehavior() throws Exception {
+        WorkflowDagPlanEntity plan = compiler().compileDag(
+                workflow(), version(mixedDagGraph()), "deepseek-v4-flash").getDagPlan();
+
+        Assert.assertEquals("MARKER_V1", plan.getRoutingProtocolVersion());
+        Assert.assertTrue(plan.getNodes().stream().allMatch(node -> node.getRouteDescriptors().isEmpty()));
     }
 
     private WorkflowGraphEntity.Node intelligentNode(String nodeId, List<String> targets) {

@@ -176,7 +176,10 @@ public interface IChatService {
      * <p>返回节点输出文本 + 本次调用真实注入的 RAG 证据；证据用于后续判断回答的引用是否合法。</p>
      */
     WorkflowNodeInvocationResultEntity invokeCompiledWorkflowNode(WorkflowDagPlanEntity.Node node,
+                                                                   WorkflowDagPlanEntity plan,
                                                                    ChatRunEntity run,
+                                                                   String nodeExecutionId,
+                                                                   boolean routeRepairOnly,
                                                                    String sessionId,
                                                                    String workflowId,
                                                                    String prompt,

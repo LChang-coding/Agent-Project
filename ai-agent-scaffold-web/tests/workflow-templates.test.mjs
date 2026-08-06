@@ -45,6 +45,7 @@ test('模板、节点和边使用稳定唯一 ID', () => {
 test('静态模板仅包含 DAG 和有界自循环', () => {
   for (const template of WORKFLOW_TEMPLATES.filter((item) => item.workflowKind === 'STATIC')) {
     assert.equal(template.graph.workflowKind, 'STATIC');
+    assert.equal(template.graph.routingProtocolVersion, 'MARKER_V1');
     assertStaticAcyclicIgnoringSelfLoops(template.graph, template.id);
     for (const edge of template.graph.edges.filter((item) => item.sourceNodeId === item.targetNodeId)) {
       const node = template.graph.nodes.find((item) => item.nodeId === edge.sourceNodeId);
@@ -57,6 +58,7 @@ test('智能模板具有有界预算、允许目标和 DEFAULT 出口', () => {
   for (const template of WORKFLOW_TEMPLATES.filter((item) => item.workflowKind === 'INTELLIGENT')) {
     const graph = template.graph;
     assert.equal(graph.workflowKind, 'INTELLIGENT');
+    assert.equal(graph.routingProtocolVersion, 'TOOL_V2');
     assert.ok(graph.maxSteps >= 1 && graph.maxSteps <= 200, template.id);
     assert.ok(graph.tokenBudget >= 1 && graph.tokenBudget <= 10_000_000, template.id);
     for (const node of graph.nodes) {
@@ -75,12 +77,13 @@ test('智能模板具有有界预算、允许目标和 DEFAULT 出口', () => {
   }
 });
 
-test('智能模板自动写入精确路由协议并支持中文主键和受控别名', () => {
+test('智能模板通过 select_workflow_route 工具选路并支持中文主键和受控别名', () => {
   for (const template of WORKFLOW_TEMPLATES.filter((item) => item.workflowKind === 'INTELLIGENT')) {
     for (const node of template.graph.nodes) {
       const outgoing = template.graph.edges.filter((edge) => edge.sourceNodeId === node.nodeId);
       for (const edge of outgoing.filter((item) => ['AI_ROUTER', 'NODE_SUGGESTION'].includes(item.routeType))) {
-        assert.ok(node.routeInstruction.includes(`[route:${edge.routeKey}]`), `${template.id}: ${edge.edgeId} 未注入精确格式`);
+        assert.ok(node.routeInstruction.includes('select_workflow_route'), `${template.id}: ${edge.edgeId} 未注入路由工具`);
+        assert.ok(node.routeInstruction.includes(edge.routeKey), `${template.id}: ${edge.edgeId} 未注入 route key`);
         for (const alias of edge.routeAliases || []) {
           assert.ok(node.routeInstruction.includes(alias), `${template.id}: ${edge.edgeId} 未注入别名 ${alias}`);
         }
@@ -92,7 +95,15 @@ test('智能模板自动写入精确路由协议并支持中文主键和受控�
   const billing = customer.edges.find((edge) => edge.sourceNodeId === 'classify' && edge.targetNodeId === 'billing');
   assert.equal(billing.routeKey, '账务');
   assert.deepEqual(billing.routeAliases, ['billing']);
-  assert.match(customer.nodes.find((node) => node.nodeId === 'classify').routeInstruction, /\[route:账务]/);
+  assert.match(customer.nodes.find((node) => node.nodeId === 'classify').routeInstruction, /select_workflow_route.*账务/s);
+  assert.ok(!customer.nodes.find((node) => node.nodeId === 'classify').routeInstruction.includes('精确输出 [route:'));
+});
+
+test('RAG 智能模板只为需要检索的节点开启知识库工具', () => {
+  const graph = workflowTemplateById('prod-intelligent-rag-retry').graph;
+  assert.equal(graph.nodes.find((node) => node.nodeId === 'retrieve').ragToolEnabled, true);
+  assert.notEqual(graph.nodes.find((node) => node.nodeId === 'rewrite').ragToolEnabled, true);
+  assert.notEqual(graph.nodes.find((node) => node.nodeId === 'answer').ragToolEnabled, true);
 });
 
 test('深拷贝载入不会污染模板清单或其他载入实例', () => {

@@ -102,6 +102,19 @@
                 {{ chatStore.sessionId ? chatStore.ragMessage : '创建或选择会话后才能设置RAG策略' }}
               </span>
             </div>
+            <label class="compact-field compact-field--wide" :title="ragInvocationHint">
+              <span>调用方式</span>
+              <select
+                :value="chatStore.ragInvocationMode"
+                class="select select--compact"
+                :disabled="ragInvocationDisabled"
+                @change="onRagInvocationModeChanged"
+              >
+                <option value="AUTO_CONTEXT">自动注入</option>
+                <option value="AGENT_TOOL">Agent 按需检索</option>
+              </select>
+              <small>{{ ragInvocationHint }}</small>
+            </label>
             <button class="icon-button" type="button" title="刷新运行目标" :disabled="chatStore.sending" @click="reloadTargets">刷新</button>
             <button class="icon-button" type="button" title="分享当前会话" :disabled="!chatStore.sessionId || chatStore.sending || sharing" @click="shareSession">
               {{ sharing ? '生成中' : '分享' }}
@@ -434,7 +447,7 @@ import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
 import { useToolStore } from '@/stores/tools';
-import type { ArtifactAsset, ChatMessage, SessionRagMode } from '@/types/api';
+import type { ArtifactAsset, ChatMessage, RagInvocationMode, SessionRagMode } from '@/types/api';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 interface MessageScrollAnchor {
@@ -473,6 +486,12 @@ const ragModeOptions: Array<{ value: SessionRagMode; label: string }> = [
 ];
 const canCreateSession = computed(() => chatStore.hasActiveTarget());
 const ragControlsDisabled = computed(() => !chatStore.sessionId || chatStore.sending || chatStore.ragSaving);
+const ragInvocationDisabled = computed(() => ragControlsDisabled.value || !chatStore.ragEnabled);
+const ragInvocationHint = computed(() => {
+  if (!chatStore.ragEnabled) return '开启知识库后可设置';
+  if (chatStore.sending) return '本轮策略已冻结，修改将在下一轮生效';
+  return chatStore.ragInvocationMode === 'AGENT_TOOL' ? 'Agent 判断需要时调用，可多次检索' : '每轮回答前固定检索';
+});
 const manualSelectionValid = computed(() => manualBindingIds.value.every((bindingId) => {
   const binding = chatStore.ragEligibleBindings.find((item) => item.bindingId === bindingId);
   return Boolean(binding && bindingAvailable(binding.status));
@@ -750,6 +769,15 @@ async function selectRagMode(mode: SessionRagMode) {
     await chatStore.setRagSetting(mode);
   } catch {
     // Store 已回滚并保留可展示的错误。
+  }
+}
+
+async function onRagInvocationModeChanged(event: Event) {
+  const mode = (event.target as HTMLSelectElement).value as RagInvocationMode;
+  try {
+    await chatStore.setRagInvocationMode(mode);
+  } catch {
+    // Store 已恢复此前调用方式并保留服务端错误。
   }
 }
 

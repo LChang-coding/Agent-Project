@@ -109,6 +109,7 @@ public class RunControlService {
                 .sourceType(sourceType)
                 .sourceId(sourceId)
                 .ragEnabled(ragSnapshot.enabled()).ragMode(ragSnapshot.mode().name())
+                .ragInvocationMode(ragSnapshot.invocationMode().name())
                 .ragPolicyRevision(ragSnapshot.revision()).ragBindingIds(ragSnapshot.bindingIds())
                 .traceId(TraceContext.ensureTraceId())
                 .status(RunStatus.RUNNING)
@@ -118,7 +119,7 @@ public class RunControlService {
                 .predecessorRunId(predecessorRunId)
                 .startedAt(now)
                 .build();
-        runRepository.insert(run);
+        runRepository.insert(run) ;
         AiLog.info(AiLog.chat().runStarted(run.getTenantId(), run.getUserId(), run.getSessionId(),
                 run.getRunId(), run.getSourceType(), run.getSourceId(), run.getRagEnabled()));
         invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), run.getRunId());
@@ -216,6 +217,7 @@ public class RunControlService {
                 .tenantId(run.getTenantId()).userId(run.getUserId()).sessionId(run.getSessionId())
                 .sourceType(run.getSourceType()).sourceId(run.getSourceId())
                 .ragEnabled(Boolean.TRUE.equals(run.getRagEnabled())).ragMode(run.getRagMode())
+                .ragInvocationMode(run.getRagInvocationMode())
                 .ragPolicyRevision(run.getRagPolicyRevision()).ragBindingIds(run.getRagBindingIds())
                 .traceId(run.getTraceId())
                 .status(RunStatus.CREATED).version(0)
@@ -250,10 +252,12 @@ public class RunControlService {
         SessionRagMode mode = SessionRagMode.resolve(session.getRagMode(), session.getRagEnabled());
         if (mode == SessionRagMode.OFF) {
             return new SessionRagRunSnapshotEntity(mode,
+                    cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode.resolve(session.getRagInvocationMode()),
                     session.getRagRevision() == null ? 0L : session.getRagRevision(), List.of());
         }
         // 仅供不装配RAG仓储的旧领域单测；生产路径绝不会生成空绑定快照。
         return new SessionRagRunSnapshotEntity(mode,
+                cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode.resolve(session.getRagInvocationMode()),
                 session.getRagRevision() == null ? 0L : session.getRagRevision(), List.of());
     }
 

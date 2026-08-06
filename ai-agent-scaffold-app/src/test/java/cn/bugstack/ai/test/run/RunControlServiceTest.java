@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.run.service.ActiveRunRegistry;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.rag.model.entity.SessionRagRunSnapshotEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
@@ -90,8 +91,8 @@ public class RunControlServiceTest {
         when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", "agent-1"))
                 .thenReturn(session);
         when(ragSettingService.resolveRunSnapshot(session)).thenReturn(
-                new SessionRagRunSnapshotEntity(SessionRagMode.MANUAL, 9L,
-                        List.of("binding-2", "binding-1")));
+                new SessionRagRunSnapshotEntity(SessionRagMode.MANUAL, RagInvocationMode.AGENT_TOOL, 9L,
+                         List.of("binding-2", "binding-1")));
         when(runRepository.insert(any())).thenReturn(1);
         RunControlService service = new RunControlService(runRepository, sessionDomain,
                 mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
@@ -102,9 +103,11 @@ public class RunControlServiceTest {
 
         assertEquals(Boolean.TRUE, run.getRagEnabled());
         assertEquals("MANUAL", run.getRagMode());
+        assertEquals("AGENT_TOOL", run.getRagInvocationMode());
         assertEquals(Long.valueOf(9L), run.getRagPolicyRevision());
         assertEquals(List.of("binding-2", "binding-1"), run.getRagBindingIds());
         verify(runRepository).insert(argThat(item -> "MANUAL".equals(item.getRagMode())
+                && "AGENT_TOOL".equals(item.getRagInvocationMode())
                 && item.getRagBindingIds().equals(List.of("binding-2", "binding-1"))));
     }
 
@@ -158,7 +161,7 @@ public class RunControlServiceTest {
         ChatRunEntity running = ChatRunEntity.builder()
                 .runId("run-old").tenantId("tenant-1").userId("user-1").sessionId("session-1")
                 .sourceType("agent").sourceId("agent-1")
-                .ragEnabled(true).ragMode("MANUAL").ragPolicyRevision(7L)
+                .ragEnabled(true).ragMode("MANUAL").ragInvocationMode("AGENT_TOOL").ragPolicyRevision(7L)
                 .ragBindingIds(List.of("binding-2", "binding-1"))
                 .status(RunStatus.RUNNING).version(0).currentContextRevision(2L).build();
         List<ChatMessageEntity> messages = List.of(ChatMessageEntity.builder()
@@ -185,11 +188,13 @@ public class RunControlServiceTest {
         assertEquals("请改为简短答复", successor.getSteerInstruction());
         assertEquals(Boolean.TRUE, successor.getRagEnabled());
         assertEquals("MANUAL", successor.getRagMode());
+        assertEquals("AGENT_TOOL", successor.getRagInvocationMode());
         assertEquals(Long.valueOf(7L), successor.getRagPolicyRevision());
         assertEquals(List.of("binding-2", "binding-1"), successor.getRagBindingIds());
         verify(runRepository).insert(argThat(run -> run.getStatus() == RunStatus.CREATED
                 && "run-old".equals(run.getPredecessorRunId())
                 && "MANUAL".equals(run.getRagMode())
+                && "AGENT_TOOL".equals(run.getRagInvocationMode())
                 && List.of("binding-2", "binding-1").equals(run.getRagBindingIds())));
         verify(sessionDomain).invalidateRunMessages("tenant-1", "user-1", "session-1", "run-old", "用户引导替代");
         verify(contextInvalidationService).invalidateRun("tenant-1", "user-1", "session-1", "run-old",

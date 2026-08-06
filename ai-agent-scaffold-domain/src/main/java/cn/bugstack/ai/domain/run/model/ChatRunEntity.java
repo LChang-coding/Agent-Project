@@ -41,6 +41,8 @@ public class ChatRunEntity {
     private Boolean ragEnabled;
     /** 本轮冻结的 RAG 策略模式（OFF/AUTO/MANUAL）；与开关一起决定这次要不要检索、按谁的范围检索。 */
     private String ragMode;
+    /** 本轮冻结的 RAG 调用方式。 */
+    private String ragInvocationMode;
     /** 本轮冻结的会话 RAG 策略版本号；用于事后核对这次运行用的是哪一版检索配置。 */
     private Long ragPolicyRevision;
     /** 本轮冻结的知识库绑定清单；AUTO 模式也在创建时就展开成具体编号，防止运行途中绑定变化导致检索范围漂移。 */

@@ -26,6 +26,7 @@ import type {
   ChatMessage,
   ChatRequest,
   LocalChatSession,
+  RagInvocationMode,
   RunStreamEvent,
   SessionMessagePage,
   SessionRagEligibleBinding,
@@ -105,6 +106,7 @@ interface ChatState {
   historyErrorMessage: string;
   ragEnabled: boolean;
   ragMode: SessionRagMode;
+  ragInvocationMode: RagInvocationMode;
   ragSelectedBindingIds: string[];
   ragEligibleBindings: SessionRagEligibleBinding[];
   ragRevision?: number;
@@ -149,6 +151,7 @@ export const useChatStore = defineStore('chat', {
     historyErrorMessage: '',
     ragEnabled: false,
     ragMode: 'OFF',
+    ragInvocationMode: 'AUTO_CONTEXT',
     ragSelectedBindingIds: [],
     ragEligibleBindings: [],
     ragRevision: undefined,
@@ -273,6 +276,7 @@ export const useChatStore = defineStore('chat', {
       this.contextRevision = session.contextRevision || 0;
       this.ragEnabled = Boolean(session.ragEnabled);
       this.ragMode = session.ragMode || (session.ragEnabled ? 'AUTO' : 'OFF');
+      this.ragInvocationMode = session.ragInvocationMode || 'AUTO_CONTEXT';
       this.ragSelectedBindingIds = [];
       this.ragEligibleBindings = [];
       this.ragRevision = session.ragRevision;
@@ -961,6 +965,7 @@ export const useChatStore = defineStore('chat', {
             contextRevision: session.contextRevision,
             ragEnabled: Boolean(session.ragEnabled),
             ragMode: session.ragMode || (session.ragEnabled ? 'AUTO' : 'OFF'),
+            ragInvocationMode: session.ragInvocationMode || 'AUTO_CONTEXT',
             ragRevision: session.ragRevision,
           } satisfies LocalChatSession;
         });
@@ -1035,6 +1040,7 @@ export const useChatStore = defineStore('chat', {
         contextRevision: this.contextRevision,
         ragEnabled: this.ragEnabled,
         ragMode: this.ragMode,
+        ragInvocationMode: this.ragInvocationMode,
         ragRevision: this.ragRevision,
       };
       const nextSessions = [session, ...this.sessions.filter((item) => item.sessionId !== session.sessionId)];
@@ -1048,6 +1054,7 @@ export const useChatStore = defineStore('chat', {
       if (!targetSessionId) {
         this.ragEnabled = false;
         this.ragMode = 'OFF';
+        this.ragInvocationMode = 'AUTO_CONTEXT';
         this.ragSelectedBindingIds = [];
         this.ragEligibleBindings = [];
         this.ragRevision = undefined;
@@ -1075,6 +1082,7 @@ export const useChatStore = defineStore('chat', {
       const previous = {
         ragEnabled: this.ragEnabled,
         ragMode: this.ragMode,
+        ragInvocationMode: this.ragInvocationMode,
         ragSelectedBindingIds: [...this.ragSelectedBindingIds],
         ragEligibleBindings: [...this.ragEligibleBindings],
         ragRevision: this.ragRevision,
@@ -1092,6 +1100,7 @@ export const useChatStore = defineStore('chat', {
       try {
         const setting = await updateSessionRagSetting(capturedSessionId, {
           mode,
+          invocationMode: this.ragInvocationMode,
           selectedBindingIds: normalizedIds,
           expectedRevision: previous.ragRevision,
         });
@@ -1101,6 +1110,7 @@ export const useChatStore = defineStore('chat', {
         if (generation === ragSettingGeneration && this.sessionId === capturedSessionId) {
           this.ragEnabled = previous.ragEnabled;
           this.ragMode = previous.ragMode;
+          this.ragInvocationMode = previous.ragInvocationMode;
           this.ragSelectedBindingIds = previous.ragSelectedBindingIds;
           this.ragEligibleBindings = previous.ragEligibleBindings;
           this.ragRevision = previous.ragRevision;
@@ -1119,6 +1129,7 @@ export const useChatStore = defineStore('chat', {
     applyRagSetting(setting: SessionRagSetting, sessionId: string) {
       const mode = setting.mode || (setting.enabled ? 'AUTO' : 'OFF');
       this.ragMode = mode;
+      this.ragInvocationMode = setting.invocationMode || 'AUTO_CONTEXT';
       this.ragEnabled = mode !== 'OFF';
       this.ragSelectedBindingIds = mode === 'MANUAL' ? [...(setting.selectedBindingIds || [])] : [];
       this.ragEligibleBindings = [...(setting.eligibleBindings || [])]
@@ -1130,6 +1141,7 @@ export const useChatStore = defineStore('chat', {
       if (session) {
         session.ragEnabled = this.ragEnabled;
         session.ragMode = mode;
+        session.ragInvocationMode = this.ragInvocationMode;
         session.ragRevision = setting.revision;
       }
     },
@@ -1139,12 +1151,39 @@ export const useChatStore = defineStore('chat', {
       ragSettingGeneration += 1;
       this.ragEnabled = false;
       this.ragMode = 'OFF';
+      this.ragInvocationMode = 'AUTO_CONTEXT';
       this.ragSelectedBindingIds = [];
       this.ragEligibleBindings = [];
       this.ragRevision = undefined;
       this.ragBindingConfigured = false;
       this.ragSaving = false;
       this.ragMessage = '创建或选择会话后可启用企业知识库检索。';
+    },
+
+    /** 切换独立的RAG调用方式；RAG关闭时不允许修改。 */
+    async setRagInvocationMode(mode: RagInvocationMode) {
+      if (!this.sessionId || !this.ragEnabled || this.ragSaving || this.sending) return;
+      const sessionId = this.sessionId;
+      const previous = this.ragInvocationMode;
+      this.ragInvocationMode = mode;
+      this.ragSaving = true;
+      try {
+        const setting = await updateSessionRagSetting(sessionId, {
+          mode: this.ragMode,
+          invocationMode: mode,
+          selectedBindingIds: this.ragMode === 'MANUAL' ? [...this.ragSelectedBindingIds] : [],
+          expectedRevision: this.ragRevision,
+        });
+        if (this.sessionId === sessionId) this.applyRagSetting(setting, sessionId);
+      } catch (error) {
+        if (this.sessionId === sessionId) {
+          this.ragInvocationMode = previous;
+          this.ragMessage = error instanceof Error ? error.message : 'RAG调用方式保存失败';
+        }
+        throw error;
+      } finally {
+        if (this.sessionId === sessionId) this.ragSaving = false;
+      }
     },
 
     /**

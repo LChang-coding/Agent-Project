@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.rag.model.entity;
 
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 
 import java.util.List;
 
@@ -8,11 +9,16 @@ import java.util.List;
  * 创建运行时冻结的会话RAG策略。
  */
 public record SessionRagRunSnapshotEntity(SessionRagMode mode,
-                                          long revision,
-                                          List<String> bindingIds) {
+                                           RagInvocationMode invocationMode,
+                                           long revision,
+                                           List<String> bindingIds) {
+
+    public SessionRagRunSnapshotEntity(SessionRagMode mode, long revision, List<String> bindingIds) {
+        this(mode, RagInvocationMode.AUTO_CONTEXT, revision, bindingIds);
+    }
 
     public SessionRagRunSnapshotEntity {
-        if (mode == null || revision < 0) {
+        if (mode == null || invocationMode == null || revision < 0) {
             throw new IllegalArgumentException("RAG运行快照参数非法");
         }
         bindingIds = bindingIds == null ? List.of() : List.copyOf(bindingIds);

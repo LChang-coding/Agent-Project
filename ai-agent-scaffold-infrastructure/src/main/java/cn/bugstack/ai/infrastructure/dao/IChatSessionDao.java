@@ -95,7 +95,8 @@ public interface IChatSessionDao {
     int updateRagPolicy(@Param("tenantId") String tenantId,
                         @Param("userId") String userId,
                         @Param("sessionId") String sessionId,
-                        @Param("ragMode") String ragMode,
+                         @Param("ragMode") String ragMode,
+                         @Param("ragInvocationMode") String ragInvocationMode,
                         @Param("enabled") boolean enabled,
                         @Param("expectedRevision") long expectedRevision);
 

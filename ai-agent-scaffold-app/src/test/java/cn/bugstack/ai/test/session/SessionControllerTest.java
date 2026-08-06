@@ -97,7 +97,7 @@ public class SessionControllerTest {
         request.setMode("MANUAL");
         request.setSelectedBindingIds(List.of("binding-1"));
         request.setExpectedRevision(2L);
-        when(ragSettingService.update("tenant-1", "user-1", "session-1", "MANUAL", null,
+        when(ragSettingService.update("tenant-1", "user-1", "session-1", "MANUAL", null, null,
                 List.of("binding-1"), 2L)).thenReturn(new SessionRagSettingEntity(
                 "session-1", true, SessionRagMode.MANUAL, 3L, true,
                 RagBindingTargetType.AGENT, "agent-1", List.of("binding-1"),
@@ -111,7 +111,7 @@ public class SessionControllerTest {
         assertEquals("MANUAL", response.getData().mode());
         assertEquals(3L, response.getData().revision());
         assertEquals("binding-1", response.getData().eligibleBindings().get(0).bindingId());
-        verify(ragSettingService).update("tenant-1", "user-1", "session-1", "MANUAL", null,
+        verify(ragSettingService).update("tenant-1", "user-1", "session-1", "MANUAL", null, null,
                 List.of("binding-1"), 2L);
     }
 }

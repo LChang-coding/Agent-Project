@@ -6,6 +6,7 @@ import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.model.entity.CreateSessionCommandEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
+import cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
@@ -35,6 +36,7 @@ public class SessionDomainTest {
         Assert.assertEquals("session_1", session.getSessionId());
         Assert.assertEquals("agent", session.getSourceType());
         Assert.assertEquals(SessionRagMode.OFF.name(), session.getRagMode());
+        Assert.assertEquals(RagInvocationMode.AUTO_CONTEXT.name(), session.getRagInvocationMode());
         Assert.assertEquals(Long.valueOf(0L), session.getRagRevision());
         Assert.assertEquals(Integer.valueOf(1), userMessage.getSequenceNo());
         Assert.assertEquals(Integer.valueOf(2), assistantMessage.getSequenceNo());
@@ -72,6 +74,19 @@ public class SessionDomainTest {
         Assert.assertEquals(SessionRagMode.AUTO.name(), updated.getRagMode());
         Assert.assertEquals(Long.valueOf(1L), updated.getRagRevision());
         Assert.assertTrue(repository.querySession("tenant_1", "user_1", "session_1").getRagEnabled());
+    }
+
+    @Test
+    public void shouldKeepCurrentInvocationModeWhenLegacyClientOmitsIt() {
+        FakeSessionRepository repository = new FakeSessionRepository();
+        SessionDomain sessionDomain = new SessionDomain(repository);
+        ChatSessionEntity session = sessionDomain.createSession(createSessionCommand());
+        session.setRagInvocationMode(RagInvocationMode.AGENT_TOOL.name());
+
+        ChatSessionEntity updated = sessionDomain.updateRagPolicy(
+                "tenant_1", "user_1", "session_1", SessionRagMode.AUTO, 0L);
+
+        Assert.assertEquals(RagInvocationMode.AGENT_TOOL.name(), updated.getRagInvocationMode());
     }
 
     @Test
@@ -172,11 +187,12 @@ public class SessionDomainTest {
 
         @Override
         public int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
-                                   boolean enabled, long expectedRevision) {
+                                   String ragInvocationMode, boolean enabled, long expectedRevision) {
             ChatSessionEntity session = querySession(tenantId, userId, sessionId);
             if (session == null || !Long.valueOf(expectedRevision).equals(session.getRagRevision())) return 0;
             session.setRagEnabled(enabled);
             session.setRagMode(ragMode);
+            session.setRagInvocationMode(ragInvocationMode);
             session.setRagRevision(expectedRevision + 1);
             return 1;
         }

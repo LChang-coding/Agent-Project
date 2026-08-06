@@ -7,6 +7,11 @@ export type WorkflowEventType =
   | 'NODE_COMPLETED'
   | 'NODE_FAILED'
   | 'NODE_CANCELLED'
+  | 'TOOL_CALL_STARTED'
+  | 'TOOL_CALL_COMPLETED'
+  | 'TOOL_CALL_FAILED'
+  | 'ROUTE_REPAIR_STARTED'
+  | 'ROUTE_REPAIR_COMPLETED'
   | 'ROUTE_DECIDED'
   | 'FINAL_ANSWER_DELTA'
   | 'FINAL_ANSWER_COMPLETED'
@@ -77,10 +82,40 @@ export interface WorkflowNodeExecutionView {
   output: string;
   routeTargetNodeId?: string;
   routeStrategy?: string;
+  routeKey?: string;
+  routeTargetNodeName?: string;
+  routeSource?: string;
+  routeReason?: string;
+  routeFunctionCallId?: string;
+  routeCostMs?: number;
+  routeCategory?: 'DEFAULT' | 'FAILURE' | 'BUSINESS';
+  routeRepairStatus?: 'running' | 'completed';
+  routeRepairRouteKey?: string;
+  toolCalls: WorkflowToolCallView[];
   totalTokens?: number;
   errorMessage?: string;
   startedAt: string;
   finishedAt?: string;
+}
+
+export interface WorkflowToolCallView {
+  functionCallId: string;
+  toolCode: string;
+  displayName: string;
+  status: 'running' | 'completed' | 'failed';
+  startedAt: string;
+  finishedAt?: string;
+  success?: boolean;
+  costMs?: number;
+  retrievalId?: string;
+  hits?: number;
+  citations?: number;
+  tokens?: number;
+  degraded?: boolean;
+  routeKey?: string;
+  reason?: string;
+  errorCode?: string;
+  retryable?: boolean;
 }
 
 export interface WorkflowRunViewState {

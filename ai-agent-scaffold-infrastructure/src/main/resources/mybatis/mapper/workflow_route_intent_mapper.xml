@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IWorkflowRouteIntentDao">
+    <resultMap id="WorkflowRouteIntentMap" type="cn.bugstack.ai.infrastructure.dao.po.WorkflowRouteIntentPO">
+        <result column="tenant_id" property="tenantId"/><result column="user_id" property="userId"/>
+        <result column="run_id" property="runId"/><result column="node_execution_id" property="nodeExecutionId"/>
+        <result column="workflow_id" property="workflowId"/><result column="workflow_version" property="workflowVersion"/>
+        <result column="definition_hash" property="definitionHash"/><result column="node_id" property="nodeId"/>
+        <result column="route_key" property="routeKey"/><result column="normalized_route_key" property="normalizedRouteKey"/>
+        <result column="resolved_edge_id" property="resolvedEdgeId"/>
+        <result column="resolved_target_node_id" property="resolvedTargetNodeId"/>
+        <result column="reason" property="reason"/><result column="function_call_id" property="functionCallId"/>
+        <result column="source" property="source"/><result column="status" property="status"/>
+        <result column="trace_id" property="traceId"/><result column="consumed_at" property="consumedAt"/>
+    </resultMap>
+    <sql id="columns">tenant_id, user_id, run_id, node_execution_id, workflow_id, workflow_version,
+        definition_hash, node_id, route_key, normalized_route_key, resolved_edge_id, resolved_target_node_id,
+        reason, function_call_id, source, status, trace_id, consumed_at</sql>
+    <insert id="insertIgnore" parameterType="cn.bugstack.ai.infrastructure.dao.po.WorkflowRouteIntentPO">
+        INSERT IGNORE INTO workflow_route_intent (<include refid="columns"/>) VALUES
+        (#{tenantId}, #{userId}, #{runId}, #{nodeExecutionId}, #{workflowId}, #{workflowVersion},
+         #{definitionHash}, #{nodeId}, #{routeKey}, #{normalizedRouteKey}, #{resolvedEdgeId},
+         #{resolvedTargetNodeId}, #{reason}, #{functionCallId}, #{source}, #{status}, #{traceId}, #{consumedAt})
+    </insert>
+    <select id="queryByNode" resultMap="WorkflowRouteIntentMap">
+        SELECT <include refid="columns"/> FROM workflow_route_intent
+        WHERE tenant_id = #{tenantId} AND run_id = #{runId} AND node_execution_id = #{nodeExecutionId}
+          AND deleted = 0 LIMIT 1
+    </select>
+    <select id="queryByFunctionCall" resultMap="WorkflowRouteIntentMap">
+        SELECT <include refid="columns"/> FROM workflow_route_intent
+        WHERE tenant_id = #{tenantId} AND function_call_id = #{functionCallId} AND deleted = 0 LIMIT 1
+    </select>
+    <update id="consume">
+        UPDATE workflow_route_intent SET status = 'CONSUMED', consumed_at = #{consumedAt}
+        WHERE tenant_id = #{tenantId} AND run_id = #{runId} AND node_execution_id = #{nodeExecutionId}
+          AND status = 'PENDING' AND status = #{expectedStatus} AND deleted = 0
+    </update>
+</mapper>

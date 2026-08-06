@@ -10,6 +10,7 @@ import cn.bugstack.ai.domain.usage.model.ModelUsageSummaryEntity;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IIntelligentWorkflowRunRepository;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowExecutionAuditRepository;
+import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowRouteIntentRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.IntelligentWorkflowRunEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.IntelligentWorkflowStartCommandEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowDagPlanEntity;
@@ -50,6 +51,7 @@ public class IntelligentWorkflowRuntimeServiceTest {
         ModelUsageService usage = mock(ModelUsageService.class);
         WorkflowInvocationGuardService guard = mock(WorkflowInvocationGuardService.class);
         IWorkflowExecutionAuditRepository audit = mock(IWorkflowExecutionAuditRepository.class);
+        IWorkflowRouteIntentRepository routeIntents = mock(IWorkflowRouteIntentRepository.class);
         InMemoryRunRepository runs = new InMemoryRunRepository();
         WorkflowRuntimeEntity runtime = runtime();
         ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant_1").userId("user_1").sessionId("session_1")
@@ -62,7 +64,7 @@ public class IntelligentWorkflowRuntimeServiceTest {
         when(runControl.appendUserMessage(eq("tenant_1"), eq("user_1"), eq("run_1"), eq("请审核"),
                 eq("trace_root_1234"), any())).thenReturn(RunMessageBindingEntity.builder().run(run)
                 .message(ChatMessageEntity.builder().sequenceNo(7).build()).build());
-        when(chatService.invokeCompiledWorkflowNode(any(), eq(run), eq("session_1"), eq("wf_1"), anyString(),
+        when(chatService.invokeCompiledWorkflowNode(any(), any(), eq(run), anyString(), eq(false), eq("session_1"), eq("wf_1"), anyString(),
                 eq("trace_root_1234"), eq("member"), eq(7), anyString()))
                 .thenReturn(WorkflowNodeInvocationResultEntity.builder().output("审核通过").evidence(List.of()).build());
         when(usage.summarizeSession("tenant_1", "user_1", "session_1", "run_1"))
@@ -73,7 +75,7 @@ public class IntelligentWorkflowRuntimeServiceTest {
         when(guard.register(eq(invocation), eq("user_1"))).thenReturn(true);
 
         IntelligentWorkflowRuntimeService service = new IntelligentWorkflowRuntimeService(workflowService, chatService,
-                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit,
+                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit, routeIntents,
                 new DirectExecutorService(), new ObjectMapper());
 
         IntelligentWorkflowRunEntity result = service.start(IntelligentWorkflowStartCommandEntity.builder()
@@ -101,13 +103,14 @@ public class IntelligentWorkflowRuntimeServiceTest {
         ModelUsageService usage = mock(ModelUsageService.class);
         WorkflowInvocationGuardService guard = mock(WorkflowInvocationGuardService.class);
         IWorkflowExecutionAuditRepository audit = mock(IWorkflowExecutionAuditRepository.class);
+        IWorkflowRouteIntentRepository routeIntents = mock(IWorkflowRouteIntentRepository.class);
         InMemoryRunRepository runs = new InMemoryRunRepository();
         runs.insert(IntelligentWorkflowRunEntity.builder().tenantId("tenant_1").userId("user_1").runId("run_1")
                 .workflowId("wf_1").workflowVersion(1).traceId("trace_root_1234").status("RUNNING")
                 .currentNodeId("review").executedSteps(0).usedTokens(0L).revision(0L).build());
         when(audit.cancelRunningNodes(eq("tenant_1"), eq("run_1"), any())).thenReturn(1);
         IntelligentWorkflowRuntimeService service = new IntelligentWorkflowRuntimeService(workflowService, chatService,
-                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit,
+                runControl, runs, events, new IntelligentWorkflowRouter(), usage, guard, audit, routeIntents,
                 new DirectExecutorService(), new ObjectMapper());
         ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant_1").userId("user_1").sessionId("session_1")
                 .runId("run_1").traceId("trace_root_1234").status(RunStatus.CANCELLED).build();

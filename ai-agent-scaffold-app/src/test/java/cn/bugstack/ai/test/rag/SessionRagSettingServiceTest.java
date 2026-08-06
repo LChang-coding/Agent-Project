@@ -38,6 +38,8 @@ public class SessionRagSettingServiceTest {
         when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", null)).thenReturn(session);
         when(sessionDomain.updateRagPolicy("tenant-1", "user-1", "session-1",
                 SessionRagMode.AUTO, null)).thenReturn(session);
+        when(sessionDomain.updateRagPolicy("tenant-1", "user-1", "session-1",
+                SessionRagMode.AUTO, null, null)).thenReturn(session);
         when(repository.listBindings("tenant-1", RagBindingTargetType.AGENT, "agent-1"))
                 .thenReturn(List.of(binding(RagBindingTargetType.AGENT, "agent-1")));
         stubUsableBinding(repository);
@@ -51,7 +53,7 @@ public class SessionRagSettingServiceTest {
         Assert.assertTrue(result.bindingConfigured());
         Assert.assertEquals(RagBindingTargetType.AGENT, result.targetType());
         verify(sessionDomain).updateRagPolicy("tenant-1", "user-1", "session-1",
-                SessionRagMode.AUTO, null);
+                SessionRagMode.AUTO, null, null);
         verify(selections).replaceSelections("tenant-1", "user-1", "session-1",
                 RagBindingTargetType.AGENT, "agent-1", List.of());
     }
@@ -84,6 +86,8 @@ public class SessionRagSettingServiceTest {
         when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", null)).thenReturn(before);
         when(sessionDomain.updateRagPolicy("tenant-1", "user-1", "session-1",
                 SessionRagMode.MANUAL, 3L)).thenReturn(after);
+        when(sessionDomain.updateRagPolicy("tenant-1", "user-1", "session-1",
+                SessionRagMode.MANUAL, null, 3L)).thenReturn(after);
         when(repository.listBindings("tenant-1", RagBindingTargetType.AGENT, "agent-1"))
                 .thenReturn(List.of(binding(RagBindingTargetType.AGENT, "agent-1")));
         stubUsableBinding(repository);

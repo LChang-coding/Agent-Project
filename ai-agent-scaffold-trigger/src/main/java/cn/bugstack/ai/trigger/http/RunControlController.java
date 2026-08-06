@@ -207,6 +207,8 @@ public class RunControlController {
                 .status(run.getStatus().name().toLowerCase())
                 .contextRevision(run.getCurrentContextRevision())
                 .successorRunId(run.getSuccessorRunId())
+                .ragInvocationMode(cn.bugstack.ai.domain.rag.model.valobj.RagInvocationMode
+                        .resolve(run.getRagInvocationMode()).name())
                 .traceId(run.getTraceId())
                 .operationTraceId(TraceContext.ensureTraceId())
                 .build();

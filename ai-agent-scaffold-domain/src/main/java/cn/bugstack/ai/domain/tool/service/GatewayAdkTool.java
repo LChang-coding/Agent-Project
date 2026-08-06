@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -162,6 +163,11 @@ public class GatewayAdkTool extends BaseTool {
         Map<String, Object> input = args == null ? new LinkedHashMap<>() : new LinkedHashMap<>(args);
    // 第二层：重建身份与运行坐标，全部取自 ADK 运行时和服务端回退值，与模型给的参数完全隔离。
         ToolInvokeContextEntity context = invokeContext(toolContext);
+        if (blank(context.getFunctionCallId())) {
+            String functionCallId = "server_call_" + UUID.randomUUID();
+            context.setFunctionCallId(functionCallId);
+            if (toolContext != null) toolContext.functionCallId(functionCallId);
+        }
  // 第三层：身份不全就不执行。返回说明而不是抛异常，让模型能自行调整而不是整轮对话崩掉。
         if (blank(context.getTenantId()) || blank(context.getUserId())) {
         // 文案会进入模型的下一轮提示词，所以只说结论不带内部细节。
@@ -208,6 +214,21 @@ public class GatewayAdkTool extends BaseTool {
                 .contextRevision(defaultLong(longValue(state.get(ToolRuntimeContextKeys.CONTEXT_REVISION)), fallbackContext.getContextRevision()))
                 .functionCallId(toolContext.functionCallId().orElse(null))
                 .traceId(defaultString(defaultString(stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID)), fallbackContext.getTraceId()), TraceContext.currentOrNewTraceId()))
+                .ragInvocationMode(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)), fallbackContext.getRagInvocationMode()))
+                .ragMode(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_MODE)), fallbackContext.getRagMode()))
+                .ragEvidenceInvocationId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)), fallbackContext.getRagEvidenceInvocationId()))
+                .ragTargetType(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)), fallbackContext.getRagTargetType()))
+                .ragTargetId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_ID)), fallbackContext.getRagTargetId()))
+                .ragBindingIds(defaultList(stringList(state.get(ToolRuntimeContextKeys.RAG_BINDING_IDS)), fallbackContext.getRagBindingIds()))
+                .workflowKind(defaultString(stringValue(state.get(ToolRuntimeContextKeys.WORKFLOW_KIND)), fallbackContext.getWorkflowKind()))
+                .routingProtocolVersion(defaultString(stringValue(state.get(ToolRuntimeContextKeys.ROUTING_PROTOCOL_VERSION)), fallbackContext.getRoutingProtocolVersion()))
+                .terminalNode(defaultBoolean(booleanValue(state.get(ToolRuntimeContextKeys.TERMINAL_NODE)), fallbackContext.getTerminalNode()))
+                .routeDescriptors(defaultList(routeDescriptors(state.get(ToolRuntimeContextKeys.ROUTE_DESCRIPTORS)), fallbackContext.getRouteDescriptors()))
+                .nodeExecutionId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.NODE_EXECUTION_ID)), fallbackContext.getNodeExecutionId()))
+                .sourceNodeId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.SOURCE_NODE_ID)), fallbackContext.getSourceNodeId()))
+                .definitionHash(defaultString(stringValue(state.get(ToolRuntimeContextKeys.DEFINITION_HASH)), fallbackContext.getDefinitionHash()))
+                .workflowVersion(defaultString(stringValue(state.get(ToolRuntimeContextKeys.WORKFLOW_VERSION)), fallbackContext.getWorkflowVersion()))
+                .routeRepairOnly(defaultBoolean(booleanValue(state.get(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY)), fallbackContext.getRouteRepairOnly()))
                 .build();
     }
 
@@ -232,6 +253,21 @@ public class GatewayAdkTool extends BaseTool {
                 .contextRevision(fallbackContext.getContextRevision())
                 .functionCallId(fallbackContext.getFunctionCallId())
                 .traceId(defaultString(fallbackContext.getTraceId(), TraceContext.currentOrNewTraceId()))
+                .ragInvocationMode(fallbackContext.getRagInvocationMode())
+                .ragMode(fallbackContext.getRagMode())
+                .ragEvidenceInvocationId(fallbackContext.getRagEvidenceInvocationId())
+                .ragTargetType(fallbackContext.getRagTargetType())
+                .ragTargetId(fallbackContext.getRagTargetId())
+                .ragBindingIds(copyList(fallbackContext.getRagBindingIds()))
+                .workflowKind(fallbackContext.getWorkflowKind())
+                .routingProtocolVersion(fallbackContext.getRoutingProtocolVersion())
+                .terminalNode(fallbackContext.getTerminalNode())
+                .routeDescriptors(copyList(fallbackContext.getRouteDescriptors()))
+                .nodeExecutionId(fallbackContext.getNodeExecutionId())
+                .sourceNodeId(fallbackContext.getSourceNodeId())
+                .definitionHash(fallbackContext.getDefinitionHash())
+                .workflowVersion(fallbackContext.getWorkflowVersion())
+                .routeRepairOnly(fallbackContext.getRouteRepairOnly())
                 .build();
     }
 
@@ -267,6 +303,9 @@ public class GatewayAdkTool extends BaseTool {
      * 这里的声明只负责把期望说清楚。</p>
      */
     private static Schema parameterSchema(ToolCatalogEntity tool) {
+        if (ToolType.PLATFORM.equals(tool.getToolType())) {
+            return platformSchema(tool.getSchemaJson());
+        }
         // Skill 只收任务文本；MCP 强制要求远程工具名和 JSON 参数。
         Map<String, Schema> properties = new LinkedHashMap<>();
      // Skill 分支：只声明一个可选的任务描述字段。
@@ -315,7 +354,14 @@ public class GatewayAdkTool extends BaseTool {
      * 实践中编码远短于这个长度，但值得知道这个边界。</p>
    */
     private static String toolName(ToolCatalogEntity tool) {
-      // 规范为 ADK 合法且不超过 64 字符的稳定函数名。
+        if (ToolType.PLATFORM.equals(tool.getToolType())) {
+            String name = tool.getFunctionName();
+            if (name == null || !name.matches("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")) {
+                throw new IllegalArgumentException("平台工具函数名不合法");
+            }
+            return name;
+        }
+       // 规范为 ADK 合法且不超过 64 字符的稳定函数名。
         String prefix = ToolType.MCP.equals(tool.getToolType()) ? "mcp_" : "skill_";
      // 优先用可读的工具编码，没有编码才退回用编号，让模型看到的名字尽量有意义。
         String raw = defaultString(tool.getToolCode(), tool.getToolId());
@@ -347,6 +393,9 @@ public class GatewayAdkTool extends BaseTool {
  * 那些内容含有外部系统凭证，一旦进入描述就等于交给了模型，模型可能在回答里把它复述给用户。</p>
      */
     private static String toolDescription(ToolCatalogEntity tool) {
+        if (ToolType.PLATFORM.equals(tool.getToolType())) {
+            return defaultString(tool.getDescription(), "平台内置工具。");
+        }
   // 描述中附带已发布 MCP 工具清单，但限制总长度。
         String typeName = ToolType.MCP.equals(tool.getToolType()) ? "MCP" : "Skill";
     // 先拼「类型 + 名称 + 用途」；用途缺失时给一句兜底说明，避免描述里出现空白让模型无法判断。
@@ -359,6 +408,56 @@ public class GatewayAdkTool extends BaseTool {
         }
         // 卡总长度：描述每轮都会发给模型，不限长会把对话历史挤出上下文窗口。
         return description.length() > MAX_DESCRIPTION_LENGTH ? description.substring(0, MAX_DESCRIPTION_LENGTH) : description;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Schema platformSchema(String schemaJson) {
+        try {
+            Map<String, Object> root = OBJECT_MAPPER.readValue(schemaJson, new TypeReference<>() {});
+            if (!"object".equals(root.get("type")) || !(root.get("properties") instanceof Map<?, ?> properties)) {
+                throw new IllegalArgumentException("平台工具参数 Schema 不合法");
+            }
+            Map<String, Schema> converted = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : properties.entrySet()) {
+                if (!(entry.getValue() instanceof Map<?, ?> definition)) throw new IllegalArgumentException("平台工具参数定义不合法");
+                Type.Known known = switch (String.valueOf(definition.get("type"))) {
+                    case "string" -> Type.Known.STRING;
+                    case "integer" -> Type.Known.INTEGER;
+                    case "number" -> Type.Known.NUMBER;
+                    case "boolean" -> Type.Known.BOOLEAN;
+                    default -> throw new IllegalArgumentException("平台工具参数类型不支持");
+                };
+                Schema.Builder builder = Schema.builder().type(known);
+                if (definition.get("description") != null) builder.description(String.valueOf(definition.get("description")));
+                if (definition.get("enum") instanceof List<?> values) {
+                    builder.enum_(values.stream().map(String::valueOf).toList());
+                }
+                if (definition.get("minLength") != null) builder.minLength(longBoundary(definition.get("minLength"), "minLength"));
+                if (definition.get("maxLength") != null) builder.maxLength(longBoundary(definition.get("maxLength"), "maxLength"));
+                if (definition.get("minimum") != null) builder.minimum(doubleBoundary(definition.get("minimum"), "minimum"));
+                if (definition.get("maximum") != null) builder.maximum(doubleBoundary(definition.get("maximum"), "maximum"));
+                converted.put(String.valueOf(entry.getKey()), builder.build());
+            }
+            List<String> required = root.get("required") instanceof List<?> values
+                    ? values.stream().map(String::valueOf).toList() : List.of();
+            return Schema.builder().type(Type.Known.OBJECT).properties(converted).required(required).build();
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("平台工具参数 Schema 不合法", exception);
+        }
+    }
+
+    private static long longBoundary(Object value, String name) {
+        if (!(value instanceof Number number)) {
+            throw new IllegalArgumentException("平台工具参数 " + name + " 必须是数字");
+        }
+        return number.longValue();
+    }
+
+    private static double doubleBoundary(Object value, String name) {
+        if (!(value instanceof Number number)) {
+            throw new IllegalArgumentException("平台工具参数 " + name + " 必须是数字");
+        }
+        return number.doubleValue();
     }
 
     /**
@@ -471,6 +570,34 @@ public class GatewayAdkTool extends BaseTool {
     private static Long defaultLong(Long value, Long defaultValue) {
         // 只判空引用：0 是合法版本号，不能当成缺失去退回旧值。
         return value == null ? defaultValue : value;
+    }
+
+    private static Boolean booleanValue(Object value) {
+        return value instanceof Boolean result ? result : value == null ? null : Boolean.valueOf(String.valueOf(value));
+    }
+
+    private static List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) return null;
+        return values.stream().filter(item -> item != null).map(String::valueOf)
+                .filter(item -> !item.isBlank()).toList();
+    }
+
+    private static List<PlatformToolResolver.RouteDescriptor> routeDescriptors(Object value) {
+        if (!(value instanceof List<?> values)) return null;
+        return values.stream().filter(PlatformToolResolver.RouteDescriptor.class::isInstance)
+                .map(PlatformToolResolver.RouteDescriptor.class::cast).toList();
+    }
+
+    private static Boolean defaultBoolean(Boolean value, Boolean defaultValue) {
+        return value == null ? defaultValue : value;
+    }
+
+    private static <T> List<T> defaultList(List<T> value, List<T> defaultValue) {
+        return copyList(value == null ? defaultValue : value);
+    }
+
+    private static <T> List<T> copyList(List<T> value) {
+        return value == null ? null : List.copyOf(value);
     }
 
     /**

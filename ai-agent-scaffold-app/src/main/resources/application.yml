@@ -41,6 +41,10 @@ xxl:
       log-retention-days: ${XXL_JOB_EXECUTOR_LOG_RETENTION_DAYS:30}
 
 ai:
+  tools:
+    platform:
+      rag-enabled: ${AI_PLATFORM_RAG_TOOL_ENABLED:true}
+      route-enabled: ${AI_PLATFORM_ROUTE_TOOL_ENABLED:true}
   rag:
     enabled: ${AI_RAG_ENABLED:false}
     qdrant:

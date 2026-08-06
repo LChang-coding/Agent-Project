@@ -16,6 +16,10 @@ import java.util.List;
 @NoArgsConstructor
 public class WorkflowGraphEntity {
 
+    /** 历史定义缺失协议字段时继续使用正文 marker 路由。 */
+    @Builder.Default
+    private String routingProtocolVersion = "MARKER_V1";
+
     /** STATIC 沿用拓扑 DAG；INTELLIGENT 由每个节点完成后动态选择唯一下一跳。 */
     private String workflowKind;
 

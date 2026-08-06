@@ -9,10 +9,12 @@ import cn.bugstack.ai.domain.tool.model.valobj.ToolStatus;
 import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
 import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
 import cn.bugstack.ai.domain.tool.service.support.SkillPackageReader;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -72,6 +74,8 @@ public class ToolGateway {
     private final ToolDispatchAuthorizationService dispatchAuthorizationService;
  /** Skill 包读取器；在条目数、字节数、字符编码三重限额内取出 SKILL.md，挡住压缩炸弹和畸形包。 */
     private final SkillPackageReader skillPackageReader;
+    private final PlatformToolRegistry platformToolRegistry;
+    private final WorkflowEventStreamService workflowEventStreamService;
     /**
      * JSON 工具。只做三件事：把入参序列化成审计文本、把历史输出反序列化用于重放、解析 MCP 参数。
      *
@@ -95,14 +99,28 @@ public class ToolGateway {
     public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
                        SkillPackageReader skillPackageReader) {
-        // 记住对象存储服务，Skill 调用时凭它把已发布的包取回来。
+        this(objectStorageService, mcpProtocolClientSupport, dispatchAuthorizationService, skillPackageReader,
+                new PlatformToolRegistry(), null);
+    }
+
+    public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
+                       ToolDispatchAuthorizationService dispatchAuthorizationService,
+                       SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry) {
+        this(objectStorageService, mcpProtocolClientSupport, dispatchAuthorizationService, skillPackageReader,
+                platformToolRegistry, null);
+    }
+
+    @Autowired
+    public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
+                       ToolDispatchAuthorizationService dispatchAuthorizationService,
+                       SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry,
+                       WorkflowEventStreamService workflowEventStreamService) {
         this.objectStorageService = objectStorageService;
-        // 记住 MCP 协议客户端，MCP 调用时由它负责建连、初始化和错误翻译。
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
-        // 记住分发授权服务，它是产生任何外部副作用之前必须过的那道门禁。
         this.dispatchAuthorizationService = dispatchAuthorizationService;
-        // 记住 Skill 包读取器，由它在限额内解析 ZIP，挡住压缩炸弹。
         this.skillPackageReader = skillPackageReader;
+        this.platformToolRegistry = platformToolRegistry;
+        this.workflowEventStreamService = workflowEventStreamService;
     }
 
   /**
@@ -180,6 +198,7 @@ public class ToolGateway {
                 "completed", System.currentTimeMillis() - claimStarted));
    // 留住这条 started 审计，稍后无论成功还是失败都要凭它回填终态。
         ToolCallLogEntity callLog = claim.getCallLog();
+        publishToolEvent(context, tool, "TOOL_CALL_STARTED", Map.of());
    // 打一条「工具开始执行」的日志，从这一刻起外部副作用随时可能发生。
         AiLog.info(AiLog.tool().callStarted(context.getTenantId(), context.getUserId(), context.getSessionId(),
                 context.getRunId(),
@@ -190,26 +209,28 @@ public class ToolGateway {
             AiLog.info(AiLog.tool().stage(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     context.getRunId(), tool.getToolType(), tool.getToolId(), tool.getToolName(),
                     context.getTraceId(), "runtime_route",
-                    ToolType.SKILL.equals(tool.getToolType()) ? "路由到Skill运行时" : "路由到MCP运行时",
+                    runtimeName(tool.getToolType()),
                     "completed", 0L));
             // 此处是通过授权和幂等门禁后唯一的真实工具执行点。
-            String output = dispatch(tool, input);
+            ToolExecutionResult execution = dispatch(tool, input, context);
    // 算出端到端耗时，写进审计供发现慢工具。
             long costMs = System.currentTimeMillis() - begin;
    // 第四层：把结果闭环写进审计。审计成功后这次调用才真正「有据可查」，重试也能安全重放它。
-            dispatchAuthorizationService.finish(callLog, toJson(Map.of("result", output)),
+            dispatchAuthorizationService.finish(callLog, execution.auditJson(objectMapper),
                     ToolStatus.SUCCESS, null, null, costMs);
+            publishToolEvent(context, tool, "TOOL_CALL_COMPLETED", completedPayload(execution, costMs));
     // 记一条成功日志，含耗时。
             AiLog.info(AiLog.tool().callSuccess(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     context.getRunId(),
                     tool.getToolType(), tool.getToolId(), tool.getToolName(), context.getTraceId(), costMs));
    // 返回固定结构给模型：success 标志 + 结果文本，模型据此继续推理。
-            return Map.of("success", true, "result", output);
+            return Map.of("success", true, "result", execution.modelResult());
         } catch (Exception e) {
         // 工具异常转换为模型结果，并尽力将 started 审计推进为 failed。
             long costMs = System.currentTimeMillis() - begin;
    // 先尽力把审计推进成失败态；这一步自身失败也不能影响下面返回给模型的内容。
             finishFailedSafely(callLog, e, costMs);
+            publishToolEvent(context, tool, "TOOL_CALL_FAILED", failedPayload(e, costMs));
         // 完整异常（含堆栈）只写日志，不返回给模型，避免内部实现细节进入提示词。
             AiLog.error(AiLog.tool().callFailed(context.getTenantId(), context.getUserId(), context.getSessionId(),
                     context.getRunId(),
@@ -243,7 +264,8 @@ public class ToolGateway {
                 Map<String, Object> output = objectMapper.readValue(log.getOutputJson(), new TypeReference<>() {
                 });
     // 取出 result 字段重放；缺字段时给空串，保持返回结构稳定。
-                return Map.of("success", true, "result", String.valueOf(output.getOrDefault("result", "")),
+                Object result = output.containsKey("modelResult") ? output.get("modelResult") : output.getOrDefault("result", "");
+                return Map.of("success", true, "result", result,
                         "replayed", true);
             } catch (Exception ignored) {
    // 解析不了就诚实告知模型，而不是抛异常——本次调用其实没有失败，只是拿不到旧结果。
@@ -295,19 +317,82 @@ public class ToolGateway {
      *
      * <p>类型不认识时直接抛异常而不是默认走某一条：默认猜测会让一个配置错误变成一次不该发生的外部调用。</p>
  */
-    private String dispatch(ToolCatalogEntity tool, Map<String, Object> input) {
+    private ToolExecutionResult dispatch(ToolCatalogEntity tool, Map<String, Object> input, ToolInvokeContextEntity context) {
         // Skill 类型：读包取指令文本。
         if (ToolType.SKILL.equals(tool.getToolType())) {
             // 交给 Skill 路径：读出已发布包里的说明书文本，不执行包内任何代码。
-            return invokeSkill(tool, input);
+            return ToolExecutionResult.standard(invokeSkill(tool, input));
         }
         // MCP 类型：连远程服务器真正执行动作。
         if (ToolType.MCP.equals(tool.getToolType())) {
             // 交给 MCP 路径：真的连上外部服务器执行动作，会产生不可撤销的副作用。
-            return invokeMcp(tool, input);
+            return ToolExecutionResult.standard(invokeMcp(tool, input));
+        }
+        if (ToolType.PLATFORM.equals(tool.getToolType())) {
+            requirePlatformContext(context);
+            PlatformToolResult result = platformToolRegistry.dispatch(tool, input, context);
+            if (!result.success()) throw new AppException(platformErrorCode(result.error()), platformErrorMessage(result.error()));
+            return ToolExecutionResult.platform(result.modelResult(), result.auditResult());
         }
  // 既不是 Skill 也不是 MCP，说明数据异常；失败关闭，绝不猜测。
         throw new AppException("TOOL_TYPE_UNSUPPORTED", "工具类型不支持：" + tool.getToolType());
+    }
+
+    private String runtimeName(String type) {
+        if (ToolType.SKILL.equals(type)) return "路由到Skill运行时";
+        if (ToolType.MCP.equals(type)) return "路由到MCP运行时";
+        return "路由到平台工具运行时";
+    }
+
+    private void requirePlatformContext(ToolInvokeContextEntity context) {
+        if (blank(context.getRunId()) || blank(context.getFunctionCallId())) {
+            throw new AppException("PLATFORM_TOOL_CONTEXT_INVALID", "平台工具缺少运行或函数调用上下文");
+        }
+    }
+
+    private void publishToolEvent(ToolInvokeContextEntity context, ToolCatalogEntity tool, String eventType,
+                                  Map<String, Object> details) {
+        if (workflowEventStreamService == null || blank(context.getWorkflowId())
+                || blank(context.getNodeExecutionId())) {
+            return;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>(details);
+        payload.put("toolCode", defaultString(tool.getToolCode(), defaultString(tool.getFunctionName(), tool.getToolId())));
+        payload.put("displayName", defaultString(tool.getToolName(), tool.getToolId()));
+        payload.put("functionCallId", context.getFunctionCallId());
+        payload.put("nodeExecutionId", context.getNodeExecutionId());
+        workflowEventStreamService.publish(context.getTenantId(), context.getUserId(), context.getRunId(),
+                context.getTraceId(), eventType, context.getNodeExecutionId(), null, toJson(payload));
+    }
+
+    private Map<String, Object> completedPayload(ToolExecutionResult execution, long costMs) {
+        Map<String, Object> payload = new LinkedHashMap<>(execution.eventAuditResult());
+        payload.put("success", true);
+        payload.put("costMs", costMs);
+        return payload;
+    }
+
+    private Map<String, Object> failedPayload(Exception error, long costMs) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("errorCode", error instanceof AppException appException
+                ? appException.getCode() : error.getClass().getSimpleName());
+        payload.put("retryable", false);
+        payload.put("costMs", costMs);
+        return payload;
+    }
+
+    private String platformErrorCode(String error) {
+        if (error == null) return "PLATFORM_TOOL_FAILED";
+        int separator = error.indexOf(':');
+        String code = separator < 0 ? error : error.substring(0, separator);
+        return code.matches("[A-Z][A-Z0-9_]*") ? code : "PLATFORM_TOOL_FAILED";
+    }
+
+    private String platformErrorMessage(String error) {
+        if (error == null || error.isBlank()) return "平台工具调用失败";
+        int separator = error.indexOf(':');
+        if (separator < 0 || separator == error.length() - 1) return error;
+        return error.substring(separator + 1);
     }
 
     /**
@@ -696,5 +781,31 @@ public class ToolGateway {
   * 那会把 toolName 这类路由字段一起发给远程，触发远程的参数校验失败。</p>
      */
     private record McpCallCommand(String toolName, Map<String, Object> arguments) {
+    }
+
+    private record ToolExecutionResult(Object modelResult, Map<String, Object> auditResult, boolean platform) {
+
+        private static ToolExecutionResult standard(Object result) {
+            return new ToolExecutionResult(result, Map.of(), false);
+        }
+
+        private static ToolExecutionResult platform(Map<String, Object> modelResult, Map<String, Object> auditResult) {
+            return new ToolExecutionResult(modelResult == null ? Map.of() : modelResult,
+                    auditResult == null ? Map.of() : auditResult, true);
+        }
+
+        private String auditJson(ObjectMapper objectMapper) {
+            try {
+                if (!platform) return objectMapper.writeValueAsString(Map.of("result", modelResult));
+                return objectMapper.writeValueAsString(Map.of("modelResult", modelResult,
+                        "auditResult", auditResult));
+            } catch (Exception ignored) {
+                return "{}";
+            }
+        }
+
+        private Map<String, Object> eventAuditResult() {
+            return platform ? auditResult : Map.of();
+        }
     }
 }
