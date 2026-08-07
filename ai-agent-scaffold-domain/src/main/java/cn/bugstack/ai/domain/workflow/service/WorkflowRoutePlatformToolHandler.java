@@ -9,6 +9,7 @@ import cn.bugstack.ai.domain.tool.service.PlatformToolResult;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowRouteIntentRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRouteIntentEntity;
 import cn.bugstack.ai.domain.workflow.model.valobj.WorkflowRouteIntentStatus;
+import cn.bugstack.ai.domain.run.service.RunControlService;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -26,10 +27,19 @@ public class WorkflowRoutePlatformToolHandler implements PlatformToolHandler {
     private static final Set<String> ALLOWED_INPUTS = Set.of("routeKey", "reason");
 
     private final IWorkflowRouteIntentRepository repository;
+    private final RunControlService runControlService;
 
     public WorkflowRoutePlatformToolHandler(PlatformToolRegistry registry,
                                             IWorkflowRouteIntentRepository repository) {
+        this(registry, repository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowRoutePlatformToolHandler(PlatformToolRegistry registry,
+                                            IWorkflowRouteIntentRepository repository,
+                                            RunControlService runControlService) {
         this.repository = repository;
+        this.runControlService = runControlService;
         registry.register(FUNCTION_NAME, this);
     }
 
@@ -40,6 +50,9 @@ public class WorkflowRoutePlatformToolHandler implements PlatformToolHandler {
         try {
             TrustedContext trusted = trusted(context);
             Selection selection = selection(input, trusted.routeDescriptors);
+            if (runControlService != null) {
+                runControlService.requireExecutable(trusted.tenantId, trusted.userId, trusted.runId, null);
+            }
 
             WorkflowRouteIntentEntity replay = repository.queryByFunctionCall(trusted.tenantId,
                     trusted.functionCallId);

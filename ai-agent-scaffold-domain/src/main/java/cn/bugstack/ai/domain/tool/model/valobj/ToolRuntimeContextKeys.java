@@ -51,6 +51,8 @@ public final class ToolRuntimeContextKeys {
     /** 证据归属编号在 state 中的 key；工作流节点没有 ADK 的 invocationId，需要显式指定一个编号把检索证据挂到这一次模型调用上。 */
     public static final String RAG_EVIDENCE_INVOCATION_ID = "ragEvidenceInvocationId";
     public static final String RAG_INVOCATION_MODE = "ragInvocationMode";
+    public static final String RAG_TOOL_ENABLED = "ragToolEnabled";
+    public static final String WORKFLOW_MCP_IDS = "workflowMcpIds";
     public static final String WORKFLOW_KIND = "workflowKind";
     public static final String ROUTING_PROTOCOL_VERSION = "routingProtocolVersion";
     public static final String TERMINAL_NODE = "terminalNode";

@@ -46,7 +46,7 @@ ai:
       rag-enabled: ${AI_PLATFORM_RAG_TOOL_ENABLED:true}
       route-enabled: ${AI_PLATFORM_ROUTE_TOOL_ENABLED:true}
   rag:
-    enabled: ${AI_RAG_ENABLED:false}
+    enabled: ${AI_RAG_ENABLED:true}
     qdrant:
       endpoint: ${AI_RAG_QDRANT_ENDPOINT:http://127.0.0.1:6333}
       api-key: ${AI_RAG_QDRANT_API_KEY:}

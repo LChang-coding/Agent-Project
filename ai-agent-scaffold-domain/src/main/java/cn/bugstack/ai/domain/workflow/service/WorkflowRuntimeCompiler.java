@@ -109,12 +109,14 @@ public class WorkflowRuntimeCompiler {
                     .description(node.getDescription())
                     .runtimeAgentId(nodeRuntimeAgentId)
                     .runtimeAgentName(nodeRuntimeAgentName)
+                    .mcpIds(node.getMcpIds() == null ? List.of() : List.copyOf(node.getMcpIds()))
                     .modelCode(modelRouter.route(requestModelCode, node.getModelCode(), version.getDefaultModelCode()))
                     .maxIterations(loopIterations(node))
                     .enabledStrategies(node.getEnabledStrategies())
                     .allowedTargetNodeIds(node.getAllowedTargetNodeIds())
                     .defaultTargetNodeId(node.getDefaultTargetNodeId())
                     .routeInstruction(node.getRouteInstruction())
+                    .ragToolEnabled(node.getRagToolEnabled())
                     .maxVisits(safeMaxVisits(node.getMaxVisits()))
                     .terminal(planEdges.stream().noneMatch(edge -> node.getNodeId().equals(edge.getSourceNodeId())))
                     .routeDescriptors(routeDescriptors(node.getNodeId(), planEdges, llmNodeMap))
@@ -620,6 +622,7 @@ public class WorkflowRuntimeCompiler {
             appendHashPart(canonical, node.getAllowedTargetNodeIds());
             appendHashPart(canonical, node.getDefaultTargetNodeId());
             appendHashPart(canonical, node.getRouteInstruction());
+            appendHashPart(canonical, node.getRagToolEnabled());
             appendHashPart(canonical, node.getMaxVisits());
             appendHashPart(canonical, node.getTerminal());
         }

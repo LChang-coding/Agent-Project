@@ -5,6 +5,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
 
 /** Concurrent run-level invocation and context-token budget for model-triggered RAG. */
 @Service
@@ -16,6 +20,10 @@ public class RagToolInvocationBudgetStore {
     private final int maxInvocations;
     private final int maxTokens;
     private final ConcurrentHashMap<Scope, Usage> usages = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Scope, Instant> touchedAt = new ConcurrentHashMap<>();
+    private final Clock clock;
+    private static final Duration ENTRY_TTL = Duration.ofHours(1);
+    private static final int MAX_ENTRIES = 10_000;
 
     @Autowired
     public RagToolInvocationBudgetStore() {
@@ -23,13 +31,19 @@ public class RagToolInvocationBudgetStore {
     }
 
     public RagToolInvocationBudgetStore(int maxInvocations, int maxTokens) {
+        this(maxInvocations, maxTokens, Clock.systemUTC());
+    }
+
+    RagToolInvocationBudgetStore(int maxInvocations, int maxTokens, Clock clock) {
         if (maxInvocations < 1 || maxTokens < 1) throw new IllegalArgumentException("RAG工具预算必须大于0");
         this.maxInvocations = maxInvocations;
         this.maxTokens = maxTokens;
+        this.clock = clock;
     }
 
     public Reservation reserve(String tenantId, String userId, String runId, int requestedTokens) {
         Scope scope = Scope.of(tenantId, userId, runId);
+        cleanupExpired();
         if (requestedTokens < 1 || requestedTokens > maxTokens) {
             throw new BudgetExceededException("请求Token预算超过单Run上限");
         }
@@ -40,10 +54,12 @@ public class RagToolInvocationBudgetStore {
             }
             return new Usage(usage.invocations + 1, usage.consumedTokens + requestedTokens);
         });
+        touchedAt.put(scope, clock.instant());
         return new Reservation(scope, requestedTokens);
     }
 
     public Usage snapshot(String tenantId, String userId, String runId) {
+        cleanupExpired();
         return usages.getOrDefault(Scope.of(tenantId, userId, runId), new Usage(0, 0));
     }
 
@@ -64,6 +80,7 @@ public class RagToolInvocationBudgetStore {
             if (!closed.compareAndSet(false, true)) return;
             usages.computeIfPresent(scope, (key, usage) ->
                     new Usage(usage.invocations, usage.consumedTokens - reservedTokens + actualTokens));
+            touchedAt.put(scope, clock.instant());
         }
 
         public void rollback() {
@@ -72,10 +89,29 @@ public class RagToolInvocationBudgetStore {
                 Usage rolledBack = new Usage(usage.invocations - 1, usage.consumedTokens - reservedTokens);
                 return rolledBack.invocations == 0 && rolledBack.consumedTokens == 0 ? null : rolledBack;
             });
+            touchedAt.put(scope, clock.instant());
         }
     }
 
     public record Usage(int invocations, int consumedTokens) {
+    }
+
+    /** 清理过期或超量的本机预算快照，避免长时间运行导致无界内存增长。 */
+    private void cleanupExpired() {
+        Instant cutoff = clock.instant().minus(ENTRY_TTL);
+        touchedAt.forEach((scope, touched) -> {
+            if (touched.isBefore(cutoff)) {
+                touchedAt.remove(scope, touched);
+                usages.remove(scope);
+            }
+        });
+        if (touchedAt.size() > MAX_ENTRIES) {
+            touchedAt.entrySet().stream().sorted(Map.Entry.comparingByValue())
+                    .limit(touchedAt.size() - MAX_ENTRIES).forEach(entry -> {
+                        touchedAt.remove(entry.getKey(), entry.getValue());
+                        usages.remove(entry.getKey());
+                    });
+        }
     }
 
     private record Scope(String tenantId, String userId, String runId) {

@@ -37,6 +37,18 @@ public class PlatformToolResolverTest {
     }
 
     @Test
+    public void doesNotExposeRagWhenCurrentNodeExplicitlyDisablesIt() {
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .ragInvocationMode("AGENT_TOOL").ragMode("HYBRID").ragToolEnabled(false)
+                .ragTargetType("WORKFLOW").ragTargetId("wf")
+                .build();
+
+        Assert.assertTrue(new PlatformToolResolver(true, true).resolve(context).stream()
+                .noneMatch(tool -> "rag_retrieve".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getFunctionName())));
+    }
+
+    @Test
     public void exposesRouteToolOnlyFromFrozenToolV2NonTerminalDescriptors() {
         ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
                 .tenantId("tenant").userId("user").runId("run").functionCallId("call")

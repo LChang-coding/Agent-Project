@@ -1513,6 +1513,11 @@ public class ChatService implements IChatService {
             putStateIfPresent(state, ToolRuntimeContextKeys.DEFINITION_HASH, plan.getDefinitionHash());
             if (plan.getVersion() != null) state.put(ToolRuntimeContextKeys.WORKFLOW_VERSION, plan.getVersion());
             state.put(ToolRuntimeContextKeys.TERMINAL_NODE, Boolean.TRUE.equals(node.getTerminal()));
+            if (node.getRagToolEnabled() != null) {
+                state.put(ToolRuntimeContextKeys.RAG_TOOL_ENABLED, node.getRagToolEnabled());
+            }
+            state.put(ToolRuntimeContextKeys.WORKFLOW_MCP_IDS,
+                    node.getMcpIds() == null ? List.of() : List.copyOf(node.getMcpIds()));
             state.put(ToolRuntimeContextKeys.ROUTE_DESCRIPTORS, platformRouteDescriptors(node));
             state.put(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY, routeRepairOnly);
         }

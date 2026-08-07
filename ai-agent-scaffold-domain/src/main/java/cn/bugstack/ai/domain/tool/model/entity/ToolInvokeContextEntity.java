@@ -50,6 +50,12 @@ public class ToolInvokeContextEntity {
     /** 入口全链路追踪编号；从 HTTP 入口一路带到工具审计日志，用户报障时凭它把前端、编排、工具三段日志串起来。 */
     private String traceId;
     private String ragInvocationMode;
+
+    /** 节点级 RAG 工具开关；null 表示继承运行级设置。 */
+    private Boolean ragToolEnabled;
+
+    /** 当前工作流节点允许使用的 MCP 工具 ID；null 表示非工作流兼容上下文。 */
+    private List<String> workflowMcpIds;
     private String ragMode;
     private String ragEvidenceInvocationId;
     private String ragTargetType;

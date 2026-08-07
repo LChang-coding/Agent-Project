@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.service.PlatformToolHandler;
 import cn.bugstack.ai.domain.tool.service.PlatformToolRegistry;
 import cn.bugstack.ai.domain.tool.service.PlatformToolResult;
+import cn.bugstack.ai.domain.run.service.RunControlService;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -29,16 +30,28 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
     private final RagRetrievalPresentationService presentationService;
     private final RagInvocationEvidenceStore evidenceStore;
     private final RagToolInvocationBudgetStore budgetStore;
+    private final RunControlService runControlService;
 
     public RagRetrievePlatformToolHandler(PlatformToolRegistry registry,
                                           RagRetrievalService retrievalService,
                                           RagRetrievalPresentationService presentationService,
                                           RagInvocationEvidenceStore evidenceStore,
                                           RagToolInvocationBudgetStore budgetStore) {
+        this(registry, retrievalService, presentationService, evidenceStore, budgetStore, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RagRetrievePlatformToolHandler(PlatformToolRegistry registry,
+                                          RagRetrievalService retrievalService,
+                                          RagRetrievalPresentationService presentationService,
+                                          RagInvocationEvidenceStore evidenceStore,
+                                          RagToolInvocationBudgetStore budgetStore,
+                                          RunControlService runControlService) {
         this.retrievalService = retrievalService;
         this.presentationService = presentationService;
         this.evidenceStore = evidenceStore;
         this.budgetStore = budgetStore;
+        this.runControlService = runControlService;
         registry.register(FUNCTION_NAME, this);
     }
 
@@ -58,6 +71,9 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
             RagRetrievalPresentationService.Presentation presentation = presentationService.present(retrieved);
             if (retrieved.estimatedTokenCount() > maxContextTokens) {
                 throw new IllegalArgumentException("检索结果Token超过预留预算");
+            }
+            if (runControlService != null) {
+                runControlService.requireExecutable(trusted.tenantId, trusted.userId, trusted.runId, null);
             }
             evidenceStore.record(trusted.tenantId, trusted.userId, trusted.sessionId, trusted.runId,
                     trusted.evidenceInvocationId, List.of(presentation.evidence()));

@@ -118,6 +118,8 @@ public class GatewayToolset implements BaseToolset {
                 .contextRevision(longValue(readonlyContext.state().get(ToolRuntimeContextKeys.CONTEXT_REVISION)))
                 .traceId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TRACE_ID)), TraceContext.currentOrNewTraceId()))
                 .ragInvocationMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)))
+                .ragToolEnabled(booleanValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TOOL_ENABLED)))
+                .workflowMcpIds(stringList(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_MCP_IDS)))
                 .ragMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_MODE)))
                 .ragEvidenceInvocationId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)))
                 .ragTargetType(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
@@ -135,6 +137,10 @@ public class GatewayToolset implements BaseToolset {
                 .build();
         // 每轮重新查询，发布、停用和权限变化无需重装配 Agent。
         List<ToolCatalogEntity> tools = new ArrayList<>(toolResolver.resolve(context));
+        if (fallbackContext.getWorkflowKind() != null && fallbackContext.getWorkflowMcpIds() != null) {
+            Set<String> allowedMcpIds = new HashSet<>(fallbackContext.getWorkflowMcpIds());
+            tools.removeIf(tool -> ToolType.MCP.equals(tool.getToolType()) && !allowedMcpIds.contains(tool.getToolId()));
+        }
         tools.addAll(platformToolResolver.resolve(fallbackContext));
         if (Boolean.TRUE.equals(fallbackContext.getRouteRepairOnly())) {
             tools.removeIf(tool -> !ToolType.PLATFORM.equals(tool.getToolType())

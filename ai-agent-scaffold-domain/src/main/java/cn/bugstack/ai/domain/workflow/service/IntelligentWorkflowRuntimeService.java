@@ -18,6 +18,7 @@ import cn.bugstack.ai.domain.workflow.model.entity.WorkflowInvocationEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowNodeExecutionEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRouteDecisionEntity;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRouteIntentEntity;
+import cn.bugstack.ai.domain.rag.service.RagToolCapabilityService;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.TraceContext;
@@ -28,6 +29,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -58,6 +61,9 @@ public class IntelligentWorkflowRuntimeService {
     private final IWorkflowRouteIntentRepository routeIntentRepository;
     private final ExecutorService coordinatorExecutor;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transitionTransaction;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RagToolCapabilityService ragToolCapabilityService;
 
     public IntelligentWorkflowRuntimeService(IWorkflowService workflowService,
                                              IChatService chatService,
@@ -67,10 +73,30 @@ public class IntelligentWorkflowRuntimeService {
                                              IntelligentWorkflowRouter router,
                                              ModelUsageService modelUsageService,
                                               WorkflowInvocationGuardService invocationGuardService,
-                                              IWorkflowExecutionAuditRepository executionAuditRepository,
-                                              IWorkflowRouteIntentRepository routeIntentRepository,
-                                              @Qualifier("workflowCoordinatorExecutor") ExecutorService coordinatorExecutor,
+                                             IWorkflowExecutionAuditRepository executionAuditRepository,
+                                             IWorkflowRouteIntentRepository routeIntentRepository,
+                                             @Qualifier("workflowCoordinatorExecutor") ExecutorService coordinatorExecutor,
                                              ObjectMapper objectMapper) {
+        this(workflowService, chatService, runControlService, intelligentRunRepository, eventStreamService, router,
+                modelUsageService, invocationGuardService, executionAuditRepository, routeIntentRepository,
+                coordinatorExecutor, objectMapper, null);
+    }
+
+    /** 生产运行时使用事务模板把一次路由推进作为单个持久化闭环。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    public IntelligentWorkflowRuntimeService(IWorkflowService workflowService,
+                                             IChatService chatService,
+                                             RunControlService runControlService,
+                                             IIntelligentWorkflowRunRepository intelligentRunRepository,
+                                             WorkflowEventStreamService eventStreamService,
+                                             IntelligentWorkflowRouter router,
+                                             ModelUsageService modelUsageService,
+                                             WorkflowInvocationGuardService invocationGuardService,
+                                             IWorkflowExecutionAuditRepository executionAuditRepository,
+                                             IWorkflowRouteIntentRepository routeIntentRepository,
+                                             @Qualifier("workflowCoordinatorExecutor") ExecutorService coordinatorExecutor,
+                                             ObjectMapper objectMapper,
+                                             PlatformTransactionManager transactionManager) {
         this.workflowService = workflowService;
         this.chatService = chatService;
         this.runControlService = runControlService;
@@ -83,6 +109,7 @@ public class IntelligentWorkflowRuntimeService {
         this.routeIntentRepository = routeIntentRepository;
         this.coordinatorExecutor = coordinatorExecutor;
         this.objectMapper = objectMapper;
+        this.transitionTransaction = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
     /** 事务内创建 chat_run、扩展状态、用户消息和首事件；提交后才启动后台执行。 */
@@ -162,7 +189,8 @@ public class IntelligentWorkflowRuntimeService {
                         Map.of("nodeName", safe(node.getNodeName()), "executionIndex", executionIndex, "attempt", 1));
                 boolean toolV2 = "TOOL_V2".equalsIgnoreCase(plan.getRoutingProtocolVersion());
                 String prompt = intelligentPrompt(userMessage, previousOutput, node.getRouteInstruction(),
-                        routeProtocol(outgoing.getOrDefault(currentNodeId, List.of()), nodes), executionIndex, toolV2);
+                        routeProtocol(outgoing.getOrDefault(currentNodeId, List.of()), nodes), executionIndex, toolV2,
+                        ragGuidance(run, node));
                 WorkflowInvocationEntity invocation = invocationGuardService.modelInvocation(run, nodeExecutionId);
                 if (!invocationGuardService.register(invocation, run.getUserId())) {
                     throw new AppException("WORKFLOW_INVOCATION_DUPLICATE", "节点模型调用已登记，拒绝重复执行");
@@ -188,15 +216,24 @@ public class IntelligentWorkflowRuntimeService {
                         AiLog.error(AiLog.workflow().nodeFailed(run.getTenantId(), run.getUserId(), sessionId, run.getRunId(),
                                 runtime.getWorkflowId(), currentNodeId, executionIndex, safeMaxVisits(node.getMaxVisits()),
                                 elapsedMs(nodeStartedNanos), invocationError));
+                        publish(run, "NODE_FAILED", nodeExecutionId, currentNodeId, Map.of(
+                                "nodeName", safe(node.getNodeName()),
+                                "errorCode", errorCode(invocationError),
+                                "message", safe(invocationError.getMessage()),
+                                "executionIndex", executionIndex));
                     }
                     if (cancelledDuringInvocation) throw invocationError;
                     IntelligentWorkflowRouter.RouteDecision failure = router.decide(
                             new IntelligentWorkflowRouter.RouteContext(false, true, "", null, null,
                                     steps, plan.getMaxSteps(), 0L, plan.getTokenBudget()), node,
                             outgoing.getOrDefault(currentNodeId, List.of()));
-                    persistDecision(run, runtime, nodeExecutionId, currentNodeId, nodes, failure,
-                            null, "RUNTIME_FAILURE");
-                    updateState(run, failure.targetNodeId(), "RUNNING", steps, 0L, null);
+                    final String failedNodeId = currentNodeId;
+                    final int failedSteps = steps;
+                    inTransition(() -> {
+                        persistDecision(run, runtime, nodeExecutionId, failedNodeId, nodes, failure,
+                                null, "RUNTIME_FAILURE");
+                        updateState(run, failure.targetNodeId(), "RUNNING", failedSteps, 0L, null);
+                    });
                     currentNodeId = failure.targetNodeId();
                     continue;
                 }
@@ -232,11 +269,16 @@ public class IntelligentWorkflowRuntimeService {
                                 new IntelligentWorkflowRouter.RouteContext(false, true, output, null, null,
                                         steps, plan.getMaxSteps(), usedTokens, plan.getTokenBudget()), node,
                                 outgoing.getOrDefault(currentNodeId, List.of()));
-                        persistDecision(run, runtime, nodeExecutionId, currentNodeId, nodes, failure,
-                                null, "RUNTIME_FAILURE");
-                        completeExecution(run, runtime, executionAudit, node, nodeExecutionId, currentNodeId,
-                                executionIndex, result, output, usedTokens, nodeStartedNanos);
-                        updateState(run, failure.targetNodeId(), "RUNNING", steps, usedTokens, null);
+                        final String repairNodeId = currentNodeId;
+                        final int repairSteps = steps;
+                        final String repairOutput = output;
+                        inTransition(() -> {
+                            persistDecision(run, runtime, nodeExecutionId, repairNodeId, nodes, failure,
+                                    null, "RUNTIME_FAILURE");
+                            completeExecution(run, runtime, executionAudit, node, nodeExecutionId, repairNodeId,
+                                    executionIndex, result, repairOutput, usedTokens, nodeStartedNanos);
+                            updateState(run, failure.targetNodeId(), "RUNNING", repairSteps, usedTokens, null);
+                        });
                         previousOutput = output;
                         currentNodeId = failure.targetNodeId();
                         continue;
@@ -255,25 +297,32 @@ public class IntelligentWorkflowRuntimeService {
                 if (toolV2 && intent == null && !"DEFAULT".equals(decision.strategy())) {
                     throw new AppException("WORKFLOW_ROUTE_REQUIRED", "智能节点必须选择合法路由");
                 }
-                if (intent != null) {
-                    if (!same(intent.getDefinitionHash(), plan.getDefinitionHash())
-                            || !same(intent.getWorkflowId(), plan.getWorkflowId())
-                            || !same(intent.getResolvedEdgeId(), decision.edgeId())
-                            || routeIntentRepository.consume(run.getTenantId(), run.getRunId(), nodeExecutionId,
-                            LocalDateTime.now()) != 1) {
-                        throw new AppException("WORKFLOW_ROUTE_INTENT_INVALID", "路由意图与冻结定义不一致或已消费");
-                    }
-                }
-                persistDecision(run, runtime, nodeExecutionId, currentNodeId, nodes, decision, intent, source);
                 if ("BUDGET_GUARD".equals(decision.strategy())) {
                     throw new AppException("WORKFLOW_BUDGET_EXCEEDED", "智能工作流执行预算已耗尽");
                 }
                 if (intent != null) output = appendRouteExplanation(output,
                         nodes.get(decision.targetNodeId()) == null ? decision.targetNodeId()
                                 : nodes.get(decision.targetNodeId()).getNodeName(), intent.getRouteKey());
-                completeExecution(run, runtime, executionAudit, node, nodeExecutionId, currentNodeId,
-                        executionIndex, result, output, usedTokens, nodeStartedNanos);
-                updateState(run, decision.targetNodeId(), "RUNNING", steps, usedTokens, null);
+                final String transitionOutput = output;
+                final WorkflowRouteIntentEntity transitionIntent = intent;
+                final String transitionSource = source;
+                final String transitionNodeId = currentNodeId;
+                final int transitionSteps = steps;
+                inTransition(() -> {
+                    if (transitionIntent != null) {
+                        if (!same(transitionIntent.getDefinitionHash(), plan.getDefinitionHash())
+                                || !same(transitionIntent.getWorkflowId(), plan.getWorkflowId())
+                                || !same(transitionIntent.getResolvedEdgeId(), decision.edgeId())
+                                || routeIntentRepository.consume(run.getTenantId(), run.getRunId(), nodeExecutionId,
+                                LocalDateTime.now()) != 1) {
+                            throw new AppException("WORKFLOW_ROUTE_INTENT_INVALID", "路由意图与冻结定义不一致或已消费");
+                        }
+                    }
+                    persistDecision(run, runtime, nodeExecutionId, transitionNodeId, nodes, decision, transitionIntent, transitionSource);
+                    completeExecution(run, runtime, executionAudit, node, nodeExecutionId, transitionNodeId,
+                            executionIndex, result, transitionOutput, usedTokens, nodeStartedNanos);
+                    updateState(run, decision.targetNodeId(), "RUNNING", transitionSteps, usedTokens, null);
+                });
                 previousOutput = output;
                 currentNodeId = decision.targetNodeId();
             }
@@ -334,6 +383,15 @@ public class IntelligentWorkflowRuntimeService {
     private void publish(ChatRunEntity run, String type, String executionId, String nodeId, Map<String, ?> payload) {
         eventStreamService.publish(run.getTenantId(), run.getUserId(), run.getRunId(), run.getTraceId(), type,
                 executionId, nodeId, json(payload));
+    }
+
+    /** 在测试环境可直接执行；生产环境将一次路由推进绑定到同一数据库事务。 */
+    private void inTransition(Runnable transition) {
+        if (transitionTransaction == null) {
+            transition.run();
+            return;
+        }
+        transitionTransaction.executeWithoutResult(status -> transition.run());
     }
 
     private void persistDecision(ChatRunEntity run, WorkflowRuntimeEntity runtime, String nodeExecutionId,
@@ -412,14 +470,23 @@ public class IntelligentWorkflowRuntimeService {
     }
 
     private String intelligentPrompt(String userMessage, String previousOutput, String routeInstruction,
-                                     String routeProtocol, int executionIndex, boolean toolV2) {
+                                     String routeProtocol, int executionIndex, boolean toolV2,
+                                     String ragGuidance) {
         return "用户本轮输入：\n" + safe(userMessage) + "\n\n上一节点输出：\n" + safe(previousOutput)
                 + "\n\n当前执行次数：" + executionIndex
                 + "\n\n业务路由判断要求：\n" + safe(routeInstruction)
                 + "\n\n系统允许的精确路由键：\n" + safe(routeProtocol)
                  + (toolV2
                  ? "\n必须调用 select_workflow_route(routeKey, reason) 登记唯一选择；不要在正文猜测目标节点。"
-                 : "\n如需建议路由，只能在正文末尾单独输出 [route:路由键]；请完成当前节点任务，不要直接调用其他节点。");
+                 : "\n如需建议路由，只能在正文末尾单独输出 [route:路由键]；请完成当前节点任务，不要直接调用其他节点。")
+                + safe(ragGuidance);
+    }
+
+    /** 按运行快照和节点策略生成模型可见的 RAG 能力说明。 */
+    private String ragGuidance(ChatRunEntity run, WorkflowDagPlanEntity.Node node) {
+        if (ragToolCapabilityService == null) return "";
+        return ragToolCapabilityService.guidance(run.getTenantId(), run.getRagInvocationMode(),
+                run.getRagBindingIds(), node.getRagToolEnabled());
     }
 
     /** 从冻结出边生成不可省略的精确路由协议，避免提示词和 graph_json 漂移。 */

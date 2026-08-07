@@ -15,8 +15,8 @@ public class PlatformToolResolver {
     private final boolean routeEnabled;
 
     public PlatformToolResolver(
-            @Value("${ai.tools.platform.rag-enabled:false}") boolean ragEnabled,
-            @Value("${ai.tools.platform.route-enabled:false}") boolean routeEnabled) {
+            @Value("${ai.tools.platform.rag-enabled:true}") boolean ragEnabled,
+            @Value("${ai.tools.platform.route-enabled:true}") boolean routeEnabled) {
         this.ragEnabled = ragEnabled;
         this.routeEnabled = routeEnabled;
     }
@@ -26,6 +26,7 @@ public class PlatformToolResolver {
         if (context == null) return result;
         if (ragEnabled && "AGENT_TOOL".equalsIgnoreCase(context.getRagInvocationMode())
                 && !"OFF".equalsIgnoreCase(context.getRagMode())
+                && !Boolean.FALSE.equals(context.getRagToolEnabled())
                 && context.getRagTargetType() != null && context.getRagTargetId() != null) {
             result.add(platform("rag_retrieve", "检索当前可信知识库上下文", "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"minLength\":1},\"maxContextTokens\":{\"type\":\"integer\",\"minimum\":128,\"maximum\":8000}}}"));
         }

@@ -18,7 +18,9 @@ import cn.bugstack.ai.infrastructure.dao.po.SkillDefinitionPO;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collections;
@@ -45,11 +47,22 @@ public class WorkflowRepository implements IWorkflowRepository {
                               IAgentWorkflowVersionDao agentWorkflowVersionDao,
                               IMcpServerConfigDao mcpServerConfigDao,
                               ISkillDefinitionDao skillDefinitionDao) {
+        this(agentWorkflowDao, agentWorkflowVersionDao, mcpServerConfigDao, skillDefinitionDao,
+                new ObjectMapper());
+    }
+
+    @Autowired
+    public WorkflowRepository(IAgentWorkflowDao agentWorkflowDao,
+                              IAgentWorkflowVersionDao agentWorkflowVersionDao,
+                              IMcpServerConfigDao mcpServerConfigDao,
+                              ISkillDefinitionDao skillDefinitionDao,
+                              ObjectMapper objectMapper) {
         this.agentWorkflowDao = agentWorkflowDao;
         this.agentWorkflowVersionDao = agentWorkflowVersionDao;
         this.mcpServerConfigDao = mcpServerConfigDao;
         this.skillDefinitionDao = skillDefinitionDao;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper.copy()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     /**
@@ -328,7 +341,7 @@ public class WorkflowRepository implements IWorkflowRepository {
         try {
             return objectMapper.readValue(graphJson, WorkflowGraphEntity.class);
         } catch (Exception e) {
-            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流画布解析失败");
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流画布解析失败", e);
         }
     }
 }

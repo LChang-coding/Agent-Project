@@ -215,6 +215,8 @@ public class GatewayAdkTool extends BaseTool {
                 .functionCallId(toolContext.functionCallId().orElse(null))
                 .traceId(defaultString(defaultString(stringValue(state.get(ToolRuntimeContextKeys.TRACE_ID)), fallbackContext.getTraceId()), TraceContext.currentOrNewTraceId()))
                 .ragInvocationMode(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)), fallbackContext.getRagInvocationMode()))
+                .ragToolEnabled(defaultBoolean(booleanValue(state.get(ToolRuntimeContextKeys.RAG_TOOL_ENABLED)), fallbackContext.getRagToolEnabled()))
+                .workflowMcpIds(defaultList(stringList(state.get(ToolRuntimeContextKeys.WORKFLOW_MCP_IDS)), fallbackContext.getWorkflowMcpIds()))
                 .ragMode(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_MODE)), fallbackContext.getRagMode()))
                 .ragEvidenceInvocationId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)), fallbackContext.getRagEvidenceInvocationId()))
                 .ragTargetType(defaultString(stringValue(state.get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)), fallbackContext.getRagTargetType()))

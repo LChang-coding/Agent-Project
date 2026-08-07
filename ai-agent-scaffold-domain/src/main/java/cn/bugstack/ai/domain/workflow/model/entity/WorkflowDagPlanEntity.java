@@ -93,6 +93,9 @@ public class WorkflowDagPlanEntity {
          */
         private String runtimeAgentName;
 
+        /** 冻结后的节点 MCP 白名单；空列表表示不允许外部 MCP。 */
+        private List<String> mcpIds;
+
         /**
          * 节点模型编码。
          */
@@ -108,6 +111,9 @@ public class WorkflowDagPlanEntity {
         private String defaultTargetNodeId;
 
         private String routeInstruction;
+
+        /** 冻结后的节点 RAG 工具开关；null 表示继承运行级设置。 */
+        private Boolean ragToolEnabled;
 
         private Integer maxVisits;
 

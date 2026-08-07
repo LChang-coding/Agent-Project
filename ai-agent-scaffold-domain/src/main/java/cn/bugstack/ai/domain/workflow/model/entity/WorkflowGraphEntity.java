@@ -1,5 +1,6 @@
 package cn.bugstack.ai.domain.workflow.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +15,7 @@ import java.util.List;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WorkflowGraphEntity {
 
     /** 历史定义缺失协议字段时继续使用正文 marker 路由。 */
@@ -52,6 +54,7 @@ public class WorkflowGraphEntity {
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Node {
 
         /**
@@ -107,6 +110,9 @@ public class WorkflowGraphEntity {
         /** AI_ROUTER 使用的业务路由说明；不得包含密钥或系统提示词。 */
         private String routeInstruction;
 
+        /** 是否允许该节点显式调用 RAG 工具；缺省时继承会话设置。 */
+        private Boolean ragToolEnabled;
+
         /** 整个运行中该节点允许被访问的次数。 */
         private Integer maxVisits;
 
@@ -128,6 +134,7 @@ public class WorkflowGraphEntity {
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Edge {
 
         /**
