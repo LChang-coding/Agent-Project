@@ -65,7 +65,7 @@ public class WorkflowDomainService implements IWorkflowService {
     private final ConcurrentMap<String, WorkflowRuntimeEntity> runtimeCache = new ConcurrentHashMap<>();
 
     /**
-     * 查询工作流列表；参数是租户ID；返回工作流列表。
+     * 查询工作流列表。
      */
     @Override
     public List<WorkflowEntity> queryWorkflowList(String tenantId, String userId, String roleCode) {
@@ -110,7 +110,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 查询工作流详情；参数是租户和工作流ID；返回工作流详情。
+     * 查询工作流详情。
      */
     @Override
     public WorkflowDetailEntity queryWorkflowDetail(String tenantId, String userId, String roleCode, String workflowId) {
@@ -188,7 +188,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 查询节点选项；参数是租户ID；返回节点、模型和工具选项。
+     * 查询节点选项。
      */
     @Override
     public WorkflowNodeOptionsEntity queryNodeOptions(String tenantId) {
@@ -219,7 +219,7 @@ public class WorkflowDomainService implements IWorkflowService {
         return runtimeCache.computeIfAbsent(cacheKey, key -> compileRuntime(tenantId, userId, workflow, version, requestModelCode, effectiveModelCode));
     }
 
-    /** 软删除工作流；参数是可信租户、用户和工作流；无返回值。 */
+    /** 软删除工作流。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteWorkflow(String tenantId, String userId, String roleCode, String workflowId) {
@@ -273,7 +273,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 填充草稿版本；参数是草稿、命令和模型；返回版本实体。
+     * 填充草稿版本。
      */
     private WorkflowVersionEntity fillDraft(WorkflowVersionEntity draft, WorkflowSaveDraftCommandEntity command, String modelCode) {
         validateGraph(command.getGraph());
@@ -285,7 +285,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 查询工作流；参数是租户和工作流ID；不存在时抛出异常。
+     * 查询工作流；不存在时抛出异常。
      */
     private WorkflowEntity requireWorkflow(String tenantId, String workflowId) {
         checkTenant(tenantId);
@@ -317,10 +317,12 @@ public class WorkflowDomainService implements IWorkflowService {
         return owner || admin || tenantPublic;
     }
 
+    /** 对不存在和无读取权限返回同一错误，避免泄露私有工作流。 */
     private AppException workflowNotFound() {
         return new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "工作流不存在");
     }
 
+    /** 只允许工作流拥有者或租户管理员修改定义和版本。 */
     private void assertWritable(WorkflowEntity workflow, String userId, String roleCode) {
         boolean owner = workflow != null && userId != null && userId.equals(workflow.getOwnerUserId());
         boolean admin = "owner".equalsIgnoreCase(roleCode) || "admin".equalsIgnoreCase(roleCode);
@@ -330,7 +332,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 构建默认画布；参数是模型编码；返回单节点画布。
+     * 构建默认画布。
      */
     private WorkflowGraphEntity defaultGraph(String modelCode) {
         WorkflowGraphEntity.Node node = WorkflowGraphEntity.Node.builder()
@@ -355,7 +357,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 查询节点类型选项；无参数；返回节点类型列表。
+     * 查询节点类型选项；返回节点类型列表。
      */
     private List<WorkflowOptionEntity> nodeTypeOptions() {
         return List.of(
@@ -367,7 +369,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 校验创建命令；参数是命令；非法时抛出异常。
+     * 校验创建命令；不合法时抛出异常。
      */
     private void checkCreateCommand(WorkflowCreateCommandEntity command) {
         if (command == null || isBlank(command.getTenantId()) || isBlank(command.getUserId()) || isBlank(command.getWorkflowName())) {
@@ -376,7 +378,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 校验保存命令；参数是命令；非法时抛出异常。
+     * 校验保存命令；不合法时抛出异常。
      */
     private void checkSaveCommand(WorkflowSaveDraftCommandEntity command) {
         if (command == null || isBlank(command.getTenantId()) || isBlank(command.getUserId())
@@ -386,7 +388,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 校验画布；参数是画布；非法时抛出异常。
+     * 校验画布；不合法时抛出异常。
      */
     private void validateGraph(WorkflowGraphEntity graph) {
         if (graph == null || graph.getNodes() == null || graph.getNodes().isEmpty()) {
@@ -399,7 +401,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 校验租户；参数是租户ID；非法时抛出异常。
+     * 校验租户；不合法时抛出异常。
      */
     private void checkTenant(String tenantId) {
         if (isBlank(tenantId)) {
@@ -408,7 +410,7 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 校验用户；参数是用户ID；非法时抛出异常。
+     * 校验用户；不合法时抛出异常。
      */
     private void checkUser(String userId) {
         if (isBlank(userId)) {
@@ -417,21 +419,21 @@ public class WorkflowDomainService implements IWorkflowService {
     }
 
     /**
-     * 安全版本号；参数是版本号；返回非空版本号。
+     * 安全版本号。
      */
     private int safeVersion(Integer version) {
         return version == null ? 0 : version;
     }
 
     /**
-     * 字符串默认值；参数是候选值和默认值；返回非空字符串。
+     * 字符串默认值。
      */
     private String defaultString(String value, String defaultValue) {
         return isBlank(value) ? defaultValue : value.trim();
     }
 
     /**
-     * 判断字符串为空；参数是字符串；返回是否为空。
+     * 判断字符串为空。
      */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();

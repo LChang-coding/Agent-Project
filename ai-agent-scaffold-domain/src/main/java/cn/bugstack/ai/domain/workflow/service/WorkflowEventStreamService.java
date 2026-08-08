@@ -25,15 +25,29 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class WorkflowEventStreamService {
 
+    /** 当前工作流事件载荷协议版本。 */
     public static final String SCHEMA_VERSION = "workflow-event-v1";
+    /** 单次数据库续读允许返回的最大事件数。 */
     private static final int REPLAY_LIMIT = 1000;
+    /** 没有本机通知时主动检查数据库的时间间隔。 */
     private static final long DATABASE_TAIL_INTERVAL_MILLIS = 1000L;
 
+    /** 分配事件序号、追加事件并按序号续读。 */
     private final IWorkflowEventRepository eventRepository;
+    /** 查询智能工作流扩展运行状态。 */
     private final IIntelligentWorkflowRunRepository runRepository;
+    /** 校验通用工作流运行的租户、用户和跟踪标识。 */
     private final IChatRunRepository chatRunRepository;
+    /** 只发送运行 ID 唤醒本进程订阅者，事件正文始终从持久化仓储续读。 */
     private final FlowableProcessor<String> wakeups = PublishProcessor.<String>create().toSerialized();
 
+    /**
+     * 创建工作流事件服务。
+     *
+     * @param eventRepository 持久化和续读事件的仓储
+     * @param runRepository 查询智能工作流运行的仓储
+     * @param chatRunRepository 校验通用工作流运行归属的仓储
+     */
     public WorkflowEventStreamService(IWorkflowEventRepository eventRepository,
                                       IIntelligentWorkflowRunRepository runRepository,
                                       IChatRunRepository chatRunRepository) {
@@ -42,7 +56,19 @@ public class WorkflowEventStreamService {
         this.chatRunRepository = chatRunRepository;
     }
 
-    /** 先提交数据库，再通知本实例订阅者；通知丢失可由 sequence 续传补齐。 */
+    /**
+     * 持久化一个工作流事件，并在事务提交后通知本实例订阅者。
+     *
+     * @param tenantId 运行所属租户
+     * @param userId 运行所属用户
+     * @param runId 事件所属运行
+     * @param traceId 与根运行一致的跟踪标识
+     * @param eventType 事件业务类型
+     * @param nodeExecutionId 关联的逻辑节点执行；运行级事件可以为空
+     * @param nodeId 关联的工作流节点；运行级事件可以为空
+     * @param payloadJson 按事件类型定义的 JSON 载荷；为空时保存空对象
+     * @return 包含运行内递增序号的持久化事件
+     */
     public WorkflowRunEventEntity publish(String tenantId, String userId, String runId, String traceId,
                                           String eventType, String nodeExecutionId, String nodeId,
                                           String payloadJson) {
@@ -66,7 +92,17 @@ public class WorkflowEventStreamService {
         }
     }
 
-    /** 以数据库为真相源持续追尾；本机通知降低延迟，周期轮询负责跨实例与丢通知恢复。 */
+    /**
+     * 从指定序号之后持续读取工作流事件，直到交付终态事件。
+     *
+     * <p>数据库保存完整事件顺序；本机通知用于降低延迟，周期查询用于读取其他实例写入或通知期间遗漏的事件。</p>
+     *
+     * @param tenantId 运行所属租户
+     * @param userId 运行所属用户
+     * @param runId 待订阅的工作流运行
+     * @param afterSequence 客户端已处理的最后序号；零表示从最早可用事件开始
+     * @return 按运行内序号交付且在终态事件后结束的数据流
+     */
     public Flowable<WorkflowRunEventEntity> stream(String tenantId, String userId, String runId, long afterSequence) {
         ChatRunEntity run = requireWorkflowRun(tenantId, userId, runId);
         long safeAfter = Math.max(0, afterSequence);
@@ -90,6 +126,14 @@ public class WorkflowEventStreamService {
                 .takeUntil((Predicate<WorkflowRunEventEntity>) event -> terminal(event.getEventType()));
     }
 
+    /**
+     * 查询当前用户有权读取的智能工作流运行。
+     *
+     * @param tenantId 运行所属租户
+     * @param userId 运行所属用户
+     * @param runId 待查询的运行标识
+     * @return 与租户、用户和运行标识同时匹配的运行实体
+     */
     public IntelligentWorkflowRunEntity requireRun(String tenantId, String userId, String runId) {
         IntelligentWorkflowRunEntity run = runRepository.query(tenantId, userId, runId);
         if (run == null) {
@@ -98,7 +142,14 @@ public class WorkflowEventStreamService {
         return run;
     }
 
-    /** 校验通用 workflow 类 chat_run 的租户、用户归属和根链路。 */
+    /**
+     * 校验通用运行属于当前用户、类型为 workflow 且包含有效跟踪标识。
+     *
+     * @param tenantId 运行所属租户
+     * @param userId 运行所属用户
+     * @param runId 待校验的运行标识
+     * @return 可用于事件订阅的通用工作流运行
+     */
     public ChatRunEntity requireWorkflowRun(String tenantId, String userId, String runId) {
         ChatRunEntity run = chatRunRepository.query(tenantId, userId, runId);
         if (run == null || !"workflow".equals(run.getSourceType())
@@ -108,20 +159,24 @@ public class WorkflowEventStreamService {
         return run;
     }
 
+    /** 组合本机唤醒通知的租户与运行标识，分隔符避免字符串拼接冲突。 */
     private String key(String tenantId, String runId) {
         return tenantId + "\u0000" + runId;
     }
 
+    /** 判断事件是否表示工作流已经完成、失败或取消。 */
     private boolean terminal(String eventType) {
         return "WORKFLOW_COMPLETED".equals(eventType)
                 || "WORKFLOW_FAILED".equals(eventType)
                 || "WORKFLOW_CANCELLED".equals(eventType);
     }
 
+    /** 校验事件身份和类型字段，阻止无法归属或重放的事件入库。 */
     private void requireText(String value, String message) {
         if (value == null || value.isBlank()) throw new AppException("WORKFLOW_EVENT_INVALID", message);
     }
 
+    /** 仅在事务成功提交后唤醒本实例订阅者，回滚事务不发送通知。 */
     private void notifyAfterCommit(String streamKey) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             wakeups.onNext(streamKey);

@@ -37,15 +37,23 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseDeletionRepository {
 
-    /** 级联任务、聚合墓碑、分块和绑定的持久化入口。 */
+    /** 知识库级联删除任务的领取、续租和状态更新入口。 */
     private final IRagKnowledgeBaseDeleteTaskDao taskDao;
+    /** 知识库状态锁定、墓碑写入和最终关闭入口。 */
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
+    /** 删除前文档数量校验和删除完成状态检查入口。 */
     private final IRagDocumentDao documentDao;
+    /** 检查知识库下是否仍有未关闭文档版本。 */
     private final IRagDocumentVersionDao documentVersionDao;
+    /** 检查知识库向量分块是否已经全部清理。 */
     private final IRagChunkDao chunkDao;
+    /** 检查摄取与子文档删除任务是否已经全部收口。 */
     private final IRagIngestTaskDao ingestTaskDao;
+    /** 登记删除时禁用绑定，并在完成时确认没有活动绑定。 */
     private final IRagAgentBindingDao bindingDao;
+    /** 在知识库数据库对象与领域实体之间转换。 */
     private final RagPersistenceMapper mapper;
+    /** 序列化和读取可恢复的级联删除检查点。 */
     private final ObjectMapper objectMapper;
 
     @Override
@@ -212,6 +220,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         }
     }
 
+    /** 将任务状态、检查点、重试时间和租约完整写入删除账本。 */
     private RagKnowledgeBaseDeleteTaskPO toPo(RagKnowledgeBaseDeleteTaskEntity task) {
         try {
             return RagKnowledgeBaseDeleteTaskPO.builder()
@@ -231,6 +240,7 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         }
     }
 
+    /** 从删除账本恢复任务状态机；无法解释的检查点作为数据错误返回。 */
     private RagKnowledgeBaseDeleteTaskEntity toEntity(RagKnowledgeBaseDeleteTaskPO po) {
         if (po == null) return null;
         try {
@@ -261,15 +271,18 @@ public class RagKnowledgeBaseDeletionRepositoryImpl implements RagKnowledgeBaseD
         }
     }
 
+    /** 统一拒绝持久化边界上的空标识，并返回已校验原值。 */
     private String requireText(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("标识符不能为空");
         return value;
     }
 
+    /** 按 UTC 将领域时间点转换为数据库时间。 */
     private LocalDateTime toLocal(java.time.Instant value) {
         return value == null ? null : LocalDateTime.ofInstant(value, ZoneOffset.UTC);
     }
 
+    /** 按数据库统一使用的 UTC 时区恢复领域时间点。 */
     private java.time.Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.toInstant(ZoneOffset.UTC);
     }

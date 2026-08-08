@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 public class ConversationMemoryRepository implements IConversationMemoryRepository {
 
+    /** 会话摘要版本、覆盖范围和激活状态的持久化入口。 */
     private final IConversationMemorySnapshotDao dao;
 
     /**
@@ -73,6 +74,7 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 将覆盖失效消息的摘要标记过期，并恢复最近一个不覆盖该区间的安全摘要。 */
     public ConversationMemorySnapshotEntity invalidateCoveringAndRestore(String tenantId, String userId, String sessionId,
                                                                           Integer minInvalidSequence) {
         String normalizedTenantId = blankToNull(tenantId);
@@ -85,6 +87,7 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
         return null;
     }
 
+    /** 从数据库快照恢复摘要版本、覆盖边界、正文和追踪信息。 */
     private ConversationMemorySnapshotEntity toEntity(ConversationMemorySnapshotPO po) {
         if (po == null) {
             return null;
@@ -106,6 +109,7 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
                 .build();
     }
 
+    /** 将领域摘要转换为可参与版本激活事务的数据库记录。 */
     private ConversationMemorySnapshotPO toPO(ConversationMemorySnapshotEntity value) {
         return ConversationMemorySnapshotPO.builder()
                 .tenantId(blankToNull(value.getTenantId()))
@@ -124,6 +128,7 @@ public class ConversationMemoryRepository implements IConversationMemoryReposito
                 .build();
     }
 
+    /** 将空租户归一为数据库空值，兼容历史单租户摘要。 */
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }

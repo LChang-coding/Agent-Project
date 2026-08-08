@@ -29,7 +29,9 @@ public class AuthService implements IAuthService {
 
     /** 注册用户的默认角色、可登录状态和令牌类型常量。 */
     private static final String ROLE_OWNER = "owner";
+    /** 允许正常登录和刷新令牌的用户状态。 */
     private static final String STATUS_ACTIVE = "active";
+    /** API 返回的标准授权头令牌类型。 */
     private static final String TOKEN_TYPE_BEARER = "Bearer";
 
     @Resource
@@ -45,7 +47,7 @@ public class AuthService implements IAuthService {
     private IJwtTokenService jwtTokenService;
 
     /**
-     * 注册用户；参数是租户、账号和密码；返回新用户身份信息。
+     * 注册用户。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -75,7 +77,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 登录用户；参数是账号和密码；返回访问令牌和刷新令牌。
+     * 登录用户。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -103,7 +105,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 刷新令牌；参数是 refreshToken；返回新的访问令牌和刷新令牌。
+     * 刷新令牌。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -130,7 +132,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 查询当前用户；参数是 userId；返回当前用户资料。
+     * 查询当前用户。
      */
     @Override
     public UserProfileEntity currentUser(String userId) {
@@ -145,7 +147,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 修改密码；参数是 userId、旧密码和新密码；返回当前用户资料。
+     * 修改密码。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -166,7 +168,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 修改资料；参数是 userId 和允许修改的资料字段；返回更新后的用户资料。
+     * 修改资料。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -185,7 +187,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验注册参数；参数是注册命令；非法时抛出异常。
+     * 校验注册参数；不合法时抛出异常。
      */
     private void checkRegisterCommand(RegisterCommandEntity command) {
         if (command == null
@@ -196,7 +198,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验登录参数；参数是登录命令；非法时抛出异常。
+     * 校验登录参数；不合法时抛出异常。
      */
     private void checkLoginCommand(LoginCommandEntity command) {
         if (command == null
@@ -207,7 +209,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验刷新参数；参数是刷新命令；非法时抛出异常。
+     * 校验刷新参数；不合法时抛出异常。
      */
     private void checkRefreshCommand(TokenRefreshCommandEntity command) {
         if (command == null || isBlank(command.getRefreshToken())) {
@@ -216,7 +218,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验改密参数；参数是改密命令；非法时抛出异常。
+     * 校验改密参数；不合法时抛出异常。
      */
     private void checkChangePasswordCommand(ChangePasswordCommandEntity command) {
         if (command == null
@@ -228,7 +230,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验资料参数；参数是资料命令；非法时抛出异常。
+     * 校验资料参数；不合法时抛出异常。
      */
     private void checkUpdateProfileCommand(UpdateProfileCommandEntity command) {
         if (command == null || isBlank(command.getUserId())) {
@@ -237,7 +239,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 校验用户可登录状态；参数是登录资料和错误码；非法时抛出异常。
+     * 校验用户可登录状态；不合法时抛出异常。
      */
     private void checkAuthUser(AuthUserEntity authUser, ResponseCode responseCode, String message) {
         if (authUser == null
@@ -253,7 +255,7 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 签发双令牌；参数是登录资料；返回访问令牌和刷新令牌。
+     * 签发双令牌。
      */
     private TokenResultEntity issueTokens(AuthUserEntity authUser) {
         LoginUser loginUser = LoginUser.builder()
@@ -284,21 +286,21 @@ public class AuthService implements IAuthService {
     }
 
     /**
-     * 取默认字符串；参数是候选值和默认值；返回非空字符串。
+     * 取默认字符串。
      */
     private String blankToDefault(String value, String defaultValue) {
         return isBlank(value) ? defaultValue : value.trim();
     }
 
     /**
-     * 取更新字符串；参数是候选值和默认值；返回可保存的字段值。
+     * 取更新字符串。
      */
     private String valueOrDefault(String value, String defaultValue) {
         return value == null ? defaultValue : value.trim();
     }
 
     /**
-     * 判断字符串为空；参数是字符串；返回是否为空。
+     * 判断字符串为空。
      */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();

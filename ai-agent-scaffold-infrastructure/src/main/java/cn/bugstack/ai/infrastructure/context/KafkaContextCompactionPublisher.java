@@ -15,7 +15,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class KafkaContextCompactionPublisher implements ContextCompactionPublisher {
 
+    /** 向版本化 Topic 发布压缩任务唤醒消息。 */
     private final KafkaTemplate<String, String> kafkaTemplate;
+    /** 将压缩命令编码为 Kafka JSON 负载。 */
     private final ObjectMapper objectMapper;
     /** 关闭时保留数据库任务，由扫描补偿链路接管。 */
     private final boolean enabled;

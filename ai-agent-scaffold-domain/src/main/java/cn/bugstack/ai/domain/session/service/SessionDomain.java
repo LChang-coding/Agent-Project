@@ -26,23 +26,29 @@ import java.util.List;
 @Service
 public class SessionDomain {
 
+    /** 持久化用户输入消息使用的角色值。 */
     public static final String ROLE_USER = "user";
+    /** 持久化模型回答消息使用的角色值。 */
     public static final String ROLE_ASSISTANT = "assistant";
+    /** 新建且未删除会话的持久化状态。 */
     private static final String STATUS_ACTIVE = "active";
+    /** 当前会话消息统一保存的文本内容类型。 */
     private static final String CONTENT_TYPE_TEXT = "text";
+    /** 保存消息时使用统一字符口径估算 Token 数。 */
     private static final CharacterTokenCounter TOKEN_COUNTER = new CharacterTokenCounter();
 
+    /** 在租户和用户范围内持久化会话、消息及版本号。 */
     private final ISessionRepository sessionRepository;
 
     /**
-     * 创建会话领域服务；参数是会话仓储；返回服务实例。
+     * 创建会话领域服务。
      */
     public SessionDomain(ISessionRepository sessionRepository) {
         this.sessionRepository = sessionRepository;
     }
 
     /**
-     * 创建平台会话；参数是会话创建命令；返回已保存的会话。
+     * 创建平台会话。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatSessionEntity createSession(CreateSessionCommandEntity command) {
@@ -75,7 +81,7 @@ public class SessionDomain {
     }
 
     /**
-     * 校验会话归属；参数是租户、用户、会话ID和 Agent ID；返回可访问的会话。
+     * 校验会话归属。
      */
     public ChatSessionEntity assertSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
         checkSessionIdentity(userId, sessionId);
@@ -94,7 +100,7 @@ public class SessionDomain {
     }
 
     /**
-     * 锁定并校验会话归属；参数是可信身份、会话和来源；返回被锁定会话。
+     * 锁定并校验会话归属。
      */
     public ChatSessionEntity lockSessionAccess(String tenantId, String userId, String sessionId, String agentId) {
         checkSessionIdentity(userId, sessionId);
@@ -109,7 +115,7 @@ public class SessionDomain {
     }
 
     /**
-     * 保存用户消息；参数是租户、用户、会话ID、内容和链路ID；返回消息实体。
+     * 保存用户消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendUserMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
@@ -117,7 +123,7 @@ public class SessionDomain {
     }
 
     /**
-     * 保存运行用户消息；参数是可信身份、运行、内容和链路ID；返回消息实体。
+     * 保存运行用户消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendUserMessage(String tenantId, String userId, String sessionId, String runId,
@@ -135,7 +141,7 @@ public class SessionDomain {
     }
 
     /**
-     * 保存助手消息；参数是租户、用户、会话ID、内容和链路ID；返回消息实体。
+     * 保存助手消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String content, String traceId) {
@@ -143,7 +149,7 @@ public class SessionDomain {
     }
 
     /**
-     * 保存运行助手消息；参数是可信身份、运行、内容和链路ID；返回消息实体。
+     * 保存运行助手消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity appendAssistantMessage(String tenantId, String userId, String sessionId, String runId,
@@ -169,7 +175,7 @@ public class SessionDomain {
     }
 
     /**
-     * 保存消息；参数是消息命令；返回已保存的消息。
+     * 保存消息。
      */
     private ChatMessageEntity appendMessage(AppendMessageCommandEntity command) {
         checkMessageCommand(command);
@@ -209,7 +215,7 @@ public class SessionDomain {
     }
 
     /**
-     * 推进会话上下文版本；参数是可信会话身份；返回新版本。
+     * 推进会话上下文版本。
      */
     @Transactional(rollbackFor = Exception.class)
     public long incrementContextRevision(String tenantId, String userId, String sessionId) {
@@ -221,7 +227,7 @@ public class SessionDomain {
     }
 
     /**
-     * 失效运行消息；参数是可信身份、运行和原因；返回影响行数。
+     * 失效运行消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId, String reason) {
@@ -230,7 +236,7 @@ public class SessionDomain {
     }
 
     /**
-     * 查询运行消息；参数是可信身份和运行；返回消息列表。
+     * 查询运行消息。
      */
     public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId) {
         return sessionRepository.queryRunMessages(blankToNull(tenantId), userId, sessionId, runId);
@@ -243,7 +249,7 @@ public class SessionDomain {
     }
 
     /**
-     * 查询会话有效消息；参数是可信身份和会话；返回按序消息。
+     * 查询会话有效消息。
      */
     public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
         // 所有上下文、分享和历史读取统一排除被取消或引导失效的消息。
@@ -252,14 +258,14 @@ public class SessionDomain {
     }
 
     /**
-     * 查询会话有效消息最大序号；参数是可信身份和会话；返回有效上下文边界。
+     * 查询会话有效消息最大序号。
      */
     public Integer queryMaxValidSequenceNo(String tenantId, String userId, String sessionId) {
         return sessionRepository.queryMaxValidSequenceNo(blankToNull(tenantId), userId, sessionId);
     }
 
     /**
-     * 游标查询用户会话；参数是可信身份、游标和数量；返回会话列表。
+     * 游标查询用户会话。
      */
     public List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,
                                                  String cursorSessionId, int limit) {
@@ -270,7 +276,7 @@ public class SessionDomain {
     }
 
     /**
-     * 游标查询有效消息；参数是可信身份、会话、前序号和数量；返回倒序消息。
+     * 游标查询有效消息。
      */
     public List<ChatMessageEntity> queryValidMessagesBefore(String tenantId, String userId, String sessionId,
                                                             Integer beforeSequence, int limit) {
@@ -283,13 +289,13 @@ public class SessionDomain {
     }
 
     /**
-     * 软删除会话；参数是可信身份和会话；返回影响行数。
+     * 软删除会话。
      */
     public int softDelete(String tenantId, String userId, String sessionId) {
         return sessionRepository.softDelete(blankToNull(tenantId), userId, sessionId);
     }
 
-    /** 更新会话RAG设置；参数是可信身份、会话和开关；返回更新后的会话。 */
+    /** 更新会话RAG设置。 */
     @Transactional(rollbackFor = Exception.class)
     public ChatSessionEntity updateRagEnabled(String tenantId, String userId, String sessionId, boolean enabled) {
         return updateRagPolicy(tenantId, userId, sessionId,
@@ -336,6 +342,7 @@ public class SessionDomain {
         return sessionRepository.querySession(session.getTenantId(), session.getUserId(), session.getSessionId());
     }
 
+    /** 解析会话 RAG 调用方式，并将空值按兼容规则恢复为默认模式。 */
     private RagInvocationMode parseInvocationMode(String value) {
         try {
             return RagInvocationMode.valueOf(value.trim().toUpperCase());
@@ -346,7 +353,7 @@ public class SessionDomain {
     }
 
     /**
-     * 校验创建参数；参数是创建命令；非法时抛出异常。
+     * 校验创建参数；不合法时抛出异常。
      */
     private void checkCreateCommand(CreateSessionCommandEntity command) {
         if (command == null
@@ -358,7 +365,7 @@ public class SessionDomain {
     }
 
     /**
-     * 校验消息参数；参数是消息命令；非法时抛出异常。
+     * 校验消息参数；不合法时抛出异常。
      */
     private void checkMessageCommand(AppendMessageCommandEntity command) {
         if (command == null
@@ -371,7 +378,7 @@ public class SessionDomain {
     }
 
     /**
-     * 校验会话身份参数；参数是用户ID和会话ID；非法时抛出异常。
+     * 校验会话身份参数；不合法时抛出异常。
      */
     private void checkSessionIdentity(String userId, String sessionId) {
         if (isBlank(userId) || isBlank(sessionId)) {
@@ -380,28 +387,28 @@ public class SessionDomain {
     }
 
     /**
-     * 取非空默认值；参数是候选值和默认值；返回可展示文本。
+     * 取非空默认值。
      */
     private String blankToDefault(String value, String defaultValue) {
         return isBlank(value) ? defaultValue : value.trim();
     }
 
     /**
-     * 空白转空值；参数是字符串；返回可落库字符串。
+     * 空白转空值。
      */
     private String blankToNull(String value) {
         return isBlank(value) ? null : value.trim();
     }
 
     /**
-     * 判断字符串为空；参数是字符串；返回是否为空。
+     * 判断字符串为空。
      */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
 
     /**
-     * 计算内容长度；参数是内容；返回字符数。
+     * 计算内容长度。
      */
     private Integer contentLength(String content) {
         return content == null ? 0 : content.length();

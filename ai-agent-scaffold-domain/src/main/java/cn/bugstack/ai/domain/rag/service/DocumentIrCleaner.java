@@ -187,6 +187,7 @@ public final class DocumentIrCleaner {
         }
     }
 
+    /** 逐块应用清洗规则，并重建页面与文档级质量标记的基类。 */
     private abstract static class BlockRule implements CleaningRule {
 
         /** 逐页逐块应用规则，并向文档级聚合新增标记。 */
@@ -355,8 +356,10 @@ public final class DocumentIrCleaner {
     /** 标记敏感内容、提示注入和明显语言错配。 */
     private static final class ContentAnnotationRule extends BlockRule {
 
+        /** 识别邮箱、手机号和长身份证号等可能的敏感文本。 */
         private static final Pattern SENSITIVE = Pattern.compile(
                 "(?iu)([\\w.+-]+@[\\w.-]+\\.[a-z]{2,}|(?<!\\d)1[3-9]\\d{9}(?!\\d)|\\b\\d{15,18}[0-9xX]\\b)");
+        /** 识别要求忽略规则、泄露系统提示等常见提示注入文本。 */
         private static final Pattern PROMPT_INJECTION = Pattern.compile(
                 "(?iu)(ignore\\s+(all\\s+)?previous\\s+instructions?|reveal\\s+(the\\s+)?system\\s+prompt"
                         + "|<\\s*system\\s*>|忽略.{0,12}(指令|规则|提示)|泄露.{0,8}(系统提示|提示词))");

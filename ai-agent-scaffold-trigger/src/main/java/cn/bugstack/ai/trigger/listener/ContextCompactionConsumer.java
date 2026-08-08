@@ -26,9 +26,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class ContextCompactionConsumer {
 
+    /** 将 Kafka JSON 载荷解析为压缩命令。 */
     private final ObjectMapper objectMapper;
+    /** 回查、认领并推进压缩任务账本状态。 */
     private final IContextCompactionTaskRepository taskRepository;
+    /** 根据已认领任务生成并保存会话记忆摘要。 */
     private final ConversationMemoryService conversationMemoryService;
+    /** 提供任务最大尝试次数等上下文策略。 */
     private final ContextPolicyProperties properties;
 
     /**

@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 public class ToolController implements IToolApiService {
 
+    /** 管理 Skill、MCP、工具目录和工具调用记录。 */
     @Resource
     private IToolPublishService toolPublishService;
 

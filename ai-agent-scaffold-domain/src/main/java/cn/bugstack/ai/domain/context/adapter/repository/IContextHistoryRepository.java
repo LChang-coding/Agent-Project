@@ -11,13 +11,13 @@ import java.util.List;
 public interface IContextHistoryRepository {
 
     /**
-     * 查询会话消息范围；参数是会话身份和序号范围；返回按序排列的消息。
+     * 查询会话消息范围。
      */
     List<ChatMessageEntity> queryMessages(String tenantId, String userId, String sessionId,
                                           Integer fromSequenceExclusive, Integer toSequenceInclusive);
 
     /**
-     * 汇总会话消息 token；参数是会话身份和序号范围；返回预估 token 总数。
+     * 汇总会话消息 token。
      */
     int sumEstimatedTokens(String tenantId, String userId, String sessionId,
                            Integer fromSequenceExclusive, Integer toSequenceInclusive);

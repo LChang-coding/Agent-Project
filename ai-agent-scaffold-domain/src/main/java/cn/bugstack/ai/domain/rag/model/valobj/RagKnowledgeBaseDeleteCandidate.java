@@ -1,19 +1,12 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 知识库删除协调器全局扫描时拿到的「只有身份」候选条目。
+ * 知识库删除任务全局扫描返回的最小候选投影。
+ * <p>候选不携带删除进度，也不表示任务已被领取。协调器必须使用 tenantId 与 taskId
+ * 在租户范围内执行原子领取。</p>
  *
- * <p>属于哪一层：领域层值对象，不可变。作用与摄取侧的 RagIngestJobCandidate 完全对称：
- * 全局扫描只允许返回定位坐标，不允许把租户的业务正文和进度带出租户边界。</p>
- *
- * <p>谁产出它：RagKnowledgeBaseDeletionRepository.listDueCandidates。
- * 谁消费它：知识库删除协调器，拿到后必须再用 tenantId + taskId 做原子领取。</p>
- *
- * <p>它不负责什么：不携带 checkpoint，所以扫描阶段完全不知道删到第几个文档了；
- * 也不代表任务已被独占，独占由 claim 签发栅栏时才成立。</p>
- *
- * @param tenantId 任务所属租户；后续领取和更新都靠它把操作重新限制在单租户内。
- * @param taskId 删除任务编号；与 tenantId 组成回查坐标。
+ * @param tenantId 任务所属租户
+ * @param taskId 知识库删除任务标识
  */
 public record RagKnowledgeBaseDeleteCandidate(String tenantId, String taskId) {
 

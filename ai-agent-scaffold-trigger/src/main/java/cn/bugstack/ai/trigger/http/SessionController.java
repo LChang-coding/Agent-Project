@@ -47,11 +47,17 @@ import java.util.List;
 @RequestMapping("/api/v1/sessions")
 public class SessionController {
 
+    /** 未指定分页大小时使用的消息或会话条数。 */
     private static final int DEFAULT_LIMIT = 30;
+    /** 防止单次查询返回过多数据的分页上限。 */
     private static final int MAX_LIMIT = 100;
+    /** 查询会话、消息并执行会话归属校验。 */
     private final SessionDomain sessionDomain;
+    /** 负责会话列表查询和会话删除。 */
     private final SessionLifecycleService lifecycleService;
+    /** 读取回答持久化的 RAG 引用及校验结果。 */
     private final RagAnswerCitationMetadataService citationMetadataService;
+    /** 查询和修改会话级 RAG 开关与知识库范围。 */
     private final SessionRagSettingService ragSettingService;
 
     /**

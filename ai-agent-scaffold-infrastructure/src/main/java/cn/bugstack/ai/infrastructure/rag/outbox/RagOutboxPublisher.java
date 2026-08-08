@@ -36,13 +36,19 @@ public class RagOutboxPublisher {
     /** 持久化错误摘要硬上限，避免异常链撑大数据库。 */
     private static final int MAX_ERROR_LENGTH = 1000;
 
-    /** 扫描、领取、Kafka 发布和重试配置。 */
+    /** 扫描事件、写发布终态和失败重试状态的持久化入口。 */
     private final IRagOutboxDao outboxDao;
+    /** 在独立事务中原子领取事件并回读新的围栏令牌。 */
     private final RagOutboxClaimService claimService;
+    /** 将摄取唤醒事件发送到配置的 Kafka Topic。 */
     private final KafkaTemplate<String, String> kafkaTemplate;
+    /** 提供批量、租约、ACK 超时和退避参数。 */
     private final RagProperties properties;
+    /** 为扫描、租约和重试时间提供可测试的 UTC 时钟。 */
     private final Clock clock;
+    /** 为指数退避生成可测试的随机抖动。 */
     private final DoubleSupplier random;
+    /** 标识当前发布器实例，只有该持有者可以确认本次领取结果。 */
     private final String leaseOwner;
 
     /** 创建生产发布器。 */
@@ -155,6 +161,7 @@ public class RagOutboxPublisher {
         }
     }
 
+    /** 计算带上下限和随机抖动的指数退避，避免故障恢复时集中重试。 */
     private long retryDelayMillis(int attemptCount, RagProperties.Outbox config) {
         int exponent = Math.min(Math.max(attemptCount - 1, 0), 30);
         long multiplier = 1L << exponent;
@@ -166,6 +173,7 @@ public class RagOutboxPublisher {
         return Math.max(1L, Math.min(config.getRetryMaxDelayMs(), Math.round(capped * factor)));
     }
 
+    /** 只持久化异常类型并限制长度，避免泄露 Kafka 响应或撑大错误字段。 */
     private String sanitize(Throwable error) {
         Throwable cause = error instanceof ExecutionException && error.getCause() != null
                 ? error.getCause() : error;
@@ -173,10 +181,12 @@ public class RagOutboxPublisher {
         return value.length() <= MAX_ERROR_LENGTH ? value : value.substring(0, MAX_ERROR_LENGTH);
     }
 
+    /** 将缺失围栏转换为永远无法匹配的值，禁止无围栏确认状态。 */
     private long required(Long value) {
         return value == null ? -1L : value;
     }
 
+    /** 将统一时钟转换为数据库使用的 UTC 本地时间。 */
     private LocalDateTime now() {
         return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
     }

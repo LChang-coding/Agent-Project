@@ -28,8 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1")
 public class SessionInsightController {
 
+    /** 按当前会话版本计算模型上下文的分类占用。 */
     private final ContextInsightService contextInsightService;
+    /** 查询单次模型调用记录及会话、运行维度汇总。 */
     private final ModelUsageService modelUsageService;
+    /** 在读取统计数据前校验会话归属。 */
     private final SessionDomain sessionDomain;
 
     /**

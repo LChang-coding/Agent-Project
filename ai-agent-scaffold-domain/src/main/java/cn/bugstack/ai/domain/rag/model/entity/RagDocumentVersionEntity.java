@@ -7,6 +7,30 @@ import java.util.Map;
 
 /**
  * 不可变文档版本实体。
+ *
+ * @param tenantId 文档版本所属租户
+ * @param knowledgeBaseId 知识库标识
+ * @param documentId 逻辑文档标识
+ * @param versionId 不可变文档版本标识
+ * @param versionNumber 逻辑文档内递增的版本序号
+ * @param generation 本版本对应的索引代际
+ * @param objectBucket 原始文件对象存储桶
+ * @param objectKey 原始文件对象键
+ * @param parsedObjectBucket 解析产物对象存储桶
+ * @param parsedObjectKey 规范化解析产物对象键
+ * @param fileName 通过安全校验的文件名
+ * @param sha256 原始文件 SHA-256 摘要
+ * @param mimeType 经扩展名与文件内容共同确认的 MIME 类型
+ * @param sizeBytes 原始文件字节数
+ * @param status 文档版本生命周期状态
+ * @param parserVersion 本次摄取实际使用的解析器版本
+ * @param chunkerVersion 本次摄取实际使用的分块器版本
+ * @param embeddingModelRevision 本次摄取实际使用的 Embedding 模型版本
+ * @param revision 乐观并发控制版本号
+ * @param pageCount 解析后页数
+ * @param characterCount 规范化正文字符数
+ * @param chunkCount 分块数
+ * @param metadata 解析和质量评估产生的不可变元数据
  */
 public record RagDocumentVersionEntity(String tenantId,
                                        String knowledgeBaseId,
@@ -45,6 +69,7 @@ public record RagDocumentVersionEntity(String tenantId,
                 0, 0L, 0, Map.of());
     }
 
+    /** 校验版本身份、对象位置、索引代际、状态和解析统计。 */
     public RagDocumentVersionEntity {
         requireText(tenantId, "租户ID");
         requireText(knowledgeBaseId, "知识库ID");
@@ -78,7 +103,13 @@ public record RagDocumentVersionEntity(String tenantId,
         }
     }
 
-    /** 记录本次摄取实际使用的不可变组件版本。 */
+    /**
+     * 记录本次摄取实际使用的不可变组件版本。
+     * @param parserRevision 解析器版本
+     * @param chunkerRevision 分块器版本
+     * @param embeddingRevision Embedding 模型版本
+     * @return 状态为 PROCESSING 且版本号递增的新文档版本
+     */
     public RagDocumentVersionEntity processing(String parserRevision, String chunkerRevision,
                                                 String embeddingRevision) {
         requireText(parserRevision, "解析器版本");
@@ -90,7 +121,10 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.PROCESSING, parserRevision, chunkerRevision, embeddingRevision);
     }
 
-    /** 已验证索引后激活版本。 */
+    /**
+     * 已验证业务分块和向量索引一致后激活版本。
+     * @return 状态为 READY 且版本号递增的新文档版本
+     */
     public RagDocumentVersionEntity ready() {
         if (status != RagDocumentVersionStatus.PROCESSING) {
             throw new IllegalStateException("只有处理中的版本可以激活");
@@ -98,19 +132,28 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.READY, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
-    /** 处理取消后关闭版本。 */
+    /**
+     * 处理取消后关闭版本。
+     * @return 状态为 CANCELLED 的新文档版本；已是终态时返回当前对象
+     */
     public RagDocumentVersionEntity cancelled() {
         if (status.terminal()) return this;
         return copy(RagDocumentVersionStatus.CANCELLED, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
-    /** 处理失败后关闭版本。 */
+    /**
+     * 处理失败后关闭版本。
+     * @return 状态为 FAILED 的新文档版本；已是终态时返回当前对象
+     */
     public RagDocumentVersionEntity failed() {
         if (status.terminal()) return this;
         return copy(RagDocumentVersionStatus.FAILED, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
-    /** 失败副作用已清理后，将同一不可变源文件版本重新排队。 */
+    /**
+     * 失败副作用已清理后，将同一不可变源文件版本重新排队。
+     * @return 状态为 QUEUED、解析产物与统计已清除的新文档版本
+     */
     public RagDocumentVersionEntity retryQueued() {
         if (status != RagDocumentVersionStatus.FAILED) {
             throw new AppException("RAG_INGEST_VERSION_RETRY_STATE_INVALID", "只有失败版本可以重新排队");
@@ -121,7 +164,10 @@ public record RagDocumentVersionEntity(String tenantId,
                 0, 0L, 0, Map.of());
     }
 
-    /** 将任意已停止写入的版本转为删除中；重复调用保持幂等。 */
+    /**
+     * 将已停止写入的版本转为删除中；重复调用保持幂等。
+     * @return 状态为 DELETING 的新文档版本；已处于删除流程时返回当前对象
+     */
     public RagDocumentVersionEntity requestDeletion() {
         if (status == RagDocumentVersionStatus.DELETING || status == RagDocumentVersionStatus.DELETED) return this;
         if (status == RagDocumentVersionStatus.PROCESSING) {
@@ -130,7 +176,10 @@ public record RagDocumentVersionEntity(String tenantId,
         return copy(RagDocumentVersionStatus.DELETING, parserVersion, chunkerVersion, embeddingModelRevision);
     }
 
-    /** 外部对象和索引均清理后关闭版本墓碑。 */
+    /**
+     * 外部对象和索引均清理后将版本转为删除终态。
+     * @return 状态为 DELETED 的新文档版本；已是删除终态时返回当前对象
+     */
     public RagDocumentVersionEntity deleted() {
         if (status == RagDocumentVersionStatus.DELETED) return this;
         if (status != RagDocumentVersionStatus.DELETING) {

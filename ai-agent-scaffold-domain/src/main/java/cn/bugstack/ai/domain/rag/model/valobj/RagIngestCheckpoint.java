@@ -1,34 +1,21 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 摄取任务的「存档点」：记录跑到哪一步、处理了多少分块、解析产物存在哪里。
+ * 摄取任务的可持久化检查点。
+ * <p>检查点记录当前阶段、分块处理进度和不可变解析事实，使租约过期后的新执行实例
+ * 可以从已持久化进度继续。阶段和数量只能前进，解析产物位置与摘要写入后不允许变更。</p>
  *
- * <p>属于哪一层：领域层值对象，不可变。每次推进都是造一个新对象，而不是改旧对象。</p>
- *
- * <p>解决什么问题：一份大文档的摄取要经过解析、切块、向量化、写索引好几步，中途 Worker
- * 崩溃是常态。有了存档点，接管的 Worker 能从上次的进度接着做，不用把整份文档重新解析、
- * 重新调一遍 Embedding（那是真金白银的模型费用）。</p>
- *
- * <p>谁读写它：RagIngestJobEntity 持有它，通过 advance / advanceDeletion 换成新的存档点，
- * 并在 complete 时检查「分块数和向量数是否对齐」；摄取 Worker 每完成一小段就写一次。</p>
- *
- * <p>不变量：进度只能前进不能后退（canAdvanceTo 强制），解析事实只能写一次
- * （parsedFactsCanAdvanceTo 强制）。违反任何一条都会被判为检查点非法，因为倒退的进度
- * 会导致同一批向量被写两遍，改动过的解析事实会让最终激活的内容和实际索引的内容对不上。</p>
- *
- * @param stage 当前流水线阶段，是断点续跑的粗粒度定位。
+ * @param stage 当前摄取或删除阶段
  * @param processedChunks 已处理分块数，必须小于等于 totalChunks。
  * @param totalChunks 已知分块总数；解析和切块完成前是 0，所以不能用它判断「有没有内容」。
- * @param embeddingBatchIndex 下一个待处理的 Embedding 批次序号；重跑时从这里续上，
- *            避免重复给已算过的批次付费。
+ * @param embeddingBatchIndex 下一个待处理的 Embedding 批次序号
  * @param vectorUpsertIndex 下一个待写入向量库的序号；完成时必须等于 totalChunks，
  *             否则说明索引只写了一半。
  * @param pageCount 解析得到的页数，属于「解析事实」，写入后不可再变。
  * @param characterCount 解析得到的字符数，同为解析事实；有解析产物时必须大于 0。
  * @param parsedObjectBucket 解析产物所在的对象存储桶，必须和 parsedObjectKey 成对出现。
  * @param parsedObjectKey 解析产物的对象键；重试会覆盖同一个键，保证一个版本只有一份解析产物。
- * @param parsedContentHash 解析产物内容的 SHA-256（强制 64 位小写十六进制）；
- *     它是「激活的内容就是当初解析出来的内容」的凭据，改了就无法证明一致性。
+ * @param parsedContentHash 解析产物内容的 64 位小写 SHA-256 摘要
  * @param parsedSizeBytes 解析产物字节数，有解析产物时必须大于 0。
  */
 public record RagIngestCheckpoint(RagIngestStage stage,

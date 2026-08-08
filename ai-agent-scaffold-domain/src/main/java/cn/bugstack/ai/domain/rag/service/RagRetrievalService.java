@@ -46,15 +46,21 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * 强租户 RAG 检索编排，保留 Dense/Sparse/融合/Rerank 独立指标以支持消融评测。
+ * 租户隔离的 RAG 在线检索编排服务。
+ * <p>服务按运行快照解析绑定和检索配置，执行稠密与稀疏召回、候选融合、
+ * 可选重排、业务回表、资源范围复核和 Token 预算组装。结果保留各阶段候选数与耗时，
+ * 供运行审计和检索质量评测使用。</p>
  */
 @Service
 public class RagRetrievalService {
 
     /** 查询长度、RRF 常数、绑定数量和数据库批量水位的硬边界。 */
     private static final int MAX_QUERY_CHARS = 4096;
+    /** RRF 融合时用于降低头部排名差异的固定常数。 */
     private static final int RRF_K = 60;
+    /** 单次运行允许解析的最大知识库绑定数。 */
     private static final int MAX_BINDINGS = 32;
+    /** 文档业务回表的单批最大标识数。 */
     private static final int DOCUMENT_LOAD_BATCH_SIZE = 500;
 
     /** 读取绑定、策略、知识库、文档和分块的业务事实。 */
@@ -72,7 +78,15 @@ public class RagRetrievalService {
     /** 统一估算最终上下文 Token 占用。 */
     private final TokenCounter tokenCounter;
 
-    /** 生产构造器使用平台默认字符 Token 估算器。 */
+    /**
+     * 使用平台默认字符 Token 估算器创建生产检索服务。
+     * @param repository RAG 业务仓储端口
+     * @param embeddingPort 稠密查询向量生成端口
+     * @param sparseEncoderPort 稀疏词项编码端口
+     * @param vectorStorePort 向量候选检索端口
+     * @param rerankerPort 候选重排端口
+     * @param auditPort 检索结果与引用审计端口
+     */
     @Autowired
     public RagRetrievalService(IRagRepository repository,
                                EmbeddingPort embeddingPort,
@@ -84,7 +98,16 @@ public class RagRetrievalService {
                 new CharacterTokenCounter());
     }
 
-    /** 测试构造器允许注入确定性的 Token 计数器。 */
+    /**
+     * 使用指定 Token 计数器创建检索服务，用于确定性预算测试。
+     * @param repository RAG 业务仓储端口
+     * @param embeddingPort 稠密查询向量生成端口
+     * @param sparseEncoderPort 稀疏词项编码端口
+     * @param vectorStorePort 向量候选检索端口
+     * @param rerankerPort 候选重排端口
+     * @param auditPort 检索结果与引用审计端口
+     * @param tokenCounter 上下文 Token 计数器
+     */
     RagRetrievalService(IRagRepository repository,
                         EmbeddingPort embeddingPort,
                         SparseEncoderPort sparseEncoderPort,
@@ -101,7 +124,14 @@ public class RagRetrievalService {
         this.tokenCounter = tokenCounter;
     }
 
-    /** 执行检索；请求身份必须来自运行时可信状态，不接受浏览器自报 tenant。 */
+    /**
+     * 使用运行时可信身份执行一次同步检索并写入审计。
+     * <p>检索审计写入失败只会标记结果降级，不会丢弃已完成的引用。
+     * 业务失败会在可用查询存在时尝试记录失败审计，随后保留原异常向上抛出。</p>
+     *
+     * @param request 包含可信身份、运行目标、查询、Token 预算和绑定快照的请求
+     * @return 经资源范围复核和 Token 预算裁剪的引用结果
+     */
     public RagRetrievalResult retrieve(RagRetrievalRequest request) {
         long started = System.nanoTime();
         String retrievalId = "ret_" + UUID.randomUUID().toString().replace("-", "");
@@ -161,7 +191,15 @@ public class RagRetrievalService {
         }
     }
 
-    /** 串联绑定解析、双路召回、融合、重排、扩展和引用预算。 */
+    /**
+     * 串联绑定解析、双路召回、融合、重排、扩展和引用预算。
+     * @param request 已通过构造校验的检索请求
+     * @param retrievalId 本次检索的唯一标识
+     * @param query 规范化后的检索问题
+     * @param started 用于计算完整耗时的单调时钟起点
+     * @param audit 不含正文的配置与执行审计状态
+     * @return 尚未补充审计耗时的检索结果
+     */
     private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
                                                 long started, AuditState audit) {
         Aggregate aggregate = new Aggregate(request.diagnosticsEnabled());
@@ -300,7 +338,16 @@ public class RagRetrievalService {
                 aggregate.degradationReasons, metrics, aggregate.diagnostics.result());
     }
 
-    /** 审计写入失败只降级主结果，不反向掩盖成功检索。 */
+    /**
+     * 写入检索审计；审计失败只返回 false，不反向掩盖成功检索。
+     * @param request 检索请求中的可信身份与运行范围
+     * @param query 规范化后的查询
+     * @param result 待审计的检索结果
+     * @param status success、empty、failed 或 cancelled
+     * @param exception 失败审计对应的异常，成功或空结果时为空
+     * @param state 实际生效的检索配置与执行计数
+     * @return 审计写入成功时返回 {@code true}
+     */
     private boolean recordAudit(RagRetrievalRequest request, String query, RagRetrievalResult result,
                                 String status, RuntimeException exception, AuditState state) {
         try {
@@ -337,7 +384,12 @@ public class RagRetrievalService {
         if (requiredAffected) throw exception;
     }
 
-    /** 将绑定解析为可搜索、代际有效、策略存在且当前用户可见的执行单元。 */
+    /**
+     * 将绑定解析为可检索、索引代际有效、配置存在且当前用户可见的执行单元。
+     * @param request 包含租户、用户与目标范围的检索请求
+     * @param bindings 已按运行快照收窄的绑定
+     * @return 可进入召回阶段的绑定、知识库和检索配置组合
+     */
     private List<ResolvedBinding> resolveBindings(RagRetrievalRequest request,
                                                    List<RagAgentBindingEntity> bindings) {
         List<ResolvedBinding> result = new ArrayList<>();
@@ -361,7 +413,12 @@ public class RagRetrievalService {
         return List.copyOf(result);
     }
 
-    /** 按Run创建时固化的Binding集合收窄目标绑定；快照失效时明确失败。 */
+    /**
+     * 按运行创建时冻结的绑定集合收窄目标绑定；快照中任一绑定失效时明确失败。
+     * @param request 可能携带运行绑定快照的检索请求
+     * @param targetBindings 当前数据库中目标的全部启用绑定
+     * @return 运行允许使用的有序绑定
+     */
     private List<RagAgentBindingEntity> selectRunBindings(RagRetrievalRequest request,
                                                            List<RagAgentBindingEntity> targetBindings) {
         if (request.bindingIds().isEmpty()) {
@@ -378,7 +435,17 @@ public class RagRetrievalService {
         return result;
     }
 
-    /** 在单个绑定范围内执行召回、融合、业务回表、去重和可选重排。 */
+    /**
+     * 在单个绑定范围内执行召回、融合、业务回表、去重和可选重排。
+     * @param request 检索请求的可信身份与链路信息
+     * @param retrievalId 本次检索标识
+     * @param query 规范化后的检索问题
+     * @param resolved 已通过权限、状态和索引代际校验的绑定
+     * @param denseVector 本请求共用的稠密查询向量
+     * @param sparseVector 本请求共用的稀疏查询向量
+     * @param aggregate 累计候选数、耗时、降级原因与诊断的容器
+     * @return 已回表校验并按最终分数排序的业务候选
+     */
     private List<RankedChunk> retrieveBinding(RagRetrievalRequest request,
                                               String retrievalId,
                                               String query,
@@ -519,7 +586,13 @@ public class RagRetrievalService {
         }
     }
 
-    /** 按策略合并 Dense/Sparse 命中，再执行阈值和融合 TopK。 */
+    /**
+     * 按配置合并稠密与稀疏命中，再执行分数阈值和融合 TopK。
+     * @param profile 本绑定生效的检索配置
+     * @param denseHits 稠密召回原始命中
+     * @param sparseHits 稀疏召回原始命中
+     * @return 按融合分数排序且已执行阈值与数量限制的候选
+     */
     private List<ScoredHit> fuse(RagRetrievalProfileEntity profile,
                                  List<VectorStorePort.VectorSearchHit> denseHits,
                                  List<VectorStorePort.VectorSearchHit> sparseHits) {
@@ -541,7 +614,15 @@ public class RagRetrievalService {
         return List.copyOf(result);
     }
 
-    /** 复核文档活动快照，扩展邻居，并同时执行全局与绑定 Token 预算。 */
+    /**
+     * 复核文档活动快照，扩展父分块与相邻分块，并同时执行全局与绑定 Token 预算。
+     * @param request 提供全局 Token 预算与租户范围的检索请求
+     * @param retrievalId 用于生成稳定引用标识的检索标识
+     * @param ranked 跨绑定去重后的有序候选
+     * @param active 本次实际执行的绑定，用于计算绑定独立预算
+     * @param aggregate 累计回表耗时、扩展数和预算拒绝数的容器
+     * @return 通过活动版本复核并适合注入模型上下文的引用
+     */
     private List<RagRetrievalResult.Citation> assembleCitations(RagRetrievalRequest request,
                                                                  String retrievalId,
                                                                  List<RankedChunk> ranked,
@@ -634,7 +715,13 @@ public class RagRetrievalService {
         return documents;
     }
 
-    /** 从主命中扩展父块和指定深度相邻块，最终按原文顺序排列。 */
+    /**
+     * 从主命中扩展父分块和指定深度的相邻分块，并按原文顺序排列。
+     * @param tenantId 候选所属租户
+     * @param value 已回表校验的主命中候选
+     * @param aggregate 累计回表耗时与扩展分块数的容器
+     * @return 只包含同租户、知识库、文档、版本和索引代际的上下文分块
+     */
     private List<RagChunkEntity> expandContext(String tenantId, RankedChunk value, Aggregate aggregate) {
         int window = value.resolved().profile().neighborWindow();
         LinkedHashMap<String, RagChunkEntity> chunks = new LinkedHashMap<>();
@@ -687,7 +774,14 @@ public class RagRetrievalService {
         }
     }
 
-    /** 识别删除并发窗口内尚留向量、但业务分块已清理的合法墓碑命中。 */
+    /**
+     * 识别删除并发窗口内尚留向量、但业务分块已清理的合法删除态命中。
+     * @param tenantId 命中所属租户
+     * @param resolved 命中对应的可信绑定范围
+     * @param hit 向量存储返回的候选
+     * @param chunk 按命中标识回表的业务分块，已物理清理时为空
+     * @return 仅当文档与版本已处于删除流程，且命中仍属于删除前活动快照时返回 {@code true}
+     */
     private boolean isLegitimateDeletingHit(String tenantId, ResolvedBinding resolved,
                                              VectorStorePort.VectorSearchHit hit,
                                              Map<String, Optional<RagDocumentEntity>> documents) {
@@ -922,21 +1016,37 @@ public class RagRetrievalService {
 
     /** 汇总阶段指标、降级原因和可选诊断轨迹。 */
     private static final class Aggregate {
+        /** Dense 向量召回返回的候选数。 */
         private int denseCandidates;
+        /** Sparse 向量召回返回的候选数。 */
         private int sparseCandidates;
+        /** 跨召回通道融合后的候选数。 */
         private int fusionCandidates;
+        /** 进入重排阶段的候选数。 */
         private int rerankCandidates;
+        /** Dense 召回耗时。 */
         private long denseMs;
+        /** Sparse 召回耗时。 */
         private long sparseMs;
+        /** 候选融合耗时。 */
         private long fusionMs;
+        /** 重排耗时。 */
         private long rerankMs;
+        /** 解析绑定和检索策略耗时。 */
         private long configurationMs;
+        /** 根据向量命中回查分块正文耗时。 */
         private long hydrationMs;
+        /** 邻接扩展、去重和上下文组装耗时。 */
         private long assemblyMs;
+        /** 邻接窗口额外扩展的分块数。 */
         private int expandedChunkCount;
+        /** 因最终 TopK 上限被拒绝的候选数。 */
         private int finalTopKRejected;
+        /** 因上下文 Token 预算被拒绝的候选数。 */
         private int tokenBudgetRejected;
+        /** 本次检索已发生的稳定降级原因。 */
         private final List<String> degradationReasons = new ArrayList<>();
+        /** 按请求开关有界收集候选诊断。 */
         private final DiagnosticsCollector diagnostics;
 
         /** 按请求开关决定是否采集候选级诊断。 */
@@ -949,9 +1059,13 @@ public class RagRetrievalService {
     private static final class DiagnosticsCollector {
         /** 候选数量与标题长度上限防止调试响应无界增长。 */
         private static final int MAX_CAPTURED = 2_048;
+        /** 单条诊断允许保留的最大标题路径字符数。 */
         private static final int MAX_HEADING_PATH_CHARS = 1_024;
+        /** 当前请求是否允许收集候选诊断。 */
         private final boolean enabled;
+        /** 已收集的不含正文候选轨迹。 */
         private final List<RagRetrievalResult.CandidateTrace> candidates = new ArrayList<>();
+        /** 候选轨迹达到上限后标记诊断结果已截断。 */
         private boolean truncated;
 
         /** 构造启用或空操作诊断器。 */
@@ -1033,14 +1147,23 @@ public class RagRetrievalService {
 
     /** 聚合不含正文的配置与执行审计状态。 */
     private final class AuditState {
+        /** 本次实际使用的检索策略 ID，按稳定顺序保存。 */
         private List<String> profileIds = List.of();
+        /** 实际使用策略中的最大 revision。 */
         private long profileRevision;
+        /** 至少一个已解析绑定启用了 Dense 召回。 */
         private boolean denseEnabled;
+        /** 至少一个已解析绑定启用了 Sparse 召回。 */
         private boolean sparseEnabled;
+        /** 至少一个已解析绑定启用了重排。 */
         private boolean rerankEnabled;
+        /** 目标配置声明的候选绑定数。 */
         private int candidateBindingCount;
+        /** 通过生命周期、权限和策略校验的绑定数。 */
         private int resolvedBindingCount;
+        /** 实际进入召回循环的绑定数。 */
         private int executedBindingCount;
+        /** 跨绑定合并并去重后的候选数。 */
         private int mergedCandidateCount;
 
         /** 从实际解析成功的绑定提取策略版本和能力开关。 */
@@ -1085,10 +1208,15 @@ public class RagRetrievalService {
 
     /** 聚合同一 chunkId 的双路分数和排名，再冻结为统一分数。 */
     private static final class MutableScore {
+        /** 同一分块首次命中时确定的资源范围。 */
         private final VectorStorePort.VectorSearchHit hit;
+        /** Dense 通道返回的原始相关性分数。 */
         private Double denseScore;
+        /** Sparse 通道返回的原始相关性分数。 */
         private Double sparseScore;
+        /** 分块在 Dense 结果中的排名，从 1 开始。 */
         private int denseRank;
+        /** 分块在 Sparse 结果中的排名，从 1 开始。 */
         private int sparseRank;
 
         /** 以首次命中的资源范围作为聚合基准。 */

@@ -14,90 +14,80 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Repository
+/** 会话与消息的 MySQL 仓储，所有读写都以租户、用户和会话范围为边界。 */
 public class SessionRepository implements ISessionRepository {
 
+    /** 会话元数据、RAG 策略和上下文版本的持久化入口。 */
     private final IChatSessionDao chatSessionDao;
+    /** 会话消息、有效性和顺序边界的持久化入口。 */
     private final IChatMessageDao chatMessageDao;
 
-    /**
-     * 创建会话仓储；参数是会话和消息 DAO；返回仓储实例。
-     */
+    /** 注入会话和消息 DAO，仓储本身不持有跨请求状态。 */
     public SessionRepository(IChatSessionDao chatSessionDao, IChatMessageDao chatMessageDao) {
         this.chatSessionDao = chatSessionDao;
         this.chatMessageDao = chatMessageDao;
     }
 
-    /**
-     * 新增会话；参数是会话实体；返回影响行数。
-     */
+    /** 新增会话，并把空 revision 和历史 RAG 调用方式归一为当前数据库值。 */
     @Override
     public int insertSession(ChatSessionEntity session) {
         return chatSessionDao.insert(toSessionPO(session));
     }
 
-    /**
-     * 查询会话；参数是租户、用户和会话ID；返回会话实体。
-     */
+    /** 在可信租户和用户范围内查询单个会话。 */
     @Override
     public ChatSessionEntity querySession(String tenantId, String userId, String sessionId) {
         return toSessionEntity(chatSessionDao.queryByTenantUserSession(tenantId, userId, sessionId));
     }
 
-    /**
-     * 锁定会话；参数是租户、用户和会话ID；返回被锁定的会话实体。
-     */
+    /** 锁定归属范围内的会话，供需要串行修改会话状态的事务使用。 */
     @Override
     public ChatSessionEntity lockSession(String tenantId, String userId, String sessionId) {
         return toSessionEntity(chatSessionDao.lockByTenantUserSession(tenantId, userId, sessionId));
     }
 
     @Override
+    /** 使用时间和会话 ID 组成稳定游标，分页查询用户会话。 */
     public List<ChatSessionEntity> querySessions(String tenantId, String userId, LocalDateTime cursorTime,
                                                  String cursorSessionId, int limit) {
         return chatSessionDao.queryPage(tenantId, userId, cursorTime, cursorSessionId, limit).stream()
                 .map(this::toSessionEntity).collect(Collectors.toList());
     }
 
-    /**
-     * 更新最后消息时间；参数是租户、用户、会话ID和时间；返回影响行数。
-     */
+    /** 更新最后消息时间，为会话列表排序提供依据。 */
     @Override
     public int updateLastMessageTime(String tenantId, String userId, String sessionId, LocalDateTime lastMessageTime) {
         return chatSessionDao.updateLastMessageTime(tenantId, userId, sessionId, lastMessageTime);
     }
 
     @Override
+    /** 使用期望 revision 更新本会话后续轮次采用的 RAG 策略。 */
     public int updateRagPolicy(String tenantId, String userId, String sessionId, String ragMode,
                                String ragInvocationMode, boolean enabled, long expectedRevision) {
         return chatSessionDao.updateRagPolicy(tenantId, userId, sessionId, ragMode, ragInvocationMode,
                 enabled, expectedRevision);
     }
 
-    /**
-     * 查询最大消息序号；参数是租户、用户和会话ID；返回当前最大序号。
-     */
+    /** 查询包含失效记录在内的最大消息序号，保证后续写入序号不重复。 */
     @Override
     public Integer queryMaxSequenceNo(String tenantId, String userId, String sessionId) {
         return chatMessageDao.queryMaxSequenceNo(tenantId, userId, sessionId);
     }
 
-    /**
-     * 查询有效消息最大序号；参数是租户、用户和会话ID；返回有效上下文边界。
-     */
+    /** 查询仍可进入上下文的最大消息序号，用作有效历史边界。 */
     @Override
     public Integer queryMaxValidSequenceNo(String tenantId, String userId, String sessionId) {
         return chatMessageDao.queryMaxValidSequenceNo(tenantId, userId, sessionId);
     }
 
-    /**
-     * 新增消息；参数是消息实体；返回影响行数。
-     */
+    /** 写入消息及其运行、有效性、顺序和追踪信息。 */
     @Override
     public int insertMessage(ChatMessageEntity message) {
         return chatMessageDao.insert(toMessagePO(message));
     }
 
     @Override
+    /** 原子递增上下文版本后回读新值，使缓存键立即与旧上下文分离。 */
     public long incrementContextRevision(String tenantId, String userId, String sessionId) {
         chatSessionDao.incrementContextRevision(tenantId, userId, sessionId);
         ChatSessionPO session = chatSessionDao.queryByTenantUserSession(tenantId, userId, sessionId);
@@ -105,12 +95,14 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
+    /** 将指定运行产生的消息整体标记为无效，保留记录用于审计和重放判断。 */
     public int invalidateRunMessages(String tenantId, String userId, String sessionId, String runId, String reason,
                                      LocalDateTime invalidatedAt) {
         return chatMessageDao.invalidateRunMessages(tenantId, userId, sessionId, runId, reason, invalidatedAt);
     }
 
     @Override
+    /** 查询一次运行产生的全部消息，包括之后可能被标记无效的记录。 */
     public List<ChatMessageEntity> queryRunMessages(String tenantId, String userId, String sessionId, String runId) {
         return chatMessageDao.queryRunMessages(tenantId, userId, sessionId, runId).stream()
                 .map(this::toMessageEntity)
@@ -118,17 +110,20 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
+    /** 仅查询当前仍有效且属于指定会话的消息。 */
     public ChatMessageEntity queryValidMessage(String tenantId, String userId, String sessionId, String messageId) {
         return toMessageEntity(chatMessageDao.queryValidMessage(tenantId, userId, sessionId, messageId));
     }
 
     @Override
+    /** 按消息顺序查询会话当前全部有效上下文。 */
     public List<ChatMessageEntity> queryValidMessages(String tenantId, String userId, String sessionId) {
         return chatMessageDao.queryValidMessages(tenantId, userId, sessionId).stream()
                 .map(this::toMessageEntity).collect(Collectors.toList());
     }
 
     @Override
+    /** 在给定序号之前倒序取一页有效消息，供上下文窗口分批装载。 */
     public List<ChatMessageEntity> queryValidMessagesBefore(String tenantId, String userId, String sessionId,
                                                             Integer beforeSequence, int limit) {
         return chatMessageDao.queryValidMessagesBefore(tenantId, userId, sessionId, beforeSequence, limit).stream()
@@ -136,13 +131,12 @@ public class SessionRepository implements ISessionRepository {
     }
 
     @Override
+    /** 在归属范围内软删除会话，保留历史数据但从正常查询中隐藏。 */
     public int softDelete(String tenantId, String userId, String sessionId) {
         return chatSessionDao.softDelete(tenantId, userId, sessionId);
     }
 
-    /**
-     * 转换会话持久化对象；参数是会话实体；返回会话 PO。
-     */
+    /** 将会话领域状态转换为数据库记录，并补齐兼容字段默认值。 */
     private ChatSessionPO toSessionPO(ChatSessionEntity session) {
         return ChatSessionPO.builder()
                 .tenantId(session.getTenantId())
@@ -166,9 +160,7 @@ public class SessionRepository implements ISessionRepository {
                 .build();
     }
 
-    /**
-     * 转换会话实体；参数是会话 PO；返回领域会话实体。
-     */
+    /** 从数据库恢复会话，并兼容旧记录缺少来源类型或 RAG 字段的情况。 */
     private ChatSessionEntity toSessionEntity(ChatSessionPO session) {
         if (session == null) {
             return null;
@@ -195,9 +187,7 @@ public class SessionRepository implements ISessionRepository {
                 .build();
     }
 
-    /**
-     * 转换消息持久化对象；参数是消息实体；返回消息 PO。
-     */
+    /** 将消息正文、运行归属、有效性和顺序信息转换为数据库记录。 */
     private ChatMessagePO toMessagePO(ChatMessageEntity message) {
         return ChatMessagePO.builder()
                 .tenantId(message.getTenantId())
@@ -219,6 +209,7 @@ public class SessionRepository implements ISessionRepository {
                 .build();
     }
 
+    /** 从数据库记录恢复可供领域层读取的完整消息。 */
     private ChatMessageEntity toMessageEntity(ChatMessagePO message) {
         return ChatMessageEntity.builder()
                 .tenantId(message.getTenantId()).userId(message.getUserId()).sessionId(message.getSessionId())

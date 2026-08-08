@@ -28,18 +28,23 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
 
     /** 限制远端响应体，避免异常服务耗尽堆内存。 */
     private static final long MAX_RESPONSE_BYTES = 8L * 1024 * 1024;
-    /** 配置、JSON、HTTP 与本地并发门禁。 */
+    /** Embedding 地址、模型修订号、超时、批次和重试配置。 */
     private final RagProperties properties;
+    /** 序列化 TEI 请求并解析向量数组。 */
     private final ObjectMapper objectMapper;
+    /** 复用连接执行 TEI HTTP 请求。 */
     private final HttpClient httpClient;
+    /** 限制当前进程同时访问 Embedding 服务的请求数。 */
     private final Semaphore concurrency;
 
+    /** 按配置创建生产环境 HTTP 客户端。 */
     @Autowired
     public TeiEmbeddingAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getEmbedding().getTimeout()).build());
     }
 
+    /** 注入可替换 HTTP 客户端，供协议和失败分支测试使用。 */
     TeiEmbeddingAdapter(RagProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -144,6 +149,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         Thread.sleep(desiredNanos / 1_000_000L, (int) (desiredNanos % 1_000_000L));
     }
 
+    /** 计算本次向量化操作的剩余时间预算，预算耗尽时立即结束。 */
     private Duration remaining(long deadlineNanos) {
         long remainingNanos = deadlineNanos - System.nanoTime();
         if (remainingNanos <= 0) {
@@ -152,6 +158,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         return Duration.ofNanos(remainingNanos);
     }
 
+    /** 仅把限流和网关临时故障识别为可重试状态。 */
     private boolean isTransientStatus(int status) {
         return status == 429 || status == 502 || status == 503 || status == 504;
     }
@@ -170,10 +177,12 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         return (type == EmbeddingInputType.QUERY ? "query: " : "passage: ") + input.trim();
     }
 
+    /** 去除端点末尾斜线后拼接固定 API 路径。 */
     static URI endpoint(URI base, String path) {
         return URI.create(base.toString().replaceAll("/+$", "") + "/" + path);
     }
 
+    /** 最多读取 maxBytes 响应内容，超过上限时拒绝整个响应。 */
     static byte[] readBounded(InputStream input, long maxBytes) throws Exception {
         try (input) {
             byte[] body = input.readNBytes(Math.toIntExact(maxBytes + 1));
@@ -184,6 +193,7 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         }
     }
 
+    /** 在剩余预算内申请一次远端调用许可，超时或中断时快速失败。 */
     static void acquire(Semaphore semaphore, Duration timeout, String service) {
         try {
             if (!semaphore.tryAcquire(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
@@ -195,12 +205,14 @@ public class TeiEmbeddingAdapter implements EmbeddingPort {
         }
     }
 
+    /** 在发送请求前检查模型服务认证配置。 */
     static void requireApiKey(String apiKey) {
         if (apiKey == null || apiKey.isBlank()) {
             throw new AppException("RAG_REMOTE_AUTH_MISSING", "RAG 模型服务认证未配置");
         }
     }
 
+    /** 限制大小后的原始 HTTP 响应。 */
     private record RawResponse(int statusCode, byte[] body) {
     }
 }

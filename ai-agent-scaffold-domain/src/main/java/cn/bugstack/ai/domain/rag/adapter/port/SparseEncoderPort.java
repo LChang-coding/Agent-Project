@@ -11,7 +11,12 @@ import java.util.TreeMap;
  */
 public interface SparseEncoderPort {
 
-    /** 批量编码查询或文档文本。 */
+    /**
+     * 按输入顺序批量编码查询或文档文本。
+     *
+     * @param command 包含文本批次和词表版本的编码命令
+     * @return 与输入文本一一对应的稀疏向量及词表版本
+     */
     SparseEncodingResult encode(SparseEncodingCommand command);
 
     /** 稀疏编码请求。 */

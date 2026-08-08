@@ -22,8 +22,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RagPersistenceCodec {
 
+    /** 保留字符串元数据泛型信息，防止 JSON 值被静默解析成其他类型。 */
     private static final TypeReference<Map<String, String>> STRING_MAP_TYPE = new TypeReference<>() { };
 
+    /** 执行严格 JSON 编解码，不启用掩盖脏数据的默认恢复。 */
     private final ObjectMapper objectMapper;
 
     /** 将字符串元数据编码为 JSON；空映射编码为空对象。 */
@@ -119,6 +121,7 @@ public class RagPersistenceCodec {
         }
     }
 
+    /** 读取检查点必填非空文本字段。 */
     private String requiredText(JsonNode root, String fieldName) {
         JsonNode value = root == null ? null : root.get(fieldName);
         if (value == null || !value.isTextual() || value.textValue().isBlank()) {
@@ -127,6 +130,7 @@ public class RagPersistenceCodec {
         return value.textValue();
     }
 
+    /** 读取检查点必填且可安全转换为 int 的整数字段。 */
     private int requiredInt(JsonNode root, String fieldName) {
         JsonNode value = root == null ? null : root.get(fieldName);
         if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()) {
@@ -135,6 +139,7 @@ public class RagPersistenceCodec {
         return value.intValue();
     }
 
+    /** 兼容旧检查点缺少的可选整数，但拒绝类型错误或数值越界。 */
     private int optionalInt(JsonNode root, String fieldName) {
         JsonNode value = root == null ? null : root.get(fieldName);
         if (value == null || value.isNull()) return 0;
@@ -144,6 +149,7 @@ public class RagPersistenceCodec {
         return value.intValue();
     }
 
+    /** 兼容旧检查点缺少的可选长整数，但拒绝类型错误或数值越界。 */
     private long optionalLong(JsonNode root, String fieldName) {
         JsonNode value = root == null ? null : root.get(fieldName);
         if (value == null || value.isNull()) return 0L;
@@ -153,6 +159,7 @@ public class RagPersistenceCodec {
         return value.longValue();
     }
 
+    /** 读取可选文本；缺失可为空，出现时必须是非空字符串。 */
     private String optionalText(JsonNode root, String fieldName) {
         JsonNode value = root == null ? null : root.get(fieldName);
         if (value == null || value.isNull()) return null;

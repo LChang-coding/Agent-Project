@@ -15,6 +15,27 @@ import java.time.Instant;
  * 可租约领取、可取消并受 fencing token 保护的摄取任务。
  * <p>任务身份与 generation 创建后不变；checkpoint 记录可恢复进度，revision 保护数据库条件更新，
  * lease 负责故障接管，fencing token 负责拒绝旧 Worker 的外部副作用和最终提交。</p>
+ *
+ * @param tenantId 任务所属租户
+ * @param knowledgeBaseId 知识库标识
+ * @param documentId 逻辑文档标识
+ * @param versionId 不可变文档版本标识
+ * @param jobId 摄取任务标识
+ * @param idempotencyKey 防止重复登记同一业务操作的幂等键
+ * @param operation 任务创建后不可变的操作类型
+ * @param generation 任务处理的目标索引代际
+ * @param status 任务执行状态
+ * @param checkpoint 已持久化的阶段、数量和解析事实
+ * @param attemptCount 已经开始的执行尝试次数
+ * @param maxAttempts 允许的最大执行尝试次数
+ * @param nextRetryAt 重试状态下的下次可领取时刻
+ * @param lease 当前执行实例与到期时刻
+ * @param fencingToken 拒绝过期执行实例写入的单调递增标识
+ * @param revision 数据库 CAS 更新使用的业务版本号
+ * @param cancelReason 取消请求原因
+ * @param errorCode 最近一次失败的稳定错误码
+ * @param errorMessage 最近一次失败的可诊断摘要
+ * @param traceId 关联任务与请求链路的标识
  */
 public record RagIngestJobEntity(String tenantId,
                                  String knowledgeBaseId,
@@ -37,9 +58,12 @@ public record RagIngestJobEntity(String tenantId,
                                  String errorMessage,
                                  String traceId) {
 
+    /** 失败补偿清理本身失败、仍允许按策略重试的原因前缀。 */
     public static final String FAILURE_CLEANUP_FAILED = "SYSTEM_FAILURE_CLEANUP:FAILED";
+    /** 失败补偿清理已达重试上限的原因前缀。 */
     public static final String FAILURE_CLEANUP_DEAD = "SYSTEM_FAILURE_CLEANUP:DEAD";
 
+    /** 校验任务身份、尝试次数、租约、重试时间和检查点与执行状态的一致性。 */
     public RagIngestJobEntity {
         requireText(tenantId, "租户ID");
         requireText(knowledgeBaseId, "知识库ID");

@@ -42,19 +42,25 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     private static final Set<String> TRUSTED_PAYLOAD_FIELDS = Set.of(
             "tenant_id", "kb_id", "document_id", "version_id", "generation", "chunk_id", "point_id");
 
+    /** 提供集合名称、认证、批量、超时、重试和响应大小边界。 */
     private final RagProperties properties;
+    /** 构造请求体并严格读取 Qdrant JSON 响应。 */
     private final ObjectMapper objectMapper;
+    /** 复用连接发送 Qdrant REST 请求。 */
     private final HttpClient httpClient;
+    /** 限制本进程同时占用的 Qdrant 请求数。 */
     private final Semaphore concurrency;
     /** 本进程已验证集合 schema 的快速路径；不替代首次服务端检查。 */
     private volatile boolean collectionReady;
 
     @Autowired
+    /** 按配置创建生产环境 HTTP 客户端和公平并发限制器。 */
     public QdrantVectorStoreAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getQdrant().getTimeout()).build());
     }
 
+    /** 注入可测试 HTTP 客户端，并在启动时校验向量维度和重试配置。 */
     QdrantVectorStoreAdapter(RagProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -111,6 +117,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    /** 精确统计租户指定版本的向量点数量，用于写入后完整性校验。 */
     public long countVersion(String tenantId, String versionId) {
         requireText(tenantId, "tenantId");
         requireText(versionId, "versionId");
@@ -126,6 +133,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
+    /** 分页读取版本点的可信身份快照，用于删除或重试前核对向量范围。 */
     public List<VectorPointSnapshot> listVersionPointSnapshots(String tenantId, String versionId) {
         requireText(tenantId, "tenantId");
         requireText(versionId, "versionId");
@@ -185,6 +193,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return readHits(tenantId, command, response.body());
     }
 
+    /** 构造同时包含稠密向量和稀疏向量的集合定义。 */
     private ObjectNode createCollectionBody() {
         ObjectNode body = objectMapper.createObjectNode();
         ObjectNode dense = body.putObject("vectors").putObject(DENSE_VECTOR);
@@ -195,6 +204,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return body;
     }
 
+    /** 校验既有集合的向量名称、维度和距离算法，拒绝向不兼容集合写入。 */
     private void validateCollectionSchema(JsonNode response) {
         JsonNode params = response.path("result").path("config").path("params");
         JsonNode vectors = params.path("vectors");
@@ -214,6 +224,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 将业务向量点转换为 Qdrant point，并写入可信检索范围字段。 */
     private ObjectNode pointNode(String tenantId, String versionId, VectorPoint point) {
         if (point == null || !versionId.equals(point.versionId())) throw invalid("向量点版本越界");
         validateDense(point.denseVector(), false);
@@ -236,6 +247,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return row;
     }
 
+    /** 按 Dense、Sparse 或 Hybrid 模式构造查询体和预取分支。 */
     private ObjectNode queryBody(VectorSearchCommand command, ObjectNode filter) {
         ObjectNode body = objectMapper.createObjectNode();
         boolean dense = !command.denseVector().isEmpty();
@@ -264,6 +276,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return body;
     }
 
+    /** 构造 Hybrid 查询的一路预取请求。 */
     private ObjectNode prefetchNode(JsonNode query, String using, ObjectNode filter, int limit) {
         ObjectNode value = objectMapper.createObjectNode();
         value.set("query", query);
@@ -273,6 +286,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return value;
     }
 
+    /** 将稀疏特征的索引和值转换为 Qdrant 稀疏向量格式。 */
     private ObjectNode sparseNode(SparseEncoderPort.SparseVector sparse) {
         ObjectNode node = objectMapper.createObjectNode();
         ArrayNode indices = node.putArray("indices");
@@ -282,6 +296,10 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     /** 构造租户硬过滤，并把每个知识库限定到活动 generation。 */
+    /**
+     * 构造租户与知识库活动代次过滤条件。
+     * 每个知识库必须同时匹配 kb_id 和 generation，防止召回旧版本向量。
+     */
     private ObjectNode scopedFilter(String tenantId, Set<KnowledgeBaseScope> scopes) {
         ObjectNode filter = objectMapper.createObjectNode();
         ArrayNode must = filter.putArray("must");
@@ -301,6 +319,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return filter;
     }
 
+    /** 构造按租户和文档版本精确删除、计数或遍历的过滤条件。 */
     private ObjectNode tenantVersionFilter(String tenantId, String versionId) {
         ObjectNode filter = objectMapper.createObjectNode();
         ArrayNode must = filter.putArray("must");
@@ -309,6 +328,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return filter;
     }
 
+    /** 构造字符串字段精确匹配条件。 */
     private ObjectNode match(String key, String value) {
         ObjectNode condition = objectMapper.createObjectNode();
         condition.put("key", key);
@@ -316,6 +336,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return condition;
     }
 
+    /** 构造整数值字段精确匹配条件。 */
     private ObjectNode match(String key, long value) {
         ObjectNode condition = objectMapper.createObjectNode();
         condition.put("key", key);
@@ -324,6 +345,10 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     /** 校验命中 payload 的租户和业务身份后才映射领域结果。 */
+    /**
+     * 解析并校验检索命中。
+     * 返回载荷必须属于请求租户和允许的知识库代次，否则按越权响应拒绝整批结果。
+     */
     private List<VectorSearchHit> readHits(String tenantId, VectorSearchCommand command, JsonNode response) {
         JsonNode rows = response.path("result").path("points");
         if (!rows.isArray() || rows.size() > command.topK()) throw responseInvalid("检索结果数量非法");
@@ -351,6 +376,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return List.copyOf(hits);
     }
 
+    /** 只向领域层暴露标量载荷，忽略嵌套结构和数组。 */
     private Map<String, String> scalarPayload(JsonNode payload) {
         Map<String, String> values = new LinkedHashMap<>();
         Iterator<Map.Entry<String, JsonNode>> fields = payload.fields();
@@ -407,6 +433,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 在剩余总时限内取得并发许可、发送一次请求并限量读取响应。 */
     private RawResponse send(URI uri, String method, byte[] requestBytes, long deadlineNanos,
                              RagProperties.Qdrant config) throws Exception {
         Duration remaining = remaining(deadlineNanos);
@@ -435,11 +462,13 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 识别适合在总时限内重试的超时、限流和网关状态。 */
     private boolean isTransient(int statusCode) {
         return statusCode == 408 || statusCode == 429
                 || statusCode == 502 || statusCode == 503 || statusCode == 504;
     }
 
+    /** 在总时限内执行有上限的指数退避，预算不足时直接结束。 */
     private void backoff(int retryIndex, long deadlineNanos, RagProperties.Qdrant config)
             throws InterruptedException {
         long multiplier = 1L << Math.min(retryIndex, 30);
@@ -459,6 +488,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         Thread.sleep(millis, nanos);
     }
 
+    /** 计算 Qdrant 操作的剩余总预算，耗尽时立即结束。 */
     private Duration remaining(long deadlineNanos) {
         long remainingNanos = deadlineNanos - System.nanoTime();
         if (remainingNanos <= 0) {
@@ -467,6 +497,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         return Duration.ofNanos(remainingNanos);
     }
 
+    /** 校验 Qdrant 写操作返回明确的 ok 状态。 */
     private void requireOk(JsonResponse response, String code) {
         if (response.body() == null || !"ok".equalsIgnoreCase(response.body().path("status").asText())) {
             throw new AppException(code, "Qdrant响应状态非法");
@@ -474,6 +505,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     /** 拒绝维度不符与非有限数值，防止坏向量入库或查询。 */
+    /** 校验稠密向量维度和数值有限性，可选向量允许为空。 */
     private void validateDense(List<Float> vector, boolean optional) {
         if (optional && (vector == null || vector.isEmpty())) return;
         if (vector == null || vector.size() != DENSE_DIMENSION || vector.stream().anyMatch(
@@ -482,6 +514,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 校验集合名和向量维度等启动配置，防止发送无效请求。 */
     private void validateConfiguration() {
         RagProperties.Qdrant config = properties.getQdrant();
         if (properties.getEmbedding().getDimension() != DENSE_DIMENSION
@@ -492,6 +525,7 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     /** 将业务点 ID 稳定映射为 Qdrant UUID，不改变业务身份。 */
+    /** 将业务 pointId 确定性转换为 Qdrant 接受的 UUID。 */
     private String qdrantPointId(String businessPointId) {
         try {
             return UUID.fromString(businessPointId).toString();
@@ -500,23 +534,33 @@ public class QdrantVectorStoreAdapter implements VectorStorePort {
         }
     }
 
+    /** 读取必需文本载荷，缺失时拒绝不可信响应。 */
     private String requiredText(JsonNode node, String field) {
         String value = node.path(field).asText(null);
         if (value == null || value.isBlank()) throw responseInvalid("命中payload缺少 " + field);
         return value;
     }
 
+    /** 在配置端点之后安全拼接资源路径和可选查询串。 */
     private URI endpoint(URI base, String path, String query) {
         String value = base.toString().replaceAll("/+$", "") + path;
         return URI.create(query == null ? value : value + "?" + query);
     }
 
+    /** 返回当前配置集合的 API 路径。 */
     private String collectionPath() { return "/collections/" + encode(properties.getQdrant().getCollection()); }
+    /** 返回当前集合 points 资源的 API 路径。 */
     private String pointsPath() { return collectionPath() + "/points"; }
+    /** 对路径片段进行 UTF-8 URL 编码并使用标准空格编码。 */
     private String encode(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20"); }
+    /** 校验请求必需文本字段。 */
     private void requireText(String value, String field) { if (value == null || value.isBlank()) throw invalid(field + "不能为空"); }
+    /** 创建稳定的 Qdrant 请求参数错误。 */
     private AppException invalid(String message) { return new AppException("RAG_QDRANT_REQUEST_INVALID", message); }
+    /** 创建稳定的 Qdrant 响应协议错误。 */
     private AppException responseInvalid(String message) { return new AppException("RAG_QDRANT_RESPONSE_INVALID", message); }
+    /** 限制大小后的原始 HTTP 响应。 */
     private record RawResponse(int statusCode, byte[] body) {}
+    /** 已解析为 JSON 的 Qdrant 响应。 */
     private record JsonResponse(int statusCode, JsonNode body) {}
 }

@@ -53,6 +53,7 @@ public class GatewayToolset implements BaseToolset {
      * 所有的门禁、幂等和审计都在它内部依赖数据库完成，不依赖 Java 层的对象状态。
      */
     private final ToolGateway toolGateway;
+    /** 根据当前可信运行上下文生成可见的平台内置工具。 */
     private final PlatformToolResolver platformToolResolver;
 
     /**
@@ -64,6 +65,13 @@ public class GatewayToolset implements BaseToolset {
         this(toolResolver, toolGateway, new PlatformToolResolver(false, false));
     }
 
+    /**
+     * 创建同时支持租户工具和平台内置工具的工具集。
+     *
+     * @param toolResolver 查询用户可用 Skill/MCP 的解析器
+     * @param toolGateway 统一执行和审计工具调用的网关
+     * @param platformToolResolver 根据运行上下文生成平台工具的解析器
+     */
     @Autowired
     public GatewayToolset(ToolResolver toolResolver, ToolGateway toolGateway,
                           PlatformToolResolver platformToolResolver) {
@@ -215,22 +223,26 @@ public class GatewayToolset implements BaseToolset {
         }
     }
 
+    /** 从可信运行时属性恢复可选布尔开关。 */
     private Boolean booleanValue(Object value) {
         return value instanceof Boolean result ? result : value == null ? null : Boolean.valueOf(String.valueOf(value));
     }
 
+    /** 从可信运行时属性提取非空字符串列表。 */
     private List<String> stringList(Object value) {
         if (!(value instanceof List<?> values)) return List.of();
         return values.stream().filter(item -> item != null).map(String::valueOf)
                 .filter(item -> !item.isBlank()).toList();
     }
 
+    /** 只接受服务端生成的路由描述符，拒绝模型或普通对象伪造。 */
     private List<PlatformToolResolver.RouteDescriptor> routeDescriptors(Object value) {
         if (!(value instanceof List<?> values)) return List.of();
         return values.stream().filter(PlatformToolResolver.RouteDescriptor.class::isInstance)
                 .map(PlatformToolResolver.RouteDescriptor.class::cast).toList();
     }
 
+    /** 按 ADK 最终函数名检查冲突，防止不同工具规范化后覆盖彼此。 */
     private void assertUniqueFunctionNames(List<ToolCatalogEntity> tools) {
         Set<String> names = new HashSet<>();
         for (ToolCatalogEntity tool : tools) {

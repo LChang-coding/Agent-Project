@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 public class WorkflowController implements IWorkflowApiService {
 
+    /** 管理工作流草稿、发布版本、删除状态和节点选项。 */
     @Resource
     private IWorkflowService workflowService;
 

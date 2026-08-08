@@ -46,20 +46,33 @@ import java.util.concurrent.Semaphore;
 @Slf4j
 public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
 
+    /** 单个待解析文档最大允许 50 MiB。 */
     private static final long MAX_DOCUMENT_BYTES = 50L * 1024 * 1024;
+    /** 本地 Markdown 字符读取缓冲区大小。 */
     private static final int TEXT_BUFFER_CHARS = 8 * 1024;
+    /** PDF 的标准 MIME 类型。 */
     private static final String PDF_MIME = "application/pdf";
+    /** DOCX 的标准 MIME 类型。 */
     private static final String DOCX_MIME =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    /** Markdown 的标准 MIME 类型。 */
     private static final String MARKDOWN_MIME = "text/markdown";
+    /** 本地 Markdown 兼容解析器标识。 */
     private static final String LOCAL_MARKDOWN_PARSER = "local-markdown-java17";
 
+    /** Docling 地址、认证、超时和文档上限配置。 */
     private final RagProperties properties;
+    /** 解析 Docling 响应并序列化 Document IR。 */
     private final ObjectMapper objectMapper;
+    /** 复用连接执行 Docling HTTP 请求。 */
     private final HttpClient httpClient;
+    /** 限制当前进程同时发送的 Docling 请求数量。 */
     private final Semaphore concurrency;
+    /** 在本地保留 Markdown AST 结构。 */
     private final MarkdownAstDocumentParser markdownParser;
+    /** 使用 Apache POI 在本地保留 DOCX 结构。 */
     private final DocxDocumentParser docxParser;
+    /** 将 Docling JSON 转换为平台统一 Document IR。 */
     private final DoclingJsonDocumentIrMapper doclingIrMapper;
 
     /**
@@ -74,6 +87,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 .connectTimeout(connectTimeout(properties.getDocling().getTimeout())).build());
     }
 
+    /** 注入可替换 HTTP 客户端，供远端协议和失败分支测试使用。 */
     DoclingDocumentParserAdapter(RagProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -122,6 +136,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return parseWithDocling(command, path, mimeType);
     }
 
+    /** 在配置的内容上限内读取 UTF-8 Markdown，并交给本地 AST 解析器。 */
     private ParsedDocument parseMarkdown(ParseCommand command, Path path) {
         RagProperties.Docling config = properties.getDocling();
         if (command.contentLength() > config.getMaxResponseBytes()) {
@@ -189,6 +204,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 构造受限 multipart 请求，关闭图片回传并传递页数、OCR 和文档超时。 */
     private HttpRequest buildRequest(ParseCommand command, Path path, String mimeType,
                                      RagProperties.Docling config) throws IOException {
         String boundary = "ai-agent-rag-" + UUID.randomUUID();
@@ -250,39 +266,47 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 连接超时不超过完整请求超时和十秒上限。 */
     private static Duration connectTimeout(Duration requestTimeout) {
         Duration upperBound = Duration.ofSeconds(10);
         return requestTimeout.compareTo(upperBound) < 0 ? requestTimeout : upperBound;
     }
 
+    /** 将单调时钟耗时转换为非负毫秒数。 */
     private static long elapsedMillis(long startedNanos) {
         return Math.max(0L, java.util.concurrent.TimeUnit.NANOSECONDS
                 .toMillis(System.nanoTime() - startedNanos));
     }
 
+    /** 构造一个 UTF-8 multipart 文本字段。 */
     private HttpRequest.BodyPublisher textPart(String boundary, String name, String value) {
         return bytes("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
                 + value + "\r\n");
     }
 
+    /** 构造文档文件的 multipart 头，文件内容由后续 BodyPublisher 提供。 */
     private HttpRequest.BodyPublisher fileHeader(String boundary, String fileName, String mimeType) {
         return bytes("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"files\"; filename=\"" + fileName + "\"\r\n"
                 + "Content-Type: " + mimeType + "\r\n\r\n");
     }
 
+    /** 将 multipart 控制文本转换为 UTF-8 请求体片段。 */
     private HttpRequest.BodyPublisher bytes(String value) {
         return HttpRequest.BodyPublishers.ofByteArray(value.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** 将请求超时转换为 Docling 接受的至少一秒文档超时。 */
     private long documentTimeoutSeconds(Duration timeout) {
         return Math.max(1L, timeout.toSeconds());
     }
 
+    /** 保留 HTTP 响应、实际尝试次数和总传输耗时。 */
     private record TransportResponse(HttpResponse<InputStream> response, int attempts, long wallMs) {
     }
 
+    /** 去除端点末尾斜线后拼接固定 API 路径。 */
     private URI endpoint(URI base, String path) {
         return URI.create(base.toString().replaceAll("/+$", "") + "/" + path);
     }
@@ -321,10 +345,12 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return path;
     }
 
+    /** 去除 MIME 参数并统一转为小写，供解析器路由判断。 */
     private String normalizeMimeType(String mimeType) {
         return mimeType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
     }
 
+    /** 拒绝会改变 multipart 结构或携带路径信息的远端文件名。 */
     private void validateRemoteFileName(String fileName) {
         if (fileName.indexOf('/') >= 0 || fileName.indexOf('\\') >= 0 || fileName.indexOf('"') >= 0
                 || fileName.codePoints().anyMatch(Character::isISOControl)) {
@@ -361,6 +387,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return markdown;
     }
 
+    /** 有界读取 Docling 响应，超过配置上限时拒绝整个响应。 */
     private byte[] readBounded(InputStream input, long maxBytes) throws IOException {
         int limit = safeReadLimit(maxBytes);
         try (input) {
@@ -372,6 +399,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 将配置的字节上限安全转换为 JDK 读取 API 使用的 int。 */
     private int safeReadLimit(long maxBytes) {
         if (maxBytes < 1 || maxBytes >= Integer.MAX_VALUE) {
             throw new AppException("RAG_DOCLING_LIMIT_INVALID", "Docling 有界读取配置不合法");
@@ -379,6 +407,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return (int) maxBytes;
     }
 
+    /** 解析 Docling JSON；不把可能包含文档内容的原始异常写入错误链。 */
     private ConvertDocumentResponse readResponse(byte[] body) {
         try {
             return objectMapper.readValue(body, ConvertDocumentResponse.class);
@@ -388,6 +417,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         }
     }
 
+    /** 从规范化 Markdown、页码映射和解析元数据构造兼容结果。 */
     private ParsedDocument parsedDocument(String markdown, String parserVersion, ParseCommand command,
                                           Map<String, String> metadata, PageMetadata pageMetadata) {
         String normalized = markdown.replace("\r\n", "\n").replace('\r', '\n').strip();
@@ -402,6 +432,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 pageMetadata.pageCount(), parserVersion, resultMetadata);
     }
 
+    /** 按 Markdown 标题切分段落，并按标题路径消耗 Docling 页码。 */
     private List<ParsedSection> sections(String markdown, HeadingPageResolver headingPages) {
         List<ParsedSection> result = new ArrayList<>();
         List<Heading> headingPath = new ArrayList<>();
@@ -428,6 +459,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return List.copyOf(result);
     }
 
+    /** 提交一个非空段落并清空当前内容缓冲区。 */
     private void addSection(List<ParsedSection> sections, String headingPath, Integer pageNumber,
                             StringBuilder content) {
         String value = content.toString().strip();
@@ -503,6 +535,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return new PageMetadata(pageNumbers.size(), new HeadingPageResolver(headings));
     }
 
+    /** 按标题级别更新当前路径，并返回供段落和页码匹配的完整路径。 */
     private String pushHeading(List<Heading> path, Heading heading) {
         while (!path.isEmpty() && path.get(path.size() - 1).level() >= heading.level()) {
             path.remove(path.size() - 1);
@@ -518,6 +551,7 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return value.toString();
     }
 
+    /** 从首条 provenance 读取已验证页码，缺失或越界时返回空值。 */
     private Integer provenancePage(JsonNode provenance, Set<Integer> pageNumbers) {
         if (provenance == null || !provenance.isArray() || provenance.isEmpty()) {
             return null;
@@ -531,10 +565,12 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return pageNumbers.contains(value) ? value : null;
     }
 
+    /** 创建统一的 Docling 页级元数据协议错误。 */
     private AppException invalidPageMetadata() {
         return new AppException("RAG_DOCLING_PAGE_METADATA_INVALID", "Docling 返回的页级元数据不合法");
     }
 
+    /** 识别一到六级 ATX 标题，普通文本返回空值。 */
     private Heading heading(String line) {
         int level = 0;
         while (level < line.length() && level < 6 && line.charAt(level) == '#') {
@@ -547,32 +583,41 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
         return text.isBlank() ? null : new Heading(level, text);
     }
 
+    /** 删除 UTF-8 文本开头的单个 BOM。 */
     private String stripBom(String value) {
         return !value.isEmpty() && value.charAt(0) == '\ufeff' ? value.substring(1) : value;
     }
 
+    /** Markdown 标题级别和正文。 */
     private record Heading(int level, String text) {
     }
 
+    /** 一个标题路径在 Docling 原文中出现的页码。 */
     private record HeadingPage(String path, int pageNumber) {
     }
 
+    /** 已验证的总页数和标题页码解析器。 */
     private record PageMetadata(int pageCount, HeadingPageResolver headingPages) {
 
+        /** 返回没有可靠页码信息的结果。 */
         private static PageMetadata empty() {
             return new PageMetadata(0, new HeadingPageResolver(List.of()));
         }
     }
 
+    /** 按标题路径保存出现顺序，处理同名标题位于不同页面的情况。 */
     private static final class HeadingPageResolver {
 
+        /** 每个标题路径尚未消费的页码队列。 */
         private final Map<String, Deque<Integer>> pagesByPath = new LinkedHashMap<>();
 
+        /** 按 Docling 文本顺序建立标题路径到页码的队列。 */
         private HeadingPageResolver(List<HeadingPage> headings) {
             headings.forEach(heading -> pagesByPath.computeIfAbsent(heading.path(), ignored -> new ArrayDeque<>())
                     .addLast(heading.pageNumber()));
         }
 
+        /** 消费标题路径下一次出现的页码，无法匹配时返回空值。 */
         private Integer nextPage(String path) {
             Deque<Integer> pages = pagesByPath.get(path);
             return pages == null || pages.isEmpty() ? null : pages.removeFirst();
@@ -580,11 +625,13 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    /** Docling convert/file 接口的顶层响应字段。 */
     private record ConvertDocumentResponse(DoclingDocument document, String status,
                                            @JsonProperty("processing_time") Double processingTime) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    /** Docling 返回的文件名、展示 Markdown 和结构化 JSON。 */
     private record DoclingDocument(@JsonProperty("filename") String fileName,
                                    @JsonProperty("md_content") String markdown,
                                    @JsonProperty("json_content") JsonNode jsonContent) {

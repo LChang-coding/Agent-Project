@@ -13,21 +13,40 @@ import java.util.List;
 @Service
 public class RagToolCapabilityService {
 
+    /** 读取运行冻结绑定与知识库展示名称。 */
     private final IRagRepository repository;
+    /** 是否允许向模型暴露平台 RAG 工具能力。 */
     private final boolean platformRagEnabled;
 
+    /**
+     * 使用启用平台 RAG 工具的默认配置创建服务。
+     * @param repository RAG 业务仓储端口
+     */
     public RagToolCapabilityService(IRagRepository repository) {
         this(repository, true);
     }
 
     @Autowired
+    /**
+     * 创建并按平台开关控制能力说明的服务。
+     * @param repository RAG 业务仓储端口
+     * @param platformRagEnabled 平台 RAG 工具总开关
+     */
     public RagToolCapabilityService(IRagRepository repository,
                                     @Value("${ai.tools.platform.rag-enabled:true}") boolean platformRagEnabled) {
         this.repository = repository;
         this.platformRagEnabled = platformRagEnabled;
     }
 
-    /** 按服务端冻结的绑定生成模型可读的知识库和停止规则。 */
+    /**
+     * 按服务端冻结的绑定生成模型可读的知识库与调用限制。
+     *
+     * @param tenantId 运行所属租户
+     * @param invocationMode 运行创建时冻结的 RAG 调用模式
+     * @param bindingIds 运行创建时冻结的绑定标识
+     * @param nodeEnabled 当前节点是否允许暴露 RAG 工具
+     * @return AGENT_TOOL 模式的能力说明；不应暴露工具时返回空字符串
+     */
     public String guidance(String tenantId, String invocationMode, List<String> bindingIds,
                            Boolean nodeEnabled) {
         if (!platformRagEnabled || !"AGENT_TOOL".equalsIgnoreCase(invocationMode)
@@ -57,6 +76,7 @@ public class RagToolCapabilityService {
         return result.toString();
     }
 
+    /** 追加一条经冻结绑定对应的知识库名称与 Token 上限。 */
     private void appendBinding(StringBuilder result, RagAgentBindingEntity binding) {
         String name = repository.findKnowledgeBase(binding.tenantId(), binding.knowledgeBaseId())
                 .map(RagKnowledgeBaseEntity::name).orElse(binding.knowledgeBaseId());

@@ -42,13 +42,20 @@ import java.util.stream.Collectors;
 @Repository
 public class ToolRepository implements IToolRepository {
 
+    /** 解析和生成工具版本配置、资产元数据及调用结果 JSON。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** Skill 包等工具资产的持久化入口。 */
     private final IArtifactAssetDao artifactAssetDao;
+    /** Skill 定义及其发布指针的持久化入口。 */
     private final ISkillDefinitionDao skillDefinitionDao;
+    /** Skill 不可变版本配置的持久化入口。 */
     private final ISkillVersionDao skillVersionDao;
+    /** MCP 定义及其发布指针的持久化入口。 */
     private final IMcpServerConfigDao mcpServerConfigDao;
+    /** MCP 不可变版本配置的持久化入口。 */
     private final IMcpConfigVersionDao mcpConfigVersionDao;
+    /** 工具调用幂等账本、结果和会话统计的持久化入口。 */
     private final IToolCallLogDao toolCallLogDao;
 
     /**
@@ -331,6 +338,7 @@ public class ToolRepository implements IToolRepository {
     }
 
     @Override
+    /** 从已完成调用中提取会话分享所需的工具类型、版本和名称快照。 */
     public List<SessionToolDependencyEntity> queryShareToolDependencies(String tenantId, String userId,
                                                                         String sessionId) {
         return toolCallLogDao.queryShareDependencies(tenantId, userId, sessionId).stream()

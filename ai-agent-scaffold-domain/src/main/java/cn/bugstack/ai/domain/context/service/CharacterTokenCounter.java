@@ -7,7 +7,7 @@ package cn.bugstack.ai.domain.context.service;
 public class CharacterTokenCounter implements TokenCounter {
 
     /**
-     * 预估文本 token 数；参数是文本；返回保守估算值。
+     * 预估文本 token 数。
      */
     @Override
     public int estimate(String text) {

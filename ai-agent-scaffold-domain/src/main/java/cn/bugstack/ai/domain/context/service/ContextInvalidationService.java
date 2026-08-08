@@ -27,7 +27,7 @@ public class ContextInvalidationService {
     private final IContextCacheRepository cacheRepository;
 
     /**
-     * 创建上下文失效服务；参数是压缩、记忆和缓存仓储；返回服务实例。
+     * 创建上下文失效服务。
      */
     public ContextInvalidationService(IContextCompactionTaskRepository taskRepository,
                                       IConversationMemoryRepository memoryRepository,
@@ -38,7 +38,7 @@ public class ContextInvalidationService {
     }
 
     /**
-     * 失效运行上下文；参数是可信身份、运行消息和原因；无返回值。
+     * 失效运行上下文。
      */
     @Transactional(rollbackFor = Exception.class)
     public void invalidateRun(String tenantId, String userId, String sessionId, String runId,
@@ -63,7 +63,7 @@ public class ContextInvalidationService {
     }
 
     /**
-     * 失效整个会话派生上下文；参数是可信身份、会话和原因；无返回值。
+     * 失效整个会话派生上下文。
      */
     @Transactional(rollbackFor = Exception.class)
     public void invalidateSession(String tenantId, String userId, String sessionId, String reason) {
@@ -80,6 +80,7 @@ public class ContextInvalidationService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            /** 事务提交后再清除缓存，避免数据库回滚却丢失仍有效缓存。 */
             public void afterCommit() {
                 cacheRepository.evictSession(tenantId, userId, sessionId);
             }

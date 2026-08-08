@@ -15,8 +15,10 @@ import java.util.Set;
 /** 单次摄取 attempt 的受控临时工作目录。 */
 public final class RagIngestWorkspace implements AutoCloseable {
 
+    /** 本次摄取独占且规范化后的临时目录根路径。 */
     private final Path root;
 
+    /** 封装已经创建并限制权限的临时根目录。 */
     private RagIngestWorkspace(Path root) {
         this.root = root;
     }
@@ -39,6 +41,7 @@ public final class RagIngestWorkspace implements AutoCloseable {
         }
     }
 
+    /** 返回解析器和下载命令允许访问的受控根目录。 */
     public Path root() {
         return root;
     }
@@ -79,17 +82,20 @@ public final class RagIngestWorkspace implements AutoCloseable {
     }
 
     @Override
+    /** 递归删除本次摄取产生的文件和目录，清理失败显式上报。 */
     public void close() {
         try {
             if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return;
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
+                /** 删除遍历到的普通文件，不跟随目录外的符号链接。 */
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     Files.delete(file);
                     return FileVisitResult.CONTINUE;
                 }
 
                 @Override
+                /** 子项清理完成后删除目录；遍历错误会终止并上报。 */
                 public FileVisitResult postVisitDirectory(Path dir, IOException error) throws IOException {
                     if (error != null) throw error;
                     Files.delete(dir);

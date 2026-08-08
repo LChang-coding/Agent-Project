@@ -26,7 +26,7 @@ public final class ContextFragment {
     }
 
     /**
-     * 创建上下文片段；参数是类型、内容和片段预算；返回上下文片段。
+     * 创建上下文片段。
      */
     public static ContextFragment of(ContextFragmentType type, String content, int maxTokens) {
         if (type == null || content == null || content.isBlank() || maxTokens < 0) {

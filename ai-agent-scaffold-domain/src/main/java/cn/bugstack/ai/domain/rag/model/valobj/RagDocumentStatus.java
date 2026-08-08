@@ -1,16 +1,9 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一份逻辑文档在知识库里的生命周期状态。
- *
- * <p>属于哪一层：领域层值对象，是 RagDocumentEntity 的状态字段类型。</p>
- *
- * <p>状态由谁推进：用户上传后由 RagDocumentEntity 的迁移方法推进，实际触发者是摄取 Worker
- * （成功走 activate、失败走 failProcessing、重试走 retryProcessing）和管理员删除请求
- * （requestDeletion → deleted）。检索链路只读不写。</p>
- *
- * <p>它不负责什么：不表示某个具体版本的处理进度（那是 RagDocumentVersionStatus），
- * 也不表示后台任务成功失败（那是 RagIngestJobStatus）。</p>
+ * 逻辑文档的生命周期状态。
+ * <p>文档实体通过状态迁移方法推进该状态；具体版本的处理进度和后台任务结果
+ * 分别由 RagDocumentVersionStatus 和 RagIngestJobStatus 表达。</p>
  */
 public enum RagDocumentStatus {
 

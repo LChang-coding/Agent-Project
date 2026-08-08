@@ -16,7 +16,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AgentPromptScheduleHandler implements ScheduleTaskHandler {
 
+    /** 使用配置中确认的 Agent、用户和消息发起对话。 */
     private final IChatService chatService;
+    /** 解析任务载荷并编码完整回复。 */
     private final ObjectMapper objectMapper;
 
     /** 返回持久化配置使用的处理器路由键。 */

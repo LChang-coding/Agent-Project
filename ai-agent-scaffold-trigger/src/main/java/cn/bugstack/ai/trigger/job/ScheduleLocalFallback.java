@@ -19,8 +19,11 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "ai.scheduler", name = "local-fallback-enabled", havingValue = "true")
 public class ScheduleLocalFallback {
 
+    /** 根据已保存的 Cron 配置生成或更新待执行任务。 */
     private final ScheduleReconciler reconciler;
+    /** 领取已到执行时间的任务并交给对应处理器。 */
     private final ScheduleDispatcher dispatcher;
+    /** 提供单轮对账和派发的批量上限。 */
     private final SchedulerProperties properties;
 
     /**

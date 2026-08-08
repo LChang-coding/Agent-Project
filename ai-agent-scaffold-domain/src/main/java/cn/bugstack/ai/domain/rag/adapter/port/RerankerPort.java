@@ -7,7 +7,12 @@ import java.util.List;
  */
 public interface RerankerPort {
 
-    /** 对同一查询的候选文本进行相关性重排。 */
+    /**
+     * 对同一查询的候选文本进行相关性重排。
+     *
+     * @param command 包含查询、候选文本和返回数量的重排命令
+     * @return 按模型相关性排序的候选及模型版本
+     */
     RerankResult rerank(RerankCommand command);
 
     /** 重排请求。 */

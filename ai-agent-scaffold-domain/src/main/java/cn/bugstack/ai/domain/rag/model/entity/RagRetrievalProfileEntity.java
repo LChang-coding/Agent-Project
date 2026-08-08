@@ -7,6 +7,26 @@ import java.math.BigDecimal;
 
 /**
  * 可版本化的检索配置实体。
+ *
+ * @param tenantId 检索配置所属租户
+ * @param profileId 检索配置标识
+ * @param name 检索配置展示名称
+ * @param mode 启用的召回通道
+ * @param fusionStrategy 多路候选的融合策略
+ * @param denseWeight 稠密召回的加权融合权重
+ * @param sparseWeight 稀疏召回的加权融合权重
+ * @param denseTopK 稠密召回候选数
+ * @param sparseTopK 稀疏召回候选数
+ * @param fusionTopK 融合后保留的候选数
+ * @param rerankEnabled 是否调用重排模型
+ * @param rerankTopK 送入重排阶段的候选数
+ * @param finalTopK 最终组装引用前保留的候选数
+ * @param neighborWindow 主命中两侧允许扩展的相邻分块数
+ * @param maxContextTokens 该配置允许的最大上下文 Token 数
+ * @param scoreThreshold 候选可进入最终结果的最低分数
+ * @param queryRewriteEnabled 是否在召回前重写查询
+ * @param deduplicateEnabled 是否在结果组装前去除重复候选
+ * @param revision 乐观并发控制版本号
  */
 public record RagRetrievalProfileEntity(String tenantId,
                                         String profileId,
@@ -28,6 +48,7 @@ public record RagRetrievalProfileEntity(String tenantId,
                                         boolean deduplicateEnabled,
                                         long revision) {
 
+    /** 校验召回模式、融合策略、各阶段候选数、Token 预算和分数阈值。 */
     public RagRetrievalProfileEntity {
         requireText(tenantId, "租户ID");
         requireText(profileId, "检索配置ID");

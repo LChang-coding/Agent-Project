@@ -49,15 +49,23 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RagRepository implements IRagRepository {
 
-    /** RAG 聚合、任务、分块、策略和绑定的数据库入口。 */
+    /** 知识库聚合的查询、锁定和代次切换入口。 */
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
+    /** 逻辑文档状态和当前活动版本的持久化入口。 */
     private final IRagDocumentDao documentDao;
+    /** 不可变文档版本及解析产物信息的持久化入口。 */
     private final IRagDocumentVersionDao documentVersionDao;
+    /** 摄取、删除任务的领取、续租和状态更新入口。 */
     private final IRagIngestTaskDao ingestTaskDao;
+    /** 检索分块的批量写入、查询和清理入口。 */
     private final IRagChunkDao chunkDao;
+    /** 租户检索参数配置的持久化入口。 */
     private final IRagRetrievalProfileDao retrievalProfileDao;
+    /** Agent、工作流与知识库绑定关系的持久化入口。 */
     private final IRagAgentBindingDao agentBindingDao;
+    /** 在数据库对象与领域实体之间转换，并恢复持久化默认值。 */
     private final RagPersistenceMapper mapper;
+    /** 将枚举、检查点和元数据转换为稳定的数据库表示。 */
     private final RagPersistenceCodec codec;
 
     @Override
@@ -104,6 +112,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 按文档 ID 批量查询并去重；限制单批数量，避免生成过大的 SQL 条件。 */
     public List<RagDocumentEntity> listDocumentsByIds(String tenantId, List<String> documentIds) {
         requireText(tenantId, "tenantId");
         if (documentIds == null || documentIds.isEmpty()) return List.of();
@@ -117,6 +126,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 查询知识库下的全部逻辑文档。 */
     public List<RagDocumentEntity> listDocuments(String tenantId, String knowledgeBaseId) {
         return documentDao.queryListByTenantAndKnowledgeBaseId(requireText(tenantId, "tenantId"),
                         requireText(knowledgeBaseId, "knowledgeBaseId")).stream()
@@ -124,12 +134,14 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 校验可信租户后新增逻辑文档。 */
     public int insertDocument(String tenantId, RagDocumentEntity document) {
         requireTenant(tenantId, document == null ? null : document.tenantId());
         return documentDao.insert(mapper.toDocumentPo(document));
     }
 
     @Override
+    /** 仅在 revision 未变化时更新文档状态和活动版本。 */
     public int updateDocument(String tenantId, RagDocumentEntity document, long expectedRevision) {
         requireTenant(tenantId, document == null ? null : document.tenantId());
         requireRevision(expectedRevision);
@@ -144,6 +156,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 按逻辑文档查询其所有不可变版本。 */
     public List<RagDocumentVersionEntity> listDocumentVersions(String tenantId, String documentId) {
         return documentVersionDao.queryListByTenantAndDocumentId(requireText(tenantId, "tenantId"),
                         requireText(documentId, "documentId")).stream()
@@ -151,6 +164,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 仅在 revision 未变化时更新版本状态和解析产物位置。 */
     public int updateDocumentVersion(String tenantId, RagDocumentVersionEntity version, long expectedRevision) {
         requireTenant(tenantId, version == null ? null : version.tenantId());
         requireRevision(expectedRevision);
@@ -166,6 +180,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 查询知识库最近的摄取与删除任务，并限制返回数量。 */
     public List<RagIngestJobEntity> listIngestJobs(String tenantId, String knowledgeBaseId, int limit) {
         requireText(tenantId, "tenantId");
         requireText(knowledgeBaseId, "knowledgeBaseId");
@@ -177,18 +192,21 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 按幂等键查询既有任务，用于重复上传或重复删除时重放原结果。 */
     public Optional<RagIngestJobEntity> findIngestJobByIdempotencyKey(String tenantId, String idempotencyKey) {
         return Optional.ofNullable(mapper.toIngestJob(ingestTaskDao.queryByTenantAndTaskKey(
                 requireText(tenantId, "tenantId"), requireText(idempotencyKey, "idempotencyKey"))));
     }
 
     @Override
+    /** 校验可信租户后新增任务账本。 */
     public int insertIngestJob(String tenantId, RagIngestJobEntity job) {
         requireTenant(tenantId, job == null ? null : job.tenantId());
         return ingestTaskDao.insert(mapper.toIngestTaskPo(job));
     }
 
     @Override
+    /** 使用 revision 乐观锁更新未领取任务，避免覆盖并发状态变化。 */
     public int updateIngestJob(String tenantId, RagIngestJobEntity job, long expectedRevision) {
         requireTenant(tenantId, job == null ? null : job.tenantId());
         requireRevision(expectedRevision);
@@ -332,6 +350,7 @@ public class RagRepository implements IRagRepository {
                 expectedFencingToken, indexedAt));
     }
 
+    /** 提取需要随就绪版本长期保存的解析器、质量和清单元数据。 */
     private Map<String, String> activationMetadata(RagIndexActivation activation) {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("parsedContentHash", activation.parsedContentHash());
@@ -466,12 +485,14 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 查询指定版本的全部未删除分块。 */
     public List<RagChunkEntity> listChunks(String tenantId, String versionId) {
         return chunkDao.queryListByTenantAndVersionId(requireText(tenantId, "tenantId"),
                         requireText(versionId, "versionId")).stream().map(mapper::toChunk).toList();
     }
 
     @Override
+    /** 按分块 ID 批量查询并去重；限制单批数量，避免生成过大的 SQL 条件。 */
     public List<RagChunkEntity> listChunksByIds(String tenantId, List<String> chunkIds) {
         requireText(tenantId, "tenantId");
         if (chunkIds == null || chunkIds.isEmpty()) return List.of();
@@ -501,18 +522,21 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 软删除指定版本的分块，使正常检索立即不可见但保留审计数据。 */
     public int deleteChunks(String tenantId, String versionId) {
         return chunkDao.softDeleteByTenantAndVersionId(requireText(tenantId, "tenantId"),
                 requireText(versionId, "versionId"));
     }
 
     @Override
+    /** 物理删除指定版本的分块，用于已经确认可清理的任务数据。 */
     public int purgeChunks(String tenantId, String versionId) {
         return chunkDao.deleteByTenantAndVersionId(requireText(tenantId, "tenantId"),
                 requireText(versionId, "versionId"));
     }
 
     @Override
+    /** 统计指定版本的全部分块，包括已经软删除的数据。 */
     public long countAllChunks(String tenantId, String versionId) {
         return chunkDao.countAllByTenantAndVersionId(requireText(tenantId, "tenantId"),
                 requireText(versionId, "versionId"));
@@ -526,12 +550,14 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 查询租户维护的全部检索策略。 */
     public List<RagRetrievalProfileEntity> listRetrievalProfiles(String tenantId) {
         return retrievalProfileDao.queryListByTenant(requireText(tenantId, "tenantId")).stream()
                 .map(mapper::toRetrievalProfile).toList();
     }
 
     @Override
+    /** 新增检索策略，并把唯一键冲突转换为稳定业务错误。 */
     public int insertRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile) {
         requireTenant(tenantId, profile == null ? null : profile.tenantId());
         try {
@@ -542,6 +568,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 校验领域 revision 连续递增后，以乐观锁更新检索策略。 */
     public int updateRetrievalProfile(String tenantId, RagRetrievalProfileEntity profile,
                                       long expectedRevision) {
         requireTenant(tenantId, profile == null ? null : profile.tenantId());
@@ -563,12 +590,14 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 查询租户下的全部知识库绑定，包括不同目标类型。 */
     public List<RagAgentBindingEntity> listBindings(String tenantId) {
         return agentBindingDao.queryListByTenant(requireText(tenantId, "tenantId")).stream()
                 .map(mapper::toAgentBinding).toList();
     }
 
     @Override
+    /** 按绑定 ID 查询租户范围内的绑定。 */
     public Optional<RagAgentBindingEntity> findBinding(String tenantId, String bindingId) {
         return Optional.ofNullable(mapper.toAgentBinding(agentBindingDao.queryByTenantAndBindingId(
                 requireText(tenantId, "tenantId"), requireText(bindingId, "bindingId"))));
@@ -576,6 +605,7 @@ public class RagRepository implements IRagRepository {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    /** 锁定知识库确认仍可检索后新增绑定，并将重复绑定转换为业务冲突。 */
     public int insertBinding(String tenantId, RagAgentBindingEntity binding) {
         requireTenant(tenantId, binding == null ? null : binding.tenantId());
         RagKnowledgeBaseEntity lockedKnowledgeBase = mapper.toKnowledgeBase(
@@ -592,6 +622,7 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    /** 使用 revision 软删除绑定，防止覆盖并发编辑。 */
     public int deleteBinding(String tenantId, String bindingId, long expectedRevision) {
         if (expectedRevision < 0) throw new IllegalArgumentException("RAG绑定revision非法");
         return agentBindingDao.softDeleteByTenantAndRevision(requireText(tenantId, "tenantId"),
@@ -606,11 +637,13 @@ public class RagRepository implements IRagRepository {
         }
     }
 
+    /** 将全局扫描的最小投影转换为不携带执行权的任务候选。 */
     private RagIngestJobCandidate toIngestCandidate(RagIngestCandidatePO candidate) {
         if (candidate == null) throw new IllegalStateException("RAG 任务候选投影不能为空");
         return new RagIngestJobCandidate(candidate.getTenantId(), candidate.getJobId());
     }
 
+    /** 校验领取范围和租约时间，拒绝空身份或非递增租约。 */
     private void validateClaimArguments(String tenantId, String jobId, String leaseOwner,
                                         Instant now, Instant leaseUntil) {
         requireText(tenantId, "tenantId");
@@ -635,6 +668,7 @@ public class RagRepository implements IRagRepository {
         }
     }
 
+    /** 校验 Worker 仍持有执行权，并确认准备写入的任务终态符合调用语义。 */
     private void validateLifecycle(String tenantId, RagIngestJobEntity job, long expectedRevision,
                                    String leaseOwner, long expectedFencingToken, Instant now,
                                    RagIngestJobStatus expectedStatus) {
@@ -659,6 +693,7 @@ public class RagRepository implements IRagRepository {
         }
     }
 
+    /** 在同一事务中关闭目标版本和文档目标代次，保留此前已经激活的版本。 */
     private void closeVersionAndDocument(String tenantId, RagIngestJobEntity job,
                                          long expectedVersionRevision, long expectedDocumentRevision,
                                          String versionStatus) {
@@ -678,10 +713,12 @@ public class RagRepository implements IRagRepository {
         }
     }
 
+    /** revision 必须来自已读取快照，负数不能参与乐观锁更新。 */
     private void requireRevision(long revision) {
         if (revision < 0) throw new IllegalArgumentException("expectedRevision不能为负数");
     }
 
+    /** 统一拒绝持久化边界上的空标识，并返回已校验原值。 */
     private String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + "不能为空");

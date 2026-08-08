@@ -23,6 +23,7 @@ public final class DocumentIrChunker {
 
     /** 产物记录算法和 Token 估算版本，便于发现新旧索引混用。 */
     public static final String CHUNKER_VERSION = "document-ir-java-v1";
+    /** 分块清单中记录的近似 Token 计数算法版本。 */
     public static final String TOKENIZER_VERSION = "approx-unicode-v1-explicit-fallback";
 
     /** 将可检索Block转换为稳定父子分块。 */

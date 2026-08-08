@@ -1,24 +1,12 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * Worker 全局扫描到期任务时拿到的「只有身份、没有内容」的候选条目。
+ * 全局到期任务扫描返回的最小候选投影。
+ * <p>候选只用于定位租户范围内的任务，不表示任务已被领取。执行实例必须后续使用
+ * tenantId 与 jobId 执行原子领取。</p>
  *
- * <p>属于哪一层：领域层值对象，不可变。</p>
- *
- * <p>为什么要有这么一个瘦对象：扫描是跨租户的全局操作，如果直接把任务全文捞出来，
- * 一次扫描就等于把所有租户的业务数据装进一个 Worker 的内存，既浪费又扩大了泄露面。
- * 所以扫描只返回「哪个租户的哪个任务到期了」，Worker 拿到之后必须再用
- * tenantId + jobId 回到租户范围内做一次原子领取，真正的数据是在那一步才读出来的。</p>
- *
- * <p>谁产出它：IRagRepository.listDueIngestJobCandidates（那是整个仓储里唯一不以 tenantId 开头的方法）。
- * 谁消费它：摄取 Worker 的调度循环。</p>
- *
- * <p>它不负责什么：不代表任务已经归你了。多个 Worker 可能扫到同一个候选，
- * 谁能真正执行由后续的原子领取（claim）决定，这里没有任何独占语义。</p>
- *
- * @param tenantId 任务所属租户；回查和领取都必须带上它，否则就成了跨租户操作。
- *             它是把全局扫描重新收敛回租户隔离的关键。
- * @param jobId 任务编号；与 tenantId 组成回查坐标。单独一个 jobId 不允许用来查询或修改。
+ * @param tenantId 任务所属租户
+ * @param jobId 摄取任务标识
  */
 public record RagIngestJobCandidate(String tenantId, String jobId) {
 

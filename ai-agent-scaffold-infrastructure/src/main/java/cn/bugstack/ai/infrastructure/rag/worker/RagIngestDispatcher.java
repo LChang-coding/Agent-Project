@@ -30,17 +30,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @ConditionalOnProperty(prefix = "ai.rag.worker", name = "enabled", havingValue = "true")
 public class RagIngestDispatcher {
 
-    /** 到期扫描、执行器和配置；inFlight 只防本进程重复提交。 */
+    /** 到期任务扫描和领取由仓储完成，数据库仍是任务状态事实源。 */
     private final IRagRepository repository;
+    /** 执行已经取得租约的摄取、删除或取消清理任务。 */
     private final RagIngestWorker worker;
+    /** 提供扫描批量、轮询间隔和 Worker 运行参数。 */
     private final RagProperties properties;
+    /** 解析 Kafka 唤醒消息中的版本和任务标识。 */
     private final ObjectMapper objectMapper;
+    /** 为数据库到期扫描提供统一 UTC 时间。 */
     private final Clock clock = Clock.systemUTC();
+    /** 标识当前进程，领取任务时会在其后追加本次提交的随机部分。 */
     private final String instanceId = instanceId();
+    /** 只防止同一任务在当前进程重复排队，不代替数据库租约。 */
     private final Set<String> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** 单线程有界执行器，限制本节点的模型、存储和向量服务并发。 */
     private final ThreadPoolExecutor executor;
+    /** 应用关闭后阻止扫描和新任务继续进入执行器。 */
     private final AtomicBoolean closed = new AtomicBoolean();
 
+    /** 创建有界单 Worker 执行器；队列容量随扫描批量调整但设置最小值。 */
     public RagIngestDispatcher(IRagRepository repository, RagIngestWorker worker,
                                RagProperties properties, ObjectMapper objectMapper) {
         this.repository = repository;
@@ -127,6 +136,7 @@ public class RagIngestDispatcher {
         }
     }
 
+    /** 读取 Kafka 必填标识符，并限制长度以拒绝异常负载。 */
     private String required(JsonNode root, String field) {
         String value = root.path(field).asText(null);
         if (value == null || value.isBlank() || value.length() > 128) {
@@ -135,12 +145,14 @@ public class RagIngestDispatcher {
         return value;
     }
 
+    /** 使用主机名和随机值生成进程级领取者标识。 */
     private String instanceId() {
         String host = System.getenv("HOSTNAME");
         return (host == null || host.isBlank() ? "local" : host) + ":" + UUID.randomUUID();
     }
 
     @PreDestroy
+    /** 标记调度器关闭并中断仍在执行或排队的本地任务。 */
     public void shutdown() {
         if (!closed.compareAndSet(false, true)) return;
         executor.shutdownNow();

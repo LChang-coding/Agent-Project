@@ -7,10 +7,20 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Converts retrieval results into model-safe reference context and citation evidence. */
+/**
+ * 将检索结果转换为模型可安全读取的参考上下文与引用证据。
+ * <p>检索正文会被标记为不可信参考资料，且所有 XML 特殊字符均被转义，
+ * 避免资料中的标签改变上下文结构。</p>
+ */
 @Service
 public class RagRetrievalPresentationService {
 
+    /**
+     * 按引用排名组装模型上下文和对应的证据元数据。
+     *
+     * @param result 已完成预算裁剪的检索结果
+     * @return 可注入模型的文本与用于最终回答校验的证据
+     */
     public Presentation present(RagRetrievalResult result) {
         if (result == null) throw new IllegalArgumentException("RAG检索结果不能为空");
         List<String> lines = new ArrayList<>();
@@ -29,6 +39,7 @@ public class RagRetrievalPresentationService {
         return new Presentation(String.join("\n", lines), toEvidence(result));
     }
 
+    /** 仅保留校验引用所需的身份、版本、摘要和定位信息。 */
     private RagContextEvidence toEvidence(RagRetrievalResult result) {
         return new RagContextEvidence(result.retrievalId(), result.citations().stream()
                 .map(citation -> new RagContextEvidence.CitationReference(citation.citationId(),
@@ -38,12 +49,19 @@ public class RagRetrievalPresentationService {
                 .toList());
     }
 
+    /** 转义会改变 XML 文本与属性边界的字符。 */
     private String escape(String value) {
         if (value == null) return "";
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
+    /**
+     * 一次检索的模型展示结果。
+     *
+     * @param content 已转义且标记为不可信参考资料的上下文
+     * @param evidence 与上下文引用一一对应的证据元数据
+     */
     public record Presentation(String content, RagContextEvidence evidence) {
     }
 }

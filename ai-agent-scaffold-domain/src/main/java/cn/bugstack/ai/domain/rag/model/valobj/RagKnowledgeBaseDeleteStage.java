@@ -1,15 +1,8 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 知识库级联删除任务跑到了第几步。
- *
- * <p>属于哪一层：领域层值对象，是 RagKnowledgeBaseDeleteCheckpoint 的阶段字段。</p>
- *
- * <p>常量顺序即业务顺序，RagKnowledgeBaseDeleteTaskEntity.advance 直接比较 ordinal 来禁止倒退，
- * 所以<b>顺序是不变量</b>。</p>
- *
- * <p>谁会推进它：知识库删除协调器（Worker）。它不表示任务成功失败，那是
- * RagKnowledgeBaseDeleteStatus。</p>
+ * 知识库级联删除的处理阶段。
+ * <p>任务实体使用枚举声明顺序禁止阶段倒退，因此常量顺序是领域契约。</p>
  */
 public enum RagKnowledgeBaseDeleteStage {
 

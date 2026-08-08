@@ -4,6 +4,17 @@ import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
 
 /**
  * Agent 或工作流到知识库的可信绑定实体。
+ *
+ * @param tenantId 绑定所属租户
+ * @param bindingId 绑定唯一标识
+ * @param targetType 绑定目标类型
+ * @param targetId Agent 或工作流标识
+ * @param knowledgeBaseId 可检索的知识库标识
+ * @param retrievalProfileId 本绑定使用的检索配置标识
+ * @param required 知识库不可用时是否中止本次检索
+ * @param maxTokens 本绑定允许占用的最大上下文 Token 数
+ * @param priority 绑定检索和组装的优先级
+ * @param revision 乐观并发控制版本号
  */
 public record RagAgentBindingEntity(String tenantId,
                                     String bindingId,
@@ -16,6 +27,7 @@ public record RagAgentBindingEntity(String tenantId,
                                     int priority,
                                     long revision) {
 
+    /** 校验绑定身份、预算和版本号。 */
     public RagAgentBindingEntity {
         requireText(tenantId, "租户ID");
         requireText(bindingId, "绑定ID");

@@ -17,8 +17,11 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ScheduleXxlJobHandler {
 
+    /** 执行调度配置对账，并生成或更新待执行任务。 */
     private final ScheduleReconciler reconciler;
+    /** 领取已到执行时间的任务并调用任务处理器。 */
     private final ScheduleDispatcher dispatcher;
+    /** 提供每次 XXL-JOB 触发可处理的批量上限。 */
     private final SchedulerProperties properties;
 
     /**

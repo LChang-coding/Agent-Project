@@ -30,7 +30,7 @@ public class ModelRouter {
     }
 
     /**
-     * 查询模型选项；无参数；返回前端可展示模型列表。
+     * 查询模型选项；返回前端可展示模型列表。
      */
     public List<WorkflowOptionEntity> modelOptions() {
         return List.of(
@@ -52,7 +52,7 @@ public class ModelRouter {
     }
 
     /**
-     * 取第一个非空字符串；参数是候选值；返回非空值。
+     * 取第一个非空字符串。
      */
     private String firstNotBlank(String... values) {
         for (String value : values) {

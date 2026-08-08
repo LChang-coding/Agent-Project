@@ -49,22 +49,37 @@ import java.util.stream.Collectors;
 @Service
 public class IntelligentWorkflowRuntimeService {
 
+    /** 加载已经发布并编译完成的工作流运行快照。 */
     private final IWorkflowService workflowService;
+    /** 创建工作流会话并持久化最终助手消息。 */
     private final IChatService chatService;
+    /** 创建、校验和终结权威 Chat Run。 */
     private final RunControlService runControlService;
+    /** 保存智能工作流当前节点、预算和乐观锁版本。 */
     private final IIntelligentWorkflowRunRepository intelligentRunRepository;
+    /** 持久化并实时发布节点、工具、路由和终态事件。 */
     private final WorkflowEventStreamService eventStreamService;
+    /** 根据冻结出边和节点结果执行确定性路由裁决。 */
     private final IntelligentWorkflowRouter router;
+    /** 汇总节点模型调用的 Token 用量。 */
     private final ModelUsageService modelUsageService;
+    /** 在模型和工具调用前后检查取消、定义版本和执行权。 */
     private final WorkflowInvocationGuardService invocationGuardService;
+    /** 持久化节点执行与权威路由决定。 */
     private final IWorkflowExecutionAuditRepository executionAuditRepository;
+    /** 读取并消费路由工具登记的唯一意图。 */
     private final IWorkflowRouteIntentRepository routeIntentRepository;
+    /** 在事务提交后异步协调节点执行，避免占用请求线程。 */
     private final ExecutorService coordinatorExecutor;
+    /** 编码工作流事件和节点输出 JSON。 */
     private final ObjectMapper objectMapper;
+    /** 将意图消费、路由决定和状态推进包在同一个事务中。 */
     private final TransactionTemplate transitionTransaction;
+    /** 可选的 RAG 能力说明服务；未装配时节点不获得 RAG 工具提示。 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private RagToolCapabilityService ragToolCapabilityService;
 
+    /** 创建无需真实事务管理器的运行时，供隔离测试直接执行路由推进。 */
     public IntelligentWorkflowRuntimeService(IWorkflowService workflowService,
                                              IChatService chatService,
                                              RunControlService runControlService,
@@ -154,6 +169,7 @@ public class IntelligentWorkflowRuntimeService {
         return intelligentRun;
     }
 
+    /** 沿单条活动路径执行节点，逐步检查取消与预算，并在每个节点后完成权威路由。 */
     private void execute(WorkflowRuntimeEntity runtime, WorkflowDagPlanEntity plan, ChatRunEntity run,
                          String sessionId, String userMessage, String roleCode, Integer historyCutoffSequence) {
         Map<String, WorkflowDagPlanEntity.Node> nodes = plan.getNodes().stream()
@@ -368,6 +384,7 @@ public class IntelligentWorkflowRuntimeService {
                 Map.of("executedSteps", state.getExecutedSteps(), "cancelledNodes", cancelledNodes));
     }
 
+    /** 以 revision 乐观锁更新智能运行状态，并对短暂并发冲突最多重试三次。 */
     private void updateState(ChatRunEntity run, String nodeId, String status, int steps, long tokens, LocalDateTime finishedAt) {
         for (int attempt = 0; attempt < 3; attempt++) {
             IntelligentWorkflowRunEntity state = intelligentRunRepository.query(run.getTenantId(), run.getUserId(), run.getRunId());
@@ -380,6 +397,7 @@ public class IntelligentWorkflowRuntimeService {
         throw new AppException("WORKFLOW_RUN_CONCURRENT_MODIFICATION", "智能工作流运行状态并发更新失败");
     }
 
+    /** 将运行身份和结构化负载交给统一事件流持久化与推送。 */
     private void publish(ChatRunEntity run, String type, String executionId, String nodeId, Map<String, ?> payload) {
         eventStreamService.publish(run.getTenantId(), run.getUserId(), run.getRunId(), run.getTraceId(), type,
                 executionId, nodeId, json(payload));
@@ -394,6 +412,7 @@ public class IntelligentWorkflowRuntimeService {
         transitionTransaction.executeWithoutResult(status -> transition.run());
     }
 
+    /** 持久化唯一权威路由决定，并发布包含目标名称和来源的 ROUTE_DECIDED 事件。 */
     private void persistDecision(ChatRunEntity run, WorkflowRuntimeEntity runtime, String nodeExecutionId,
                                  String sourceNodeId, Map<String, WorkflowDagPlanEntity.Node> nodes,
                                  IntelligentWorkflowRouter.RouteDecision decision,
@@ -422,6 +441,7 @@ public class IntelligentWorkflowRuntimeService {
         publish(run, "ROUTE_DECIDED", nodeExecutionId, sourceNodeId, payload);
     }
 
+    /** 完成节点执行审计，记录输出与用量并发布 NODE_COMPLETED。 */
     private void completeExecution(ChatRunEntity run, WorkflowRuntimeEntity runtime,
                                    WorkflowNodeExecutionEntity executionAudit, WorkflowDagPlanEntity.Node node,
                                    String nodeExecutionId, String nodeId, int executionIndex,
@@ -443,11 +463,13 @@ public class IntelligentWorkflowRuntimeService {
                 Map.of("displayOutput", output, "executionIndex", executionIndex, "totalTokens", usedTokens));
     }
 
+    /** 构造只允许补调一次路由工具的修复提示，不重新执行原节点任务。 */
     private String repairPrompt(String output, WorkflowDagPlanEntity.Node node) {
         return "原节点输出摘要：\n" + safe(output) + "\n\n本轮只允许调用一次 select_workflow_route。"
                 + "必须从当前工具 schema 的合法 routeKey 中选择，不得调用其他工具，也不要重新执行原任务。";
     }
 
+    /** 在最终展示文本中幂等追加中文路由说明和旧协议兼容标记。 */
     private String appendRouteExplanation(String output, String targetNodeName, String routeKey) {
         String explanation = "经判断，路由到「" + safe(targetNodeName) + "」节点。";
         String marker = "[route:" + safe(routeKey) + "]";
@@ -457,18 +479,22 @@ public class IntelligentWorkflowRuntimeService {
         return value;
     }
 
+    /** 对可选文本执行空值安全的精确比较。 */
     private boolean same(String left, String right) {
         return safe(left).equals(safe(right));
     }
 
+    /** 保留领域错误码，其他运行时异常统一映射为节点执行失败。 */
     private String errorCode(RuntimeException exception) {
         return exception instanceof AppException app ? app.getCode() : "WORKFLOW_NODE_EXECUTION_FAILED";
     }
 
+    /** 使用单调时钟计算节点耗时，避免系统时钟调整影响指标。 */
     private long elapsedMs(long startedNanos) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
+    /** 组装当前节点输入、上游输出和冻结路由协议，不暴露未允许的目标节点。 */
     private String intelligentPrompt(String userMessage, String previousOutput, String routeInstruction,
                                      String routeProtocol, int executionIndex, boolean toolV2,
                                      String ragGuidance) {
@@ -509,10 +535,12 @@ public class IntelligentWorkflowRuntimeService {
         return lines.isEmpty() ? "- 当前节点没有可建议的路由键。" : String.join("\n", lines);
     }
 
+    /** 仅为旧 MARKER_V1 工作流提取正文末尾的兼容路由标记。 */
     private String routeMarker(String output) {
         return WorkflowRouteKey.markerAtEnd(output);
     }
 
+    /** 为缺少历史 definitionHash 的运行计划计算稳定兼容摘要。 */
     private String hash(WorkflowDagPlanEntity plan) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(objectMapper.writeValueAsBytes(plan));
@@ -524,11 +552,13 @@ public class IntelligentWorkflowRuntimeService {
         }
     }
 
+    /** 将事件负载编码为 JSON，编码失败时显式终止当前推进。 */
     private String json(Map<String, ?> payload) {
         try { return objectMapper.writeValueAsString(payload); }
         catch (JsonProcessingException exception) { throw new AppException("WORKFLOW_EVENT_INVALID", "工作流事件编码失败"); }
     }
 
+    /** 有事务时在提交后执行副作用，无事务测试环境中立即执行。 */
     private void afterCommit(Runnable action) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             action.run(); return;
@@ -538,6 +568,7 @@ public class IntelligentWorkflowRuntimeService {
         });
     }
 
+    /** 校验启动智能工作流所需的可信身份、工作流和用户输入。 */
     private void validate(IntelligentWorkflowStartCommandEntity command) {
         if (command == null || blank(command.getTenantId()) || blank(command.getUserId())
                 || blank(command.getWorkflowId()) || blank(command.getMessage())) {
@@ -545,11 +576,16 @@ public class IntelligentWorkflowRuntimeService {
         }
     }
 
+    /** 将节点访问上限限制在 1 到 50，旧定义缺失时使用 3。 */
     private int safeMaxVisits(Integer value) { return value == null ? 3 : Math.max(1, Math.min(value, 50)); }
+    /** 将可选列表归一为空列表，避免运行时分支反复处理 null。 */
     private <T> List<T> safeList(List<T> value) { return value == null ? List.of() : value; }
+    /** 判断必填文本是否缺失。 */
     private boolean blank(String value) { return value == null || value.isBlank(); }
+    /** 将可选展示文本归一为空串。 */
     private String safe(String value) { return value == null ? "" : value; }
 
+    /** 根据运行开始时间计算非负耗时。 */
     private long elapsed(LocalDateTime startedAt) {
         return startedAt == null ? 0L : Math.max(0L, java.time.Duration.between(startedAt, LocalDateTime.now()).toMillis());
     }

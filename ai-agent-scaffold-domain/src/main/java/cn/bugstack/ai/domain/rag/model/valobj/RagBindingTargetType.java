@@ -1,16 +1,8 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一条知识库绑定挂在「哪种东西」上的类型标记。
- *
- * <p>属于哪一层：领域层值对象。它和 targetId 一起构成绑定的定位坐标，
- * 单独一个 targetId 是不够的——不同类型下的 ID 可能重复，必须类型加 ID 一起查。</p>
- *
- * <p>谁会读它：仓储按 (tenantId, targetType, targetId) 查这次运行能用哪些知识库；
- * 会话 RAG 设置服务用它决定「当前这轮对话的授权范围」；手动选择绑定时也用它防止把
- * A 工作流的绑定选进 B Agent 的会话里。</p>
- *
- * <p>它不负责什么：不表示绑定是否启用、是否 required、优先级多少，那些在 RagAgentBindingEntity 上。</p>
+ * 知识库绑定的运行目标类型。
+ * <p>租户、目标类型与目标标识共同限定绑定查询范围，避免不同目标类型下的相同标识发生混用。</p>
  */
 public enum RagBindingTargetType {
 

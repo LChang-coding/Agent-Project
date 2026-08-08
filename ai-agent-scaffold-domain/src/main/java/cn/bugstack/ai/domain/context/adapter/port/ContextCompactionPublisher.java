@@ -8,7 +8,7 @@ import cn.bugstack.ai.domain.context.model.ContextCompactionCommand;
 public interface ContextCompactionPublisher {
 
     /**
-     * 发布压缩命令；参数是任务命令；无返回值。
+     * 发布压缩命令。
      */
     void publish(ContextCompactionCommand command);
 }

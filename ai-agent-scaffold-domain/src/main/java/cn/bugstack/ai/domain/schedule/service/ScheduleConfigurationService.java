@@ -23,12 +23,18 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ScheduleConfigurationService {
 
+    /** 调度配置允许的错过执行处理策略。 */
     private static final Set<String> MISFIRE_POLICIES = Set.of("fire_once_now", "skip", "catch_up");
 
+    /** 在用户所有权范围内保存和查询调度配置。 */
     private final IScheduleRepository repository;
+    /** 配置变化后立即更新对应的运行态任务。 */
     private final ScheduleReconciler reconciler;
+    /** 规范化并校验 Cron 表达式和时区。 */
     private final CronScheduleSupport cronSupport;
+    /** 校验并规范化持久化任务载荷。 */
     private final ObjectMapper objectMapper;
+    /** 生成调度配置业务时间的 UTC 时钟。 */
     private final Clock clock = Clock.systemUTC();
 
     /** 校验并保存当前用户的配置，随后立即收敛运行态。 */

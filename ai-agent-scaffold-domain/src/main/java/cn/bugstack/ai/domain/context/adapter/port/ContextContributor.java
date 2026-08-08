@@ -13,7 +13,7 @@ import java.util.List;
 public interface ContextContributor {
 
     /**
-     * 贡献上下文片段；参数是组装请求和策略；返回可注入片段。
+     * 贡献上下文片段。
      */
     List<ContextContribution> contribute(ContextAssembleRequest request, ContextPolicyProperties properties);
 }

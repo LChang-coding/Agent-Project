@@ -51,7 +51,7 @@ public class WorkflowRuntimeCompiler {
     private ModelRouter modelRouter;
 
     /**
-     * 编译工作流；参数是工作流、版本和请求模型；返回可由 Armory 装配的配置表。
+     * 编译工作流。
      */
     public AiAgentConfigTableVO compile(WorkflowEntity workflow, WorkflowVersionEntity version, String requestModelCode) {
         checkRuntimeSource(workflow, version);
@@ -146,7 +146,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 生成 DAG 节点运行时 Agent ID；参数是工作流运行时ID和节点；返回节点 Bean 名称。
+     * 生成 DAG 节点运行时 Agent ID。
      */
     private String runtimeNodeAgentId(String runtimeAgentId, WorkflowGraphEntity.Node node) {
         String uniqueKey = shortHash(runtimeAgentId + ":" + node.getNodeId());
@@ -154,7 +154,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 校验编译来源；参数是工作流和版本；非法时抛出异常。
+     * 校验编译来源；不合法时抛出异常。
      */
     private void checkRuntimeSource(WorkflowEntity workflow, WorkflowVersionEntity version) {
         if (workflow == null || version == null || version.getGraph() == null) {
@@ -163,7 +163,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建工作流 Agent 元信息；参数是工作流和运行时ID；返回 Agent 配置。
+     * 构建工作流 Agent 元信息。
      */
     private AiAgentConfigTableVO.Agent buildAgent(WorkflowEntity workflow, String runtimeAgentId) {
         AiAgentConfigTableVO.Agent agent = new AiAgentConfigTableVO.Agent();
@@ -174,7 +174,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建 DAG 节点配置表；参数是工作流、版本、模型和节点；返回单节点 Agent 配置。
+     * 构建 DAG 节点配置表。
      */
     private AiAgentConfigTableVO buildDagNodeTable(WorkflowEntity workflow,
                                                    WorkflowVersionEntity version,
@@ -202,7 +202,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建 DAG 节点 Agent；参数是租户、版本、模型、节点和运行名；返回 Agent 配置。
+     * 构建 DAG 节点 Agent。
      */
     private AiAgentConfigTableVO.Module.Agent buildDagNodeAgent(String tenantId,
                                                                 WorkflowVersionEntity version,
@@ -221,7 +221,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建单节点 Runner；参数是节点运行名；返回 Runner 配置。
+     * 构建单节点 Runner。
      */
     private AiAgentConfigTableVO.Module.Runner buildNodeRunner(String runtimeAgentName) {
         AiAgentConfigTableVO.Module.Runner runner = new AiAgentConfigTableVO.Module.Runner();
@@ -243,7 +243,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建全局模型配置；参数是版本和请求模型；返回 ChatModel 配置。
+     * 构建全局模型配置。
      */
     private AiAgentConfigTableVO.Module.ChatModel buildGlobalChatModel(WorkflowVersionEntity version, String requestModelCode) {
         AiAgentConfigTableVO.Module.ChatModel chatModel = new AiAgentConfigTableVO.Module.ChatModel();
@@ -254,7 +254,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建 LLM 节点 Agent；参数是租户、版本、请求模型和节点；返回 Agent 配置列表。
+     * 构建 LLM 节点 Agent。
      */
     private List<AiAgentConfigTableVO.Module.Agent> buildLlmAgents(String tenantId,
                                                                    WorkflowVersionEntity version,
@@ -292,7 +292,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建 Runner 配置；参数是画布和 LLM 节点；返回 Runner 配置。
+     * 构建 Runner 配置。
      */
     private AiAgentConfigTableVO.Module.Runner buildRunner(WorkflowGraphEntity graph, List<WorkflowGraphEntity.Node> llmNodes) {
         AiAgentConfigTableVO.Module.Runner runner = new AiAgentConfigTableVO.Module.Runner();
@@ -325,7 +325,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 转换 MCP 配置；参数是工作流 MCP 工具；返回 Armory MCP 配置。
+     * 转换 MCP 配置。
      */
     private AiAgentConfigTableVO.Module.ChatModel.ToolMcp toToolMcp(WorkflowMcpToolEntity tool) {
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp = new AiAgentConfigTableVO.Module.ChatModel.ToolMcp();
@@ -345,7 +345,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 转换 SSE MCP；参数是 MCP 工具；返回 SSE 配置。
+     * 转换 SSE MCP。
      */
     private AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters toSse(WorkflowMcpToolEntity tool) {
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters sse = new AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters();
@@ -374,7 +374,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 转换 stdio MCP；参数是 MCP 工具；返回 stdio 配置。
+     * 转换 stdio MCP。
      */
     private AiAgentConfigTableVO.Module.ChatModel.ToolMcp.StdioServerParameters toStdio(WorkflowMcpToolEntity tool) {
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp.StdioServerParameters stdio = new AiAgentConfigTableVO.Module.ChatModel.ToolMcp.StdioServerParameters();
@@ -388,7 +388,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 转换 Skill 配置；参数是工作流 Skill 工具；返回 Armory Skill 配置。
+     * 转换 Skill 配置。
      */
     private AiAgentConfigTableVO.Module.ChatModel.ToolSkills toToolSkill(WorkflowSkillToolEntity tool) {
         if (tool.getSourceUri() == null || tool.getSourceUri().isBlank()) {
@@ -401,7 +401,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 查询第一个系统模型配置；无参数；返回配置表。
+     * 查询第一个系统模型配置；返回配置表。
      */
     private AiAgentConfigTableVO firstConfiguredTable() {
         if (aiAgentAutoConfigProperties.getTables() == null || aiAgentAutoConfigProperties.getTables().isEmpty()) {
@@ -494,7 +494,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 递归追加节点；参数是节点ID、节点表、出边表、已访问集合和输出列表；无返回值。
+     * 递归追加节点。
      */
     private void appendNodeByEdge(String nodeId,
                                   Map<String, WorkflowGraphEntity.Node> nodeMap,
@@ -586,6 +586,7 @@ public class WorkflowRuntimeCompiler {
                 .collect(Collectors.toList());
     }
 
+    /** 从冻结节点表读取目标展示名，缺失时退回目标 ID。 */
     private String targetNodeName(String targetNodeId, Map<String, WorkflowGraphEntity.Node> nodeMap) {
         if ("END".equalsIgnoreCase(targetNodeId)) {
             return "结束";
@@ -645,27 +646,28 @@ public class WorkflowRuntimeCompiler {
         }
     }
 
+    /** 以长度前缀追加规范字段，避免不同字段组合产生相同定义摘要。 */
     private void appendHashPart(StringBuilder canonical, Object value) {
         String text = String.valueOf(value);
         canonical.append(text.length()).append(':').append(text).append('|');
     }
 
     /**
-     * 读取节点 Agent 名称；参数是节点；返回安全名称。
+     * 读取节点 Agent 名称。
      */
     private String nodeAgentName(WorkflowGraphEntity.Node node) {
         return safeAgentName("node_" + defaultString(node.getNodeId(), ""), "node");
     }
 
     /**
-     * 读取根工作流名称；参数是画布；返回安全名称。
+     * 读取根工作流名称。
      */
     private String rootWorkflowName(WorkflowGraphEntity graph) {
         return safeAgentName("workflow_" + defaultString(graph.getRootNodeId(), "root"), "workflow_root");
     }
 
     /**
-     * 读取循环次数；参数是画布；返回循环上限。
+     * 读取循环次数。
      */
     private Integer loopIterations(WorkflowGraphEntity graph) {
         if (graph.getNodes() == null) {
@@ -679,7 +681,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 读取节点循环次数；参数是节点；返回循环上限。
+     * 读取节点循环次数。
      */
     private Integer loopIterations(WorkflowGraphEntity.Node node) {
         if (node.getMaxIterations() == null || node.getMaxIterations() < 1) {
@@ -751,6 +753,7 @@ public class WorkflowRuntimeCompiler {
         }
     }
 
+    /** 登记主键或别名并检测同一源节点内的规范化冲突。 */
     private void registerRouteKey(String sourceNodeId, WorkflowGraphEntity.Edge edge, String value,
                                   String kind, Map<String, String> owners) {
         if (!WorkflowRouteKey.valid(value)) {
@@ -765,20 +768,23 @@ public class WorkflowRuntimeCompiler {
         }
     }
 
+    /** 将工作流最大步骤限制在运行时允许范围内。 */
     private int safeMaxSteps(Integer maxSteps) {
         return maxSteps == null ? 40 : Math.max(1, Math.min(maxSteps, 200));
     }
 
+    /** 将单节点最大访问次数限制在运行时允许范围内。 */
     private int safeMaxVisits(Integer maxVisits) {
         return maxVisits == null ? 3 : Math.max(1, Math.min(maxVisits, 50));
     }
 
+    /** 将总 Token 预算限制在正数和平台上限之间。 */
     private long safeTokenBudget(Long tokenBudget) {
         return tokenBudget == null || tokenBudget < 1 ? 128_000L : Math.min(tokenBudget, 10_000_000L);
     }
 
     /**
-     * 标准化编排模式；参数是模式；返回受支持模式。
+     * 标准化编排模式。
      */
     private String normalizeMode(String mode) {
         if ("parallel".equalsIgnoreCase(mode)) {
@@ -791,14 +797,14 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 构建默认提示词；参数是节点；返回提示词。
+     * 构建默认提示词。
      */
     private String defaultInstruction(WorkflowGraphEntity.Node node) {
         return defaultString(node.getInstruction(), "你是工作流节点 " + defaultString(node.getName(), node.getNodeId()) + "，请完成当前步骤并输出结果。");
     }
 
     /**
-     * 拆分命令参数；参数是文本；返回参数列表。
+     * 拆分命令参数。
      */
     private List<String> splitArgs(String args) {
         if (args == null || args.isBlank()) {
@@ -808,7 +814,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 解析环境变量；参数是 k=v 文本；返回环境变量 Map。
+     * 解析环境变量。
      */
     private Map<String, String> parseEnv(String env) {
         if (env == null || env.isBlank()) {
@@ -825,21 +831,21 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 字符串默认值；参数是候选值和默认值；返回非空字符串。
+     * 字符串默认值。
      */
     private String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value.trim();
     }
 
     /**
-     * 转安全名称；参数是原始文本；返回适合作为 Agent 名称的文本。
+     * 转安全名称。
      */
     private String sanitize(String value) {
         return safeAgentName(value, "node");
     }
 
     /**
-     * 生成短哈希；参数是原始文本；返回稳定短标识。
+     * 生成短哈希。
      */
     private String shortHash(String value) {
         String source = value == null ? "" : value;
@@ -850,7 +856,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 转 ADK 可接受的 Agent 名称；参数是候选名称和兜底名称；返回稳定 ASCII 名称。
+     * 转 ADK 可接受的 Agent 名称。
      */
     private String safeAgentName(String value, String fallback) {
         String sanitized = normalizeAgentName(value);
@@ -867,7 +873,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 标准化 Agent 名称字符；参数是原始文本；返回只包含字母数字和下划线的文本。
+     * 标准化 Agent 名称字符。
      */
     private String normalizeAgentName(String value) {
         if (value == null || value.isBlank()) {
@@ -880,7 +886,7 @@ public class WorkflowRuntimeCompiler {
     }
 
     /**
-     * 移除尾部分隔符；参数是候选名称；返回不会以分隔符结尾的名称。
+     * 移除尾部分隔符。
      */
     private String trimTrailingSeparators(String value) {
         return value == null ? "" : value.replaceAll("_+$", "");

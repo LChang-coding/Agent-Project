@@ -12,21 +12,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * 把 RAG 检索到的资料，拼成一段带引用编号、且明确声明「无指令权限」的文本，交给统一上下文组装器。
- *
- * <p>解决什么问题：上下文里同时有系统提示、历史对话、工具结果和外部资料，谁占多少 Token 必须统一调度。
- * 本类是 RAG 这一路的「投稿人」：只有当预算允许、运行目标可信、问题非空时才投稿；
- * 投稿内容还必须做两层防护——用 XML 标签把资料围起来并转义元字符（防止文档正文伪造标签逃逸出资料区），
- * 以及显式写明资料里的命令、角色设定、工具调用要求都无效（防止提示注入把资料变成新的系统指令）。</p>
- *
- * <p>属于哪一层：领域层（domain），实现上下文层定义的投稿端口 ContextContributor。</p>
- *
- * <p>谁会调用它：统一上下文组装器（Context Manager）在每轮对话拼上下文时，会遍历所有投稿人并调到这里。</p>
- *
- * <p>它向下调用什么：唯一依赖是线上检索服务，由它完成绑定解析、可见性判断、召回、融合、重排和引用组装。</p>
- *
- * <p>它不负责什么：不实现检索算法、不做知识库权限判断、不裁剪 Token（预算由上下文策略给定，超额裁剪在检索服务内完成）、
- * 不调用大模型、不校验模型回答里的引用真假（那是引用校验器的事）。</p>
+ * RAG 上下文贡献器。
+ * <p>当运行身份、绑定目标、用户问题和 Token 预算均有效时，执行真实检索并返回
+ * 带引用证据的上下文片段。检索正文会被转义并标记为不可信参考资料，不允许其改变系统指令。</p>
  */
 @Service
 public class RagContextContributor implements ContextContributor {
@@ -37,6 +25,7 @@ public class RagContextContributor implements ContextContributor {
      * <p>刻意复用聊天主链路的同一个实现，不为上下文组装另造一套检索口径；否则调试、评测、线上三处结果会互相对不上。</p>
      */
     private final RagRetrievalService retrievalService;
+    /** 将检索结果转换为不可信参考上下文与引用证据。 */
     private final RagRetrievalPresentationService presentationService;
 
     /**
@@ -103,7 +92,7 @@ public class RagContextContributor implements ContextContributor {
         // 第三层：一条都没召回（没配绑定、知识库不可见、索引为空、全部被过滤掉）就同样不投稿，
         // 免得往上下文里塞一段空的资料区，既浪费 Token 又会让模型以为「有资料但没内容」。
         if (result.citations().isEmpty()) return List.of();
-        // 第四层：把命中结果渲染成带引用编号的受限资料文本，这段文本就是最终喂给模型的内容。
+        // 将命中结果渲染为带引用编号的受限参考文本，作为最终注入的 RAG 上下文。
         RagRetrievalPresentationService.Presentation presentation = presentationService.present(result);
         // 第五层：打包成一个上下文片段——类型标成 RAG（便于上下文层按类型排序和裁剪）、
         // 带上渲染后的正文、预估 Token 数（供上下文层核算总预算）、检索批次编号作为来源标识，

@@ -15,15 +15,19 @@ import java.util.List;
 @Repository
 public class WorkflowEventRepository implements IWorkflowEventRepository {
 
+    /** 持久化工作流事件和查询事件流的 DAO。 */
     private final IWorkflowRunEventDao eventDao;
+    /** 为同一运行分配严格递增事件序号的仓储。 */
     private final IWorkflowEventCursorRepository cursorRepository;
 
+    /** 注入事件 DAO 和序号游标仓储。 */
     public WorkflowEventRepository(IWorkflowRunEventDao eventDao,
                                    IWorkflowEventCursorRepository cursorRepository) {
         this.eventDao = eventDao;
         this.cursorRepository = cursorRepository;
     }
 
+    /** 分配序号并在同一事务中写入事件，任一步失败都会回滚。 */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowRunEventEntity append(WorkflowRunEventEntity event) {
@@ -36,6 +40,10 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
         return event;
     }
 
+    /**
+     * 查询指定序号之后的事件。
+     * 每次最多返回 1000 条，防止重放请求一次读取过多记录。
+     */
     @Override
     public List<WorkflowRunEventEntity> queryAfter(String tenantId, String userId, String runId,
                                                     long afterSequence, int limit) {
@@ -44,17 +52,20 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
                 .stream().map(this::toEntity).toList();
     }
 
+    /** 查询当前仍可重放的最早事件序号，用于判断客户端游标是否已经过期。 */
     @Override
     public Long queryOldestSequence(String tenantId, String userId, String runId) {
         return eventDao.queryOldestSequence(tenantId, userId, runId);
     }
 
+    /** 查询运行的终态事件，不存在终态时返回空值。 */
     @Override
     public WorkflowRunEventEntity queryTerminal(String tenantId, String userId, String runId) {
         WorkflowRunEventPO terminal = eventDao.queryTerminal(tenantId, userId, runId);
         return terminal == null ? null : toEntity(terminal);
     }
 
+    /** 将领域事件的顺序、节点和载荷信息复制到持久化对象。 */
     private WorkflowRunEventPO toPO(WorkflowRunEventEntity event) {
         WorkflowRunEventPO po = new WorkflowRunEventPO();
         po.setTenantId(event.getTenantId()); po.setUserId(event.getUserId()); po.setRunId(event.getRunId());
@@ -65,6 +76,7 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
         return po;
     }
 
+    /** 将持久化事件恢复为对外重放使用的领域事件。 */
     private WorkflowRunEventEntity toEntity(WorkflowRunEventPO po) {
         return WorkflowRunEventEntity.builder().tenantId(po.getTenantId()).userId(po.getUserId())
                 .runId(po.getRunId()).eventId(po.getEventId()).sequence(po.getSequence())

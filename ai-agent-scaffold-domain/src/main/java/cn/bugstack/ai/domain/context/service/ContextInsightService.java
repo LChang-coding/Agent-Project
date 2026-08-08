@@ -40,7 +40,7 @@ public class ContextInsightService {
     private final CharacterTokenCounter tokenCounter = new CharacterTokenCounter();
 
     /**
-     * 创建上下文洞察服务；参数是会话、上下文、工具与配置依赖；返回服务实例。
+     * 创建上下文洞察服务。
      */
     public ContextInsightService(SessionDomain sessionDomain, ConversationMemoryService memoryService,
                                  IContextCompactionTaskRepository taskRepository, IToolRepository toolRepository,
@@ -56,7 +56,7 @@ public class ContextInsightService {
     }
 
     /**
-     * 查询会话上下文洞察；参数是可信身份和会话；返回只读统计。
+     * 查询会话上下文洞察。
      */
     public ContextInsightEntity query(String tenantId, String userId, String sessionId) {
         ChatSessionEntity session = sessionDomain.assertSessionAccess(tenantId, userId, sessionId, null);

@@ -58,6 +58,7 @@ public record RagContextEvidence(String retrievalId, List<CitationReference> cit
             }
         }
 
+        /** 校验证据身份字段，防止空标识进入引用白名单。 */
         private static void requireText(String value, String name) {
             if (value == null || value.isBlank()) {
                 throw new IllegalArgumentException(name + "不能为空");

@@ -26,21 +26,29 @@ import java.util.concurrent.Semaphore;
 @Component
 public class TeiRerankerAdapter implements RerankerPort {
 
-    /** 限制响应体以及送入模型的查询、候选文本长度。 */
+    /** 单次响应体最大允许读取 4 MiB，防止异常响应占满内存。 */
     private static final long MAX_RESPONSE_BYTES = 4L * 1024 * 1024;
+    /** 查询文本最大字符数。 */
     private static final int MAX_QUERY_CHARS = 4096;
+    /** 单个候选文本最大字符数。 */
     private static final int MAX_CANDIDATE_CHARS = 16000;
+    /** Reranker 地址、超时、批次和重试配置。 */
     private final RagProperties properties;
+    /** 序列化请求并解析 TEI 返回结果。 */
     private final ObjectMapper objectMapper;
+    /** 复用连接执行 TEI HTTP 请求。 */
     private final HttpClient httpClient;
+    /** 限制当前进程同时进行的完整重排数量。 */
     private final Semaphore concurrency;
 
+    /** 按配置创建生产环境 HTTP 客户端。 */
     @Autowired
     public TeiRerankerAdapter(RagProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(properties.getReranker().getTimeout()).build());
     }
 
+    /** 注入可替换 HTTP 客户端，供协议和失败分支测试使用。 */
     TeiRerankerAdapter(RagProperties properties, ObjectMapper objectMapper, HttpClient httpClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -122,6 +130,7 @@ public class TeiRerankerAdapter implements RerankerPort {
         }
     }
 
+    /** 使用总 deadline 的剩余时间约束单批 HTTP 请求，并限制响应体大小。 */
     private RawResponse sendBatch(byte[] requestBody, long deadlineNanos, RagProperties.Reranker config)
             throws Exception {
         Duration remaining = remaining(deadlineNanos);
@@ -161,10 +170,12 @@ public class TeiRerankerAdapter implements RerankerPort {
         return result;
     }
 
+    /** 仅把限流和网关临时故障识别为可重试状态。 */
     private boolean isTransient(int statusCode) {
         return statusCode == 429 || statusCode == 502 || statusCode == 503 || statusCode == 504;
     }
 
+    /** 在总 deadline 内执行有上限的指数退避，剩余时间不足时直接结束。 */
     private void backoff(int retryIndex, long deadlineNanos, RagProperties.Reranker config)
             throws InterruptedException {
         long multiplier = 1L << Math.min(retryIndex, 30);
@@ -198,6 +209,7 @@ public class TeiRerankerAdapter implements RerankerPort {
         return List.copyOf(result);
     }
 
+    /** 计算本次重排的剩余时间预算，预算耗尽时抛出稳定超时错误。 */
     private Duration remaining(long deadlineNanos) {
         long remainingNanos = deadlineNanos - System.nanoTime();
         if (remainingNanos <= 0) {
@@ -206,12 +218,15 @@ public class TeiRerankerAdapter implements RerankerPort {
         return Duration.ofNanos(remainingNanos);
     }
 
+    /** TEI 返回的批内候选索引和相关性分数。 */
     private record TeiScore(Integer index, Double score) {
     }
 
+    /** 已限制大小的原始 HTTP 响应。 */
     private record RawResponse(int statusCode, byte[] body) {
     }
 
+    /** 恢复到完整候选列表后的索引和分数。 */
     private record IndexedScore(int candidateIndex, double score) {
     }
 }

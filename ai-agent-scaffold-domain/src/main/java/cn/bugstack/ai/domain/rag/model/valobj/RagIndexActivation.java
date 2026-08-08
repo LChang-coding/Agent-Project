@@ -4,6 +4,29 @@ package cn.bugstack.ai.domain.rag.model.valobj;
  * 经过索引验证后的文档版本原子激活参数。
  * <p>同时携带知识库 generation、三个聚合 revision、解析统计、不可变解析产物位置、解析器与
  * IR/质量/Tokenizer 版本，仓储只能在全部条件一致时原子切换可见版本。</p>
+ *
+ * @param knowledgeBaseId 知识库标识
+ * @param documentId 逻辑文档标识
+ * @param versionId 待激活的文档版本标识
+ * @param generation 待激活的索引代际
+ * @param expectedVersionRevision 激活前的预期文档版本号
+ * @param expectedDocumentRevision 激活前的预期逻辑文档版本号
+ * @param expectedKnowledgeBaseRevision 激活前的预期知识库版本号
+ * @param pageCount 解析后页数
+ * @param characterCount 规范化正文字符数
+ * @param chunkCount 经核验的业务分块数
+ * @param parsedObjectBucket 解析产物对象存储桶
+ * @param parsedObjectKey 规范化解析产物对象键
+ * @param parsedContentHash 解析产物内容 SHA-256 摘要
+ * @param parsedSizeBytes 解析产物字节数
+ * @param parserName 实际使用的解析器名称
+ * @param parserRevision 实际使用的解析器版本
+ * @param irSchemaVersion 文档 IR 结构版本
+ * @param qualityDisposition 允许激活的质量结论
+ * @param qualityScore 零到一的综合质量分数
+ * @param qualityReportObjectKey 质量报告对象键
+ * @param chunkManifestObjectKey 分块清单对象键
+ * @param tokenizerVersion 计算分块 Token 数的分词器版本
  */
 public record RagIndexActivation(String knowledgeBaseId,
                                  String documentId,
@@ -51,6 +74,7 @@ public record RagIndexActivation(String knowledgeBaseId,
                 null, null, null, null, 0, null, null, null);
     }
 
+    /** 校验三个聚合版本号、解析产物完整性和可激活的质量结论。 */
     public RagIndexActivation {
         requireText(knowledgeBaseId, "knowledgeBaseId");
         requireText(documentId, "documentId");

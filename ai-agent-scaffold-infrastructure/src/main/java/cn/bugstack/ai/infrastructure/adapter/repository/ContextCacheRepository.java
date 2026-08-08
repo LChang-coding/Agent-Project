@@ -23,7 +23,9 @@ import java.util.Set;
 @Repository
 public class ContextCacheRepository implements IContextCacheRepository {
 
+    /** 保存会话上下文快照和最近消息列表的 Redis 操作入口。 */
     private final StringRedisTemplate redisTemplate;
+    /** 编解码缓存中的上下文快照和消息 JSON。 */
     private final ObjectMapper objectMapper;
 
     /**
@@ -160,10 +162,12 @@ public class ContextCacheRepository implements IContextCacheRepository {
         }
     }
 
+    /** 使用租户、用户和会话组成隔离的上下文快照键。 */
     private String snapshotKey(String tenantId, String userId, String sessionId) {
         return "ctx:snapshot:" + blank(tenantId) + ':' + blank(userId) + ':' + blank(sessionId);
     }
 
+    /** 只保留配置数量的最近消息，避免会话列表在 Redis 中无限增长。 */
     private void trimRecentMessages(String key, int maxMessages) {
         if (maxMessages <= 0) {
             return;
@@ -174,10 +178,12 @@ public class ContextCacheRepository implements IContextCacheRepository {
         }
     }
 
+    /** 使用租户、用户和会话组成隔离的最近消息列表键。 */
     private String recentMessagesKey(String tenantId, String userId, String sessionId) {
         return "ctx:recent:" + blank(tenantId) + ':' + blank(userId) + ':' + blank(sessionId);
     }
 
+    /** 将兼容期允许为空的租户值归一为空串，保持缓存键稳定。 */
     private String blank(String value) {
         return value == null ? "" : value;
     }

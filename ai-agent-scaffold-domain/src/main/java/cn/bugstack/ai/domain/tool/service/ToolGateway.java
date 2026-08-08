@@ -74,7 +74,9 @@ public class ToolGateway {
     private final ToolDispatchAuthorizationService dispatchAuthorizationService;
  /** Skill 包读取器；在条目数、字节数、字符编码三重限额内取出 SKILL.md，挡住压缩炸弹和畸形包。 */
     private final SkillPackageReader skillPackageReader;
+    /** 执行由服务端提供的平台内置工具。 */
     private final PlatformToolRegistry platformToolRegistry;
+    /** 工作流运行中持久化工具开始、完成和失败事件。 */
     private final WorkflowEventStreamService workflowEventStreamService;
     /**
      * JSON 工具。只做三件事：把入参序列化成审计文本、把历史输出反序列化用于重放、解析 MCP 参数。
@@ -103,6 +105,15 @@ public class ToolGateway {
                 new PlatformToolRegistry(), null);
     }
 
+    /**
+     * 创建支持平台内置工具的网关，主要供不需要工作流事件的测试和兼容装配使用。
+     *
+     * @param objectStorageService Skill 内容所在的对象存储服务
+     * @param mcpProtocolClientSupport MCP 协议调用支持
+     * @param dispatchAuthorizationService 工具调用授权与幂等登记服务
+     * @param skillPackageReader 受限读取 Skill 包内容的组件
+     * @param platformToolRegistry 平台内置工具注册表
+     */
     public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
                        SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry) {
@@ -110,6 +121,16 @@ public class ToolGateway {
                 platformToolRegistry, null);
     }
 
+    /**
+     * 创建完整工具网关。
+     *
+     * @param objectStorageService Skill 内容所在的对象存储服务
+     * @param mcpProtocolClientSupport MCP 协议调用支持
+     * @param dispatchAuthorizationService 工具调用授权与幂等登记服务
+     * @param skillPackageReader 受限读取 Skill 包内容的组件
+     * @param platformToolRegistry 平台内置工具注册表
+     * @param workflowEventStreamService 工作流工具事件发布服务；非工作流装配时可以为空
+     */
     @Autowired
     public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
@@ -338,18 +359,21 @@ public class ToolGateway {
         throw new AppException("TOOL_TYPE_UNSUPPORTED", "工具类型不支持：" + tool.getToolType());
     }
 
+    /** 将工具类型映射为可观测日志中的运行时名称。 */
     private String runtimeName(String type) {
         if (ToolType.SKILL.equals(type)) return "路由到Skill运行时";
         if (ToolType.MCP.equals(type)) return "路由到MCP运行时";
         return "路由到平台工具运行时";
     }
 
+    /** 平台工具必须绑定权威运行和函数调用身份，缺失时禁止执行副作用。 */
     private void requirePlatformContext(ToolInvokeContextEntity context) {
         if (blank(context.getRunId()) || blank(context.getFunctionCallId())) {
             throw new AppException("PLATFORM_TOOL_CONTEXT_INVALID", "平台工具缺少运行或函数调用上下文");
         }
     }
 
+    /** 在工作流节点范围完整时发布工具事件；普通 Agent 调用不伪造节点事件。 */
     private void publishToolEvent(ToolInvokeContextEntity context, ToolCatalogEntity tool, String eventType,
                                   Map<String, Object> details) {
         if (workflowEventStreamService == null || blank(context.getWorkflowId())
@@ -365,6 +389,7 @@ public class ToolGateway {
                 context.getTraceId(), eventType, context.getNodeExecutionId(), null, toJson(payload));
     }
 
+    /** 构造成功事件审计负载，不把模型展示正文混入结构化字段。 */
     private Map<String, Object> completedPayload(ToolExecutionResult execution, long costMs) {
         Map<String, Object> payload = new LinkedHashMap<>(execution.eventAuditResult());
         payload.put("success", true);
@@ -372,6 +397,7 @@ public class ToolGateway {
         return payload;
     }
 
+    /** 构造失败事件负载，只暴露稳定错误码、重试属性和耗时。 */
     private Map<String, Object> failedPayload(Exception error, long costMs) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("errorCode", error instanceof AppException appException
@@ -381,6 +407,7 @@ public class ToolGateway {
         return payload;
     }
 
+    /** 从平台工具错误串提取合法稳定错误码，格式不符时使用统一代码。 */
     private String platformErrorCode(String error) {
         if (error == null) return "PLATFORM_TOOL_FAILED";
         int separator = error.indexOf(':');
@@ -388,6 +415,7 @@ public class ToolGateway {
         return code.matches("[A-Z][A-Z0-9_]*") ? code : "PLATFORM_TOOL_FAILED";
     }
 
+    /** 从平台工具错误串提取可展示消息，缺失时返回统一说明。 */
     private String platformErrorMessage(String error) {
         if (error == null || error.isBlank()) return "平台工具调用失败";
         int separator = error.indexOf(':');
@@ -783,17 +811,29 @@ public class ToolGateway {
     private record McpCallCommand(String toolName, Map<String, Object> arguments) {
     }
 
+    /**
+     * 一次工具执行产生的模型结果和服务端审计结果。
+     *
+     * <p>普通 Skill/MCP 只返回统一结果；平台工具还会返回不向模型公开的审计字段。</p>
+     *
+     * @param modelResult 可返回给模型的执行结果
+     * @param auditResult 仅供服务端事件和审计持久化的字段
+     * @param platform 是否为平台内置工具结果
+     */
     private record ToolExecutionResult(Object modelResult, Map<String, Object> auditResult, boolean platform) {
 
+        /** 将普通 Skill/MCP 结果转换为统一执行结果。 */
         private static ToolExecutionResult standard(Object result) {
             return new ToolExecutionResult(result, Map.of(), false);
         }
 
+        /** 将平台工具的模型字段与审计字段分别保存。 */
         private static ToolExecutionResult platform(Map<String, Object> modelResult, Map<String, Object> auditResult) {
             return new ToolExecutionResult(modelResult == null ? Map.of() : modelResult,
                     auditResult == null ? Map.of() : auditResult, true);
         }
 
+        /** 生成持久化工具调用日志使用的 JSON，编码失败时返回空对象。 */
         private String auditJson(ObjectMapper objectMapper) {
             try {
                 if (!platform) return objectMapper.writeValueAsString(Map.of("result", modelResult));
@@ -804,6 +844,7 @@ public class ToolGateway {
             }
         }
 
+        /** 返回可写入工作流事件的审计字段；普通工具没有扩展审计字段。 */
         private Map<String, Object> eventAuditResult() {
             return platform ? auditResult : Map.of();
         }

@@ -35,7 +35,9 @@ import java.util.List;
 @RequestMapping("/api/v1/schedules")
 public class ScheduleController {
 
+    /** 校验并保存调度配置，同时提供触发、启停和执行记录查询。 */
     private final ScheduleConfigurationService service;
+    /** 在任务消息文本与持久化 JSON 载荷之间转换。 */
     private final ObjectMapper objectMapper;
 
     /**

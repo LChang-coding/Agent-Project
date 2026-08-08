@@ -50,15 +50,21 @@ import java.util.Set;
  */
 final class MarkdownAstDocumentParser {
 
+    /** 写入解析结果的解析器名称。 */
     static final String PARSER_NAME = "commonmark-java";
+    /** 写入文档版本的固定解析器修订号。 */
     static final String PARSER_REVISION = "commonmark-java-0.28.0-ir-v1";
+    /** 开启表格、任务列表和 YAML Front Matter 语法。 */
     private static final List<Extension> EXTENSIONS = List.of(
             TablesExtension.create(), TaskListItemsExtension.create(), YamlFrontMatterExtension.create());
 
+    /** 保留块级和行内源码范围的 Markdown AST 解析器。 */
     private final Parser parser = Parser.builder().extensions(EXTENSIONS)
             .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES).build();
+    /** 序列化最终 Document IR。 */
     private final ObjectMapper objectMapper;
 
+    /** 注入项目统一配置的 JSON 转换器。 */
     MarkdownAstDocumentParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -152,6 +158,7 @@ final class MarkdownAstDocumentParser {
         }
     }
 
+    /** 使用 AST 源码范围、标题路径和阅读顺序构造可追溯文档块。 */
     private DocumentIr.Block block(String documentId, Node node, String source, DocumentIr.BlockType type,
                                    String normalized, List<String> headings, DocumentIr.Table table, int order) {
         int start = sourceStart(node);
@@ -166,6 +173,7 @@ final class MarkdownAstDocumentParser {
                 false, true, "", List.of());
     }
 
+    /** 将 YAML Front Matter 展平为带前缀的文档元数据。 */
     private Map<String, String> frontMatter(Node root) {
         YamlFrontMatterVisitor visitor = new YamlFrontMatterVisitor();
         root.accept(visitor);
@@ -185,12 +193,14 @@ final class MarkdownAstDocumentParser {
         }
         root.accept(new AbstractVisitor() {
             @Override
+            /** 标记包含原始 HTML 的块为不可信内容，同时继续检查其子节点。 */
             public void visit(HtmlBlock htmlBlock) {
                 warnings.add("MARKDOWN_HTML_BLOCK_UNTRUSTED");
                 visitChildren(htmlBlock);
             }
 
             @Override
+            /** 记录缺少替代文本的图片，同时继续检查图片子节点。 */
             public void visit(Image image) {
                 if (inlineText(image).isBlank()) warnings.add("MARKDOWN_IMAGE_WITHOUT_ALT");
                 visitChildren(image);
@@ -199,6 +209,7 @@ final class MarkdownAstDocumentParser {
         return List.copyOf(warnings);
     }
 
+    /** 根据原始语法识别脚注和公式段落，其余段落保持正文类型。 */
     private DocumentIr.BlockType paragraphType(Node node, String source) {
         String raw = raw(node, source).strip();
         if (raw.startsWith("[^") && raw.contains("]:")) return DocumentIr.BlockType.FOOTNOTE;
@@ -230,6 +241,7 @@ final class MarkdownAstDocumentParser {
         return new DocumentIr.Table(rows);
     }
 
+    /** 将结构化表格转换为保留行列边界的检索文本。 */
     private String tableText(DocumentIr.Table table) {
         return table.rows().stream().map(row -> row.cells().stream()
                         .map(DocumentIr.TableCell::normalizedText)
@@ -237,6 +249,7 @@ final class MarkdownAstDocumentParser {
                 .collect(java.util.stream.Collectors.joining("\n"));
     }
 
+    /** 将可检索正文块转换为兼容检索入库接口的段落列表。 */
     private List<RagDocumentParserPort.ParsedSection> sections(List<DocumentIr.Block> blocks) {
         List<RagDocumentParserPort.ParsedSection> result = new ArrayList<>();
         for (DocumentIr.Block block : blocks) {
@@ -249,6 +262,7 @@ final class MarkdownAstDocumentParser {
         return List.copyOf(result);
     }
 
+    /** 提取行内文字并保留换行，样式和链接容器本身不写入正文。 */
     private String inlineText(Node node) {
         StringBuilder text = new StringBuilder();
         node.accept(new AbstractVisitor() {
@@ -264,22 +278,26 @@ final class MarkdownAstDocumentParser {
         return text.toString();
     }
 
+    /** 按 AST 源码范围截取未经规范化的原始 Markdown。 */
     private String raw(Node node, String source) {
         int start = sourceStart(node);
         int end = sourceEnd(node);
         return start >= 0 && end >= start && end <= source.length() ? source.substring(start, end) : "";
     }
 
+    /** 返回节点第一段源码的起始下标，缺失范围时返回 -1。 */
     private int sourceStart(Node node) {
         return node.getSourceSpans().isEmpty() ? -1 : node.getSourceSpans().get(0).getInputIndex();
     }
 
+    /** 返回节点最后一段源码的结束下标，缺失范围时返回 -1。 */
     private int sourceEnd(Node node) {
         if (node.getSourceSpans().isEmpty()) return -1;
         org.commonmark.node.SourceSpan last = node.getSourceSpans().get(node.getSourceSpans().size() - 1);
         return last.getInputIndex() + last.getLength();
     }
 
+    /** 按文档、顺序、块类型和原文生成重复解析结果一致的块 ID。 */
     private String stableId(String documentId, int order, DocumentIr.BlockType type, String raw) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(

@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RagWorkerConfiguration {
 
+    /** 注册确定性稀疏编码器，使入库和在线查询使用相同词表算法。 */
     @Bean
     public SparseEncoderPort ragSparseEncoder() {
         return new DeterministicSparseEncoder();

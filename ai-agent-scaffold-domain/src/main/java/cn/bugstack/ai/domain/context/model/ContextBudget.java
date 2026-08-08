@@ -28,7 +28,7 @@ public record ContextBudget(int availableTokens,
         }
     }
 
-    /** 兼容无附件预算的旧调用；参数是原有五项预算；返回预算对象。 */
+    /** 兼容无附件预算的旧调用。 */
     public ContextBudget(int availableTokens, int longTermMemoryTokens, int recentConversationTokens,
                          int upstreamTokens, int ragTokens) {
         this(availableTokens, longTermMemoryTokens, recentConversationTokens, 0, upstreamTokens, ragTokens);

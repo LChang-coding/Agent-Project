@@ -14,6 +14,7 @@ import java.util.List;
 @Repository
 public class ContextHistoryRepository implements IContextHistoryRepository {
 
+    /** 按会话和消息序号读取有效上下文及 Token 统计。 */
     private final IChatMessageDao chatMessageDao;
 
     /**
@@ -42,6 +43,7 @@ public class ContextHistoryRepository implements IContextHistoryRepository {
         return tokens == null ? 0 : tokens;
     }
 
+    /** 将数据库消息恢复为上下文组装所需的领域字段。 */
     private ChatMessageEntity toEntity(ChatMessagePO po) {
         return ChatMessageEntity.builder()
                 .tenantId(po.getTenantId())
@@ -59,6 +61,7 @@ public class ContextHistoryRepository implements IContextHistoryRepository {
                 .build();
     }
 
+    /** 将空租户归一为数据库空值，兼容历史单租户消息。 */
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }

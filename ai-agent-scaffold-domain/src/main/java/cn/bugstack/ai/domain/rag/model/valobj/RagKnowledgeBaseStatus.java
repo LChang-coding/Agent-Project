@@ -1,15 +1,9 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一个知识库整体的生命周期状态。
- *
- * <p>属于哪一层：领域层值对象，是 RagKnowledgeBaseEntity 的状态字段类型。</p>
- *
- * <p>状态由谁推进：知识库管理服务（创建、停用、改名）和知识库级联删除任务
- * （requestDeletion 立屏障 → 删完所有文档后 deleted 关墓碑）。</p>
- *
- * <p>它不负责什么：不表示库里的文档是否可用，也不表示删除任务跑到哪一步
- * （那是 RagKnowledgeBaseDeleteStatus 和 RagKnowledgeBaseDeleteStage）。</p>
+ * 知识库生命周期状态。
+ * <p>该状态决定知识库是否可进入在线检索范围；文档可用性和删除任务进度
+ * 由各自的状态对象表达。</p>
  */
 public enum RagKnowledgeBaseStatus {
 
@@ -59,13 +53,10 @@ public enum RagKnowledgeBaseStatus {
     DELETED;
 
     /**
- * 把状态翻译成一个业务判断：这个库现在允不允许被在线检索。
-     *
-     * <p>三个地方都靠它做门禁：检索服务解析可用绑定、会话 RAG 设置列出可选知识库、
-     * 引用原文查看做二次校验。返回 false 的库会被整条剔除，required 绑定则直接报错。</p>
+     * 判断知识库是否允许进入在线检索范围。
+     * @return 状态为 ACTIVE 时返回 {@code true}
      */
     public boolean searchable() {
- // 只有启用状态允许在线检索；停用、建索引中、删除中的库一律不能进入召回范围。
         return this == ACTIVE;
     }
 }

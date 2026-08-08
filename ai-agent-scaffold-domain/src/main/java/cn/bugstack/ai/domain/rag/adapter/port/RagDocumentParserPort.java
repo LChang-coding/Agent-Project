@@ -13,7 +13,12 @@ import java.util.Set;
  */
 public interface RagDocumentParserPort {
 
-    /** 解析受控文档内容。 */
+    /**
+     * 将受控临时目录中的文档解析为可追溯结构。
+     *
+     * @param command 已验证路径边界、文件长度和 OCR 策略的解析命令
+     * @return 规范化正文、结构化文档、解析器版本和警告
+     */
     ParsedDocument parse(ParseCommand command);
 
     /**

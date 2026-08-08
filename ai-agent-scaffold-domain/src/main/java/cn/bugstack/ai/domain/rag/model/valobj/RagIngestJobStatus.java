@@ -1,16 +1,9 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一条文档摄取任务（或删除任务）的执行状态。
- *
- * <p>属于哪一层：领域层值对象，是 RagIngestJobEntity 的状态字段类型。</p>
- *
- * <p>状态由谁推进：只能通过 RagIngestJobEntity 上的迁移方法推进，实际触发者是摄取 Worker
- * （claim 领取、advance 推进、complete 完成、failRetryable / failTerminal 记故障）
- * 和管理端取消请求（requestCancel）。任何绕过实体直接改数据库状态的写法都会破坏这里的不变量。</p>
- *
- * <p>它不负责什么：不表示任务跑到流水线哪一步（那是 checkpoint 里的 RagIngestStage），
- * 也不表示任务在干什么活（那是 RagIngestOperation）。</p>
+ * 文档摄取或删除任务的执行状态。
+ * <p>状态只通过 RagIngestJobEntity 的生命周期方法推进。当前处理阶段和任务操作类型
+ * 分别由 RagIngestStage 和 RagIngestOperation 表达。</p>
  */
 public enum RagIngestJobStatus {
 

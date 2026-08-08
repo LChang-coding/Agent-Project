@@ -20,14 +20,19 @@ import java.util.List;
 @Service
 public class SessionLifecycleService {
 
+    /** 会话删除触发运行取消和上下文失效时使用的统一原因。 */
     private static final String DELETE_REASON = "会话已删除";
+    /** 锁定会话、推进上下文版本并执行软删除。 */
     private final SessionDomain sessionDomain;
+    /** 查询并取消会话中仍可执行的运行。 */
     private final RunControlService runControlService;
+    /** 使会话派生的摘要和压缩任务失效。 */
     private final ContextInvalidationService contextInvalidationService;
+    /** 撤销该会话已经创建的分享授权。 */
     private final ISessionShareRepository shareRepository;
 
     /**
-     * 创建会话生命周期服务；参数是领域协作服务；返回服务实例。
+     * 创建会话生命周期服务。
      */
     public SessionLifecycleService(SessionDomain sessionDomain, RunControlService runControlService,
                                    ContextInvalidationService contextInvalidationService,
@@ -39,7 +44,7 @@ public class SessionLifecycleService {
     }
 
     /**
-     * 软删除会话；参数是可信身份和会话；返回删除前推进后的上下文版本。
+     * 软删除会话。
      */
     @Transactional(rollbackFor = Exception.class)
     public long delete(String tenantId, String userId, String sessionId) {

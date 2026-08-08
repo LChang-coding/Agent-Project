@@ -49,7 +49,7 @@ public class ContextPolicyProperties {
     private int cacheTtlSeconds = 1800;
 
     /**
-     * 计算可注入预算；无参数；返回当前策略预算。
+     * 计算可注入预算；返回当前策略预算。
      */
     public ContextBudget toBudget() {
         if (enabled && modelWindowTokens <= 0) {

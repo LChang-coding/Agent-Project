@@ -10,6 +10,7 @@ public interface IWorkflowEventCursorRepository {
      * @param userId 可信用户ID
      * @param runId 工作流运行ID
      * @param traceId 运行根链路ID
+     * @param eventType 待追加事件的类型，终态类型会参与唯一性校验
      * @return 本次分配的序号
      */
     long allocate(String tenantId, String userId, String runId, String traceId, String eventType);

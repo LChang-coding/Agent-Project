@@ -33,6 +33,7 @@ public class RagOutboxClaimService {
                 candidate.getTenantId(), candidate.getEventId()));
     }
 
+    /** 判断候选的租户或事件标识是否不可用于领取。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }

@@ -154,10 +154,12 @@ public class ChatRunRepository implements IChatRunRepository {
         }
     }
 
+    /** 将运行状态转换为数据库约定的小写值。 */
     private String value(RunStatus status) {
         return status == null ? null : status.name().toLowerCase(Locale.ROOT);
     }
 
+    /** 将空白可选字段归一为数据库空值。 */
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }

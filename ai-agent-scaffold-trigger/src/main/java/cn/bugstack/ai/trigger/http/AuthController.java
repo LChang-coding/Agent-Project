@@ -44,6 +44,7 @@ import javax.annotation.Resource;
 @CrossOrigin(origins = "*")
 public class AuthController implements IAuthApiService {
 
+    /** 处理凭据校验、令牌签发以及用户资料变更。 */
     @Resource
     private IAuthService authService;
 

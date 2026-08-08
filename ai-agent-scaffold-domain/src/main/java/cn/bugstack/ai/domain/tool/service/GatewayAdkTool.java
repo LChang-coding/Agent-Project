@@ -413,6 +413,7 @@ public class GatewayAdkTool extends BaseTool {
     }
 
     @SuppressWarnings("unchecked")
+    /** 将平台工具声明的受控 JSON Schema 转换为 ADK Schema，非法结构直接拒绝装配。 */
     private static Schema platformSchema(String schemaJson) {
         try {
             Map<String, Object> root = OBJECT_MAPPER.readValue(schemaJson, new TypeReference<>() {});
@@ -448,6 +449,7 @@ public class GatewayAdkTool extends BaseTool {
         }
     }
 
+    /** 读取 Schema 整数边界，拒绝非数字或超出 long 范围的配置。 */
     private static long longBoundary(Object value, String name) {
         if (!(value instanceof Number number)) {
             throw new IllegalArgumentException("平台工具参数 " + name + " 必须是数字");
@@ -455,6 +457,7 @@ public class GatewayAdkTool extends BaseTool {
         return number.longValue();
     }
 
+    /** 读取 Schema 小数边界，拒绝非数字和非有限值。 */
     private static double doubleBoundary(Object value, String name) {
         if (!(value instanceof Number number)) {
             throw new IllegalArgumentException("平台工具参数 " + name + " 必须是数字");
@@ -574,30 +577,36 @@ public class GatewayAdkTool extends BaseTool {
         return value == null ? defaultValue : value;
     }
 
+    /** 从运行时属性恢复可选布尔值。 */
     private static Boolean booleanValue(Object value) {
         return value instanceof Boolean result ? result : value == null ? null : Boolean.valueOf(String.valueOf(value));
     }
 
+    /** 从运行时属性提取非空字符串列表，类型不匹配时返回空。 */
     private static List<String> stringList(Object value) {
         if (!(value instanceof List<?> values)) return null;
         return values.stream().filter(item -> item != null).map(String::valueOf)
                 .filter(item -> !item.isBlank()).toList();
     }
 
+    /** 从运行时属性提取经过服务端构造的路由描述符，丢弃其他对象。 */
     private static List<PlatformToolResolver.RouteDescriptor> routeDescriptors(Object value) {
         if (!(value instanceof List<?> values)) return null;
         return values.stream().filter(PlatformToolResolver.RouteDescriptor.class::isInstance)
                 .map(PlatformToolResolver.RouteDescriptor.class::cast).toList();
     }
 
+    /** 仅在值缺失时使用冻结运行上下文中的默认布尔值。 */
     private static Boolean defaultBoolean(Boolean value, Boolean defaultValue) {
         return value == null ? defaultValue : value;
     }
 
+    /** 仅在列表缺失时使用冻结默认值，并返回不可变副本。 */
     private static <T> List<T> defaultList(List<T> value, List<T> defaultValue) {
         return copyList(value == null ? defaultValue : value);
     }
 
+    /** 对可选列表建立不可变副本，避免工具执行期间被调用方修改。 */
     private static <T> List<T> copyList(List<T> value) {
         return value == null ? null : List.copyOf(value);
     }

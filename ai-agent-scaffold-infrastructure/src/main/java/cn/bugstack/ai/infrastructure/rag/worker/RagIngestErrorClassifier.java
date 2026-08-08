@@ -8,6 +8,10 @@ import java.util.Set;
 /** 将摄取异常收敛为可安全持久的稳定错误。 */
 public final class RagIngestErrorClassifier {
 
+    /**
+     * 可通过重新访问外部服务或存储恢复的稳定错误码。
+     * 未列入集合的错误会进入不可重试终态，避免永久重复执行确定性失败。
+     */
     private static final Set<String> RETRYABLE_CODES = Set.of(
             "RAG_DOCLING_UNAVAILABLE", "RAG_DOCLING_INTERRUPTED",
             "RAG_EMBEDDING_UNAVAILABLE", "RAG_EMBEDDING_INTERRUPTED",
@@ -19,7 +23,7 @@ public final class RagIngestErrorClassifier {
             "RAG_DELETE_CHUNK_REMAINS", "RAG_DELETE_OBJECT_REMAINS",
             "RAG_WORKSPACE_CREATE_FAILED", "RAG_WORKSPACE_CLEANUP_FAILED");
 
-    /** 分类且脱敏；绝不保存原始 exception message。 */
+    /** 沿异常链提取领域错误码并脱敏，绝不持久化原始异常消息。 */
     public Failure classify(Throwable error) {
         Throwable current = error;
         while (current != null) {
@@ -35,11 +39,13 @@ public final class RagIngestErrorClassifier {
         return new Failure("RAG_INGEST_INTERNAL_ERROR", false, "摄取流程发生内部错误");
     }
 
+    /** 只接受长度受限的大写错误码，拒绝把任意文本写入状态字段。 */
     private String safeCode(String code) {
         if (code == null || !code.matches("[A-Z0-9_]{1,128}")) return "RAG_INGEST_FAILED";
         return code;
     }
 
+    /** 将内部错误码归并为不包含文件内容、地址或凭据的阶段摘要。 */
     private String safeSummary(String code) {
         if (code.contains("CANCEL") || code.contains("FENCE") || code.contains("LEASE")) {
             return "摄取任务已取消或租约失效";
@@ -53,6 +59,7 @@ public final class RagIngestErrorClassifier {
         return "摄取任务执行失败";
     }
 
+    /** 提供给任务状态机的稳定错误分类结果。 */
     public record Failure(String code, boolean retryable, String safeMessage) {
     }
 }

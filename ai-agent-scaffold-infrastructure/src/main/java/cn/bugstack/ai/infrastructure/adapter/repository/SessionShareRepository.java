@@ -20,6 +20,7 @@ public class SessionShareRepository implements ISessionShareRepository {
     /** 接收方导入幂等账本入口。 */
     private final IChatSessionImportDao importDao;
 
+    /** 注入分享定义和接收方导入账本 DAO。 */
     public SessionShareRepository(IChatSessionShareDao shareDao, IChatSessionImportDao importDao) {
         this.shareDao = shareDao;
         this.importDao = importDao;
@@ -85,6 +86,7 @@ public class SessionShareRepository implements ISessionShareRepository {
         return affected;
     }
 
+    /** 将不可变分享快照位置、摘要、有效期和下载限制写入数据库记录。 */
     private ChatSessionSharePO toSharePO(SessionShareEntity entity) {
         return ChatSessionSharePO.builder()
                 .shareId(entity.getShareId()).ownerTenantId(entity.getOwnerTenantId())
@@ -96,6 +98,7 @@ public class SessionShareRepository implements ISessionShareRepository {
                 .downloadCount(entity.getDownloadCount()).revokedAt(entity.getRevokedAt()).build();
     }
 
+    /** 从数据库恢复分享状态、对象位置和剩余访问约束。 */
     private SessionShareEntity toShareEntity(ChatSessionSharePO po) {
         if (po == null) {
             return null;
@@ -111,6 +114,7 @@ public class SessionShareRepository implements ISessionShareRepository {
                 .build();
     }
 
+    /** 将接收方范围和新会话 ID 写入幂等导入账本。 */
     private ChatSessionImportPO toImportPO(SessionImportEntity entity) {
         return ChatSessionImportPO.builder().importId(entity.getImportId()).shareId(entity.getShareId())
                 .recipientScopeKey(entity.getRecipientScopeKey()).tenantId(entity.getTenantId())
@@ -118,6 +122,7 @@ public class SessionShareRepository implements ISessionShareRepository {
                 .newSessionId(entity.getNewSessionId()).status(entity.getStatus()).build();
     }
 
+    /** 从导入账本恢复接收方范围、源摘要和导入结果。 */
     private SessionImportEntity toImportEntity(ChatSessionImportPO po) {
         if (po == null) {
             return null;

@@ -32,26 +32,31 @@ public class ScheduleRepository implements IScheduleRepository {
     private final IAgentScheduleExecutionDao executionDao;
 
     @Override
+    /** 查询需要重新对账的配置，供调度任务同步器分批处理。 */
     public List<ScheduleConfigEntity> listForReconcile(int limit) {
         return configDao.queryForReconcile(limit).stream().map(this::toConfig).toList();
     }
 
     @Override
+    /** 按配置 ID 查询调度配置，不附加用户归属条件。 */
     public ScheduleConfigEntity findConfig(String configId) {
         return toConfig(configDao.queryByConfigId(configId));
     }
 
     @Override
+    /** 按可信租户和用户查询其拥有的调度配置。 */
     public ScheduleConfigEntity findOwnedConfig(String tenantId, String userId, String configId) {
         return toConfig(configDao.queryOwned(tenantId, userId, configId));
     }
 
     @Override
+    /** 查询可信租户和用户拥有的全部调度配置。 */
     public List<ScheduleConfigEntity> listOwnedConfigs(String tenantId, String userId) {
         return configDao.queryOwnedList(tenantId, userId).stream().map(this::toConfig).toList();
     }
 
     @Override
+    /** 新配置执行插入，既有配置执行归属范围内更新，并拒绝并发覆盖。 */
     public void saveConfig(ScheduleConfigEntity config) {
         AgentScheduleConfigPO po = toConfigPo(config);
         if (configDao.queryOwned(config.getTenantId(), config.getOwnerUserId(), config.getConfigId()) == null) {
@@ -62,12 +67,14 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 切换配置开关，并同步可供对账读取的 active/disabled 状态。 */
     public boolean updateEnabled(String tenantId, String userId, String configId, boolean enabled) {
         return configDao.updateEnabled(tenantId, userId, configId, enabled ? 1 : 0,
                 enabled ? "active" : "disabled") == 1;
     }
 
     @Override
+    /** 记录本次对账采用的配置哈希、版本和时间，供后续判断是否需要重建任务。 */
     public void updateReconciled(String configId, String configHash, long configVersion,
                                  LocalDateTime reconciledAt, LocalDateTime expectedUpdateTime) {
         configDao.updateReconciled(configId, configHash, configVersion, reconciledAt, expectedUpdateTime);
@@ -82,6 +89,7 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 批量禁用已经没有活动配置支撑的运行任务。 */
     public int disableInactiveTasks() {
         return taskDao.disableInactive();
     }
@@ -97,28 +105,33 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 按任务 ID 查询完整调度运行时，包括租约和 Cron 游标。 */
     public ScheduleTaskEntity findTask(String taskId) {
         return toTask(taskDao.queryByTaskId(taskId));
     }
 
     @Override
+    /** 仅允许当前租约和围栏持有者延长任务租约。 */
     public boolean renewLease(String taskId, String leaseOwner, long fencingToken, LocalDateTime leaseUntil) {
         return taskDao.renewLease(taskId, leaseOwner, fencingToken, leaseUntil) == 1;
     }
 
     @Override
+    /** 完成当前计划发生，并推进最近和下一次执行时间。 */
     public boolean completeTask(String taskId, String leaseOwner, long fencingToken,
                                 LocalDateTime lastPlannedTime, LocalDateTime nextFireTime) {
         return taskDao.complete(taskId, leaseOwner, fencingToken, lastPlannedTime, nextFireTime) == 1;
     }
 
     @Override
+    /** 释放当前执行权并登记下一次退避重试时间。 */
     public boolean retryTask(String taskId, String leaseOwner, long fencingToken, int retryCount,
                              LocalDateTime retryAt) {
         return taskDao.retry(taskId, leaseOwner, fencingToken, retryCount, retryAt) == 1;
     }
 
     @Override
+    /** 终止本次失败发生并推进 Cron 游标，使后续计划仍可继续。 */
     public boolean releaseFailedOccurrence(String taskId, String leaseOwner, long fencingToken,
                                            LocalDateTime lastPlannedTime, LocalDateTime nextFireTime) {
         return taskDao.releaseFailedOccurrence(taskId, leaseOwner, fencingToken,
@@ -126,6 +139,7 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 将归属范围内的任务下一触发时间推进到当前时刻，实现立即执行。 */
     public boolean triggerNow(String tenantId, String userId, String configId, LocalDateTime now) {
         return taskDao.triggerNow(tenantId, userId, configId, now) == 1;
     }
@@ -150,6 +164,7 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 由当前租约持有者写入单次执行终态、耗时、错误或结果。 */
     public boolean completeExecution(String executionId, String leaseOwner, long fencingToken, String status,
                                      LocalDateTime endTime, long durationMs, String errorMessage,
                                      String resultJson) {
@@ -189,6 +204,7 @@ public class ScheduleRepository implements IScheduleRepository {
     }
 
     @Override
+    /** 查询指定配置最近的执行账本，结果始终受租户和用户归属限制。 */
     public List<ScheduleExecutionEntity> listExecutions(String tenantId, String userId, String configId,
                                                         int limit) {
         return executionDao.queryOwnedByConfig(tenantId, userId, configId, limit).stream()
@@ -210,6 +226,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .updateTime(po.getUpdateTime()).build();
     }
 
+    /** 将领域配置转换为数据库记录，并固定当前仅支持的 private 可见性。 */
     private AgentScheduleConfigPO toConfigPo(ScheduleConfigEntity entity) {
         return AgentScheduleConfigPO.builder().tenantId(entity.getTenantId()).ownerUserId(entity.getOwnerUserId())
                 .runAsUserId(entity.getRunAsUserId()).runAsRoleCode(entity.getRunAsRoleCode())
@@ -235,6 +252,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .fencingToken(value(po.getFencingToken())).rowVersion(value(po.getRowVersion())).build();
     }
 
+    /** 将对账后的领域任务转换为可插入或更新的运行时记录。 */
     private AgentScheduleTaskPO toTaskPo(ScheduleTaskEntity entity) {
         return AgentScheduleTaskPO.builder().tenantId(entity.getTenantId()).userId(entity.getUserId())
                 .configId(entity.getConfigId()).taskId(entity.getTaskId()).businessKey(entity.getBusinessKey())
@@ -257,6 +275,7 @@ public class ScheduleRepository implements IScheduleRepository {
                 .resultJson(po.getResultJson()).build();
     }
 
+    /** 将新发生转换为执行账本记录；终态字段由完成方法后续填写。 */
     private AgentScheduleExecutionPO toExecutionPo(ScheduleExecutionEntity entity) {
         return AgentScheduleExecutionPO.builder().tenantId(entity.getTenantId()).userId(entity.getUserId())
                 .configId(entity.getConfigId()).taskId(entity.getTaskId()).executionId(entity.getExecutionId())
@@ -265,10 +284,12 @@ public class ScheduleRepository implements IScheduleRepository {
                 .leaseOwner(entity.getLeaseOwner()).startTime(entity.getStartTime()).status(entity.getStatus()).build();
     }
 
+    /** 将旧记录中的空长整数恢复为领域默认值 0。 */
     private long value(Long value) {
         return value == null ? 0L : value;
     }
 
+    /** 将旧记录中的空整数恢复为领域默认值 0。 */
     private int intValue(Integer value) {
         return value == null ? 0 : value;
     }

@@ -1,25 +1,14 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 知识库级联删除的「存档点」：删到第几个文档、当前正在删哪一个。
+ * 知识库级联删除任务的可持久化检查点。
+ * <p>检查点仅保存删除阶段、总文档数、已完成数和当前文档标识，使协调器重启或租约过期后
+ * 可以继续未完成的级联删除。</p>
  *
- * <p>属于哪一层：领域层值对象，不可变。</p>
- *
- * <p>解决什么问题：删一个知识库要逐个删掉里面所有文档，可能上千个。协调器中途重启后
- * 靠它知道已经删完多少个，剩下的接着删，而不是从头再扫一遍。</p>
- *
- * <p>刻意不放什么：不放文档正文、不放任何访问凭据。这份进度会被写进任务表并被跨实例读取，
- * 越轻越安全，只留能定位进度的最小信息。</p>
- *
- * <p>谁读写它：RagKnowledgeBaseDeleteTaskEntity 持有它，通过 advance / waitForChild 换新；
- * complete 时会检查「完成数是否等于总数」。</p>
- *
- * @param stage 级联删除的当前阶段。
- * @param totalDocuments 建屏障那一刻库里的文档总数；它是删除任务的分母，
- *  一旦确定在整个任务生命周期内都不允许改变（advance 会逐次比对）。
- * @param completedDocuments 已经删完的文档数，只能增不能减；等于总数才允许进入完成。
- * @param currentDocumentId 正在处理的文档编号，可为空；长度限制 64，
- *        只用于排查「卡在哪个文档上」，不作为任何判断依据。
+ * @param stage 级联删除的当前阶段
+ * @param totalDocuments 任务登记时确定且后续不可变的文档总数
+ * @param completedDocuments 已完成删除的文档数
+ * @param currentDocumentId 当前正在处理的文档标识，可为空
  */
 public record RagKnowledgeBaseDeleteCheckpoint(RagKnowledgeBaseDeleteStage stage,
          int totalDocuments,

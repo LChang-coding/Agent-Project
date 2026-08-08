@@ -7,7 +7,12 @@ import java.util.List;
  */
 public interface EmbeddingPort {
 
-    /** 批量生成文档或查询向量。 */
+    /**
+     * 按输入顺序批量生成查询或文档的稠密向量。
+     *
+     * @param command 包含租户、输入类型和文本批次的编码命令
+     * @return 与输入文本一一对应的向量及模型版本
+     */
     EmbeddingResult embed(EmbeddingCommand command);
 
     /**

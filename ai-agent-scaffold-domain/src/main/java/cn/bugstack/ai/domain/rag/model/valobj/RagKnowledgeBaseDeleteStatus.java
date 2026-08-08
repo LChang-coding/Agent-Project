@@ -2,15 +2,8 @@ package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
  * 知识库级联删除任务的执行状态。
- *
- * <p>属于哪一层：领域层值对象，是 RagKnowledgeBaseDeleteTaskEntity 的状态字段类型。</p>
- *
- * <p>状态由谁推进：只能通过删除任务实体的迁移方法推进（claim / advance / waitForChild /
- * complete / fail / requeue），调用方是知识库删除协调器。</p>
- *
- * <p>和摄取任务状态的最大区别：这里多了一个 WAITING。级联删除要等一堆子文档删完，
- * 与其让 Worker 干等着，不如主动释放租约、约定下次轮询时间，而且这种等待<b>不算失败</b>、
- * 不消耗重试次数——否则一个文档多的库还没删完就把尝试次数耗光了。</p>
+ * <p>状态只通过删除任务实体的迁移方法推进。WAITING 表示任务已释放租约并等待
+ * 子文档删除结果，该状态不增加失败尝试次数。</p>
  */
 public enum RagKnowledgeBaseDeleteStatus {
 

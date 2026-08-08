@@ -1,15 +1,8 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一条 RAG 后台任务到底在干什么活。
- *
- * <p>属于哪一层：领域层值对象。它在摄取任务创建时确定，之后终身不变——
- * RagIngestJobEntity 的每个状态迁移方法都会先看它，用错方法就抛领域异常。</p>
- *
- * <p>谁会读它：RagIngestJobEntity 用它把「摄取流水线」和「删除流水线」两套阶段推进彻底隔开；
- * Worker 用它选择要执行哪条流水线。</p>
- *
- * <p>它不负责什么：不表示任务跑到哪一步（那是 checkpoint 的 stage），也不表示成功失败（那是 status）。</p>
+ * RAG 后台任务的操作类型。
+ * <p>操作类型在任务创建后保持不变，并用于限制可使用的检查点推进和生命周期方法。</p>
  */
 public enum RagIngestOperation {
 

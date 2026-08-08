@@ -34,10 +34,15 @@ import java.util.stream.Collectors;
 @Repository
 public class WorkflowRepository implements IWorkflowRepository {
 
+    /** 工作流定义、状态和当前版本指针的持久化入口。 */
     private final IAgentWorkflowDao agentWorkflowDao;
+    /** 工作流图不可变版本的持久化入口。 */
     private final IAgentWorkflowVersionDao agentWorkflowVersionDao;
+    /** 解析工作流引用的 MCP 定义和发布版本。 */
     private final IMcpServerConfigDao mcpServerConfigDao;
+    /** 解析工作流引用的 Skill 定义和发布版本。 */
     private final ISkillDefinitionDao skillDefinitionDao;
+    /** 编解码工作流图 JSON，并兼容旧版本缺少新增字段。 */
     private final ObjectMapper objectMapper;
 
     /**
@@ -52,6 +57,7 @@ public class WorkflowRepository implements IWorkflowRepository {
     }
 
     @Autowired
+    /** 注入共享 ObjectMapper，并复制为兼容旧工作流图字段的仓储专用实例。 */
     public WorkflowRepository(IAgentWorkflowDao agentWorkflowDao,
                               IAgentWorkflowVersionDao agentWorkflowVersionDao,
                               IMcpServerConfigDao mcpServerConfigDao,
@@ -102,6 +108,7 @@ public class WorkflowRepository implements IWorkflowRepository {
     }
 
     @Override
+    /** 在租户范围内软删除工作流，并记录执行删除的用户。 */
     public int softDeleteWorkflow(String tenantId, String workflowId, String deletedBy) {
         return agentWorkflowDao.softDelete(tenantId, workflowId, deletedBy);
     }

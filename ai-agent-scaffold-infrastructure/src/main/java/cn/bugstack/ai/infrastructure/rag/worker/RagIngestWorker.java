@@ -72,27 +72,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @ConditionalOnProperty(prefix = "ai.rag.worker", name = "enabled", havingValue = "true")
 public class RagIngestWorker {
 
+    /** 单个待处理文档最大允许 50 MiB。 */
     private static final long MAX_DOCUMENT_BYTES = 50L * 1024 * 1024;
 
     /** 状态事实源与外部副作用端口。 */
     private final IRagRepository repository;
+    /** 下载源文档并保存解析、切块和质量产物。 */
     private final ObjectStorageService objectStorageService;
+    /** 将 Markdown、PDF 或 DOCX 转换为统一 Document IR。 */
     private final RagDocumentParserPort parser;
+    /** 为子块正文生成稠密向量。 */
     private final EmbeddingPort embedding;
+    /** 为子块正文生成确定性稀疏向量。 */
     private final SparseEncoderPort sparseEncoder;
+    /** 写入、计数和删除 Qdrant 向量点。 */
     private final VectorStorePort vectorStore;
+    /** 提供批次、租约、重试和预处理配置。 */
     private final RagProperties properties;
+    /** 按标题、长度和父子关系生成检索块。 */
     private final DocumentIrChunker chunker = new DocumentIrChunker();
+    /** 清除解析噪声并保留可追溯块结构。 */
     private final DocumentIrCleaner cleaner = DocumentIrCleaner.standard();
+    /** 根据配置选择完整或评测用预处理策略。 */
     private final DocumentPreprocessingStrategyExecutor preprocessing =
             new DocumentPreprocessingStrategyExecutor(cleaner);
+    /** 计算解析覆盖率、文本质量和结构保真指标。 */
     private final DocumentParseQualityEvaluator qualityEvaluator = DocumentParseQualityEvaluator.standard();
+    /** 序列化检查点和处理产物。 */
     private final ObjectMapper objectMapper;
+    /** 将异常分类为可重试或不可重试的稳定错误。 */
     private final RagIngestErrorClassifier errorClassifier = new RagIngestErrorClassifier();
+    /** 统一生成租约、检查点和终态时间。 */
     private final Clock clock;
+    /** 独立续租长时间运行的解析、向量化和索引任务。 */
     private final ScheduledExecutorService heartbeatExecutor;
 
     @Autowired
+    /** 注入完整摄取流水线依赖，并创建独立租约心跳调度器。 */
     public RagIngestWorker(IRagRepository repository, ObjectStorageService objectStorageService,
                            RagDocumentParserPort parser, EmbeddingPort embedding,
                            SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,
@@ -310,6 +326,7 @@ public class RagIngestWorker {
         completeDeletion(job, leaseOwner);
     }
 
+    /** 在删除对象存储文件前后校验租约，防止过期 Worker 继续删除。 */
     private RagIngestJobEntity deleteObjectWithBarrier(RagIngestJobEntity job, String leaseOwner,
                                                         LeaseHeartbeat heartbeat, String bucket,
                                                         String objectKey) {
@@ -325,6 +342,7 @@ public class RagIngestWorker {
                 current.fencingToken(), heartbeat, true);
     }
 
+    /** 校验待删除对象仍属于当前租户、知识库、文档和版本目录。 */
     private void validateDeleteObjectLocation(RagIngestJobEntity job, RagDocumentVersionEntity version,
                                               String bucket, String objectKey, String kind) {
         if (!objectStorageService.ragBucket().equals(bucket)
@@ -335,6 +353,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 加载删除任务对应的文档及全部版本，并校验知识库归属。 */
     private DeleteScope loadDeleteScope(RagIngestJobEntity job) {
         RagDocumentEntity document = repository.findDocument(job.tenantId(), job.documentId())
                 .orElseThrow(() -> new AppException("RAG_DELETE_DOCUMENT_NOT_FOUND", "待删除文档不存在"));
@@ -350,6 +369,7 @@ public class RagIngestWorker {
         return new DeleteScope(document, versions);
     }
 
+    /** 验证文档所有版本已清理后提交文档删除终态。 */
     private void completeDeletion(RagIngestJobEntity job, String leaseOwner) {
         DeleteScope current = loadDeleteScope(job);
         long expectedTaskRevision = job.revision();
@@ -359,6 +379,7 @@ public class RagIngestWorker {
                 current.versions().stream().map(RagDocumentVersionEntity::deleted).toList(), clock.instant());
     }
 
+    /** 加载入库任务关联的知识库、文档和版本，并拒绝跨范围组合。 */
     private Scope loadScope(RagIngestJobEntity job) {
         RagDocumentVersionEntity version = repository.findDocumentVersion(job.tenantId(), job.versionId())
                 .orElseThrow(() -> new AppException("RAG_INGEST_VERSION_NOT_FOUND", "摄取文档版本不存在"));
@@ -377,6 +398,7 @@ public class RagIngestWorker {
         return new Scope(version, document, knowledgeBase);
     }
 
+    /** 将待处理文档版本推进到 processing，并冻结解析器和模型修订号。 */
     private void startVersionProcessing(RagDocumentVersionEntity version) {
         if (version.status() == RagDocumentVersionStatus.PROCESSING) return;
         RagDocumentVersionEntity processing = version.processing(properties.getDocling().getParserRevision(),
@@ -457,6 +479,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 保存切块总数并把任务检查点推进到向量生成阶段。 */
     private List<RagChunkEntity> advanceToEmbedding(RagIngestJobEntity job, List<RagChunkEntity> children,
                                                      String leaseOwner) {
         RagIngestJobEntity advanced = advance(job, leaseOwner,
@@ -464,6 +487,7 @@ public class RagIngestWorker {
         return childSnapshot(advanced, children.size());
     }
 
+    /** 回读子块快照并验证数量，避免使用未完整提交的切块集合。 */
     private List<RagChunkEntity> childSnapshot(RagIngestJobEntity job, int expected) {
         List<RagChunkEntity> children = repository.listChunks(job.tenantId(), job.versionId()).stream()
                 .filter(this::isChild).sorted(Comparator.comparingInt(RagChunkEntity::chunkIndex)).toList();
@@ -522,6 +546,7 @@ public class RagIngestWorker {
         return job;
     }
 
+    /** 验证索引数量和预处理产物后原子激活文档版本。 */
     private void activate(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         job = barrier(job.tenantId(), job.jobId(), leaseOwner, job.fencingToken(), heartbeat, true);
         long metadataStarted = System.nanoTime();
@@ -648,6 +673,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 仅由当前租约持有者登记终态失败前的向量和产物清理要求。 */
     private void requestFailureCleanupIfOwned(String tenantId, String jobId, String leaseOwner, long fence,
                                               boolean dead, RagIngestErrorClassifier.Failure failure) {
         try {
@@ -664,6 +690,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 清理失败任务已经写入的索引和处理中间产物。 */
     private void cleanupForTerminalFailure(RagIngestJobEntity job, String leaseOwner, long fence) {
         RagIngestJobEntity current = barrier(job.tenantId(), job.jobId(), leaseOwner, fence,
                 LeaseHeartbeat.passive(), true);
@@ -687,6 +714,7 @@ public class RagIngestWorker {
         return repository.findIngestJob(tenantId, jobId).orElseThrow();
     }
 
+    /** 续租取消清理任务并确认状态仍允许清理。 */
     private RagIngestJobEntity cancellationBarrier(String tenantId, String jobId, String leaseOwner,
                                                     long fence, LeaseHeartbeat heartbeat) {
         if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "取消清理租约已丢失");
@@ -704,6 +732,7 @@ public class RagIngestWorker {
         return repository.findIngestJob(tenantId, jobId).orElseThrow();
     }
 
+    /** 使用 revision、租约和 fencing token 提交下一处理检查点。 */
     private RagIngestJobEntity advance(RagIngestJobEntity job, String leaseOwner,
                                        RagIngestCheckpoint checkpoint) {
         Instant now = clock.instant();
@@ -720,27 +749,32 @@ public class RagIngestWorker {
         return updated;
     }
 
+    /** 计算从本次租约心跳开始到当前时刻的近似耗时。 */
     private long elapsedFromLease(RagIngestJobEntity job) {
         if (job == null || job.lease() == null) return 0L;
         return Math.max(0L, Duration.between(job.lease().expiresAt().minus(leaseDuration()),
                 clock.instant()).toMillis());
     }
 
+    /** 记录一个可按任务和阶段检索的开始事件。 */
     private void stageStarted(RagIngestJobEntity job, String stage, String message, Integer inputCount) {
         AiLog.info(AiLog.rag().ingestStageStarted(job.tenantId(), job.jobId(), job.documentId(),
                 job.versionId(), stage, message, inputCount));
     }
 
+    /** 记录阶段耗时及输入输出数量。 */
     private void stageCompleted(RagIngestJobEntity job, String stage, String message, Long costMs,
                                 Integer inputCount, Integer outputCount) {
         AiLog.info(AiLog.rag().ingestStageCompleted(job.tenantId(), job.jobId(), job.documentId(),
                 job.versionId(), stage, message, costMs, inputCount, outputCount));
     }
 
+    /** 将单调时钟差值转换为非负毫秒数。 */
     private long elapsedNanos(long startedAtNanos) {
         return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos));
     }
 
+    /** 提交删除流程的下一阶段，并回读最新任务快照。 */
     private RagIngestJobEntity advanceDeletion(RagIngestJobEntity job, String leaseOwner,
                                                 RagIngestStage stage) {
         Instant now = clock.instant();
@@ -752,6 +786,7 @@ public class RagIngestWorker {
         return repository.findIngestJob(job.tenantId(), job.jobId()).orElseThrow();
     }
 
+    /** 校验下载文件的长度和摘要与文档版本登记值一致。 */
     private void verifyDownload(RagDocumentVersionEntity version, ObjectStorageDownloadResultEntity download) {
         if (download == null || download.getTargetPath() == null
                 || download.getSizeBytes() != version.sizeBytes()
@@ -760,6 +795,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 下载并校验源文件，执行结构化解析、质量评估及必要的强制 OCR 兜底。 */
     private PreprocessedDocument preprocess(RagIngestJobEntity initial, Scope scope,
                                             RagIngestWorkspace workspace, String leaseOwner,
                                             LeaseHeartbeat heartbeat) {
@@ -808,6 +844,7 @@ public class RagIngestWorker {
     }
 
     /** 清洗后执行结构质量门禁；低质量 PDF 可触发强制 OCR 重跑。 */
+    /** 按冻结策略清洗 Document IR，并计算可用于质量门禁的报告。 */
     private PreprocessedDocument cleanAndEvaluate(RagIngestJobEntity job,
                                                   RagDocumentParserPort.ParsedDocument parsed) {
         RagPreprocessingStrategy strategy = preprocessingStrategy();
@@ -834,6 +871,7 @@ public class RagIngestWorker {
         return new PreprocessedDocument(parsed, selected.document(), selected.cleaningAudits(), quality);
     }
 
+    /** 判断 PDF 首次解析质量是否要求再执行一次强制 OCR。 */
     private boolean requiresForcedOcr(String mimeType, PreprocessedDocument value) {
         return mimeType != null && mimeType.toLowerCase(java.util.Locale.ROOT).startsWith("application/pdf")
                 && (value.quality().disposition() == DocumentQualityDisposition.NEEDS_REVIEW
@@ -841,6 +879,7 @@ public class RagIngestWorker {
                 || value.quality().coverage() < 0.70);
     }
 
+    /** 拒绝未达到文本覆盖和结构质量下限的解析结果。 */
     private void enforceQualityGate(DocumentParseQualityReport quality) {
         if (properties.getWorker().isBenchmarkPreprocessingEnabled()
                 && preprocessingStrategy() != RagPreprocessingStrategy.IR_FULL) {
@@ -854,6 +893,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 从对象存储恢复 Document IR，并重新验证策略修订号和质量门禁。 */
     private PreprocessedDocument restorePreprocessedDocument(RagIngestJobEntity job) {
         String expectedKey = RagObjectStorageScope.documentIrObjectKey(job.tenantId(), job.knowledgeBaseId(),
                 job.documentId(), job.versionId());
@@ -883,6 +923,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 将切块结果转换为带版本、代次和检索元数据的持久化实体。 */
     private List<RagChunkEntity> toChunkEntities(Scope scope,
                                                   List<DocumentIrChunker.StructuredChunk> chunks) {
         List<RagChunkEntity> result = new ArrayList<>(chunks.size());
@@ -906,26 +947,31 @@ public class RagIngestWorker {
         return List.copyOf(result);
     }
 
+    /** 判断块是否为实际向量化和召回使用的子块。 */
     private boolean isChild(RagChunkEntity chunk) {
         return "child".equals(chunk.metadata().get("chunk_level"));
     }
 
+    /** 读取清洗阶段保存的向量化文本，缺失时回退到块正文。 */
     private String embeddingText(RagChunkEntity chunk) {
         String value = chunk.metadata().get("embedding_text");
         return value == null || value.isBlank() ? chunk.content() : value;
     }
 
+    /** 从 Worker 配置生成当前切块大小、重叠和父子块限制。 */
     private DocumentIrChunker.Config chunkConfig() {
         RagProperties.Worker worker = properties.getWorker();
         return new DocumentIrChunker.Config(worker.getChildMaxChars(), worker.getChildMaxTokens(),
                 worker.getParentMaxChars(), worker.getParentMaxTokens(), worker.getOverlapChars());
     }
 
+    /** 构造包含处理进度和产物对象键的入库检查点。 */
     private RagIngestCheckpoint checkpoint(RagIngestStage stage, int processed, int total,
                                             int embeddingBatch, int vectorIndex) {
         return new RagIngestCheckpoint(stage, processed, total, embeddingBatch, vectorIndex);
     }
 
+    /** 保留已有产物位置，仅更新阶段和处理进度。 */
     private RagIngestCheckpoint carry(RagIngestCheckpoint source, RagIngestStage stage,
                                        int processed, int total, int embeddingBatch, int vectorIndex) {
         return new RagIngestCheckpoint(stage, processed, total, embeddingBatch, vectorIndex,
@@ -934,6 +980,7 @@ public class RagIngestWorker {
     }
 
     /** 保存 Canonical IR、normalized.md、parser output 和质量报告以便追责复现。 */
+    /** 保存解析原始输出、Document IR、规范化 Markdown 和质量报告。 */
     private ArtifactBundle persistPreprocessingArtifacts(RagIngestJobEntity job,
                                                          PreprocessedDocument value,
                                                          RagIngestWorkspace workspace) {
@@ -971,6 +1018,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 保存父子块关系和切块修订号，供重放与问题定位使用。 */
     private void persistChunkManifest(RagIngestJobEntity job, DocumentIrChunker.ChunkingResult result,
                                       RagIngestWorkspace workspace) {
         try {
@@ -989,6 +1037,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 将本地工作区产物写入 RAG 对象存储路径。 */
     private ObjectStorageResultEntity putArtifact(Path path, String objectKey, String contentType)
             throws java.io.IOException {
         return objectStorageService.putFile(ObjectStorageFileCommandEntity.builder()
@@ -996,6 +1045,7 @@ public class RagIngestWorker {
                 .sourcePath(path).sizeBytes(Files.size(path)).contentType(contentType).build());
     }
 
+    /** 将处理产物序列化为 JSON，失败时转换为稳定错误。 */
     private String json(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -1004,12 +1054,14 @@ public class RagIngestWorker {
         }
     }
 
+    /** 生成供管理端查看的文档文本。 */
     private String renderDisplay(DocumentIr ir) {
         return ir.blocks().stream().filter(DocumentIr.Block::retrievable)
                 .map(DocumentIr.Block::normalizedText).filter(value -> !value.isBlank())
                 .collect(java.util.stream.Collectors.joining("\n\n"));
     }
 
+    /** 按块类型生成用于保存和评测的规范化 Markdown。 */
     private String renderNormalizedMarkdown(DocumentIr ir) {
         StringBuilder result = new StringBuilder();
         for (DocumentIr.Block block : ir.blocks()) {
@@ -1030,6 +1082,7 @@ public class RagIngestWorker {
         return result.toString().strip();
     }
 
+    /** 计算产物内容的 SHA-256 十六进制摘要。 */
     private String sha256(byte[] bytes) {
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest
@@ -1039,14 +1092,17 @@ public class RagIngestWorker {
         }
     }
 
+    /** 返回当前进程冻结的文档预处理策略。 */
     private RagPreprocessingStrategy preprocessingStrategy() {
         return properties.getWorker().getPreprocessingStrategy();
     }
 
+    /** 返回切块器与预处理策略组合后的修订号。 */
     private String chunkerRevision() {
         return DocumentIrChunker.CHUNKER_VERSION + "+" + preprocessingStrategy().revision();
     }
 
+    /** 验证恢复的 Document IR 使用当前冻结策略及修订号。 */
     private void verifyPreprocessingStrategy(DocumentIr ir) {
         String actual = ir.metadata().get("preprocessing_strategy");
         String revision = ir.metadata().get("preprocessing_strategy_revision");
@@ -1062,6 +1118,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 在租约检查之间删除解析和切块产物，并保存清理进度。 */
     private RagIngestJobEntity deleteParsedArtifactWithBarrier(RagIngestJobEntity job, String leaseOwner,
                                                                  LeaseHeartbeat heartbeat) {
         Set<String> keys = new LinkedHashSet<>();
@@ -1084,16 +1141,19 @@ public class RagIngestWorker {
                 current.fencingToken(), heartbeat);
     }
 
+    /** 在失败或取消收口阶段重新加载任务所属文档范围。 */
     private Scope loadScopeForClosing(RagIngestJobEntity job) {
         return new Scope(repository.findDocumentVersion(job.tenantId(), job.versionId()).orElseThrow(),
                 repository.findDocument(job.tenantId(), job.documentId()).orElseThrow(),
                 repository.findKnowledgeBase(job.tenantId(), job.knowledgeBaseId()).orElseThrow());
     }
 
+    /** 读取单次任务租约时长。 */
     private Duration leaseDuration() {
         return Duration.ofMillis(properties.getWorker().getLeaseDurationMs());
     }
 
+    /** 按尝试次数计算有上限的指数退避时间。 */
     private Duration retryDelay(int attempt) {
         long multiplier = 1L << Math.min(Math.max(0, attempt - 1), 10);
         return Duration.ofMillis(Math.min(properties.getWorker().getRetryMaxDelayMs(),
@@ -1101,6 +1161,7 @@ public class RagIngestWorker {
     }
 
     /** 独立调度心跳；续租失败后标记 lost，使后续屏障立即停止。 */
+    /** 定时续租当前任务，续租失败后通过共享标志阻止后续写入。 */
     private LeaseHeartbeat startHeartbeat(RagIngestJobEntity job, String leaseOwner) {
         LeaseHeartbeat heartbeat = new LeaseHeartbeat();
         long interval = properties.getWorker().getHeartbeatIntervalMs();
@@ -1118,29 +1179,35 @@ public class RagIngestWorker {
         return heartbeat;
     }
 
+    /** 将空值规范化为空字符串，供对象键比较使用。 */
     private String value(String value) {
         return value == null ? "" : value;
     }
 
+    /** 判断字符串是否包含非空白内容。 */
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 
     @PreDestroy
+    /** 应用关闭时停止租约心跳线程。 */
     public void shutdown() {
         heartbeatExecutor.shutdownNow();
     }
 
+    /** 入库任务经过归属校验后的版本、文档和知识库。 */
     private record Scope(RagDocumentVersionEntity version, RagDocumentEntity document,
                          RagKnowledgeBaseEntity knowledgeBase) {
     }
 
+    /** 删除任务对应的文档及全部版本。 */
     private record DeleteScope(RagDocumentEntity document, List<RagDocumentVersionEntity> versions) {
         private DeleteScope {
             versions = List.copyOf(versions);
         }
     }
 
+    /** 解析、清洗和质量评估完成后的文档。 */
     private record PreprocessedDocument(RagDocumentParserPort.ParsedDocument parsed,
                                         DocumentIr documentIr,
                                         List<DocumentIrCleaner.CleaningAudit> cleaningAudits,
@@ -1150,6 +1217,7 @@ public class RagIngestWorker {
         }
     }
 
+    /** 预处理阶段写入对象存储的主要产物位置。 */
     private record ArtifactBundle(ObjectStorageResultEntity primary,
                                   List<ObjectStorageResultEntity> artifacts) {
         private ArtifactBundle {
@@ -1157,27 +1225,35 @@ public class RagIngestWorker {
         }
     }
 
+    /** 在长时间外部调用期间定时续租，并向主流程暴露租约是否已经丢失。 */
     static final class LeaseHeartbeat implements AutoCloseable {
+        /** 心跳线程发现租约失效后置为 true。 */
         private final AtomicBoolean lost = new AtomicBoolean();
+        /** 后台续租任务句柄，用于任务结束时停止心跳。 */
         private ScheduledFuture<?> future;
 
+        /** 为不需要后台续租的清理路径创建被动检查器。 */
         static LeaseHeartbeat passive() {
             return new LeaseHeartbeat();
         }
 
+        /** 绑定当前任务的后台续租句柄。 */
         void attach(ScheduledFuture<?> future) {
             this.future = future;
         }
 
+        /** 心跳更新失败时标记租约已经丢失。 */
         void markLost() {
             lost.set(true);
         }
 
+        /** 返回后台心跳是否已经确认当前 Worker 失去执行权。 */
         boolean lost() {
             return lost.get();
         }
 
         @Override
+        /** 结束任务时取消后台心跳。 */
         public void close() {
             if (future != null) future.cancel(false);
         }

@@ -19,15 +19,23 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
+/** 认证与用户资料的 MySQL 仓储，组合账号、租户成员关系和密钥记录。 */
 public class AuthRepository implements IAuthRepository {
 
+    /** 用户密钥表中密码哈希的类型标识。 */
     private static final String SECRET_TYPE_PASSWORD = "password";
+    /** 用户密钥表中刷新令牌哈希的类型标识。 */
     private static final String SECRET_TYPE_REFRESH_TOKEN = "refresh_token";
+    /** 新租户、账号、成员关系和密钥的默认可用状态。 */
     private static final String STATUS_ACTIVE = "active";
 
+    /** 租户基本信息的持久化入口。 */
     private final ITenantDao tenantDao;
+    /** 用户账号、资料和状态的持久化入口。 */
     private final IUserAccountDao userAccountDao;
+    /** 用户在租户内的角色和成员状态持久化入口。 */
     private final ITenantUserDao tenantUserDao;
+    /** 密码与刷新令牌哈希的持久化入口。 */
     private final IUserSecretDao userSecretDao;
 
     /**

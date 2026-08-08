@@ -464,12 +464,14 @@ public class RagProperties {
         /** Child chunk 字符/近似 Token 上限。 */
         @Min(128)
         private int childMaxChars = 1800;
+        /** 子分块近似 Token 上限，必须不大于父分块上限。 */
         @Min(64)
         private int childMaxTokens = 420;
 
         /** Parent chunk 字符/近似 Token 上限。 */
         @Min(256)
         private int parentMaxChars = 6000;
+        /** 父分块近似 Token 上限。 */
         @Min(128)
         private int parentMaxTokens = 1400;
 
@@ -478,11 +480,13 @@ public class RagProperties {
         private int overlapChars = 160;
 
         @AssertTrue(message = "RAG Worker心跳必须早于租约过期")
+        /** 保证至少可发送两次心跳后租约才过期，为短暂抖动留出续租窗口。 */
         public boolean isHeartbeatWithinLease() {
             return heartbeatIntervalMs * 2 < leaseDurationMs;
         }
 
         @AssertTrue(message = "RAG Worker重试退避或分块预算不合法")
+        /** 校验退避上下限和父子分块预算之间的约束。 */
         public boolean isBoundaryValid() {
             return retryMaxDelayMs >= retryBaseDelayMs
                     && childMaxChars <= parentMaxChars && childMaxTokens <= parentMaxTokens
@@ -497,6 +501,7 @@ public class RagProperties {
         }
 
         @Override
+        /** 输出不含密钥和正文的 Worker 配置摘要。 */
         public String toString() {
             return "Worker{enabled=" + enabled + ", pollDelayMs=" + pollDelayMs
                     + ", scanBatchSize=" + scanBatchSize + ", concurrency=1, leaseDurationMs="
@@ -512,9 +517,11 @@ public class RagProperties {
     public static class Audit {
         /** 默认关闭查询正文和引用正文持久化，降低敏感数据扩散。 */
         private boolean storeQueryText;
+        /** 是否持久化引用正文；默认关闭以限制知识内容扩散。 */
         private boolean storeCitationContent;
 
         @Override
+        /** 输出审计正文存储开关，不包含实际查询或引用内容。 */
         public String toString() {
             return "Audit{storeQueryText=" + storeQueryText
                     + ", storeCitationContent=" + storeCitationContent + '}';
@@ -570,6 +577,7 @@ public class RagProperties {
         }
     }
 
+    /** 判断配置值是否包含非空白内容，用于脱敏摘要显示配置状态。 */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }

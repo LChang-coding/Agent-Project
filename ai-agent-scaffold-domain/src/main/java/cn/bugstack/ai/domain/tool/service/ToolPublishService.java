@@ -59,10 +59,11 @@ public class ToolPublishService implements IToolPublishService {
     private final McpProtocolClientSupport mcpProtocolClientSupport;
     /** 在发布前验证 ZIP 和 SKILL.md。 */
     private final SkillPackageReader skillPackageReader;
+    /** 校验并规范化 Skill 与 MCP 版本配置 JSON。 */
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 创建工具发布服务；参数是仓储、协议客户端和 Skill 包读取器；返回服务实例。
+     * 创建工具发布服务。
      */
     public ToolPublishService(IToolRepository toolRepository, ObjectStorageService objectStorageService,
                               McpProtocolClientSupport mcpProtocolClientSupport,
@@ -217,7 +218,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询 Skill 列表；参数是用户上下文和范围；返回 Skill 列表。
+     * 查询 Skill 列表。
      */
     @Override
     public List<SkillDefinitionEntity> querySkills(ToolUserContextEntity context, String scope) {
@@ -304,7 +305,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 构建 MCP 测试结果文案；参数是 MCP 版本和 Schema；返回测试说明。
+     * 构建 MCP 测试结果文案。
      */
     private String mcpTestMessage(McpVersionEntity version, String schema) {
         if ("sse".equalsIgnoreCase(version.getTransportType()) || "stdio".equalsIgnoreCase(version.getTransportType())) {
@@ -336,7 +337,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 禁用 MCP；参数是用户上下文和 MCP ID；返回 MCP 定义。
+     * 禁用 MCP。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -350,7 +351,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询 MCP 列表；参数是用户上下文和范围；返回 MCP 列表。
+     * 查询 MCP 列表。
      */
     @Override
     public List<McpDefinitionEntity> queryMcps(ToolUserContextEntity context, String scope) {
@@ -359,7 +360,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询当前用户工具目录；参数是用户上下文；返回可用工具目录。
+     * 查询当前用户工具目录。
      */
     @Override
     public List<ToolCatalogEntity> queryCatalog(ToolUserContextEntity context) {
@@ -368,7 +369,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询会话工具调用日志；参数是用户上下文和会话ID；返回调用日志。
+     * 查询会话工具调用日志。
      */
     @Override
     public List<ToolCallLogEntity> queryCallLogs(ToolUserContextEntity context, String sessionId) {
@@ -388,7 +389,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询并校验资产；参数是资产ID；返回资产信息。
+     * 查询并校验资产。
      */
     private SkillPackageUploadResultEntity requireAsset(String assetId) {
         SkillPackageUploadResultEntity asset = toolRepository.querySkillAsset(assetId);
@@ -399,7 +400,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询并校验 Skill；参数是 Skill ID；返回 Skill 定义。
+     * 查询并校验 Skill。
      */
     private SkillDefinitionEntity requireSkill(String skillId) {
         SkillDefinitionEntity skill = toolRepository.querySkillDefinition(skillId);
@@ -410,7 +411,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询并校验 Skill 版本；参数是 Skill ID 和版本；返回 Skill 版本。
+     * 查询并校验 Skill 版本。
      */
     private SkillVersionEntity requireSkillVersion(String skillId, String version) {
         SkillVersionEntity skillVersion = toolRepository.querySkillVersion(skillId, version);
@@ -421,7 +422,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询并校验 MCP；参数是 MCP ID；返回 MCP 定义。
+     * 查询并校验 MCP。
      */
     private McpDefinitionEntity requireMcp(String mcpId) {
         McpDefinitionEntity mcp = toolRepository.queryMcpDefinition(mcpId);
@@ -432,7 +433,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 查询并校验 MCP 版本；参数是 MCP ID 和版本；返回 MCP 版本。
+     * 查询并校验 MCP 版本。
      */
     private McpVersionEntity requireMcpVersion(String mcpId, String version) {
         McpVersionEntity mcpVersion = toolRepository.queryMcpVersion(mcpId, version);
@@ -471,7 +472,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 规范化 JSON 文本；参数是原文本和字段名；返回可入库 JSON 或空值。
+     * 规范化 JSON 文本。
      */
     private String normalizeJsonText(String jsonText, String fieldName) {
         if (jsonText == null || jsonText.isBlank()) {
@@ -496,14 +497,14 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 判断是否租户管理员；参数是用户上下文；返回是否 owner/admin。
+     * 判断是否租户管理员。
      */
     private boolean isTenantAdmin(ToolUserContextEntity context) {
         return "owner".equalsIgnoreCase(context.getRoleCode()) || "admin".equalsIgnoreCase(context.getRoleCode());
     }
 
     /**
-     * 校验上下文；参数是用户上下文；返回用户上下文。
+     * 校验上下文。
      */
     private ToolUserContextEntity requireContext(ToolUserContextEntity context) {
         if (context == null || context.getTenantId() == null || context.getTenantId().isBlank()
@@ -514,7 +515,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 补齐上传包摘要；参数是上传资产和文件字节；无返回值。
+     * 补齐上传包摘要。
      */
     private void fillSha256IfMissing(SkillPackageUploadResultEntity asset, byte[] bytes) {
         if (asset.getSha256() == null || asset.getSha256().isBlank()) {
@@ -523,7 +524,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 计算 SHA-256；参数是文件字节；返回十六进制摘要。
+     * 计算 SHA-256。
      */
     private String sha256(byte[] bytes) {
         try {
@@ -575,7 +576,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 校验 MCP 运行连接配置；参数是传输和连接字段；无返回值。
+     * 校验 MCP 运行连接配置。
      */
     private void validateMcpConnection(String transportType, String endpoint, String command, String args, String env) {
         if (!"stdio".equalsIgnoreCase(transportType)) {
@@ -591,7 +592,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 推进补丁版本；参数是当前版本；返回下一个版本号。
+     * 推进补丁版本。
      */
     private String nextPatchVersion(String currentVersion) {
         if (currentVersion == null || currentVersion.isBlank()) {
@@ -610,14 +611,14 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 安全文件名；参数是原始文件名；返回安全文件名。
+     * 安全文件名。
      */
     private String safeFileName(String fileName) {
         return defaultString(fileName, "skill.zip").replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     /**
-     * 安全工具名；参数是原始名称；返回函数名可用编码。
+     * 安全工具名。
      */
     private String safeToolName(String name) {
         String value = defaultString(name, "skill").replaceAll("[^a-zA-Z0-9_]", "_");
@@ -628,14 +629,14 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 默认字符串；参数是候选值和默认值；返回非空值。
+     * 默认字符串。
      */
     private String defaultString(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
     /**
-     * 转 JSON；参数是对象；返回 JSON 文本。
+     * 转 JSON。
      */
     private String toJson(Object value) {
         try {
@@ -646,7 +647,7 @@ public class ToolPublishService implements IToolPublishService {
     }
 
     /**
-     * 截断文本；参数是文本和最大长度；返回截断后文本。
+     * 截断文本。
      */
     private String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {

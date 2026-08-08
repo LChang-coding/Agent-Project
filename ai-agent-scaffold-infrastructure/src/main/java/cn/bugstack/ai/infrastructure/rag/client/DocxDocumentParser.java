@@ -41,11 +41,15 @@ import java.util.Set;
  */
 final class DocxDocumentParser {
 
+    /** 写入解析结果的解析器名称。 */
     static final String PARSER_NAME = "apache-poi-ooxml";
+    /** 写入文档版本的固定解析器修订号。 */
     static final String PARSER_REVISION = "apache-poi-5.5.1-ir-v1";
 
+    /** 序列化最终 Document IR。 */
     private final ObjectMapper objectMapper;
 
+    /** 注入项目统一配置的 JSON 转换器。 */
     DocxDocumentParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -107,6 +111,7 @@ final class DocxDocumentParser {
         }
     }
 
+    /** 按段落样式和编号识别标题、列表或正文，并维护后续块的标题路径。 */
     private void appendParagraph(XWPFParagraph paragraph, String location, List<String> headingPath,
                                  List<DocumentIr.Block> blocks, int[] order, int[] offset,
                                  Set<String> warnings) {
@@ -167,6 +172,7 @@ final class DocxDocumentParser {
                 headingPath, structure, order[0]++, offset, Set.of(DocumentIr.Flag.TABLE_STRUCTURE)));
     }
 
+    /** 将页眉、页脚和脚注段落作为独立类型追加，避免混入正文。 */
     private void appendAncillary(List<XWPFParagraph> paragraphs, DocumentIr.BlockType type,
                                  String location, List<DocumentIr.Block> blocks,
                                  int[] order, int[] offset) {
@@ -178,6 +184,7 @@ final class DocxDocumentParser {
         }
     }
 
+    /** 使用累计字符范围和 OOXML 位置构造可追溯文档块。 */
     private DocumentIr.Block block(DocumentIr.BlockType type, String text, String location,
                                    List<String> headings, DocumentIr.Table table, int order,
                                    int[] offset, Set<DocumentIr.Flag> flags) {
@@ -189,6 +196,7 @@ final class DocxDocumentParser {
                 flags, false, true, "", List.of());
     }
 
+    /** 从标题样式或 OOXML 大纲级别识别一到六级标题。 */
     private int headingLevel(XWPFParagraph paragraph) {
         String style = paragraph.getStyle();
         if (style != null) {
@@ -205,6 +213,7 @@ final class DocxDocumentParser {
         return 0;
     }
 
+    /** 合并段落中的文本片段，并把有说明文字的内嵌图片保留为文本提示。 */
     private String paragraphText(XWPFParagraph paragraph) {
         StringBuilder result = new StringBuilder();
         for (XWPFRun run : paragraph.getRuns()) {
@@ -246,6 +255,7 @@ final class DocxDocumentParser {
         }
     }
 
+    /** 将可检索正文块转换为兼容检索入库接口的段落列表。 */
     private List<RagDocumentParserPort.ParsedSection> sections(List<DocumentIr.Block> blocks) {
         List<RagDocumentParserPort.ParsedSection> result = new ArrayList<>();
         for (DocumentIr.Block block : blocks) {
@@ -257,6 +267,7 @@ final class DocxDocumentParser {
         return List.copyOf(result);
     }
 
+    /** 按标题、列表和代码块类型生成供用户查看的 Markdown。 */
     private String displayMarkdown(List<DocumentIr.Block> blocks) {
         StringBuilder result = new StringBuilder();
         for (DocumentIr.Block block : blocks) {
@@ -272,6 +283,7 @@ final class DocxDocumentParser {
         return result.toString().strip();
     }
 
+    /** 序列化完整 Document IR，失败时转换为稳定领域错误。 */
     private String serialize(DocumentIr ir) {
         try {
             return objectMapper.writeValueAsString(ir);

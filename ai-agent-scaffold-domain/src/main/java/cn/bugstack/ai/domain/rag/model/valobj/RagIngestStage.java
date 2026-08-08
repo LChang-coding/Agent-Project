@@ -1,19 +1,9 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 摄取（或删除）流水线跑到了第几步。
- *
- * <p>属于哪一层：领域层值对象，是 RagIngestCheckpoint 的核心字段，用来支持「断点续跑」：
- * Worker 崩溃重启后靠它知道该从哪一步接着做，而不是从头重来。</p>
- *
- * <p>枚举声明顺序就是业务顺序，这一点被 canAdvanceTo 直接依赖（比较 ordinal），
- * 所以<b>常量顺序是不变量，调整顺序等于改变流水线语义</b>。</p>
- *
- * <p>谁会读它：RagIngestCheckpoint 判断能否推进；RagIngestJobEntity 在 complete 时强制要求
- * 当前必须停在 VERIFYING（不许跳过验证直接完成），在 advanceDeletion 里另用
- * validDeleteTransition 校验删除专用的三步顺序。</p>
- *
- * <p>它不负责什么：不表示任务成功失败（那是 RagIngestJobStatus）。</p>
+ * 摄取或文档删除任务的处理阶段。
+ * <p>摄取阶段使用枚举声明顺序判断能否前进，因此常量顺序是领域契约，不能任意调整。
+ * 删除阶段使用独立的迁移校验。</p>
  */
 public enum RagIngestStage {
 

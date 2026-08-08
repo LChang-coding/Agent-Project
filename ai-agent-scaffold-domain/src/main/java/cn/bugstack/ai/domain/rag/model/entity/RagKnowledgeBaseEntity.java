@@ -6,6 +6,19 @@ import cn.bugstack.ai.types.exception.AppException;
 
 /**
  * 租户知识库实体。
+ *
+ * @param tenantId 知识库所属租户
+ * @param ownerUserId 知识库拥有者用户标识
+ * @param knowledgeBaseId 知识库标识
+ * @param name 知识库展示名称
+ * @param description 知识库用途说明
+ * @param visibility 知识库在租户内的可见范围
+ * @param status 知识库生命周期状态
+ * @param retrievalProfileId 默认检索配置标识
+ * @param embeddingDimension 向量索引的固定维度
+ * @param collectionAlias 向量存储中的集合别名
+ * @param currentGeneration 当前允许检索的索引代际
+ * @param revision 乐观并发控制版本号
  */
 public record RagKnowledgeBaseEntity(String tenantId,
                                      String ownerUserId,
@@ -20,6 +33,7 @@ public record RagKnowledgeBaseEntity(String tenantId,
                                      long currentGeneration,
                                      long revision) {
 
+    /** 校验知识库身份、向量维度、索引代际和状态。 */
     public RagKnowledgeBaseEntity {
         requireText(tenantId, "租户ID");
         requireText(ownerUserId, "拥有者用户ID");
@@ -38,7 +52,11 @@ public record RagKnowledgeBaseEntity(String tenantId,
         }
     }
 
-    /** 推进知识库当前可见代引代，禁止倒退。 */
+    /**
+     * 推进知识库当前可检索的索引代际，禁止倒退。
+     * @param generation 已通过索引完整性校验的目标代际
+     * @return 状态为 ACTIVE、当前代际已更新的新知识库
+     */
     public RagKnowledgeBaseEntity activateGeneration(long generation) {
         if (generation < 1 || generation < currentGeneration) {
             throw new IllegalArgumentException("知识库generation不能倒退");
@@ -48,7 +66,10 @@ public record RagKnowledgeBaseEntity(String tenantId,
                 collectionAlias, generation, revision + 1);
     }
 
-    /** 建立不可取消的级联删除屏障。 */
+    /**
+     * 将知识库转为删除中，使其退出检索范围并禁止新的子资源操作。
+     * @return 状态为 DELETING 的新知识库；已处于删除中时返回当前对象
+     */
     public RagKnowledgeBaseEntity requestDeletion() {
         if (status == RagKnowledgeBaseStatus.DELETING) return this;
         if (status == RagKnowledgeBaseStatus.DELETED) {
@@ -62,7 +83,10 @@ public record RagKnowledgeBaseEntity(String tenantId,
                 collectionAlias, currentGeneration, revision + 1);
     }
 
-    /** 全部外部副作用和数据库子项验证清理后关闭墓碑。 */
+    /**
+     * 全部外部数据和数据库子项均验证清理后，将知识库转为删除终态。
+     * @return 状态为 DELETED 的新知识库；已是删除终态时返回当前对象
+     */
     public RagKnowledgeBaseEntity deleted() {
         if (status == RagKnowledgeBaseStatus.DELETED) return this;
         if (status != RagKnowledgeBaseStatus.DELETING) {

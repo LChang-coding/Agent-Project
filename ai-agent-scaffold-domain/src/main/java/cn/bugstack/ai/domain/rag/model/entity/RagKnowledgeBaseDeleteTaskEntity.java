@@ -13,6 +13,22 @@ import java.time.Instant;
  * 可租约接管、可从文档检查点恢复的知识库级联删除任务。
  * <p>checkpoint 保存子文档总数和完成数；WAITING 主动让出租约等待子任务，revision 与 fencing token
  * 分别保护数据库更新和跨实例副作用。</p>
+ *
+ * @param tenantId 任务所属租户
+ * @param knowledgeBaseId 待删除的知识库标识
+ * @param requestedByUserId 发起删除的可信用户标识
+ * @param taskId 知识库删除任务标识
+ * @param taskKey 防止重复登记同一知识库删除的幂等键
+ * @param status 删除任务执行状态
+ * @param checkpoint 已持久化的删除阶段与文档进度
+ * @param attemptCount 已经开始的执行尝试次数
+ * @param maxAttempts 允许的最大执行尝试次数
+ * @param nextRetryAt 重试或等待状态下的下次可领取时刻
+ * @param lease 当前执行实例与到期时刻
+ * @param fencingToken 拒绝过期执行实例写入的单调递增标识
+ * @param revision 数据库 CAS 更新使用的业务版本号
+ * @param errorCode 最近一次失败的稳定错误码
+ * @param errorMessage 最近一次失败的可诊断摘要
  */
 public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                                                String knowledgeBaseId,
@@ -30,6 +46,7 @@ public record RagKnowledgeBaseDeleteTaskEntity(String tenantId,
                                                String errorCode,
                                                String errorMessage) {
 
+    /** 校验任务身份、尝试次数、租约、重试时间和检查点与执行状态的一致性。 */
     public RagKnowledgeBaseDeleteTaskEntity {
         requireText(tenantId, "租户ID");
         requireText(knowledgeBaseId, "知识库ID");

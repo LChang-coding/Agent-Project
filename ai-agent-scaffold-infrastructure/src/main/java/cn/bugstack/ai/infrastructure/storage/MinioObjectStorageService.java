@@ -47,13 +47,17 @@ public class MinioObjectStorageService implements ObjectStorageService {
     /** 默认整对象读取上限，优先使用流式下载处理大文件。 */
     private static final long DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024;
 
+    /** 决定使用 MinIO 还是本地目录，并提供桶名、端点和本地根目录。 */
     private final ObjectStorageProperties properties;
+    /** 延迟创建 MinIO 客户端，便于本地模式不建立远程连接并支持测试替身。 */
     private final Supplier<MinioClient> minioClientFactory;
     /** 分离客户端和建桶锁，避免首次连接互相扩大临界区。 */
     private final Object minioClientMonitor = new Object();
+    /** 串行化同一进程中的首次建桶检查，避免并发重复创建。 */
     private final Object bucketMonitor = new Object();
     /** 仅缓存本进程已确认的桶，进程重启后重新探测。 */
     private final Set<String> readyBuckets = ConcurrentHashMap.newKeySet();
+    /** 延迟初始化的共享客户端；volatile 保证锁外快速读取可见。 */
     private volatile MinioClient minioClient;
 
     /**
@@ -214,6 +218,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
     }
 
     @Override
+    /** 检查对象是否存在；只有服务端明确返回不存在时才折叠为 false。 */
     public boolean objectExists(String bucket, String objectKey) {
         checkLocation(bucket, objectKey);
         try {
@@ -251,6 +256,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
     }
 
     @Override
+    /** 返回 RAG 源文件和解析产物使用的专用桶。 */
     public String ragBucket() {
         return properties.getMinio().getRagBucket();
     }
@@ -278,6 +284,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         }
     }
 
+    /** 从暂存文件流式上传到 MinIO，并在同一次读取中计算内容摘要。 */
     private void putMinioFile(ObjectStorageFileCommandEntity command, MessageDigest digest) throws Exception {
         MinioClient client = minioClient();
         ensureBucket(client, command.getBucket());
@@ -322,6 +329,7 @@ public class MinioObjectStorageService implements ObjectStorageService {
         Files.write(target, command.getBytes());
     }
 
+    /** 流式写入本地临时文件，校验长度后原子替换目标并同步计算摘要。 */
     private void putLocalFile(ObjectStorageFileCommandEntity command, MessageDigest digest) throws Exception {
         Path target = localPath(command.getBucket(), command.getObjectKey());
         Files.createDirectories(target.getParent());

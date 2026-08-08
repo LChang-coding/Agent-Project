@@ -33,12 +33,19 @@ public class RagUploadRegistrationRepository implements RagUploadRegistrationPor
     private static final String EVENT_TYPE = "rag.ingest.requested.v1";
     /** 聚合登记所需 DAO；全部写入共享同一数据库事务。 */
     private final IRagIngestTaskDao ingestTaskDao;
+    /** 锁定知识库，确认登记期间仍处于可接收文档状态。 */
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
+    /** 写入逻辑文档及其源文件位置。 */
     private final IRagDocumentDao documentDao;
+    /** 写入本次上传对应的不可变文档版本。 */
     private final IRagDocumentVersionDao documentVersionDao;
+    /** 在同一事务中登记待发布 Kafka 唤醒事件。 */
     private final IRagOutboxDao outboxDao;
+    /** 将领域文档、版本和任务转换为数据库记录。 */
     private final RagPersistenceMapper mapper;
+    /** 提供摄取 Kafka Topic 配置。 */
     private final RagProperties properties;
+    /** 将稳定事件字段编码为 Outbox JSON 负载。 */
     private final ObjectMapper objectMapper;
 
     @Override

@@ -18,8 +18,11 @@ import java.util.regex.Pattern;
 @Service
 public class IntelligentWorkflowRouter {
 
+    /** 白名单等于表达式，只允许读取已落地的状态、输出或建议。 */
     private static final Pattern EQUALS = Pattern.compile("^(status|output|suggestion)\\s*==\\s*'([^']{0,256})'$", Pattern.CASE_INSENSITIVE);
+    /** 白名单包含表达式，只允许读取输出或建议且限制比较文本长度。 */
     private static final Pattern CONTAINS = Pattern.compile("^(output|suggestion)\\s+contains\\s+'([^']{1,256})'$", Pattern.CASE_INSENSITIVE);
+    /** 平台固定策略优先级，技术失败和显式业务边先于默认兜底。 */
     private static final List<String> STRATEGY_ORDER = List.of(
             "FAILURE", "FIXED", "SUCCESS", "EXPRESSION", "NODE_SUGGESTION", "AI_ROUTER", "DEFAULT");
 
@@ -63,6 +66,7 @@ public class IntelligentWorkflowRouter {
         return EQUALS.matcher(expression.trim()).matches() || CONTAINS.matcher(expression.trim()).matches();
     }
 
+    /** 按策略类型判断边是否命中，DEFAULT 只在更高优先级策略未命中后生效。 */
     private boolean matches(String strategy, WorkflowDagPlanEntity.Edge edge, RouteContext context) {
         return switch (strategy) {
             case "FAILURE" -> context.failed();
@@ -76,6 +80,7 @@ public class IntelligentWorkflowRouter {
         };
     }
 
+    /** 只执行白名单中的等于或包含表达式，不解释任意代码。 */
     private boolean expressionMatches(String expression, RouteContext context) {
         if (!supportedExpression(expression)) {
             return false;
@@ -89,6 +94,7 @@ public class IntelligentWorkflowRouter {
         return contains.matches() && value(contains.group(1), context).contains(contains.group(2));
     }
 
+    /** 从已落地节点结果中读取表达式允许访问的字段。 */
     private String value(String name, RouteContext context) {
         return switch (name.toLowerCase(Locale.ROOT)) {
             case "status" -> context.failed() ? "FAILED" : "SUCCEEDED";
@@ -97,6 +103,7 @@ public class IntelligentWorkflowRouter {
         };
     }
 
+    /** 校验目标属于节点冻结的允许集合，防止模型越过图定义。 */
     private void assertAllowed(WorkflowDagPlanEntity.Node node, String targetNodeId) {
         List<String> allowed = node.getAllowedTargetNodeIds();
         if (allowed != null && !allowed.isEmpty() && allowed.stream().noneMatch(target -> same(target, targetNodeId))) {
@@ -104,6 +111,7 @@ public class IntelligentWorkflowRouter {
         }
     }
 
+    /** 按业务优先级降序及边 ID 稳定排序，保证重复运行得到同一裁决。 */
     private List<WorkflowDagPlanEntity.Edge> ordered(List<WorkflowDagPlanEntity.Edge> candidateEdges) {
         List<WorkflowDagPlanEntity.Edge> edges = new ArrayList<>(candidateEdges == null ? List.of() : candidateEdges);
         edges.sort(Comparator.<WorkflowDagPlanEntity.Edge>comparingInt(
@@ -112,6 +120,7 @@ public class IntelligentWorkflowRouter {
         return edges;
     }
 
+    /** 将节点启用策略归一为去重的大写集合。 */
     private Set<String> normalizedStrategies(List<String> strategies) {
         Set<String> result = new LinkedHashSet<>();
         if (strategies != null) {
@@ -121,15 +130,18 @@ public class IntelligentWorkflowRouter {
         return result;
     }
 
+    /** 读取边策略类型，旧定义缺失时按固定边处理。 */
     private String type(WorkflowDagPlanEntity.Edge edge) {
         return edge == null || edge.getRouteType() == null || edge.getRouteType().isBlank()
                 ? "FIXED" : edge.getRouteType().toUpperCase(Locale.ROOT);
     }
 
+    /** 构造要求运行立即收口的终止裁决。 */
     private RouteDecision terminal(String strategy, String target, String reason) {
         return new RouteDecision(strategy, target, null, reason, true);
     }
 
+    /** 对可选路由文本执行空值安全、忽略大小写的精确比较。 */
     private boolean same(String left, String right) {
         return safe(left).equalsIgnoreCase(safe(right));
     }
@@ -142,6 +154,7 @@ public class IntelligentWorkflowRouter {
                 .anyMatch(alias -> WorkflowRouteKey.same(alias, candidate));
     }
 
+    /** 将可选表达式值归一为空串。 */
     private String safe(String value) {
         return value == null ? "" : value;
     }

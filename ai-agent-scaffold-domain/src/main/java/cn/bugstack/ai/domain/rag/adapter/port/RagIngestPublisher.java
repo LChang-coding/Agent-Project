@@ -6,7 +6,12 @@ package cn.bugstack.ai.domain.rag.adapter.port;
  */
 public interface RagIngestPublisher {
 
-    /** 发布摄取任务唤醒命令。 */
+    /**
+     * 发布摄取任务唤醒命令。
+     * <p>消费端仍需按任务标识和预期版本号重新校验数据库状态。</p>
+     *
+     * @param command 不含文档正文的任务唤醒命令
+     */
     void publish(RagIngestCommand command);
 
     /** 摄取任务唤醒命令。 */

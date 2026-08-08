@@ -23,8 +23,10 @@ import java.util.Set;
  */
 final class DoclingJsonDocumentIrMapper {
 
+    /** 将 Docling JSON 和最终 Document IR 相互转换。 */
     private final ObjectMapper objectMapper;
 
+    /** 注入项目统一配置的 JSON 转换器。 */
     DoclingJsonDocumentIrMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
@@ -96,6 +98,7 @@ final class DoclingJsonDocumentIrMapper {
                 List.copyOf(warnings), ocrApplied);
     }
 
+    /** 读取页码和页面尺寸；缺失页面元数据时记录质量告警。 */
     private Map<Integer, PageDraft> pages(JsonNode json, Set<String> warnings) {
         Map<Integer, PageDraft> result = new LinkedHashMap<>();
         JsonNode nodes = json == null ? null : json.get("pages");
@@ -114,6 +117,7 @@ final class DoclingJsonDocumentIrMapper {
         return result;
     }
 
+    /** 将 Docling 文本节点转换为带页码、顺序、坐标和标题级别的块草稿。 */
     private void readTextBlocks(JsonNode values, List<BlockDraft> result, Set<String> warnings) {
         if (values == null || !values.isArray()) return;
         int order = 0;
@@ -197,6 +201,7 @@ final class DoclingJsonDocumentIrMapper {
         }
     }
 
+    /** 从首条 provenance 读取页码、阅读顺序、坐标和字符范围。 */
     private Provenance provenance(JsonNode values, int fallbackOrder) {
         JsonNode value = values != null && values.isArray() && !values.isEmpty() ? values.get(0) : null;
         int page = integer(value, "page_no", 1);
@@ -209,6 +214,7 @@ final class DoclingJsonDocumentIrMapper {
                 boundingBox, start, end);
     }
 
+    /** 校验坐标边界并转换为页内矩形；非法或缺失坐标返回空值。 */
     private DocumentIr.BoundingBox boundingBox(int page, JsonNode bbox) {
         if (bbox == null || !bbox.isObject()) return null;
         double left = number(bbox, "l", number(bbox, "left", -1));
@@ -219,6 +225,7 @@ final class DoclingJsonDocumentIrMapper {
         return new DocumentIr.BoundingBox(Math.max(1, page), left, top, right, bottom);
     }
 
+    /** 将 Docling 标签映射到平台统一块类型，未知标签按正文段落处理。 */
     private DocumentIr.BlockType blockType(String label) {
         return switch (label) {
             case "title" -> DocumentIr.BlockType.TITLE;
@@ -235,6 +242,7 @@ final class DoclingJsonDocumentIrMapper {
         };
     }
 
+    /** 从可检索正文块生成兼容检索入库接口的段落列表。 */
     private List<RagDocumentParserPort.ParsedSection> sections(DocumentIr ir) {
         List<RagDocumentParserPort.ParsedSection> result = new ArrayList<>();
         for (DocumentIr.Block block : ir.blocks()) {
@@ -248,6 +256,7 @@ final class DoclingJsonDocumentIrMapper {
         return List.copyOf(result);
     }
 
+    /** 当 Docling 未返回 Markdown 时，按标题和正文块生成可展示文本。 */
     private String renderMarkdown(DocumentIr ir) {
         StringBuilder result = new StringBuilder();
         for (DocumentIr.Block block : ir.blocks()) {
@@ -260,21 +269,25 @@ final class DoclingJsonDocumentIrMapper {
         return result.toString().strip();
     }
 
+    /** 读取零到一之间的置信度，非法值回退为完全可信。 */
     private double confidence(JsonNode node) {
         double value = number(node, "confidence", 1.0);
         return Double.isFinite(value) && value >= 0 && value <= 1 ? value : 1.0;
     }
 
+    /** 读取可转换为整数的字段，否则使用调用方提供的默认值。 */
     private int integer(JsonNode node, String field, int fallback) {
         JsonNode value = node == null ? null : node.get(field);
         return value != null && value.canConvertToInt() ? value.asInt() : fallback;
     }
 
+    /** 读取数值字段，否则使用调用方提供的默认值。 */
     private double number(JsonNode node, String field, double fallback) {
         JsonNode value = node == null ? null : node.get(field);
         return value != null && value.isNumber() ? value.asDouble() : fallback;
     }
 
+    /** 将页面对象键转换为页码，格式不合法时使用默认页码。 */
     private int parseInt(String value, int fallback) {
         try {
             return Integer.parseInt(value);
@@ -295,26 +308,32 @@ final class DoclingJsonDocumentIrMapper {
         }
     }
 
+    /** Docling 响应转换后的结构化文档、展示文本、兼容段落和质量信息。 */
     record MappedDocument(DocumentIr ir, String normalizedMarkdown,
                           List<RagDocumentParserPort.ParsedSection> sections,
                           String parserOutputJson, List<String> warnings, boolean ocrApplied) {
     }
 
+    /** 尚未绑定正文块的页面尺寸草稿。 */
     private record PageDraft(int pageNumber, double width, double height) {
     }
 
+    /** 构造当前标题路径所需的标题级别和文本。 */
     private record HeadingDraft(int level, String text) {
     }
 
+    /** Docling 节点在原文中的页、顺序、坐标和字符范围。 */
     private record Provenance(int pageNumber, int order, DocumentIr.BoundingBox boundingBox,
                               int startOffset, int endOffset) {
     }
 
+    /** 转换为最终 Document IR 块之前的 Docling 节点数据。 */
     private record BlockDraft(int pageNumber, int readingOrder, DocumentIr.BlockType type, String text,
                               DocumentIr.BoundingBox boundingBox, DocumentIr.Table table,
                               int startOffset, int endOffset, List<String> headingPath, String language,
                               double confidence, Set<DocumentIr.Flag> flags, int headingLevel,
                               int columnIndex) {
+        /** 为没有标题级别和分栏信息的块提供默认值。 */
         private BlockDraft(int pageNumber, int readingOrder, DocumentIr.BlockType type, String text,
                            DocumentIr.BoundingBox boundingBox, DocumentIr.Table table,
                            int startOffset, int endOffset, List<String> headingPath, String language,

@@ -38,18 +38,30 @@ import java.util.stream.Collectors;
 @Service
 public class ScheduleDispatcher {
 
+    /** 记录任务领取、执行、重试和租约失效结果。 */
     private static final Logger log = LoggerFactory.getLogger(ScheduleDispatcher.class);
 
+    /** 领取到期任务、续租并以条件更新提交执行结果。 */
     private final IScheduleRepository repository;
+    /** 根据 Cron 和时区计算下一次计划执行时间。 */
     private final CronScheduleSupport cronSupport;
+    /** 提供并发数、租约时长、批量大小和重试间隔。 */
     private final SchedulerProperties properties;
+    /** 按任务类型选择实际业务处理器的不可变映射。 */
     private final Map<String, ScheduleTaskHandler> handlers;
+    /** 在任务执行期间定时延长数据库租约。 */
     private final ScheduledExecutorService heartbeatExecutor;
+    /** 有界并发执行已成功领取的调度任务。 */
     private final ThreadPoolExecutor dispatchExecutor;
+    /** 保证同一实例同一时间只生产一个扫描批次。 */
     private final ReentrantLock batchLock = new ReentrantLock();
+    /** 协调批次提交与关闭，避免关闭过程中继续提交任务。 */
     private final Object submissionMonitor = new Object();
+    /** 标记调度器已停止接收和执行新任务。 */
     private final AtomicBoolean closed = new AtomicBoolean();
+    /** 写入任务租约的实例标识，用于确认只有持有者可以续租和提交。 */
     private final String instanceId;
+    /** 统一计划时间和租约判断使用的 UTC 时钟。 */
     private final Clock clock = Clock.systemUTC();
 
     /** 建立有界执行池、单线程续租器和任务类型到处理器的不可变映射。 */

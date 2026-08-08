@@ -26,7 +26,7 @@ public enum ContextFragmentType {
     }
 
     /**
-     * 获取预算优先级；无参数；返回数值越大优先级越高。
+     * 获取预算优先级；返回数值越大优先级越高。
      */
     public int getPriority() {
         return priority;

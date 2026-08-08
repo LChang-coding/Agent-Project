@@ -52,6 +52,7 @@ public class RagPersistenceMapper {
                 requiredLong(po.getRevision(), "知识库revision"));
     }
 
+    /** 将知识库领域状态写成数据库约定的枚举值和可见范围。 */
     public RagKnowledgeBasePO toKnowledgeBasePo(RagKnowledgeBaseEntity entity) {
         return RagKnowledgeBasePO.builder().tenantId(entity.tenantId()).ownerUserId(entity.ownerUserId())
                 .visibility(writeVisibility(entity.visibility())).knowledgeBaseId(entity.knowledgeBaseId())
@@ -71,6 +72,7 @@ public class RagPersistenceMapper {
                 optionalInt(po.getPageCount()), optionalInt(po.getChunkCount()));
     }
 
+    /** 将逻辑文档写成数据库记录，并保留活动版本与目标代次。 */
     public RagDocumentPO toDocumentPo(RagDocumentEntity entity) {
         return RagDocumentPO.builder().tenantId(entity.tenantId()).ownerUserId(entity.ownerUserId())
                 .visibility(writeVisibility(entity.visibility())).knowledgeBaseId(entity.knowledgeBaseId())
@@ -97,6 +99,7 @@ public class RagPersistenceMapper {
                 codec.readMetadata(po.getMetadata()));
     }
 
+    /** 将不可变版本及解析产物、质量元数据写成数据库记录。 */
     public RagDocumentVersionPO toDocumentVersionPo(RagDocumentVersionEntity entity) {
         return RagDocumentVersionPO.builder().tenantId(entity.tenantId())
                 .knowledgeBaseId(entity.knowledgeBaseId()).documentId(entity.documentId())
@@ -124,6 +127,7 @@ public class RagPersistenceMapper {
                 po.getContentHash(), po.getVectorPointId(), codec.readMetadata(po.getMetadata()));
     }
 
+    /** 将分块正文、结构位置和向量点身份写成活动分块记录。 */
     public RagChunkPO toChunkPo(RagChunkEntity entity) {
         return RagChunkPO.builder().tenantId(entity.tenantId()).ownerUserId(entity.ownerUserId())
                 .visibility(writeVisibility(entity.visibility())).knowledgeBaseId(entity.knowledgeBaseId())
@@ -154,6 +158,7 @@ public class RagPersistenceMapper {
                 po.getErrorCode(), po.getErrorMessage(), po.getTraceId());
     }
 
+    /** 将任务状态机、检查点、租约和错误信息完整写回任务账本。 */
     public RagIngestTaskPO toIngestTaskPo(RagIngestJobEntity entity) {
         return RagIngestTaskPO.builder().taskId(entity.jobId()).taskKey(entity.idempotencyKey())
                 .tenantId(entity.tenantId()).knowledgeBaseId(entity.knowledgeBaseId())
@@ -185,6 +190,7 @@ public class RagPersistenceMapper {
                 enabled(po.getDeduplicateEnabled(), "去重开关"), requiredLong(po.getRevision(), "策略revision"));
     }
 
+    /** 将领域检索模式拆成数据库 Dense/Sparse 开关，并写入完整检索参数。 */
     public RagRetrievalProfilePO toRetrievalProfilePo(RagRetrievalProfileEntity entity) {
         boolean dense = entity.mode() != RagRetrievalMode.SPARSE;
         boolean sparse = entity.mode() != RagRetrievalMode.DENSE;
@@ -211,6 +217,7 @@ public class RagPersistenceMapper {
                 requiredInt(po.getPriority(), "绑定优先级"), requiredLong(po.getRevision(), "绑定revision"));
     }
 
+    /** 将目标与知识库的绑定写成活动记录，并保留优先级和 Token 上限。 */
     public RagAgentBindingPO toAgentBindingPo(RagAgentBindingEntity entity) {
         return RagAgentBindingPO.builder().tenantId(entity.tenantId()).bindingId(entity.bindingId())
                 .targetType(codec.databaseValue(entity.targetType())).targetId(entity.targetId())
@@ -219,6 +226,7 @@ public class RagPersistenceMapper {
                 .status("active").revision(entity.revision()).metadata("{}").build();
     }
 
+    /** 兼容历史数据库状态名称，并拒绝无法解释的文档状态。 */
     private RagDocumentStatus readDocumentStatus(String value) {
         if (value == null) throw new IllegalStateException("文档状态为空");
         return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
@@ -232,6 +240,7 @@ public class RagPersistenceMapper {
         };
     }
 
+    /** 将数据库 private/tenant_public 及历史 tenant 值恢复为领域可见范围。 */
     private RagVisibility readVisibility(String value) {
         if (value == null) throw new IllegalStateException("RAG 可见范围为空");
         return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
@@ -241,10 +250,12 @@ public class RagPersistenceMapper {
         };
     }
 
+    /** 使用数据库现行 tenant_public/private 约定保存领域可见范围。 */
     private String writeVisibility(RagVisibility visibility) {
         return visibility == RagVisibility.TENANT ? "tenant_public" : "private";
     }
 
+    /** 根据两个持久化开关恢复唯一检索模式，禁止两路召回同时关闭。 */
     private RagRetrievalMode readMode(boolean denseEnabled, boolean sparseEnabled) {
         if (denseEnabled && sparseEnabled) return RagRetrievalMode.HYBRID;
         if (denseEnabled) return RagRetrievalMode.DENSE;
@@ -252,6 +263,7 @@ public class RagPersistenceMapper {
         throw new IllegalStateException("检索策略不能同时关闭 Dense 和 Sparse");
     }
 
+    /** 只有持有者和到期时间同时存在时才恢复任务租约，半条租约视为脏数据。 */
     private RagLease readLease(String leaseOwner, LocalDateTime leaseUntil) {
         if (leaseOwner == null && leaseUntil == null) return null;
         if (leaseOwner == null || leaseUntil == null) {
@@ -268,28 +280,34 @@ public class RagPersistenceMapper {
         return value == 1;
     }
 
+    /** 读取不能为空的整数列，缺失时立即暴露持久化数据问题。 */
     private int requiredInt(Integer value, String fieldName) {
         if (value == null) throw new IllegalStateException(fieldName + "为空");
         return value;
     }
 
+    /** 读取不能为空的长整数列，缺失时立即暴露持久化数据问题。 */
     private long requiredLong(Long value, String fieldName) {
         if (value == null) throw new IllegalStateException(fieldName + "为空");
         return value;
     }
 
+    /** 将兼容期允许为空的统计整数恢复为领域默认值 0。 */
     private int optionalInt(Integer value) {
         return value == null ? 0 : value;
     }
 
+    /** 将兼容期允许为空的统计长整数恢复为领域默认值 0。 */
     private long optionalLong(Long value) {
         return value == null ? 0L : value;
     }
 
+    /** 按数据库统一使用的 UTC 时区将本地时间恢复为时间点。 */
     private Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.toInstant(ZoneOffset.UTC);
     }
 
+    /** 按 UTC 将领域时间点转换为数据库时间。 */
     private LocalDateTime toLocalDateTime(Instant value) {
         return value == null ? null : LocalDateTime.ofInstant(value, ZoneOffset.UTC);
     }

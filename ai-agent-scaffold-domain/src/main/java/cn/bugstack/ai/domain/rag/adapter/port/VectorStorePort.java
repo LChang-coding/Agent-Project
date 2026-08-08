@@ -10,19 +10,48 @@ import java.util.Set;
  */
 public interface VectorStorePort {
 
-    /** 幂等批量写入指定文档版本的向量点。 */
+    /**
+     * 幂等批量写入指定文档版本的向量点。
+     *
+     * @param tenantId 向量点所属租户
+     * @param versionId 向量点所属不可变文档版本
+     * @param points 按稳定点标识写入的向量点批次
+     */
     void upsert(String tenantId, String versionId, List<VectorPoint> points);
 
-    /** 删除租户指定文档版本的全部向量点。 */
+    /**
+     * 删除租户指定文档版本的全部向量点。
+     *
+     * @param tenantId 向量点所属租户
+     * @param versionId 待删除的文档版本标识
+     */
     void deleteVersion(String tenantId, String versionId);
 
-    /** 精确统计租户指定文档版本的向量点数。 */
+    /**
+     * 精确统计租户指定文档版本的向量点数。
+     *
+     * @param tenantId 向量点所属租户
+     * @param versionId 待统计的文档版本标识
+     * @return 该版本当前存在的向量点数
+     */
     long countVersion(String tenantId, String versionId);
 
-    /** 分页读取版本内的可信点标识与内容摘要，用于激活前精确核验而非只比数量。 */
+    /**
+     * 读取版本内的可信点标识与内容摘要，用于激活前精确核验。
+     *
+     * @param tenantId 向量点所属租户
+     * @param versionId 待核验的文档版本标识
+     * @return 该版本内全部点的最小核验快照
+     */
     List<VectorPointSnapshot> listVersionPointSnapshots(String tenantId, String versionId);
 
-    /** 使用可信知识库范围检索候选。 */
+    /**
+     * 在服务端已确定的知识库与激活代际范围内检索候选。
+     *
+     * @param tenantId 检索所属租户
+     * @param command 包含可信范围、查询向量和候选数量的命令
+     * @return 向量存储返回的原始候选集
+     */
     List<VectorSearchHit> search(String tenantId, VectorSearchCommand command);
 
     /** 一个同时支持 Dense 和 Sparse 的向量点。 */

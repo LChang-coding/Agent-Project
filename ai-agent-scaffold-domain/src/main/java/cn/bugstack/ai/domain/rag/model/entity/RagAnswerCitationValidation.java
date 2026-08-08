@@ -4,7 +4,16 @@ import cn.bugstack.ai.domain.context.model.RagContextEvidence;
 
 import java.util.List;
 
-/** 最终回答引用校验结果。 */
+/**
+ * 最终回答引用校验结果。
+ *
+ * @param status 引用校验终态
+ * @param retrievalIds 本轮回答可使用的检索标识
+ * @param allowedCitationIds 本轮回答可引用的证据标识
+ * @param usedCitationIds 回答中实际使用的合法引用标识
+ * @param invalidCitationIds 回答中不在允许集合内的引用标识
+ * @param usedCitations 与合法引用标识对应的证据元数据
+ */
 public record RagAnswerCitationValidation(Status status,
                                           List<String> retrievalIds,
                                           List<String> allowedCitationIds,
@@ -12,6 +21,7 @@ public record RagAnswerCitationValidation(Status status,
                                           List<String> invalidCitationIds,
                                           List<RagContextEvidence.CitationReference> usedCitations) {
 
+    /** 将可空引用列表规范为不可变列表，并校验终态。 */
     public RagAnswerCitationValidation {
         retrievalIds = copy(retrievalIds);
         allowedCitationIds = copy(allowedCitationIds);

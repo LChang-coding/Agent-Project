@@ -106,7 +106,7 @@ public class ConversationMemoryService {
     private final ObjectProvider<PlatformTransactionManager> transactionManagerProvider;
 
     /**
-     * 创建会话记忆服务；参数是上下文依赖端口；返回服务实例。
+     * 创建会话记忆服务。
      */
     public ConversationMemoryService(IConversationMemoryRepository memoryRepository,
                                      IContextCompactionTaskRepository taskRepository,
@@ -136,14 +136,14 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 组装模型调用上下文；参数是组装请求；返回可注入系统指令。
+     * 组装模型调用上下文。
      */
     public ContextAssemblyResult assemble(ContextAssembleRequest request) {
         return assembleInternal(request, false);
     }
 
     /**
-     * 只读预览模型上下文；参数是组装请求；返回与真实组装同口径且不写缓存的结果。
+     * 只读预览模型上下文。
      */
     public ContextAssemblyResult preview(ContextAssembleRequest request) {
         return assembleInternal(request, true);
@@ -248,7 +248,7 @@ public class ConversationMemoryService {
                 .build();
     }
 
-    /** 判断本次上下文组装是否要求执行RAG；参数是组装请求；返回是否存在可信RAG目标。 */
+    /** 判断本次上下文组装是否要求执行RAG。 */
     private boolean ragRequested(ContextAssembleRequest request) {
         return request != null && request.getRagTargetType() != null
                 && !isBlank(request.getRagTargetId()) && !isBlank(request.getRagQuery());
@@ -261,7 +261,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 会话激活时重投未完成任务；参数是会话身份；无返回值。
+     * 会话激活时重投未完成任务。
      */
     public void republishUnfinished(String tenantId, String userId, String sessionId) {
         if (!properties.isEnabled()) {
@@ -278,7 +278,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 助手消息保存后检查是否需要压缩；参数是助手消息；无返回值。
+     * 助手消息保存后检查是否需要压缩。
      */
     public void onAssistantMessageSaved(ChatMessageEntity assistantMessage) {
         if (!properties.isEnabled() || assistantMessage == null || assistantMessage.getSequenceNo() == null) {
@@ -327,7 +327,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 消息持久化后刷新会话短期窗口；参数是已保存消息；无返回值。
+     * 消息持久化后刷新会话短期窗口。
      */
     public void onMessageSaved(ChatMessageEntity message) {
         if (!properties.isEnabled() || message == null || message.getSequenceNo() == null) {
@@ -338,7 +338,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 执行压缩任务；参数是任务ID；成功后激活新摘要。
+     * 执行压缩任务；成功后激活新摘要。
      */
     public void compactTask(String taskId) {
         ContextCompactionTaskEntity task = taskRepository.queryByTaskId(taskId);
@@ -399,7 +399,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 在短事务中激活压缩结果；参数是任务、摘要和覆盖指纹；返回新快照。
+     * 在短事务中激活压缩结果。
      */
     private ConversationMemorySnapshotEntity activateCompaction(String taskId, ContextCompactionTaskEntity task,
                                                                  String json, String expectedHash, int estimatedTokens) {
@@ -472,7 +472,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 同步压缩当前会话；参数是会话身份和可见序号；返回是否完成压缩。
+     * 同步压缩当前会话。
      */
     public boolean compactSynchronously(String tenantId, String userId, String sessionId, Integer visibleThroughSequence, String traceId) {
         if (!properties.isEnabled() || visibleThroughSequence == null || visibleThroughSequence <= 0) {
@@ -507,7 +507,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 工具调用前按阈值压缩；参数是运行身份、可见序号和链路ID；返回是否激活了新摘要。
+     * 工具调用前按阈值压缩。
      */
     public boolean compactBeforeTool(String tenantId, String userId, String sessionId, String runId,
                                      Integer visibleThroughSequence, String traceId) {
@@ -589,7 +589,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 在数据库提交后切换缓存摘要和短期窗口；参数是新摘要；无返回值。
+     * 在数据库提交后切换缓存摘要和短期窗口。
      */
     private void refreshCacheAfterCommit(ConversationMemorySnapshotEntity snapshot) {
         Runnable refresh = () -> {
@@ -603,6 +603,7 @@ public class ConversationMemoryService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            /** 摘要激活事务提交后再切换缓存，保证缓存只暴露已提交版本。 */
             public void afterCommit() {
                 refresh.run();
             }
@@ -786,7 +787,7 @@ public class ConversationMemoryService {
         return String.join("\n", lines);
     }
 
-    /** 组装指定消息区间的附件文本；参数是可信会话和序号边界；返回已去重的附件片段。 */
+    /** 组装指定消息区间的附件文本。 */
     private String attachmentContext(String tenantId, String userId, String sessionId,
                                      Integer fromSequenceExclusive, Integer toSequenceInclusive) {
         ContextAssembleRequest request = ContextAssembleRequest.builder()
@@ -868,7 +869,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 查询已注册运行时 Agent；参数是装配工厂和 Agent 标识；找不到时返回空。
+     * 查询已注册运行时 Agent；找不到时返回空。
      */
     private AiAgentRegisterVO queryRegisteredAgent(DefaultArmoryFactory defaultArmoryFactory, String agentId) {
         if (isBlank(agentId)) {

@@ -17,14 +17,14 @@ public class ModelUsageService {
     private final IModelUsageRepository repository;
 
     /**
-     * 创建模型用量服务；参数是用量仓储；返回服务实例。
+     * 创建模型用量服务。
      */
     public ModelUsageService(IModelUsageRepository repository) {
         this.repository = repository;
     }
 
     /**
-     * 幂等保存调用终态；参数是模型用量；返回影响行数。
+     * 幂等保存调用终态。
      */
     public int record(ModelUsageEntity usage) {
         if (usage == null || blank(usage.getUserId()) || blank(usage.getSessionId()) || blank(usage.getCallId())
@@ -44,21 +44,21 @@ public class ModelUsageService {
     }
 
     /**
-     * 查询会话最新调用；参数是可信身份和会话；返回最新用量。
+     * 查询会话最新调用。
      */
     public ModelUsageEntity latest(String tenantId, String userId, String sessionId) {
         return repository.queryLatest(tenantId, userId, sessionId);
     }
 
     /**
-     * 聚合会话或运行用量；参数是可信身份、会话和运行；返回聚合结果。
+     * 聚合会话或运行用量。
      */
     public ModelUsageSummaryEntity summarizeSession(String tenantId, String userId, String sessionId, String runId) {
         return defaultSummary(repository.summarizeSession(tenantId, userId, sessionId, runId));
     }
 
     /**
-     * 聚合近期用户用量；参数是可信身份和天数；返回聚合结果。
+     * 聚合近期用户用量。
      */
     public ModelUsageSummaryEntity summarizeRecent(String tenantId, String userId, int days) {
         if (days < 1 || days > 90) {
@@ -68,7 +68,7 @@ public class ModelUsageService {
     }
 
     /**
-     * 将运行中的模型调用标记取消；参数是可信身份、会话、运行和原因；返回影响行数。
+     * 将运行中的模型调用标记取消。
      */
     public int cancelRunning(String tenantId, String userId, String sessionId, String runId, String reason) {
         if (blank(userId) || blank(sessionId) || blank(runId)) {

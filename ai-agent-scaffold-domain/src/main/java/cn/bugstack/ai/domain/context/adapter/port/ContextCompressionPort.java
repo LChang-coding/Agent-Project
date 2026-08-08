@@ -8,7 +8,7 @@ import org.springframework.ai.chat.model.ChatModel;
 public interface ContextCompressionPort {
 
     /**
-     * 生成结构化摘要；参数是模型和压缩提示；返回 JSON 摘要文本。
+     * 生成结构化摘要。
      */
     String compress(ChatModel chatModel, String prompt);
 }

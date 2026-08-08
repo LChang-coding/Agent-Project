@@ -17,15 +17,28 @@ import java.util.List;
 @Service
 public class StaticWorkflowRuntimeService {
 
+    /** 加载已经发布且当前用户可读的工作流运行定义。 */
     private final IWorkflowService workflowService;
+    /** 创建通用运行并启动普通 DAG 的后台执行。 */
     private final IChatService chatService;
 
+    /**
+     * 创建普通工作流启动服务。
+     *
+     * @param workflowService 加载已发布工作流运行定义的服务
+     * @param chatService 创建运行并执行普通工作流的会话服务
+     */
     public StaticWorkflowRuntimeService(IWorkflowService workflowService, IChatService chatService) {
         this.workflowService = workflowService;
         this.chatService = chatService;
     }
 
-    /** 校验发布版本类型后启动后台 DAG，返回可立即订阅事件的根 Run。 */
+    /**
+     * 校验发布版本为普通 DAG 后创建运行并启动后台执行。
+     *
+     * @param command 包含可信身份、工作流、会话和用户消息的启动命令
+     * @return 可立即用于订阅工作流事件的通用运行
+     */
     public ChatRunEntity start(StaticWorkflowStartCommandEntity command) {
         validate(command);
         WorkflowRuntimeEntity runtime = workflowService.loadRuntime(command.getTenantId(), command.getUserId(),
@@ -44,6 +57,7 @@ public class StaticWorkflowRuntimeService {
         return started.getRun();
     }
 
+    /** 校验静态工作流启动所需的可信身份、工作流和用户消息。 */
     private void validate(StaticWorkflowStartCommandEntity command) {
         if (command == null || blank(command.getTenantId()) || blank(command.getUserId())
                 || blank(command.getWorkflowId()) || blank(command.getSessionId()) || blank(command.getMessage())) {
@@ -51,6 +65,7 @@ public class StaticWorkflowRuntimeService {
         }
     }
 
+    /** 判断必填文本是否缺失。 */
     private boolean blank(String value) {
         return value == null || value.isBlank();
     }

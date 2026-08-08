@@ -50,7 +50,7 @@ public class ContextCompactionTaskEntity {
     private String traceId;
 
     /**
-     * 转为 Kafka 命令；无参数；返回异步压缩通知。
+     * 转为 Kafka 命令；返回异步压缩通知。
      */
     public ContextCompactionCommand toCommand() {
         // 消息只携带定位信息；状态、覆盖指纹、租约和栅栏必须从 MySQL 重新读取。

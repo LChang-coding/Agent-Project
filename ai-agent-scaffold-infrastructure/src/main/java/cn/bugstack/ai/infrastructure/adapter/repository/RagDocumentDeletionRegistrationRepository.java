@@ -34,12 +34,19 @@ public class RagDocumentDeletionRegistrationRepository implements RagDocumentDel
 
     /** 删除登记所需 DAO；锁定、建账和 outbox 必须同事务。 */
     private final IRagIngestTaskDao ingestTaskDao;
+    /** 锁定知识库并确认删除目标仍属于可操作聚合。 */
     private final IRagKnowledgeBaseDao knowledgeBaseDao;
+    /** 锁定逻辑文档并写入删除中墓碑状态。 */
     private final IRagDocumentDao documentDao;
+    /** 读取删除范围内的不可变版本，防止遗漏源文件或解析产物。 */
     private final IRagDocumentVersionDao documentVersionDao;
+    /** 在同一事务中登记待发布 Kafka 删除唤醒事件。 */
     private final IRagOutboxDao outboxDao;
+    /** 将领域文档和删除任务转换为数据库记录。 */
     private final RagPersistenceMapper mapper;
+    /** 提供删除任务复用的摄取 Kafka Topic。 */
     private final RagProperties properties;
+    /** 将稳定事件字段编码为 Outbox JSON 负载。 */
     private final ObjectMapper objectMapper;
 
     @Override

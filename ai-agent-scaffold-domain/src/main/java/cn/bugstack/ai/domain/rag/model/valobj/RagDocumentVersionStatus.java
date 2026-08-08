@@ -1,16 +1,9 @@
 package cn.bugstack.ai.domain.rag.model.valobj;
 
 /**
- * 一个不可变文档版本（一次具体上传的那份文件）的处理状态。
- *
- * <p>属于哪一层：领域层值对象，是 RagDocumentVersionEntity 的状态字段类型。</p>
- *
- * <p>状态由谁推进：全部通过 RagDocumentVersionEntity 上的迁移方法推进，调用方是上传服务
- * （创建时给 CREATED/QUEUED）和摄取 Worker（processing / ready / failed / cancelled /
- * retryQueued / requestDeletion / deleted）。</p>
- *
- * <p>它不负责什么：不表示这份版本是不是「当前对外可见的那一版」——那由文档实体的
- * activeVersionId 决定。一个版本可以是 READY 但已经被更新的版本顶掉。</p>
+ * 不可变文档版本的处理状态。
+ * <p>所有状态通过 RagDocumentVersionEntity 的迁移方法推进。版本是否当前可检索
+ * 仍由逻辑文档的 activeVersionId 和 activeGeneration 决定。</p>
  */
 public enum RagDocumentVersionStatus {
 

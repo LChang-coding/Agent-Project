@@ -17,7 +17,7 @@ public class ContextAssembler {
     private final TokenCounter tokenCounter;
 
     /**
-     * 创建上下文组装器；参数是 token 计数器；返回组装器实例。
+     * 创建上下文组装器。
      */
     public ContextAssembler(TokenCounter tokenCounter) {
         if (tokenCounter == null) {
@@ -27,7 +27,7 @@ public class ContextAssembler {
     }
 
     /**
-     * 按预算组装片段；参数是总预算和候选片段；返回保留后的片段列表。
+     * 按预算组装片段。
      */
     public List<ContextFragment> assemble(ContextBudget budget, List<ContextFragment> fragments) {
         if (budget == null || fragments == null || fragments.isEmpty()) {

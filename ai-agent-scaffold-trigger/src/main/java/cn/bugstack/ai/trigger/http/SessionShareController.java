@@ -36,6 +36,7 @@ import java.util.List;
 @RequestMapping("/api/v1/session-shares")
 public class SessionShareController {
 
+    /** 创建、校验、下载、导入和撤销会话分享快照。 */
     private final SessionShareService shareService;
 
     /** @param shareService 会话分享快照和导入领域服务 */

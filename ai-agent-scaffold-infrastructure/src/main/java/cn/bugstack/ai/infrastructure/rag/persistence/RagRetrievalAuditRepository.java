@@ -27,10 +27,14 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
 
     /** 检索摘要与最终引用分别入库。 */
     private final IRagRetrievalRecordDao recordDao;
+    /** 批量写入最终返回给模型的引用快照。 */
     private final IRagRetrievalCitationDao citationDao;
+    /** 控制查询正文和引用正文是否允许进入审计表。 */
     private final RagProperties properties;
+    /** 编码请求快照、阶段指标和引用元数据。 */
     private final ObjectMapper objectMapper;
 
+    /** 注入检索主记录、引用、正文留存策略和 JSON 编码依赖。 */
     public RagRetrievalAuditRepository(IRagRetrievalRecordDao recordDao,
                                        IRagRetrievalCitationDao citationDao,
                                        RagProperties properties,
@@ -106,6 +110,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
                 "hydrationMs", result.metrics().hydrationMs());
     }
 
+    /** 只保存稳定错误码和异常类型，并限制数据库字段长度。 */
     private String errorSummary(String code, String type) {
         if (code == null && type == null) return null;
         String value = (code == null ? "RAG_RETRIEVAL_FAILED" : code) + ":"
@@ -113,10 +118,12 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
         return value.length() <= 1000 ? value : value.substring(0, 1000);
     }
 
+    /** 将可选浮点评分转换为数据库精确十进制表示。 */
     private BigDecimal decimal(Double value) {
         return value == null ? null : BigDecimal.valueOf(value);
     }
 
+    /** 将领域布尔值转换为数据库 0/1 标记。 */
     private int flag(boolean value) {
         return value ? 1 : 0;
     }
@@ -130,6 +137,7 @@ public class RagRetrievalAuditRepository implements RagRetrievalAuditPort {
         }
     }
 
+    /** 对归一化查询生成不可逆摘要，默认审计不保存查询正文。 */
     private String sha256(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

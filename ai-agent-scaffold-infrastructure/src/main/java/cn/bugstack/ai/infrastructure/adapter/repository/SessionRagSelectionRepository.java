@@ -16,6 +16,7 @@ import java.util.stream.IntStream;
 @Repository
 public class SessionRagSelectionRepository implements ISessionRagSelectionRepository {
 
+    /** 会话手动绑定选择及其稳定顺序的持久化入口。 */
     private final ISessionRagBindingSelectionDao selectionDao;
 
     /**

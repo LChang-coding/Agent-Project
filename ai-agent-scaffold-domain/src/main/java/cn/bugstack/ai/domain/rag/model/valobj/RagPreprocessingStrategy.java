@@ -13,8 +13,11 @@ public enum RagPreprocessingStrategy {
     /** 生产默认：格式专用 IR、Cleaner 和结构感知分块全部启用。 */
     IR_FULL("document-ir-full-v1", true, true);
 
+    /** 产物追溯与消融评测使用的稳定策略版本。 */
     private final String revision;
+    /** 是否在分块前执行文档 IR 清洗规则。 */
     private final boolean cleanerEnabled;
+    /** 是否在分块前保留标题、表格和页面结构。 */
     private final boolean structurePreserved;
 
     RagPreprocessingStrategy(String revision, boolean cleanerEnabled, boolean structurePreserved) {
@@ -23,14 +26,26 @@ public enum RagPreprocessingStrategy {
         this.structurePreserved = structurePreserved;
     }
 
+    /**
+     * 返回用于产物追溯和消融评测的策略版本。
+     * @return 稳定的预处理策略版本
+     */
     public String revision() {
         return revision;
     }
 
+    /**
+     * 判断该策略是否执行文档 IR 清洗规则。
+     * @return 需要执行清洗时返回 {@code true}
+     */
     public boolean cleanerEnabled() {
         return cleanerEnabled;
     }
 
+    /**
+     * 判断该策略在分块前是否保留标题、表格和页面结构。
+     * @return 保留结构化 IR 时返回 {@code true}
+     */
     public boolean structurePreserved() {
         return structurePreserved;
     }

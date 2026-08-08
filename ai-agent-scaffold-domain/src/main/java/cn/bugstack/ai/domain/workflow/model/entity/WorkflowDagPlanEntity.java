@@ -104,17 +104,22 @@ public class WorkflowDagPlanEntity {
         /** 自循环节点的执行上限；防止无限迭代。 */
         private Integer maxIterations;
 
+        /** 当前节点允许运行时采用的路由策略集合。 */
         private List<String> enabledStrategies;
 
+        /** 当前节点允许直接到达的目标节点，防止运行时选择图外目标。 */
         private List<String> allowedTargetNodeIds;
 
+        /** 没有业务路由命中时使用的默认目标节点。 */
         private String defaultTargetNodeId;
 
+        /** 提供给智能路由模型的业务选择说明。 */
         private String routeInstruction;
 
         /** 冻结后的节点 RAG 工具开关；null 表示继承运行级设置。 */
         private Boolean ragToolEnabled;
 
+        /** 整个运行中该节点允许被调度的次数。 */
         private Integer maxVisits;
 
         /** 当前节点是否没有任何后续出边。 */
@@ -131,14 +136,19 @@ public class WorkflowDagPlanEntity {
     @NoArgsConstructor
     public static class RouteDescriptor {
 
+        /** 模型可见并提交的主路由键。 */
         private String routeKey;
 
+        /** 只用于服务端精确兼容匹配的受控别名。 */
         private List<String> routeAliases;
 
+        /** 该路由对应的工作流边。 */
         private String edgeId;
 
+        /** 该路由命中的目标节点。 */
         private String targetNodeId;
 
+        /** 目标节点展示名，用于生成模型可理解的工具说明。 */
         private String targetNodeName;
     }
 
@@ -162,14 +172,19 @@ public class WorkflowDagPlanEntity {
         /** 下游节点ID；与起点相同时表示有限自循环。 */
         private String targetNodeId;
 
+        /** 边的路由类型，决定运行时在哪一种策略中评估它。 */
         private String routeType;
 
+        /** 节点建议或模型路由使用的主路由键。 */
         private String routeKey;
 
+        /** 只参与显式路由键精确匹配的兼容别名。 */
         private List<String> routeAliases;
 
+        /** 已通过编译器白名单校验的条件表达式。 */
         private String conditionExpression;
 
+        /** 同类路由中的评估顺序，数值越小越优先。 */
         private Integer priority;
     }
 }

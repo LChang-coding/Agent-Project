@@ -14,6 +14,10 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WorkflowNodeInvocationResultEntity {
+
+    /** 当前 Agent 节点返回并提供给路由判断的文本。 */
     private String output;
+
+    /** 当前节点模型调用实际使用的 RAG 证据。 */
     private List<RagContextEvidence> evidence;
 }

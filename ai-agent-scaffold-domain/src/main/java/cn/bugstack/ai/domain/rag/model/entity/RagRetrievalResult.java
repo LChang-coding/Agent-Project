@@ -6,6 +6,14 @@ import java.util.Map;
 
 /**
  * 可注入模型、可评测且不暴露存储凭证的 RAG 检索结果。
+ *
+ * @param retrievalId 本次检索的唯一标识
+ * @param citations 按最终排名排序的引用上下文
+ * @param estimatedTokenCount 全部引用上下文的预估 Token 数
+ * @param degraded 本次检索是否使用了降级路径
+ * @param degradationReasons 本次检索实际发生的去重降级原因
+ * @param metrics 各检索阶段的候选数与耗时
+ * @param diagnostics 仅在授权调试请求中返回的有界候选诊断
  */
 public record RagRetrievalResult(String retrievalId,
                                  List<Citation> citations,
@@ -22,6 +30,7 @@ public record RagRetrievalResult(String retrievalId,
                 Diagnostics.empty());
     }
 
+    /** 校验检索标识、Token 数和阶段指标，并保存列表的防御副本。 */
     public RagRetrievalResult {
         requireText(retrievalId, "检索ID");
         citations = citations == null ? List.of() : List.copyOf(citations);
@@ -32,20 +41,36 @@ public record RagRetrievalResult(String retrievalId,
         }
     }
 
-    /** 创建仅含总耗时的空命中结果。 */
+    /**
+     * 创建仅含总耗时的空命中结果。
+     * @param retrievalId 检索标识
+     * @param totalMs 检索主流程总耗时毫秒数
+     * @return 不含引用且未降级的检索结果
+     */
     public static RagRetrievalResult empty(String retrievalId, long totalMs) {
         return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
                 new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs));
     }
 
-    /** 创建包含配置解析耗时的空命中结果。 */
+    /**
+     * 创建包含配置解析耗时的空命中结果。
+     * @param retrievalId 检索标识
+     * @param totalMs 检索主流程总耗时毫秒数
+     * @param configurationMs 绑定授权与检索配置解析耗时毫秒数
+     * @return 不含引用且带配置耗时的检索结果
+     */
     public static RagRetrievalResult empty(String retrievalId, long totalMs, long configurationMs) {
         return new RagRetrievalResult(retrievalId, List.of(), 0, false, List.of(),
                 new Metrics(0, 0, 0, 0, 0, 0, 0, 0, 0, totalMs,
                         configurationMs, 0, 0, 0, 0));
     }
 
-    /** 补齐同步审计和完整服务边界；审计记录本身仍保存审计前即可确定的指标。 */
+    /**
+     * 补齐同步审计和完整服务边界耗时。
+     * @param auditMs 同步审计写入耗时毫秒数
+     * @param serviceMs 包含审计在内的完整检索服务耗时毫秒数
+     * @return 保留检索内容并更新完成耗时的新结果
+     */
     public RagRetrievalResult withCompletionTimings(long auditMs, long serviceMs) {
         Metrics value = metrics;
         return new RagRetrievalResult(retrievalId, citations, estimatedTokenCount, degraded, degradationReasons,
@@ -55,7 +80,11 @@ public record RagRetrievalResult(String retrievalId,
                         value.hydrationMs(), value.assemblyMs(), auditMs, serviceMs), diagnostics);
     }
 
-    /** 标记一次不会丢弃主检索结果的降级；相同原因保持幂等。 */
+    /**
+     * 标记一次不会丢弃主检索结果的降级；相同原因保持幂等。
+     * @param reason 稳定的降级原因
+     * @return 已标记降级且保留原引用的新结果
+     */
     public RagRetrievalResult withDegradation(String reason) {
         requireText(reason, "降级原因");
         List<String> reasons = new ArrayList<>(degradationReasons);
@@ -66,7 +95,28 @@ public record RagRetrievalResult(String retrievalId,
                 metrics, diagnostics);
     }
 
-    /** 最终引用；context 可包含同版本父块和相邻块，chunkId 始终指向主命中。 */
+    /**
+     * 最终引用；context 可包含同版本父分块和相邻分块，chunkId 始终指向主命中。
+     *
+     * @param citationId 本次检索内的引用标识
+     * @param rank 引用的最终排名
+     * @param knowledgeBaseId 知识库标识
+     * @param documentId 逻辑文档标识
+     * @param documentName 文档展示名称
+     * @param versionId 文档版本标识
+     * @param documentVersion 文档内递增的版本序号
+     * @param generation 命中分块所属索引代际
+     * @param chunkId 主命中分块标识
+     * @param context 经 Token 预算裁剪后的可引用正文
+     * @param pageNumber 主命中所在页码
+     * @param headingPath 主命中所在标题路径
+     * @param contentHash 主命中正文摘要
+     * @param denseScore 稠密召回分数
+     * @param sparseScore 稀疏召回分数
+     * @param fusionScore 候选融合分数
+     * @param rerankScore 重排模型分数
+     * @param metadata 不含内部存储位置的引用元数据
+     */
     public record Citation(String citationId,
                            int rank,
                            String knowledgeBaseId,

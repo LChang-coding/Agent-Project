@@ -22,9 +22,13 @@ import java.util.HexFormat;
 @RequiredArgsConstructor
 public class ScheduleReconciler {
 
+    /** 查询配置并按稳定业务键更新唯一运行态任务。 */
     private final IScheduleRepository repository;
+    /** 规范化 Cron 和时区，并计算下一次计划时间。 */
     private final CronScheduleSupport cronSupport;
+    /** 解析任务载荷以生成稳定配置摘要。 */
     private final ObjectMapper objectMapper;
+    /** 统一计算计划时间和记录更新时间的 UTC 时钟。 */
     private final Clock clock = Clock.systemUTC();
 
     /** 有界扫描待收敛配置，并停用失去有效配置的运行态。 */

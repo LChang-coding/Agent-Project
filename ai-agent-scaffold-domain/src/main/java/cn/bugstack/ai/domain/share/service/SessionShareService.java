@@ -42,20 +42,34 @@ import java.util.UUID;
 @Service
 public class SessionShareService {
 
+    /** 当前写入的会话导出文档协议版本。 */
     public static final String SCHEMA_VERSION = "chat-session-export/v2";
+    /** 仍允许导入的历史会话导出协议版本。 */
     public static final String LEGACY_SCHEMA_VERSION = "chat-session-export/v1";
+    /** 对象存储中会话导出文档使用的媒体类型。 */
     public static final String CONTENT_TYPE = "application/vnd.ai-agent.chat-session+json";
+    /** 单个导出文档允许占用的最大字节数。 */
     private static final long MAX_EXPORT_BYTES = 8L * 1024 * 1024;
+    /** 单个分享允许包含的最大消息数量。 */
     private static final int MAX_MESSAGES = 10_000;
+    /** 单条导出消息允许包含的最大字符数。 */
     private static final int MAX_MESSAGE_CHARS = 256 * 1024;
+    /** 单个分享允许声明的最大工具依赖数量。 */
     private static final int MAX_TOOL_DEPENDENCIES = 1_000;
 
+    /** 校验源会话归属，并为导入结果创建新会话和消息。 */
     private final SessionDomain sessionDomain;
+    /** 持久化分享授权、下载次数和导入记录。 */
     private final ISessionShareRepository shareRepository;
+    /** 保存和读取不可变会话导出文档。 */
     private final ObjectStorageService storageService;
+    /** 编码并校验版本化导出文档。 */
     private final ObjectMapper objectMapper;
+    /** 查询导出会话使用的工具依赖及接收方可用工具。 */
     private final IToolRepository toolRepository;
+    /** 在可用时原子保存导入会话、消息和导入记录。 */
     private final TransactionTemplate transactionTemplate;
+    /** 生成不可预测的分享令牌，数据库只保存其摘要。 */
     private final SecureRandom secureRandom = new SecureRandom();
 
     /** 组装分享依赖；事务管理器缺失时保留可测试的无事务执行模式。 */
@@ -73,7 +87,7 @@ public class SessionShareService {
     }
 
     /**
-     * 创建分享；参数是可信身份、会话、有效小时和读取上限；返回分享与一次性原令牌。
+     * 创建分享。
      */
     public SessionShareResultEntity create(String tenantId, String userId, String sessionId,
                                            Integer validHours, Integer maxDownloads) {
@@ -111,7 +125,7 @@ public class SessionShareService {
     }
 
     /**
-     * 查询分享预览；参数是原分享令牌；返回不含敏感字段的元数据。
+     * 查询分享预览。
      */
     public SessionShareResultEntity preview(String tenantId, String userId, String token) {
         SessionShareEntity share = resolveActive(token);
@@ -121,7 +135,7 @@ public class SessionShareService {
     }
 
     /**
-     * 下载分享导出；参数是原分享令牌；返回通过摘要验证的导出字节。
+     * 下载分享导出。
      */
     public SessionShareResultEntity download(String token) {
         SessionShareEntity share = resolveActive(token);
@@ -134,13 +148,13 @@ public class SessionShareService {
     }
 
     /**
-     * 复制导入分享；参数是接收者可信身份和分享令牌；返回独立会话副本。
+     * 复制导入分享。
      */
     public SessionShareResultEntity importCopy(String tenantId, String userId, String token) {
         return importCopy(tenantId, userId, token, false);
     }
 
-    /** 复制导入分享；参数是接收者身份、令牌和风险确认；返回独立会话副本。 */
+    /** 复制导入分享。 */
     public SessionShareResultEntity importCopy(String tenantId, String userId, String token,
                                                boolean confirmToolAccessRisk) {
         // 导入重试必须先定位分享；已完成的接收方导入不应被后续额度耗尽阻断。
@@ -150,7 +164,7 @@ public class SessionShareService {
     }
 
     /**
-     * 撤销分享；参数是创建者可信身份和分享ID；无返回值。
+     * 撤销分享。
      */
     public void revoke(String tenantId, String userId, String shareId) {
         SessionShareEntity share = shareRepository.queryOwnerShare(tenantId, userId, shareId);

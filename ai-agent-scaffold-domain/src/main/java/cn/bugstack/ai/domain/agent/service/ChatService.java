@@ -1580,6 +1580,7 @@ public class ChatService implements IChatService {
         return WorkflowNodeInvocationResultEntity.builder().output(result.output()).evidence(result.evidence()).build();
     }
 
+    /** 从当前节点冻结出边生成路由工具描述，只暴露允许模型选择的键和目标摘要。 */
     private List<cn.bugstack.ai.domain.tool.service.PlatformToolResolver.RouteDescriptor> platformRouteDescriptors(
             WorkflowDagPlanEntity.Node node) {
         if (node == null || node.getRouteDescriptors() == null) return List.of();
