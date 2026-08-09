@@ -106,7 +106,7 @@ public class IntelligentWorkflowRunController {
     @PostMapping
     public Response<IntelligentWorkflowRunResponseDTO> start(@RequestBody IntelligentWorkflowRunStartRequestDTO request) {
         // 身份三件套全部取自认证上下文，绝不采信请求体，避免有人用别人的身份跑工作流；
-         // 工作流、版本、模型、会话、消息、附件则原样转交，由领域层负责校验和冻结版本。
+         // 工作流、版本、模型、会话、消息、附件原样转交，由领域层校验并保存本次运行使用的版本。
         IntelligentWorkflowRunEntity run = runtimeService.start(IntelligentWorkflowStartCommandEntity.builder()
                 .tenantId(TenantContextHolder.getTenantId()).userId(TenantContextHolder.getUserId())
                 .roleCode(TenantContextHolder.getRoleCode()).workflowId(request.getWorkflowId())

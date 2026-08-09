@@ -69,6 +69,14 @@ public class ContextCompactionTaskRepository implements IContextCompactionTaskRe
                 .toList();
     }
 
+    /** 从 MySQL 找出可能因 Kafka 丢通知而没有被处理的任务。 */
+    @Override
+    public List<ContextCompactionTaskEntity> queryRecoverable(int limit, int maxAttempts) {
+        return dao.queryRecoverable(Math.max(1, Math.min(limit, 200)), Math.max(1, maxAttempts)).stream()
+                .map(this::toEntity)
+                .toList();
+    }
+
     /** 查询会话最近一次压缩任务，用于判断当前压缩进度和结果。 */
     @Override
     public ContextCompactionTaskEntity queryLatest(String tenantId, String userId, String sessionId) {

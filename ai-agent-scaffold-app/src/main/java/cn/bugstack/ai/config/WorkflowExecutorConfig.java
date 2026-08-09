@@ -1,5 +1,6 @@
 package cn.bugstack.ai.config;
 
+import cn.bugstack.ai.domain.workflow.service.WorkflowNodeRetryPolicy;
 import cn.bugstack.ai.types.observability.TraceableThreadPoolExecutor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -23,6 +24,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Configuration
 @EnableConfigurationProperties(WorkflowExecutorProperties.class)
 public class WorkflowExecutorConfig {
+
+    /** 把部署配置转换成领域层可直接使用的重试规则。 */
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowNodeRetryPolicy workflowNodeRetryPolicy(WorkflowExecutorProperties properties) {
+        WorkflowExecutorProperties.NodeRetry retry = properties.getNodeRetry();
+        return new WorkflowNodeRetryPolicy(retry.getMaxAttempts(), retry.getInitialBackoffMillis(),
+                retry.getMaxBackoffMillis(), retry.getCancellationPollMillis());
+    }
 
     /**
      * 创建工作流编排执行器；过载时显式拒绝，避免占用 HTTP 或订阅线程。

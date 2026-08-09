@@ -207,6 +207,21 @@ public class WorkflowDagCompilerTest {
         Assert.assertTrue(plan.getNodes().stream().allMatch(node -> node.getRouteDescriptors().isEmpty()));
     }
 
+    @Test
+    public void shouldFreezeNodeMcpAndSkillAllowlistsIntoDagPlan() throws Exception {
+        WorkflowGraphEntity.Node source = node("source", "入口", 1);
+        source.setMcpIds(List.of("mcp-1"));
+        source.setSkillIds(List.of("skill-1", "skill-2"));
+        WorkflowGraphEntity graph = WorkflowGraphEntity.builder().mode("sequential").rootNodeId("source")
+                .nodes(List.of(source)).edges(List.of()).build();
+
+        WorkflowDagPlanEntity.Node compiled = compiler().compileDag(
+                workflow(), version(graph), "deepseek-v4-flash").getDagPlan().getNodes().get(0);
+
+        Assert.assertEquals(List.of("mcp-1"), compiled.getMcpIds());
+        Assert.assertEquals(List.of("skill-1", "skill-2"), compiled.getSkillIds());
+    }
+
     private WorkflowGraphEntity.Node intelligentNode(String nodeId, List<String> targets) {
         WorkflowGraphEntity.Node node = node(nodeId, nodeId, 1);
         node.setMaxVisits(2);

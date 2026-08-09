@@ -40,11 +40,35 @@ xxl:
       log-path: ${XXL_JOB_EXECUTOR_LOG_PATH:./data/xxl-job}
       log-retention-days: ${XXL_JOB_EXECUTOR_LOG_RETENTION_DAYS:30}
 
+workflow:
+  executor:
+    node-retry:
+      max-attempts: ${WORKFLOW_NODE_RETRY_MAX_ATTEMPTS:3}
+      initial-backoff-millis: ${WORKFLOW_NODE_RETRY_INITIAL_BACKOFF_MILLIS:500}
+      max-backoff-millis: ${WORKFLOW_NODE_RETRY_MAX_BACKOFF_MILLIS:4000}
+      cancellation-poll-millis: ${WORKFLOW_NODE_RETRY_CANCELLATION_POLL_MILLIS:100}
+
 ai:
+  context:
+    kafka:
+      send-timeout-ms: ${AI_CONTEXT_KAFKA_SEND_TIMEOUT_MS:3000}
+      recovery-delay-ms: ${AI_CONTEXT_KAFKA_RECOVERY_DELAY_MS:30000}
+      recovery-batch-size: ${AI_CONTEXT_KAFKA_RECOVERY_BATCH_SIZE:50}
+
   tools:
     platform:
       rag-enabled: ${AI_PLATFORM_RAG_TOOL_ENABLED:true}
       route-enabled: ${AI_PLATFORM_ROUTE_TOOL_ENABLED:true}
+      trace-log-enabled: ${AI_PLATFORM_TRACE_LOG_TOOL_ENABLED:false}
+  observability:
+    grafana:
+      url: ${AI_GRAFANA_URL:http://127.0.0.1:13000}
+      datasource-uid: ${AI_GRAFANA_DATASOURCE_UID:loki}
+      username: ${AI_GRAFANA_USERNAME:}
+      password: ${AI_GRAFANA_PASSWORD:}
+      selector: ${AI_GRAFANA_LOG_SELECTOR:{job="ai-agent-scaffold"}}
+      timeout: ${AI_GRAFANA_QUERY_TIMEOUT:15s}
+      max-response-bytes: ${AI_GRAFANA_MAX_RESPONSE_BYTES:1048576}
   rag:
     enabled: ${AI_RAG_ENABLED:true}
     qdrant:

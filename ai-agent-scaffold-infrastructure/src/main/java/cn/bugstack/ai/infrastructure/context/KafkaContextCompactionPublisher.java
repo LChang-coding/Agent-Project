@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Kafka 上下文压缩命令发布器。
  * <p>消息只负责唤醒消费者；压缩任务表才是状态与幂等事实源。</p>
@@ -19,10 +21,12 @@ public class KafkaContextCompactionPublisher implements ContextCompactionPublish
     private final KafkaTemplate<String, String> kafkaTemplate;
     /** 将压缩命令编码为 Kafka JSON 负载。 */
     private final ObjectMapper objectMapper;
-    /** 关闭时保留数据库任务，由扫描补偿链路接管。 */
+    /** 功能关闭时只保留数据库任务；开启后发送结果必须能被调用方感知。 */
     private final boolean enabled;
     /** 版本化主题承载可演进的压缩命令协议。 */
     private final String topic;
+    /** 等待 Kafka 确认的最长时间，超时后由数据库扫描再次通知。 */
+    private final long sendTimeoutMillis;
 
     /**
      * 创建 Kafka 发布器；参数是 Kafka 模板、JSON 工具和功能开关；返回发布器实例。
@@ -30,11 +34,13 @@ public class KafkaContextCompactionPublisher implements ContextCompactionPublish
     public KafkaContextCompactionPublisher(KafkaTemplate<String, String> kafkaTemplate,
                                            ObjectMapper objectMapper,
                                            @Value("${ai.context.kafka.enabled:false}") boolean enabled,
-                                           @Value("${ai.context.kafka.topic:context.compaction.request.v1}") String topic) {
+                                           @Value("${ai.context.kafka.topic:context.compaction.request.v1}") String topic,
+                                           @Value("${ai.context.kafka.send-timeout-ms:3000}") long sendTimeoutMillis) {
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.topic = topic;
+        this.sendTimeoutMillis = Math.max(100L, sendTimeoutMillis);
     }
 
     /**
@@ -48,10 +54,16 @@ public class KafkaContextCompactionPublisher implements ContextCompactionPublish
         try {
             // 同租户同会话使用稳定分区键，避免同会话压缩命令乱序。
             String key = String.join(":", blank(command.tenantId()), blank(command.sessionId()));
-            kafkaTemplate.send(topic, key, objectMapper.writeValueAsString(command));
+            kafkaTemplate.send(topic, key, objectMapper.writeValueAsString(command))
+                    .get(sendTimeoutMillis, TimeUnit.MILLISECONDS);
         } catch (JsonProcessingException e) {
             // 序列化失败表示命令无法投递，必须显式失败而非制造假成功。
             throw new IllegalStateException("上下文压缩命令序列化失败", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("上下文压缩命令发送被中断", e);
+        } catch (Exception e) {
+            throw new IllegalStateException("上下文压缩命令未得到 Kafka 确认", e);
         }
     }
 

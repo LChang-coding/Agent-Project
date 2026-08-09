@@ -233,36 +233,50 @@ public class DoclingDocumentParserAdapter implements RagDocumentParserPort {
                 .build();
     }
 
-    /** 仅对网络错误和 5xx 做一次重试，保留尝试次数和墙钟耗时。 */
+    /** 对网络错误和 5xx 再请求一次；完整请求超时、4xx 和响应格式错误不重试。 */
     private TransportResponse sendWithOneRetry(HttpRequest request)
             throws IOException, InterruptedException {
         long started = System.nanoTime();
+        final HttpResponse<InputStream> firstResponse;
         try {
-            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            long wallMs = elapsedMillis(started);
-            log.info("event=rag_docling_http attempt=1 outcome=response status={} wallMs={}",
-                    response.statusCode(), wallMs);
-            return new TransportResponse(response, 1, wallMs);
+            firstResponse = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (firstResponse.statusCode() < 500 || firstResponse.statusCode() > 599) {
+                long wallMs = elapsedMillis(started);
+                log.info("event=rag_docling_http attempt=1 outcome=response status={} wallMs={}",
+                        firstResponse.statusCode(), wallMs);
+                return new TransportResponse(firstResponse, 1, wallMs);
+            }
         } catch (HttpTimeoutException timeout) {
             log.warn("event=rag_docling_http attempt=1 outcome=timeout wallMs={}", elapsedMillis(started));
             throw timeout;
         } catch (IOException firstFailure) {
             log.warn("event=rag_docling_http attempt=1 outcome=io_failure errorType={} wallMs={}",
                     firstFailure.getClass().getSimpleName(), elapsedMillis(started));
-            try {
-                HttpResponse<InputStream> response = httpClient.send(request,
-                        HttpResponse.BodyHandlers.ofInputStream());
-                long wallMs = elapsedMillis(started);
-                log.info("event=rag_docling_http attempt=2 outcome=response status={} wallMs={}",
-                        response.statusCode(), wallMs);
-                return new TransportResponse(response, 2, wallMs);
-            } catch (IOException retryFailure) {
-                log.warn("event=rag_docling_http attempt=2 outcome={} errorType={} wallMs={}",
-                        retryFailure instanceof HttpTimeoutException ? "timeout" : "io_failure",
-                        retryFailure.getClass().getSimpleName(), elapsedMillis(started));
-                retryFailure.addSuppressed(firstFailure);
-                throw retryFailure;
-            }
+            return sendSecondAttempt(request, started, firstFailure);
+        }
+
+        // 第一次收到服务器错误时先关闭响应体，再重新发送同一个可重复读取的文件请求。
+        firstResponse.body().close();
+        log.warn("event=rag_docling_http attempt=1 outcome=server_error status={} wallMs={}",
+                firstResponse.statusCode(), elapsedMillis(started));
+        return sendSecondAttempt(request, started, null);
+    }
+
+    /** 执行唯一一次补充请求；第二次无论怎样失败都直接返回，不会再发第三次。 */
+    private TransportResponse sendSecondAttempt(HttpRequest request, long started, IOException firstFailure)
+            throws IOException, InterruptedException {
+        try {
+            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            long wallMs = elapsedMillis(started);
+            log.info("event=rag_docling_http attempt=2 outcome=response status={} wallMs={}",
+                    response.statusCode(), wallMs);
+            return new TransportResponse(response, 2, wallMs);
+        } catch (IOException retryFailure) {
+            log.warn("event=rag_docling_http attempt=2 outcome={} errorType={} wallMs={}",
+                    retryFailure instanceof HttpTimeoutException ? "timeout" : "io_failure",
+                    retryFailure.getClass().getSimpleName(), elapsedMillis(started));
+            if (firstFailure != null) retryFailure.addSuppressed(firstFailure);
+            throw retryFailure;
         }
     }
 

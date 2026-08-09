@@ -203,6 +203,7 @@ public class RagRetrievalService {
     private RagRetrievalResult retrieveInternal(RagRetrievalRequest request, String retrievalId, String query,
                                                 long started, AuditState audit) {
         Aggregate aggregate = new Aggregate(request.diagnosticsEnabled());
+        // 第一阶段：只保留本次运行保存的绑定，并逐项核对知识库、策略版本和访问范围。
         long configurationStarted = System.nanoTime();
         List<RagAgentBindingEntity> targetBindings = repository.listBindings(request.tenantId(), request.targetType(),
                 request.targetId());
@@ -231,6 +232,7 @@ public class RagRetrievalService {
             return emptyResult(retrievalId, started, aggregate);
         }
 
+        // 配置打开了问题改写，但项目尚未接入独立改写器时继续使用原问题，并明确记录这次降级。
         long rewriteStarted = System.nanoTime();
         long rewriteRequested = resolved.stream().filter(value -> value.profile().queryRewriteEnabled()).count();
         resolved.stream().filter(value -> value.profile().queryRewriteEnabled())
@@ -243,6 +245,7 @@ public class RagRetrievalService {
                 resolved.size(), 0);
         List<ResolvedBinding> active = new ArrayList<>(resolved);
         Timed<List<Float>> dense = Timed.empty(List.of());
+        // 第二阶段：只为实际需要 Dense 的绑定生成查询向量；失败时不能静默返回不完整结果。
         if (active.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.SPARSE)) {
             long denseStarted = System.nanoTime();
             try {
@@ -251,6 +254,7 @@ public class RagRetrievalService {
                 logStage(request, retrievalId, "dense_embedding", "Dense查询向量生成完成",
                         "completed", dense.elapsedMs(), 1, dense.value().size());
             } catch (RuntimeException exception) {
+                // 必须使用 Dense 的知识库失败会结束检索；可选知识库则被移除，让其他绑定继续工作。
                 failIfRequired(active, RagRetrievalMode.SPARSE, exception);
                 aggregate.degradationReasons.add("dense_unavailable");
                 active.removeIf(value -> value.profile().mode() != RagRetrievalMode.SPARSE);
@@ -262,6 +266,7 @@ public class RagRetrievalService {
                     "skipped", 0L, 0, 0);
         }
         Timed<SparseEncoderPort.SparseVector> sparse = Timed.empty(null);
+        // Sparse 与 Dense 使用相同的必需/可选规则，避免一个可选外部能力拖垮全部知识库。
         if (active.stream().anyMatch(value -> value.profile().mode() != RagRetrievalMode.DENSE)) {
             long sparseStarted = System.nanoTime();
             try {
@@ -291,11 +296,13 @@ public class RagRetrievalService {
 
         List<RankedChunk> ranked = new ArrayList<>();
         audit.executedBindingCount = active.size();
+        // 第三阶段：每个知识库按自己的 Dense、Sparse、融合和重排配置召回候选。
         for (ResolvedBinding value : active) {
             try {
                 ranked.addAll(retrieveBinding(request, retrievalId, query, value,
                         dense.value(), sparse.value(), aggregate));
             } catch (RuntimeException exception) {
+                // 越权或必需知识库失败必须立即停止；普通可选库失败只记录原因并继续查其他库。
                 if (value.binding().required() || isScopeViolation(exception)) {
                     throw exception;
                 }
@@ -306,6 +313,7 @@ public class RagRetrievalService {
             }
         }
 
+        // 第四阶段：同一小块可能被多个知识库绑定召回，只保留排序更好的那一份。
         long mergeStarted = System.nanoTime();
         List<RankedChunk> merged = ranked.stream()
                 .collect(Collectors.toMap(value -> value.chunk().chunkId(), value -> value,
@@ -314,6 +322,7 @@ public class RagRetrievalService {
         audit.mergedCandidateCount = merged.size();
         logStage(request, retrievalId, "cross_binding_merge", "跨知识库候选去重与合并完成",
                 "completed", elapsedMs(mergeStarted), ranked.size(), merged.size());
+        // 最后补充父块和相邻块，再按总 Token 上限取舍；超出预算的内容不会交给 Agent。
         long assemblyStarted = System.nanoTime();
         long hydrationBeforeAssembly = aggregate.hydrationMs;
         List<RagRetrievalResult.Citation> citations = assembleCitations(

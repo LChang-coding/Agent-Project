@@ -130,6 +130,42 @@ public class ConversationMemoryServiceTest {
         Assert.assertEquals(Integer.valueOf(1), result.getMemoryVersion());
     }
 
+    @Test
+    public void shouldFallbackToDatabaseWhenRecentCacheLostOlderMessages() {
+        Fixture fixture = new Fixture();
+        fixture.properties.setRecentWindowMaxMessages(3);
+        for (int sequence = 1; sequence <= 5; sequence++) {
+            fixture.history.messages.add(message(sequence, sequence % 2 == 0 ? "assistant" : "user",
+                    "历史消息" + sequence, 2));
+        }
+        fixture.cache.warmRecentMessages("tenant_1", "user_1", "session_1", fixture.history.messages,
+                3, Duration.ofMinutes(1));
+
+        ContextAssemblyResult result = fixture.service.assemble(ContextAssembleRequest.builder()
+                .tenantId("tenant_1").userId("user_1").sessionId("session_1")
+                .visibleThroughSequence(5).build());
+
+        Assert.assertEquals("不完整的 Redis 窗口必须回查 MySQL", 1, fixture.history.queryCount);
+        Assert.assertTrue(result.getInstruction().contains("历史消息1"));
+        Assert.assertTrue(result.getInstruction().contains("历史消息5"));
+    }
+
+    @Test
+    public void shouldReportActiveMemorySnapshotCacheHit() {
+        Fixture fixture = new Fixture();
+        fixture.cache.cachedSnapshot = ConversationMemorySnapshotEntity.builder()
+                .tenantId("tenant_1").userId("user_1").sessionId("session_1")
+                .memoryVersion(2).coveredToSequence(3).content("{\"conversationSummary\":\"缓存摘要\"}")
+                .estimatedTokenCount(4).status("active").build();
+
+        ContextAssemblyResult result = fixture.service.assemble(ContextAssembleRequest.builder()
+                .tenantId("tenant_1").userId("user_1").sessionId("session_1")
+                .visibleThroughSequence(3).build());
+
+        Assert.assertTrue(result.getCacheHit());
+        Assert.assertEquals(Integer.valueOf(2), result.getMemoryVersion());
+    }
+
     /**
      * 校验上下文预览是只读操作；无参数；验证预览直接读取数据库且不改写短期缓存。
      */
@@ -502,6 +538,11 @@ public class ConversationMemoryServiceTest {
         }
 
         @Override
+        public List<ContextCompactionTaskEntity> queryRecoverable(int limit, int maxAttempts) {
+            return task == null ? List.of() : List.of(task);
+        }
+
+        @Override
         public ContextCompactionTaskEntity queryLatest(String tenantId, String userId, String sessionId) {
             return task;
         }
@@ -538,9 +579,11 @@ public class ConversationMemoryServiceTest {
 
     private static class FakeHistoryRepository implements IContextHistoryRepository {
         private final List<ChatMessageEntity> messages = new ArrayList<>();
+        private int queryCount;
 
         @Override
         public List<ChatMessageEntity> queryMessages(String tenantId, String userId, String sessionId, Integer fromSequenceExclusive, Integer toSequenceInclusive) {
+            queryCount++;
             return messages.stream()
                     .filter(message -> message.getSequenceNo() > fromSequenceExclusive && message.getSequenceNo() <= toSequenceInclusive)
                     .toList();
@@ -557,14 +600,16 @@ public class ConversationMemoryServiceTest {
     private static class FakeCacheRepository implements IContextCacheRepository {
         private final List<ChatMessageEntity> recentMessages = new ArrayList<>();
         private boolean recentWindowAvailable;
+        private ConversationMemorySnapshotEntity cachedSnapshot;
 
         @Override
         public ConversationMemorySnapshotEntity queryActiveSnapshot(String tenantId, String userId, String sessionId) {
-            return null;
+            return cachedSnapshot;
         }
 
         @Override
         public void cacheActiveSnapshot(ConversationMemorySnapshotEntity snapshot, Duration ttl) {
+            cachedSnapshot = snapshot;
         }
 
         @Override
@@ -572,6 +617,8 @@ public class ConversationMemoryServiceTest {
             recentWindowAvailable = true;
             recentMessages.removeIf(item -> item.getSequenceNo().equals(message.getSequenceNo()));
             recentMessages.add(message);
+            recentMessages.sort(java.util.Comparator.comparing(ChatMessageEntity::getSequenceNo));
+            while (maxMessages > 0 && recentMessages.size() > maxMessages) recentMessages.remove(0);
         }
 
         @Override
@@ -580,9 +627,15 @@ public class ConversationMemoryServiceTest {
             if (!recentWindowAvailable) {
                 return null;
             }
-            return recentMessages.stream()
+            List<ChatMessageEntity> result = recentMessages.stream()
                     .filter(message -> message.getSequenceNo() > fromSequenceExclusive && message.getSequenceNo() <= toSequenceInclusive)
                     .toList();
+            if (result.isEmpty()) return null;
+            int expected = fromSequenceExclusive + 1;
+            for (ChatMessageEntity message : result) {
+                if (message.getSequenceNo() != expected++) return null;
+            }
+            return expected - 1 == toSequenceInclusive ? result : null;
         }
 
         @Override
@@ -600,6 +653,9 @@ public class ConversationMemoryServiceTest {
 
         @Override
         public void evictSession(String tenantId, String userId, String sessionId) {
+            cachedSnapshot = null;
+            recentMessages.clear();
+            recentWindowAvailable = false;
         }
     }
 

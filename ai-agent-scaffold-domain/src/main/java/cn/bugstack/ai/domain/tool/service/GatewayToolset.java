@@ -83,38 +83,23 @@ public class GatewayToolset implements BaseToolset {
     }
 
     /**
-     * 回答 ADK 的提问：这一轮模型可以调用哪些工具？
+     * 为本轮模型请求生成实际可用的工具清单。
      *
-     * <p>各层职责：
-     * 第一层：从只读 state 里取出可信身份（租户、用户、角色）。租户只能来自编排层写入的 state，
-     *         用户可以退回 ADK 自己的认证用户，因为那也是框架侧的可信来源。
-     * 第二层：再从 state 里凑一份「运行回退上下文」。它的作用是：模型真正发起调用时，
-     *         如果 ADK 给的工具上下文缺了某些字段，就用这份回退值补上，避免审计里出现大片空值。
-   * 第三层：现查一次可用工具目录，让发布和停用能立刻生效。
-     * 第四层：把每个目录项包装成一个 ADK 函数工具，包装时会生成给模型看的函数名、描述和入参 schema。</p>
+     * <p>身份、运行编号和节点范围只从服务端写入的 ADK 状态读取。方法每轮重新查询已发布工具，
+     * 再按当前节点过滤 MCP 与 Skill、加入符合条件的平台工具，最后检查函数名是否冲突。</p>
      *
-     * <p>数据流：
-     * ADK 只读上下文
-   * → 取出可信身份（租户/用户/角色）
-     * → 拼出运行回退上下文（会话、工作流、运行、上下文版本、链路标识）
-     * → 查询已授权的工具目录
-     * → 逐项包装成 ADK 工具
-     * → 以数据流形式交还框架</p>
- *
-     * <p>返回值直接决定模型这一轮的能力边界：多返回一个工具，模型就多一种触发外部动作的可能；
-     * 少返回一个，模型就会明确表示自己做不到。</p>
-     *
-     * <p>只读，不写库、不改状态。身份不完整时解析器会抛异常，这一轮的工具装配随之失败。</p>
-   */
+     * @param readonlyContext ADK 提供的只读运行状态
+     * @return 当前模型请求可以看到的函数工具流
+     */
     @Override
     public Flowable<BaseTool> getTools(ReadonlyContext readonlyContext) {
-   // tenantId 必须来自 ChatService state；userId 可回退 ADK 认证用户。
+        // tenantId 必须来自 ChatService 写入的状态；userId 可使用 ADK 已认证的用户。
         ToolUserContextEntity context = ToolUserContextEntity.builder()
                 .tenantId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.TENANT_ID)))
                 .userId(defaultString(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.USER_ID)), readonlyContext.userId()))
                 .roleCode(stringValue(readonlyContext.state().get("roleCode")))
                 .build();
- // 第二层：凑一份运行回退上下文。模型真正发起调用时，ADK 给的上下文可能缺字段，
+        // 组装运行回退上下文。模型真正调用时若 ADK 上下文缺字段，会用这些可信值补齐。
         // 缺的部分就用这份值补，保证审计里的会话、运行、链路标识不会大面积为空。
         ToolInvokeContextEntity fallbackContext = ToolInvokeContextEntity.builder()
                 .tenantId(context.getTenantId())
@@ -128,6 +113,7 @@ public class GatewayToolset implements BaseToolset {
                 .ragInvocationMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_INVOCATION_MODE)))
                 .ragToolEnabled(booleanValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TOOL_ENABLED)))
                 .workflowMcpIds(stringList(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_MCP_IDS)))
+                .workflowSkillIds(stringList(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_SKILL_IDS)))
                 .ragMode(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_MODE)))
                 .ragEvidenceInvocationId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_EVIDENCE_INVOCATION_ID)))
                 .ragTargetType(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.RAG_TARGET_TYPE)))
@@ -145,80 +131,56 @@ public class GatewayToolset implements BaseToolset {
                 .build();
         // 每轮重新查询，发布、停用和权限变化无需重装配 Agent。
         List<ToolCatalogEntity> tools = new ArrayList<>(toolResolver.resolve(context));
+        // 工作流节点只能看到画布为该节点配置的 MCP，不能继承用户的全部 MCP 权限。
         if (fallbackContext.getWorkflowKind() != null && fallbackContext.getWorkflowMcpIds() != null) {
             Set<String> allowedMcpIds = new HashSet<>(fallbackContext.getWorkflowMcpIds());
             tools.removeIf(tool -> ToolType.MCP.equals(tool.getToolType()) && !allowedMcpIds.contains(tool.getToolId()));
         }
+        // Skill 使用与 MCP 相同的节点范围，工具发现和执行前授权都会再次核对。
+        if (fallbackContext.getWorkflowKind() != null && fallbackContext.getWorkflowSkillIds() != null) {
+            Set<String> allowedSkillIds = new HashSet<>(fallbackContext.getWorkflowSkillIds());
+            tools.removeIf(tool -> ToolType.SKILL.equals(tool.getToolType()) && !allowedSkillIds.contains(tool.getToolId()));
+        }
+        // RAG、路由和 Trace 日志等平台工具根据本次可信运行状态动态加入。
         tools.addAll(platformToolResolver.resolve(fallbackContext));
+        // 补选路径时不再开放业务工具，避免 Agent 在修正路由期间产生新的外部副作用。
         if (Boolean.TRUE.equals(fallbackContext.getRouteRepairOnly())) {
             tools.removeIf(tool -> !ToolType.PLATFORM.equals(tool.getToolType())
                     || !"select_workflow_route".equals(tool.getFunctionName()));
         }
+        // 两个工具如果最终函数名相同，模型无法可靠区分，必须在请求模型前明确失败。
         assertUniqueFunctionNames(tools);
-      // 第四层：逐项包装成 ADK 函数工具。包装动作会冻结函数名、描述和入参 schema，
-    // 并把执行网关与回退上下文一起交给每个包装器，模型点哪个就由哪个去走门禁。
+        // 每个目录项转换为 ADK 函数工具，并绑定统一执行网关与可信回退上下文。
         return Flowable.fromIterable(tools).map(tool -> new GatewayAdkTool(tool, toolGateway, fallbackContext));
     }
 
-    /**
-     * 框架回收工具集时调用，这里无需释放任何东西。
-     *
-     * <p>原因是包装器不持有长连接：MCP 客户端由每一次调用现建现关，Skill 包也是现读现取。
-     * 这种「不复用连接」的设计换来的好处正是这里——工具集本身没有生命周期负担，
-     * 也不会出现「上一次调用的连接状态串到下一次」的问题。</p>
-     */
+    /** 工具集本身不持有连接；MCP 客户端由每次调用创建并关闭。 */
     @Override
     public void close() {
-  // 当前工具集不持有长连接，暂不需要释放资源。
+        // 无需释放资源。
     }
 
-    /**
-* 把 state 里取出的任意值安全地转成字符串，null 依然返回 null。
-     *
-     * <p>state 是一个值类型完全不受控的 Map，直接强制转换会抛类型异常。
-     * 保留 null 而不是转成 "null" 字面量，是为了让下面的默认值逻辑能正确识别「这个键根本没有」。</p>
-   */
+    /** 把运行状态中的值转为字符串，同时保留“未提供”的 null。 */
     private String stringValue(Object value) {
-        // 保留 null 不转成字面量，这样两级回退才能识别出「state 里没有这个键」。
         return value == null ? null : String.valueOf(value);
     }
 
-    /**
-   * 取第一个有内容的字符串，用于「state 里没有就退回框架侧取值」这种两级回退。
-     *
-     * <p>空白串也算没有：state 里残留一个空字符串很常见，若把它当成有效身份传下去，
-     * 会造成租户隔离失效或审计归属错乱，而这类问题在日志里很难看出来。</p>
-     */
+    /** 运行状态未提供有效值时，退回框架给出的可信值。 */
     private String defaultString(String value, String defaultValue) {
-        // 有值就用原值，空引用和纯空白都退回框架侧取值。
         return value == null || value.isBlank() ? defaultValue : value;
     }
 
-    /**
-     * 把 state 里的值转成长整数，转不出来就返回 null。
-     *
-     * <p>专门用于上下文版本号。它可能是数字，也可能因为序列化环节变成了字符串，两种都要能读。</p>
-     *
-   * <p>转不出来时返回 null 而不是 0：0 是一个看起来合法的版本号，会让「上下文是否过期」的判断
-     * 得出错误结论；返回 null 表示「不知道」，下游会跳过版本校验，这比误判安全。</p>
-     */
+    /** 上下文版本可能是数字或字符串；无法解析时返回 null，避免误用 0。 */
     private Long longValue(Object value) {
-        // 键不存在时直接返回空，表示这一轮没有版本信息。
         if (value == null) {
-            // 键不存在时返回空，表示这一轮没有版本信息。
             return null;
         }
-        // 已经是数字类型时直接取长整数值，避免多余的字符串转换。
         if (value instanceof Number number) {
-            // 已经是数字时直接取值，省掉一次字符串转换。
             return number.longValue();
         }
-    // 剩下的情况按字符串解析，解析失败要接住。
         try {
-      // 尝试把文本解析成长整数。
             return Long.parseLong(String.valueOf(value));
         } catch (NumberFormatException e) {
-       // 解析不了就返回空，表示版本未知；绝不用 0 兜底，那会让版本校验得出错误结论。
             return null;
         }
     }

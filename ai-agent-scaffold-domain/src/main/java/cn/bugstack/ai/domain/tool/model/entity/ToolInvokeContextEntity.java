@@ -48,6 +48,8 @@ public class ToolInvokeContextEntity {
 
     /** 当前工作流节点允许使用的 MCP 工具 ID；null 表示非工作流兼容上下文。 */
     private List<String> workflowMcpIds;
+    /** 当前工作流节点允许使用的 Skill ID；null 表示非工作流兼容上下文。 */
+    private List<String> workflowSkillIds;
     /** 本轮冻结的 RAG 选择模式，例如 OFF、AUTO 或 MANUAL。 */
     private String ragMode;
 

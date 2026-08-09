@@ -5,10 +5,34 @@ description: Query, reconstruct, and diagnose this project's remote Grafana/Loki
 
 # Grafana Log Inspector
 
-Use the bundled CLI. Keep the shell working directory at the target project so
-the command discovers that project's local `codex.md`.
+Choose the execution path that is actually available:
 
-## Prepare the CLI
+- Inside the Agent platform, call the visible `query_trace_logs` platform tool.
+  It can read only the current run's Trace ID and accepts only `traceId`,
+  `lookbackMinutes`, and `limit`. Start with 30 minutes and at most 200 lines;
+  increase the window only when the returned chain is incomplete.
+- In a developer terminal, use the bundled CLI below. Keep the shell working
+  directory at the target project so the command discovers that project's
+  local `codex.md`.
+
+Never ask the Agent platform to execute the bundled binary or an arbitrary
+shell command. The package scripts are for a developer terminal; Agent-side
+execution must go through `query_trace_logs`, whose Grafana query and current
+Trace ID are controlled by the server.
+
+## Analyze inside the Agent platform
+
+Call the platform tool with the current run's Trace ID:
+
+```json
+{"traceId":"<current-trace-id>","lookbackMinutes":30,"limit":200}
+```
+
+Read the returned entries in timestamp order. Identify the first failure,
+timeout, cancellation, fallback, or missing completion event and explain the
+supporting log lines. Missing logs are not proof that a stage never ran.
+
+## Prepare the developer CLI
 
 Resolve the installed Skill and perform the offline package check:
 

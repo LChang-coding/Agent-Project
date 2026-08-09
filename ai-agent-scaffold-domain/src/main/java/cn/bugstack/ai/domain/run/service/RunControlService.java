@@ -36,17 +36,25 @@ import java.util.List;
 @Service
 public class RunControlService {
 
+    /** 持久化运行状态，并在需要时提供行锁读取。 */
     private final IChatRunRepository runRepository;
+    /** 校验会话归属、保存消息和推进上下文版本。 */
     private final SessionDomain sessionDomain;
+    /** 保存当前进程中可主动中断的运行句柄。 */
     private final ActiveRunRegistry activeRunRegistry;
+    /** 在消息变化后使旧摘要和压缩任务失效。 */
     private final ContextInvalidationService contextInvalidationService;
+    /** 将最终模型 Token 用量归集到运行记录。 */
     private final ModelUsageService modelUsageService;
+    /** 校验并绑定本轮消息使用的附件。 */
     private final AssetService assetService;
+    /** 缓存短时间内重复读取的无副作用运行状态。 */
     private final RunStateSnapshotCache runStateSnapshots;
+    /** 在创建运行时取得并保存会话当前的 RAG 策略。 */
     private final SessionRagSettingService sessionRagSettingService;
 
     /**
-     * 创建运行控制服务；参数是运行仓储、会话服务和本机注册表；返回服务实例。
+     * 创建运行控制服务。
      */
     @Autowired
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
@@ -90,7 +98,7 @@ public class RunControlService {
     }
 
     /**
-     * 创建运行；参数是可信身份、来源和可选运行ID；返回运行实体。
+     * 创建运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity start(String tenantId, String userId, String sessionId, String sourceType,
@@ -127,7 +135,7 @@ public class RunControlService {
     }
 
     /**
-     * 创建或恢复客户端已知运行；参数是可信身份、来源和运行ID；返回可执行运行。
+     * 创建或恢复客户端已知运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity startOrResume(String tenantId, String userId, String sessionId, String sourceType,
@@ -144,7 +152,7 @@ public class RunControlService {
     }
 
     /**
-     * 启动已由引导预建的后继运行；参数是可信身份、会话和来源；返回运行实体。
+     * 启动已由引导预建的后继运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity resumePrepared(String tenantId, String userId, String sessionId, String sourceType,
@@ -169,7 +177,7 @@ public class RunControlService {
     }
 
     /**
-     * 引导当前运行；参数是可信身份、运行和新指令；返回待启动后继运行。
+     * 引导当前运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity steer(String tenantId, String userId, String runId, String instruction) {
@@ -262,7 +270,7 @@ public class RunControlService {
     }
 
     /**
-     * 绑定用户消息；参数是运行和消息ID；返回刷新后的运行。
+     * 绑定用户消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity bindUserMessage(ChatRunEntity run, String messageId) {
@@ -275,7 +283,7 @@ public class RunControlService {
     }
 
     /**
-     * 在运行锁内写入并绑定用户消息；参数是运行身份、内容和链路ID；返回运行与消息。
+     * 在运行锁内写入并绑定用户消息。
      */
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
@@ -284,7 +292,7 @@ public class RunControlService {
     }
 
     /**
-     * 在运行锁内原子写入用户消息、绑定运行与附件；参数是运行身份、内容、链路和附件；返回运行与消息。
+     * 在运行锁内原子写入用户消息、绑定运行与附件。
      */
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendUserMessage(String tenantId, String userId, String runId,
@@ -305,7 +313,7 @@ public class RunControlService {
     }
 
     /**
-     * 在运行锁内保存助手消息并完成运行；参数是运行、内容和链路ID；返回已保存消息，已取消时返回空。
+     * 在运行锁内保存助手消息并完成运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
@@ -337,7 +345,7 @@ public class RunControlService {
     }
 
     /**
-     * 在运行锁内保存错误消息并标记失败；参数是运行、错误内容和原因；返回已保存消息。
+     * 在运行锁内保存错误消息并标记失败。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatMessageEntity failWithAssistantMessage(String tenantId, String userId, String runId,
@@ -362,7 +370,7 @@ public class RunControlService {
     }
 
     /**
-     * 取消运行；参数是可信身份、运行ID和原因；返回最终运行状态。
+     * 取消运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity cancel(String tenantId, String userId, String runId, String reason) {
@@ -415,7 +423,7 @@ public class RunControlService {
     }
 
     /**
-     * 完成运行；参数是可信身份和运行ID；返回最终运行状态。
+     * 完成运行。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity complete(String tenantId, String userId, String runId) {
@@ -434,7 +442,7 @@ public class RunControlService {
     }
 
     /**
-     * 标记运行失败；参数是可信身份、运行ID和原因；返回最终运行状态。
+     * 标记运行失败。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity fail(String tenantId, String userId, String runId, String reason) {
@@ -457,7 +465,7 @@ public class RunControlService {
     }
 
     /**
-     * 校验运行可继续；参数是可信身份、运行ID和预期上下文版本；返回当前运行。
+     * 校验运行可继续。
      */
     public ChatRunEntity requireExecutable(String tenantId, String userId, String runId, Long expectedRevision) {
         RunStateSnapshotCache.Snapshot snapshot = readSnapshot(tenantId, userId, runId);
@@ -475,7 +483,7 @@ public class RunControlService {
     }
 
     /**
-     * 在运行行锁下授权外部工具开始；参数是可信身份、运行和预期上下文版本；返回当前运行。
+     * 在运行行锁下授权外部工具开始。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity authorizeToolDispatch(String tenantId, String userId, String runId, Long expectedRevision) {
@@ -495,7 +503,7 @@ public class RunControlService {
     }
 
     /**
-     * 刷新运行上下文版本；参数是可信身份和运行ID；返回刷新后的运行。
+     * 刷新运行上下文版本。
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity refreshContextRevision(String tenantId, String userId, String runId) {
@@ -510,7 +518,7 @@ public class RunControlService {
     }
 
     /**
-     * 查询运行；参数是可信身份和运行ID；返回运行实体。
+     * 查询运行。
      */
     public ChatRunEntity require(String tenantId, String userId, String runId) {
         ChatRunEntity run = runRepository.query(tenantId, userId, runId);
@@ -521,14 +529,14 @@ public class RunControlService {
     }
 
     /**
-     * 查询会话可执行运行；参数是可信身份和会话；返回活动运行列表。
+     * 查询会话可执行运行。
      */
     public List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId) {
         return runRepository.queryExecutableBySession(tenantId, userId, sessionId);
     }
 
     /**
-     * 判断运行已取消；参数是可信身份和运行ID；返回是否取消。
+     * 判断运行已取消。
      */
     public boolean cancelled(String tenantId, String userId, String runId) {
         RunStatus status = readSnapshot(tenantId, userId, runId).status();
@@ -615,6 +623,7 @@ public class RunControlService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            /** 运行创建事务提交后再执行异步启动动作。 */
             public void afterCommit() {
                 runStateSnapshots.invalidate(tenantId, userId, runId);
             }
@@ -629,6 +638,7 @@ public class RunControlService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            /** 状态推进提交后再发布对应运行事件。 */
             public void afterCommit() {
                 activeRunRegistry.remove(runId);
             }
@@ -643,6 +653,7 @@ public class RunControlService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            /** 取消事务提交后再触发取消后的清理和通知。 */
             public void afterCommit() {
                 activeRunRegistry.interrupt(runId);
             }

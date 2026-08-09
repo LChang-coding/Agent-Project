@@ -96,6 +96,9 @@ public class WorkflowDagPlanEntity {
         /** 冻结后的节点 MCP 白名单；空列表表示不允许外部 MCP。 */
         private List<String> mcpIds;
 
+        /** 冻结后的节点 Skill 白名单；空列表表示当前节点不开放 Skill。 */
+        private List<String> skillIds;
+
         /**
          * 节点模型编码。
          */

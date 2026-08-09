@@ -161,9 +161,10 @@ public class ConversationMemoryService {
         }
 
         ContextBudget budget = properties.toBudget();
-        ConversationMemorySnapshotEntity snapshot = readOnly
-                ? memoryRepository.queryActive(request.getTenantId(), request.getUserId(), request.getSessionId())
-                : queryActiveSnapshot(request.getTenantId(), request.getUserId(), request.getSessionId());
+        SnapshotLookup snapshotLookup = readOnly
+                ? new SnapshotLookup(memoryRepository.queryActive(request.getTenantId(), request.getUserId(), request.getSessionId()), false)
+                : queryActiveSnapshotWithStatus(request.getTenantId(), request.getUserId(), request.getSessionId());
+        ConversationMemorySnapshotEntity snapshot = snapshotLookup.snapshot();
         int coveredToSequence = ConversationMemorySnapshotEntity.coveredSequenceOf(snapshot);
         // 只读取摘要覆盖点之后且本次调用可见的有效数据库消息。
         int visibleThrough = request.getVisibleThroughSequence() == null ? coveredToSequence : request.getVisibleThroughSequence();
@@ -235,7 +236,7 @@ public class ConversationMemoryService {
                 .estimatedTokenCount(estimatedTokens)
                 .memoryVersion(snapshot == null ? 0 : snapshot.getMemoryVersion())
                 .coveredToSequence(coveredToSequence)
-                .cacheHit(false)
+                .cacheHit(snapshotLookup.cacheHit())
                 .trimReason(totalBudgetTrimmed ? "total_context_budget"
                         : (recentWindowTrimmed ? "recent_window_budget" : null))
                 .summaryTokens(summaryTokens).historyTokens(historyTokens).upstreamTokens(upstreamTokens)
@@ -261,7 +262,7 @@ public class ConversationMemoryService {
     }
 
     /**
-     * 会话激活时重投未完成任务。
+     * 同一会话再次保存助手回答时，补发该会话未完成任务；全局定时扫描负责覆盖长期不活跃会话。
      */
     public void republishUnfinished(String tenantId, String userId, String sessionId) {
         if (!properties.isEnabled()) {
@@ -269,7 +270,7 @@ public class ConversationMemoryService {
         }
         List<ContextCompactionTaskEntity> tasks = taskRepository.queryUnfinished(tenantId, userId, sessionId);
         for (ContextCompactionTaskEntity task : tasks) {
-            publisher.publish(task.toCommand());
+            publishCompactionNotification(task);
         }
         if (!tasks.isEmpty()) {
             log.info("上下文压缩任务已重投 tenantId:{} userId:{} sessionId:{} count:{}",
@@ -319,10 +320,23 @@ public class ConversationMemoryService {
                 .build());
         if (task != null && (task.getStatus() == ContextCompactionTaskStatus.PENDING || task.getStatus() == ContextCompactionTaskStatus.RETRYING)) {
             // MySQL 账本先落地，Kafka 只负责通知；重复通知由任务状态与 claim 消解。
-            publisher.publish(task.toCommand());
+            publishCompactionNotification(task);
             log.info("上下文压缩任务已创建 tenantId:{} userId:{} sessionId:{} taskId:{} range:{}-{} uncoveredTokens:{}",
                     task.getTenantId(), task.getUserId(), task.getSessionId(), task.getTaskId(),
                     task.getFromSequence(), task.getToSequence(), uncoveredTokens);
+        }
+    }
+
+    /**
+     * 尝试通知 Kafka，但不让消息队列故障推翻已经保存成功的对话。
+     * 任务已经先写入 MySQL，发送失败后会由全局定时扫描再次找到。
+     */
+    private void publishCompactionNotification(ContextCompactionTaskEntity task) {
+        try {
+            publisher.publish(task.toCommand());
+        } catch (RuntimeException exception) {
+            log.warn("上下文整理任务通知失败，等待数据库扫描补发 taskId:{} sessionId:{}",
+                    task.getTaskId(), task.getSessionId(), exception);
         }
     }
 
@@ -577,15 +591,20 @@ public class ConversationMemoryService {
 
     /** 先读可重建缓存，未命中时回源数据库并回填。 */
     private ConversationMemorySnapshotEntity queryActiveSnapshot(String tenantId, String userId, String sessionId) {
+        return queryActiveSnapshotWithStatus(tenantId, userId, sessionId).snapshot();
+    }
+
+    /** 返回摘要和它是否直接来自 Redis，供上下文观测结果准确记录缓存命中。 */
+    private SnapshotLookup queryActiveSnapshotWithStatus(String tenantId, String userId, String sessionId) {
         ConversationMemorySnapshotEntity cached = cacheRepository.queryActiveSnapshot(tenantId, userId, sessionId);
         if (cached != null) {
-            return cached;
+            return new SnapshotLookup(cached, true);
         }
         ConversationMemorySnapshotEntity snapshot = memoryRepository.queryActive(tenantId, userId, sessionId);
         if (snapshot != null) {
             cacheRepository.cacheActiveSnapshot(snapshot, Duration.ofSeconds(properties.getCacheTtlSeconds()));
         }
-        return snapshot;
+        return new SnapshotLookup(snapshot, false);
     }
 
     /**
@@ -622,6 +641,10 @@ public class ConversationMemoryService {
         cacheRepository.warmRecentMessages(tenantId, userId, sessionId, messages, properties.getRecentWindowMaxMessages(),
                 Duration.ofSeconds(properties.getCacheTtlSeconds()));
         return messages;
+    }
+
+    /** 摘要读取结果与来源；只在一次上下文组装期间存在。 */
+    private record SnapshotLookup(ConversationMemorySnapshotEntity snapshot, boolean cacheHit) {
     }
 
     /** 从最新消息向前选择一个完整、连续的短期窗口。 */

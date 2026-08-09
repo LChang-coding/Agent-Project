@@ -83,6 +83,24 @@
         LIMIT 20
     </select>
 
+    <!-- Kafka 通知可能丢失，因此按任务账本定时找回待处理和已过期任务。 -->
+    <select id="queryRecoverable" resultMap="TaskMap">
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE status IN ('pending', 'retrying')
+          AND attempt_count &lt; #{maxAttempts}
+          AND deleted = 0
+        UNION ALL
+        SELECT <include refid="TaskColumns"/>
+        FROM context_compaction_task
+        WHERE status = 'processing'
+          AND lease_until &lt; CURRENT_TIMESTAMP(3)
+          AND attempt_count &lt; #{maxAttempts}
+          AND deleted = 0
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
     <select id="queryLatest" resultMap="TaskMap">
         SELECT <include refid="TaskColumns"/>
         FROM context_compaction_task

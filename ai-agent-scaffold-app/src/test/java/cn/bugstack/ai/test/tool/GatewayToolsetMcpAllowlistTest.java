@@ -27,7 +27,8 @@ public class GatewayToolsetMcpAllowlistTest {
                 ToolRuntimeContextKeys.TENANT_ID, "tenant",
                 ToolRuntimeContextKeys.USER_ID, "user",
                 ToolRuntimeContextKeys.WORKFLOW_KIND, "STATIC",
-                ToolRuntimeContextKeys.WORKFLOW_MCP_IDS, List.of()));
+                ToolRuntimeContextKeys.WORKFLOW_MCP_IDS, List.of(),
+                ToolRuntimeContextKeys.WORKFLOW_SKILL_IDS, List.of("skill-1")));
 
         assertFalse(names.contains("mcp_bing"));
         assertTrue(names.contains("skill_internal"));
@@ -39,10 +40,25 @@ public class GatewayToolsetMcpAllowlistTest {
                 ToolRuntimeContextKeys.TENANT_ID, "tenant",
                 ToolRuntimeContextKeys.USER_ID, "user",
                 ToolRuntimeContextKeys.WORKFLOW_KIND, "INTELLIGENT",
-                ToolRuntimeContextKeys.WORKFLOW_MCP_IDS, List.of("mcp_allowed")));
+                ToolRuntimeContextKeys.WORKFLOW_MCP_IDS, List.of("mcp_allowed"),
+                ToolRuntimeContextKeys.WORKFLOW_SKILL_IDS, List.of()));
 
         assertTrue(names.contains("mcp_allowed"));
         assertFalse(names.contains("mcp_bing"));
+    }
+
+    @Test
+    public void workflowNodeCanSeeOnlyWhitelistedSkill() {
+        List<String> names = namesFor(Map.of(
+                ToolRuntimeContextKeys.TENANT_ID, "tenant",
+                ToolRuntimeContextKeys.USER_ID, "user",
+                ToolRuntimeContextKeys.WORKFLOW_KIND, "INTELLIGENT",
+                ToolRuntimeContextKeys.WORKFLOW_MCP_IDS, List.of(),
+                ToolRuntimeContextKeys.WORKFLOW_SKILL_IDS, List.of("skill-1")));
+
+        assertTrue(names.contains("skill_internal"));
+        assertFalse(names.contains("skill_hidden"));
+        assertFalse(names.contains("mcp_allowed"));
     }
 
     private List<String> namesFor(Map<String, Object> state) {
@@ -50,7 +66,8 @@ public class GatewayToolsetMcpAllowlistTest {
         when(resolver.resolve(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(
                 ToolCatalogEntity.builder().toolType("mcp").toolId("mcp_bing").toolCode("bing").build(),
                 ToolCatalogEntity.builder().toolType("mcp").toolId("mcp_allowed").toolCode("allowed").build(),
-                ToolCatalogEntity.builder().toolType("skill").toolId("skill-1").toolCode("internal").build()));
+                ToolCatalogEntity.builder().toolType("skill").toolId("skill-1").toolCode("internal").build(),
+                ToolCatalogEntity.builder().toolType("skill").toolId("skill-2").toolCode("hidden").build()));
         ReadonlyContext context = mock(ReadonlyContext.class);
         when(context.state()).thenReturn(state);
         when(context.userId()).thenReturn("user");

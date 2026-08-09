@@ -12,6 +12,7 @@ public class WorkflowExecutorProperties {
 
     private Pool coordinator = Pool.coordinatorDefaults();
     private Pool node = Pool.nodeDefaults();
+    private NodeRetry nodeRetry = new NodeRetry();
 
     /**
      * 单个工作流执行器的线程和排队边界。
@@ -43,5 +44,14 @@ public class WorkflowExecutorProperties {
             value.allowCoreThreadTimeout = true;
             return value;
         }
+    }
+
+    /** Agent 节点发生暂时性错误时的有限重试配置。 */
+    @Data
+    public static class NodeRetry {
+        private int maxAttempts = 3;
+        private long initialBackoffMillis = 500L;
+        private long maxBackoffMillis = 4_000L;
+        private long cancellationPollMillis = 100L;
     }
 }

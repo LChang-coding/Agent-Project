@@ -97,7 +97,6 @@ public class RagKnowledgeBaseDeletionController {
       * @param taskId 删除任务ID
       * @return 当前阶段、文档进度和失败信息
       */
-     */
     @GetMapping("/knowledge-base-delete-tasks/{taskId}")
     public Response<RagKnowledgeBaseDeleteTaskResponseDTO> task(@PathVariable String taskId) {
         // 任务不存在或不属于当前用户都会抛业务异常，统一接住转成错误码。

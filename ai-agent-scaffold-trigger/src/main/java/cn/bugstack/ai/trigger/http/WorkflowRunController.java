@@ -35,7 +35,7 @@ public class WorkflowRunController {
 
     /** 负责创建普通 DAG 运行；运行受理后由后台线程继续推进。 */
     private final StaticWorkflowRuntimeService runtimeService;
-    /** 校验运行归属并按事件序号读取可重放的工作流事件。 */
+    /** 校验运行归属，并从指定事件序号之后继续读取遗漏的工作流事件。 */
     private final WorkflowEventStreamService eventStreamService;
 
     /**

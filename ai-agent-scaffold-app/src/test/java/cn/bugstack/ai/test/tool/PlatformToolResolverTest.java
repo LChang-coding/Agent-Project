@@ -62,4 +62,21 @@ public class PlatformToolResolverTest {
         Assert.assertTrue(tools.stream().anyMatch(tool ->
                 "select_workflow_route".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool).getFunctionName())));
     }
+
+    @Test
+    public void exposesTraceLogToolOnlyWhenEnabledAndCurrentTraceIsAvailable() {
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .traceId("trace-current")
+                .build();
+
+        List<?> tools = new PlatformToolResolver(false, false, true).resolve(context);
+
+        Assert.assertTrue(tools.stream().anyMatch(tool ->
+                "query_trace_logs".equals(((cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity) tool)
+                        .getFunctionName())));
+        Assert.assertTrue(new PlatformToolResolver(false, false, false).resolve(context).isEmpty());
+        context.setTraceId(null);
+        Assert.assertTrue(new PlatformToolResolver(false, false, true).resolve(context).isEmpty());
+    }
 }

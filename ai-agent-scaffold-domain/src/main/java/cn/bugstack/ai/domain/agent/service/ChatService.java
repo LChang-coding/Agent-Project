@@ -1259,7 +1259,7 @@ public class ChatService implements IChatService {
             List<CompletableFuture<NodeRunResult>> futures = currentLevel.stream()
                     .map(nodeId -> CompletableFuture.supplyAsync(() -> runDagNode(nodeMap.get(nodeId), incoming.getOrDefault(nodeId, Collections.emptyList()),
                             selfLoopNodeIds.contains(nodeId), outputs, provenance, tenantId, userId, sessionId, dagPlan.getWorkflowId(),
-                            userMessage, traceId, roleCode, historyCutoffSequence, run), workflowNodeExecutor))
+                            userMessage, traceId, roleCode, historyCutoffSequence, run, dagPlan), workflowNodeExecutor))
                     .collect(Collectors.toList());
             // 收集本层成功的结果。
             List<NodeRunResult> levelResults = new ArrayList<>(futures.size());
@@ -1353,7 +1353,8 @@ public class ChatService implements IChatService {
                                      String traceId,
                                      String roleCode,
                                      Integer historyCutoffSequence,
-                                     ChatRunEntity run) {
+                                     ChatRunEntity run,
+                                     WorkflowDagPlanEntity plan) {
         // 第一层：边指向了不存在的节点，属于计划本身的错误，直接拒绝执行。
         if (node == null) {
             // 抛参数非法异常，交由外层统一收尾。
@@ -1395,7 +1396,7 @@ public class ChatService implements IChatService {
                 NodeExecutionResult execution = runDagNodeOnce(node, tenantId, userId, sessionId, workflowId, prompt,
                         traceId, roleCode, historyCutoffSequence, String.join("\n\n", upstreamOutputs), run,
                         delta -> publishWorkflowEvent(run, "NODE_OUTPUT_DELTA", nodeExecutionId, node.getNodeId(),
-                                Map.of("delta", delta)), null, nodeExecutionId, false);
+                                Map.of("delta", delta)), plan, nodeExecutionId, false);
                 // 记下本轮输出，它既是节点结果也是下一轮的反馈输入。
                 previousOutput = execution.output();
                 // 把本轮真实注入的证据追加进累积链。
@@ -1518,6 +1519,8 @@ public class ChatService implements IChatService {
             }
             state.put(ToolRuntimeContextKeys.WORKFLOW_MCP_IDS,
                     node.getMcpIds() == null ? List.of() : List.copyOf(node.getMcpIds()));
+            state.put(ToolRuntimeContextKeys.WORKFLOW_SKILL_IDS,
+                    node.getSkillIds() == null ? List.of() : List.copyOf(node.getSkillIds()));
             state.put(ToolRuntimeContextKeys.ROUTE_DESCRIPTORS, platformRouteDescriptors(node));
             state.put(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY, routeRepairOnly);
         }

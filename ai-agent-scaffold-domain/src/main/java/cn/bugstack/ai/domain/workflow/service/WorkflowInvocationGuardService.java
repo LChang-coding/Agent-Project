@@ -82,9 +82,14 @@ public class WorkflowInvocationGuardService {
      * @return 带有运行级幂等键和跟踪标识的待登记调用
      */
     public WorkflowInvocationEntity modelInvocation(ChatRunEntity run, String nodeExecutionId) {
+        return modelInvocation(run, nodeExecutionId, 1);
+    }
+
+    /** 为节点的某次 Agent 尝试创建独立调用记录，便于区分首次调用和后续重试。 */
+    public WorkflowInvocationEntity modelInvocation(ChatRunEntity run, String nodeExecutionId, int attempt) {
         return WorkflowInvocationEntity.builder().tenantId(run.getTenantId()).runId(run.getRunId())
                 .invocationId("wfi_" + java.util.UUID.randomUUID())
-                .idempotencyKey(run.getRunId() + ":" + nodeExecutionId + ":MODEL:1")
+                .idempotencyKey(run.getRunId() + ":" + nodeExecutionId + ":MODEL:" + Math.max(1, attempt))
                 .nodeExecutionId(nodeExecutionId).invocationType("MODEL").replayClass("IDEMPOTENT")
                 .status("RUNNING").traceId(run.getTraceId()).startedAt(LocalDateTime.now()).build();
     }

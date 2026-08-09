@@ -25,6 +25,9 @@ public interface IContextCompactionTaskRepository {
      */
     List<ContextCompactionTaskEntity> queryUnfinished(String tenantId, String userId, String sessionId);
 
+    /** 查询全局可恢复任务，供定时扫描补回丢失的 Kafka 通知。 */
+    List<ContextCompactionTaskEntity> queryRecoverable(int limit, int maxAttempts);
+
     /**
      * 查询会话最近一次压缩任务。
      */

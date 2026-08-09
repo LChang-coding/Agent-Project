@@ -13,7 +13,7 @@ import java.util.List;
  * 根据可信运行上下文生成本次模型调用可见的平台工具。
  *
  * <p>RAG 工具受会话调用方式、RAG 开关、节点权限和绑定范围共同限制；路由工具只在使用 TOOL_V2
- * 协议的智能工作流非终点节点中可见，并只暴露当前节点允许的路由键。</p>
+ * 协议的智能工作流非终点节点中可见，并只暴露当前节点允许的路由键；日志工具只允许查看当前运行。</p>
  */
 @Service
 public class PlatformToolResolver {
@@ -24,17 +24,28 @@ public class PlatformToolResolver {
     /** 是否允许向符合条件的智能工作流节点暴露路由平台工具。 */
     private final boolean routeEnabled;
 
+    /** 是否允许 Agent 查询当前运行自己的 Trace 日志。 */
+    private final boolean traceLogEnabled;
+
     /**
      * 创建平台工具解析器。
      *
      * @param ragEnabled RAG 平台工具的全局开关
      * @param routeEnabled 智能路由平台工具的全局开关
+     * @param traceLogEnabled 当前运行日志工具的全局开关
      */
     public PlatformToolResolver(
             @Value("${ai.tools.platform.rag-enabled:true}") boolean ragEnabled,
-            @Value("${ai.tools.platform.route-enabled:true}") boolean routeEnabled) {
+            @Value("${ai.tools.platform.route-enabled:true}") boolean routeEnabled,
+            @Value("${ai.tools.platform.trace-log-enabled:false}") boolean traceLogEnabled) {
         this.ragEnabled = ragEnabled;
         this.routeEnabled = routeEnabled;
+        this.traceLogEnabled = traceLogEnabled;
+    }
+
+    /** 保留测试和历史装配入口；未显式配置时不开放日志查询工具。 */
+    public PlatformToolResolver(boolean ragEnabled, boolean routeEnabled) {
+        this(ragEnabled, routeEnabled, false);
     }
 
     /**
@@ -60,6 +71,14 @@ public class PlatformToolResolver {
                     .filter(value -> value != null && !value.isBlank()).distinct()
                     .map(value -> "\"" + escape(value) + "\"").reduce((a, b) -> a + "," + b).orElse("");
             result.add(platform("select_workflow_route", "只能选择一个当前节点已配置的路由键", "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"routeKey\",\"reason\"],\"properties\":{\"routeKey\":{\"type\":\"string\",\"enum\":[" + enumJson + "]},\"reason\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":500}}}"));
+        }
+        if (traceLogEnabled && context.getTraceId() != null && !context.getTraceId().isBlank()
+                && context.getRunId() != null && !context.getRunId().isBlank()) {
+            result.add(platform("query_trace_logs", "查询并分析当前这次运行的应用日志",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
+                            "\"traceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}," +
+                            "\"lookbackMinutes\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":120}," +
+                            "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500}}}"));
         }
         return result;
     }

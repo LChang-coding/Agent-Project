@@ -23,6 +23,10 @@ public interface IContextCompactionTaskDao {
                                                   @Param("userId") String userId,
                                                   @Param("sessionId") String sessionId);
 
+    /** 查询等待处理或租约已过期、且尚未超过最大尝试次数的任务。 */
+    List<ContextCompactionTaskPO> queryRecoverable(@Param("limit") int limit,
+                                                   @Param("maxAttempts") int maxAttempts);
+
     /** 查询会话最近一次压缩任务，不限定终态。 */
     ContextCompactionTaskPO queryLatest(@Param("tenantId") String tenantId,
                                         @Param("userId") String userId,

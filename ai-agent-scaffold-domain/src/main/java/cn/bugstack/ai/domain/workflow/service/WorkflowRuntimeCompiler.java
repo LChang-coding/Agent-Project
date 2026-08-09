@@ -110,6 +110,7 @@ public class WorkflowRuntimeCompiler {
                     .runtimeAgentId(nodeRuntimeAgentId)
                     .runtimeAgentName(nodeRuntimeAgentName)
                     .mcpIds(node.getMcpIds() == null ? List.of() : List.copyOf(node.getMcpIds()))
+                    .skillIds(node.getSkillIds() == null ? List.of() : List.copyOf(node.getSkillIds()))
                     .modelCode(modelRouter.route(requestModelCode, node.getModelCode(), version.getDefaultModelCode()))
                     .maxIterations(loopIterations(node))
                     .enabledStrategies(node.getEnabledStrategies())
@@ -567,7 +568,7 @@ public class WorkflowRuntimeCompiler {
         return edges;
     }
 
-    /** 从冻结出边生成模型可选的业务路由，不把 DEFAULT/FAILURE 暴露为 route key。 */
+    /** 从本次运行保存的出边生成模型可选路径，不把默认和失败出口暴露给模型。 */
     private List<WorkflowDagPlanEntity.RouteDescriptor> routeDescriptors(
             String nodeId,
             List<WorkflowDagPlanEntity.Edge> edges,
@@ -586,7 +587,7 @@ public class WorkflowRuntimeCompiler {
                 .collect(Collectors.toList());
     }
 
-    /** 从冻结节点表读取目标展示名，缺失时退回目标 ID。 */
+    /** 从本次运行的节点表读取目标名称，缺失时使用目标 ID。 */
     private String targetNodeName(String targetNodeId, Map<String, WorkflowGraphEntity.Node> nodeMap) {
         if ("END".equalsIgnoreCase(targetNodeId)) {
             return "结束";
@@ -602,7 +603,7 @@ public class WorkflowRuntimeCompiler {
                 : "MARKER_V1";
     }
 
-    /** 对运行所需冻结定义生成稳定摘要，避免依赖对象序列化属性顺序。 */
+    /** 为本次运行使用的工作流配置生成稳定摘要，避免依赖对象序列化属性顺序。 */
     private String definitionHash(WorkflowDagPlanEntity plan) {
         StringBuilder canonical = new StringBuilder();
         appendHashPart(canonical, plan.getWorkflowId());

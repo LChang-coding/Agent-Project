@@ -46,6 +46,8 @@ public final class ToolRuntimeContextKeys {
     public static final String RAG_TOOL_ENABLED = "ragToolEnabled";
     /** 当前工作流节点允许使用的 MCP 工具编号。 */
     public static final String WORKFLOW_MCP_IDS = "workflowMcpIds";
+    /** 当前工作流节点允许使用的 Skill 编号。 */
+    public static final String WORKFLOW_SKILL_IDS = "workflowSkillIds";
     /** 当前运行的工作流类型。 */
     public static final String WORKFLOW_KIND = "workflowKind";
     /** 当前运行保存的工作流路由协议版本。 */

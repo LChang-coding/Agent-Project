@@ -64,8 +64,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 以 MySQL 任务账本为真相源的单任务 RAG 摄取 Worker。
- * <p>所有远程调用前后均重读任务并校验取消、租约和 fencing token。</p>
+ * 以 MySQL 任务记录为准执行单个 RAG 文档入库任务。
+ *
+ * <p>任务会暂时交给一个 Worker 处理，超时后允许其他 Worker 接手；每次接手都会增加执行编号，
+ * 旧 Worker 在远程调用前后核对编号，一旦过期就停止继续写入。</p>
  */
 @Slf4j
 @Component
@@ -75,7 +77,7 @@ public class RagIngestWorker {
     /** 单个待处理文档最大允许 50 MiB。 */
     private static final long MAX_DOCUMENT_BYTES = 50L * 1024 * 1024;
 
-    /** 状态事实源与外部副作用端口。 */
+    /** 读取任务最终状态，并提交数据库状态变化。 */
     private final IRagRepository repository;
     /** 下载源文档并保存解析、切块和质量产物。 */
     private final ObjectStorageService objectStorageService;
@@ -87,7 +89,7 @@ public class RagIngestWorker {
     private final SparseEncoderPort sparseEncoder;
     /** 写入、计数和删除 Qdrant 向量点。 */
     private final VectorStorePort vectorStore;
-    /** 提供批次、租约、重试和预处理配置。 */
+    /** 提供批次、任务处理时限、重试和预处理配置。 */
     private final RagProperties properties;
     /** 按标题、长度和父子关系生成检索块。 */
     private final DocumentIrChunker chunker = new DocumentIrChunker();
@@ -102,13 +104,13 @@ public class RagIngestWorker {
     private final ObjectMapper objectMapper;
     /** 将异常分类为可重试或不可重试的稳定错误。 */
     private final RagIngestErrorClassifier errorClassifier = new RagIngestErrorClassifier();
-    /** 统一生成租约、检查点和终态时间。 */
+    /** 统一生成任务处理时限、检查点和结束时间。 */
     private final Clock clock;
     /** 独立续租长时间运行的解析、向量化和索引任务。 */
     private final ScheduledExecutorService heartbeatExecutor;
 
     @Autowired
-    /** 注入完整摄取流水线依赖，并创建独立租约心跳调度器。 */
+    /** 注入完整入库流水线依赖，并创建独立的任务续期调度器。 */
     public RagIngestWorker(IRagRepository repository, ObjectStorageService objectStorageService,
                            RagDocumentParserPort parser, EmbeddingPort embedding,
                            SparseEncoderPort sparseEncoder, VectorStorePort vectorStore,
@@ -148,7 +150,7 @@ public class RagIngestWorker {
     }
 
     /** 尝试领取并执行一个任务；重复唤醒领取失败时安全返回 false。 */
-    /** 先领取数据库租约，再按 operation 执行；未领取绝不产生外部副作用。 */
+    /** 先从数据库取得任务处理权，再按操作类型执行；未取得时不调用外部系统。 */
     public boolean execute(String tenantId, String jobId, String leaseOwner) {
         Instant now = clock.instant();
         Optional<RagIngestJobEntity> current = repository.findIngestJob(tenantId, jobId);
@@ -221,7 +223,7 @@ public class RagIngestWorker {
      * 精确核验索引快照并执行可重入激活。
      * <p>任务已经推进到VERIFYING后发生进程退出时，重试只重复校验和CAS激活，不重新解析、分块或写向量。</p>
      */
-    /** 向量数量与数据库分块一致后才允许切换活动 generation。 */
+    /** 向量数量与数据库分块一致后，才允许切换当前生效的索引批次。 */
     private void verifyAndActivate(RagIngestJobEntity initial, List<RagChunkEntity> children,
                                    String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity job = barrier(initial.tenantId(), initial.jobId(), leaseOwner,
@@ -326,7 +328,7 @@ public class RagIngestWorker {
         completeDeletion(job, leaseOwner);
     }
 
-    /** 在删除对象存储文件前后校验租约，防止过期 Worker 继续删除。 */
+    /** 删除对象存储文件前后确认任务仍由当前 Worker 负责，防止旧 Worker 继续删除。 */
     private RagIngestJobEntity deleteObjectWithBarrier(RagIngestJobEntity job, String leaseOwner,
                                                         LeaseHeartbeat heartbeat, String bucket,
                                                         String objectKey) {
@@ -398,7 +400,7 @@ public class RagIngestWorker {
         return new Scope(version, document, knowledgeBase);
     }
 
-    /** 将待处理文档版本推进到 processing，并冻结解析器和模型修订号。 */
+    /** 将文档版本改为处理中，并记录本次任务使用的解析器和模型修订号。 */
     private void startVersionProcessing(RagDocumentVersionEntity version) {
         if (version.status() == RagDocumentVersionStatus.PROCESSING) return;
         RagDocumentVersionEntity processing = version.processing(properties.getDocling().getParserRevision(),
@@ -497,7 +499,7 @@ public class RagIngestWorker {
         return children;
     }
 
-    /** 每批 Embedding/Qdrant 写入后保存 checkpoint，支持租约失效后的安全续跑。 */
+    /** 每批向量写入后保存进度，任务被其他 Worker 接手时可以从已完成位置继续。 */
     private RagIngestJobEntity indexBatches(RagIngestJobEntity initial, List<RagChunkEntity> children,
                                              String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity job = initial;
@@ -585,7 +587,7 @@ public class RagIngestWorker {
                 job.versionId(), job.checkpoint().totalChunks(), elapsedFromLease(job)));
     }
 
-    /** 取消屏障后只清理本 generation 产物，不触碰已有活动版本。 */
+    /** 确认取消状态后只清理本次索引批次的产物，不触碰正在使用的版本。 */
     private void cleanupCancelled(RagIngestJobEntity job, String leaseOwner, LeaseHeartbeat heartbeat) {
         RagIngestJobEntity current = cancellationBarrier(job.tenantId(), job.jobId(), leaseOwner,
                 job.fencingToken(), heartbeat);
@@ -618,7 +620,7 @@ public class RagIngestWorker {
                 elapsedNanos(cleanupStarted), 1, 1);
     }
 
-    /** 分类瞬态/永久错误；终态失败先清理目标代次再闭合账本。 */
+    /** 区分可恢复和确定性错误；最终失败前清理本次产物并完整保存失败状态。 */
     private void handleFailure(String tenantId, String jobId, String leaseOwner, long fence, Exception error) {
         RagIngestErrorClassifier.Failure failure = errorClassifier.classify(error);
         Optional<RagIngestJobEntity> latestOptional = repository.findIngestJob(tenantId, jobId);
@@ -630,7 +632,7 @@ public class RagIngestWorker {
             try {
                 cleanupCancelled(latest, leaseOwner, LeaseHeartbeat.passive());
             } catch (Exception cleanupError) {
-                log.warn("RAG取消清理失败，等待租约过期接管 tenantId:{} jobId:{} code:{}",
+                log.warn("RAG取消清理失败，等待处理权过期后由其他Worker接手 tenantId:{} jobId:{} code:{}",
                         tenantId, jobId, errorClassifier.classify(cleanupError).code());
             }
             return;
@@ -668,12 +670,12 @@ public class RagIngestWorker {
                 requestFailureCleanupIfOwned(tenantId, jobId, leaseOwner, fence,
                         failure.retryable() && latest.attemptCount() >= latest.maxAttempts(), failure);
             }
-            log.warn("RAG失败结果或清理未提交，等待租约恢复 tenantId:{} jobId:{} code:{}",
+            log.warn("RAG失败结果或清理未提交，等待其他Worker接手 tenantId:{} jobId:{} code:{}",
                     tenantId, jobId, errorClassifier.classify(commitError).code());
         }
     }
 
-    /** 仅由当前租约持有者登记终态失败前的向量和产物清理要求。 */
+    /** 仅允许当前负责该任务的 Worker 登记最终失败前的清理要求。 */
     private void requestFailureCleanupIfOwned(String tenantId, String jobId, String leaseOwner, long fence,
                                               boolean dead, RagIngestErrorClassifier.Failure failure) {
         try {
@@ -699,10 +701,10 @@ public class RagIngestWorker {
         repository.deleteChunks(job.tenantId(), job.versionId());
     }
 
-    /** 每个外部副作用前重读任务并校验租约、围栏和取消状态。 */
+    /** 每次写外部系统前重读任务，确认处理权、执行编号和取消状态仍有效。 */
     private RagIngestJobEntity barrier(String tenantId, String jobId, String leaseOwner, long fence,
                                        LeaseHeartbeat heartbeat, boolean renew) {
-        if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "摄取任务租约已丢失");
+        if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "摄取任务处理权已失效");
         Instant now = clock.instant();
         RagIngestJobEntity job = repository.findIngestJob(tenantId, jobId)
                 .orElseThrow(() -> new AppException("RAG_INGEST_JOB_NOT_FOUND", "摄取任务不存在"));
@@ -717,13 +719,13 @@ public class RagIngestWorker {
     /** 续租取消清理任务并确认状态仍允许清理。 */
     private RagIngestJobEntity cancellationBarrier(String tenantId, String jobId, String leaseOwner,
                                                     long fence, LeaseHeartbeat heartbeat) {
-        if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "取消清理租约已丢失");
+        if (heartbeat.lost()) throw new AppException("RAG_INGEST_LEASE_LOST", "取消清理任务处理权已失效");
         Instant now = clock.instant();
         RagIngestJobEntity job = repository.findIngestJob(tenantId, jobId).orElseThrow();
         if (job.status() != RagIngestJobStatus.CANCEL_REQUESTED || job.lease() == null
                 || !job.lease().owner().equals(leaseOwner) || job.fencingToken() != fence
                 || job.lease().expiredAt(now)) {
-            throw new AppException("RAG_INGEST_CANCEL_FENCE_LOST", "取消清理租约或栅栏已失效");
+            throw new AppException("RAG_INGEST_CANCEL_FENCE_LOST", "取消清理任务已由其他Worker接手");
         }
         if (repository.heartbeatClaimedIngestJob(tenantId, jobId, leaseOwner, fence,
                 now, now.plus(leaseDuration())) != 1) {
@@ -732,7 +734,7 @@ public class RagIngestWorker {
         return repository.findIngestJob(tenantId, jobId).orElseThrow();
     }
 
-    /** 使用 revision、租约和 fencing token 提交下一处理检查点。 */
+    /** 使用数据库版本、当前处理者和执行编号提交下一阶段进度。 */
     private RagIngestJobEntity advance(RagIngestJobEntity job, String leaseOwner,
                                        RagIngestCheckpoint checkpoint) {
         Instant now = clock.instant();
@@ -749,7 +751,7 @@ public class RagIngestWorker {
         return updated;
     }
 
-    /** 计算从本次租约心跳开始到当前时刻的近似耗时。 */
+    /** 计算从本次任务续期开始到当前时刻的近似耗时。 */
     private long elapsedFromLease(RagIngestJobEntity job) {
         if (job == null || job.lease() == null) return 0L;
         return Math.max(0L, Duration.between(job.lease().expiresAt().minus(leaseDuration()),
@@ -844,7 +846,7 @@ public class RagIngestWorker {
     }
 
     /** 清洗后执行结构质量门禁；低质量 PDF 可触发强制 OCR 重跑。 */
-    /** 按冻结策略清洗 Document IR，并计算可用于质量门禁的报告。 */
+    /** 按本次任务记录的策略清洗统一文档结构，并生成质量检查报告。 */
     private PreprocessedDocument cleanAndEvaluate(RagIngestJobEntity job,
                                                   RagDocumentParserPort.ParsedDocument parsed) {
         RagPreprocessingStrategy strategy = preprocessingStrategy();
@@ -1018,7 +1020,7 @@ public class RagIngestWorker {
         }
     }
 
-    /** 保存父子块关系和切块修订号，供重放与问题定位使用。 */
+    /** 保存父子块关系和切块修订号，供任务接手和问题定位使用。 */
     private void persistChunkManifest(RagIngestJobEntity job, DocumentIrChunker.ChunkingResult result,
                                       RagIngestWorkspace workspace) {
         try {
@@ -1092,7 +1094,7 @@ public class RagIngestWorker {
         }
     }
 
-    /** 返回当前进程冻结的文档预处理策略。 */
+    /** 返回当前进程使用的文档预处理策略。 */
     private RagPreprocessingStrategy preprocessingStrategy() {
         return properties.getWorker().getPreprocessingStrategy();
     }
@@ -1102,7 +1104,7 @@ public class RagIngestWorker {
         return DocumentIrChunker.CHUNKER_VERSION + "+" + preprocessingStrategy().revision();
     }
 
-    /** 验证恢复的 Document IR 使用当前冻结策略及修订号。 */
+    /** 验证已保存的统一文档结构与当前任务记录的策略及修订号一致。 */
     private void verifyPreprocessingStrategy(DocumentIr ir) {
         String actual = ir.metadata().get("preprocessing_strategy");
         String revision = ir.metadata().get("preprocessing_strategy_revision");
@@ -1118,7 +1120,7 @@ public class RagIngestWorker {
         }
     }
 
-    /** 在租约检查之间删除解析和切块产物，并保存清理进度。 */
+    /** 每次确认任务仍由当前 Worker 负责后，删除解析和切块产物并保存清理进度。 */
     private RagIngestJobEntity deleteParsedArtifactWithBarrier(RagIngestJobEntity job, String leaseOwner,
                                                                  LeaseHeartbeat heartbeat) {
         Set<String> keys = new LinkedHashSet<>();
@@ -1148,7 +1150,7 @@ public class RagIngestWorker {
                 repository.findKnowledgeBase(job.tenantId(), job.knowledgeBaseId()).orElseThrow());
     }
 
-    /** 读取单次任务租约时长。 */
+    /** 读取单个 Worker 持有任务处理权的时长。 */
     private Duration leaseDuration() {
         return Duration.ofMillis(properties.getWorker().getLeaseDurationMs());
     }
@@ -1190,7 +1192,7 @@ public class RagIngestWorker {
     }
 
     @PreDestroy
-    /** 应用关闭时停止租约心跳线程。 */
+    /** 应用关闭时停止任务续期线程。 */
     public void shutdown() {
         heartbeatExecutor.shutdownNow();
     }
@@ -1225,9 +1227,9 @@ public class RagIngestWorker {
         }
     }
 
-    /** 在长时间外部调用期间定时续租，并向主流程暴露租约是否已经丢失。 */
+    /** 长时间调用外部服务时定期延长任务处理期限，并告知主流程处理权是否已经失效。 */
     static final class LeaseHeartbeat implements AutoCloseable {
-        /** 心跳线程发现租约失效后置为 true。 */
+        /** 续期线程发现任务处理权失效后置为 true。 */
         private final AtomicBoolean lost = new AtomicBoolean();
         /** 后台续租任务句柄，用于任务结束时停止心跳。 */
         private ScheduledFuture<?> future;
@@ -1242,7 +1244,7 @@ public class RagIngestWorker {
             this.future = future;
         }
 
-        /** 心跳更新失败时标记租约已经丢失。 */
+        /** 续期失败时标记任务处理权已经失效。 */
         void markLost() {
             lost.set(true);
         }

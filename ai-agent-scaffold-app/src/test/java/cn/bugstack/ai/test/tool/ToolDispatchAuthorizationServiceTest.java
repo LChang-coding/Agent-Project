@@ -1,15 +1,19 @@
 package cn.bugstack.ai.test.tool;
 
 import cn.bugstack.ai.domain.run.service.RunControlService;
+import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.tool.adapter.repository.IToolRepository;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolDispatchClaimEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.service.ToolDispatchAuthorizationService;
+import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.InOrder;
+
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -29,6 +33,7 @@ public class ToolDispatchAuthorizationServiceTest {
     public void shouldAuthorizeRunBeforeClaimingStartedLog() {
         RunControlService runService = mock(RunControlService.class);
         IToolRepository repository = mock(IToolRepository.class);
+        allowRun(runService, "trace");
         when(repository.claimToolCallLog(any())).thenReturn(1);
         ToolDispatchAuthorizationService service = new ToolDispatchAuthorizationService(runService, repository);
 
@@ -49,6 +54,7 @@ public class ToolDispatchAuthorizationServiceTest {
     public void shouldReturnExistingLogForDuplicateFunctionCall() {
         RunControlService runService = mock(RunControlService.class);
         IToolRepository repository = mock(IToolRepository.class);
+        allowRun(runService, "trace");
         ToolCallLogEntity existing = ToolCallLogEntity.builder().status("success").outputJson("{\"result\":\"ok\"}").build();
         when(repository.claimToolCallLog(any())).thenReturn(0);
         when(repository.queryToolCallLogByIdempotencyKey(any())).thenReturn(existing);
@@ -59,6 +65,62 @@ public class ToolDispatchAuthorizationServiceTest {
         Assert.assertFalse(result.isClaimed());
         Assert.assertSame(existing, result.getCallLog());
         verify(repository).queryToolCallLogByIdempotencyKey(any());
+    }
+
+    @Test
+    public void shouldRejectWorkflowToolOutsideCurrentNodeAllowlist() {
+        RunControlService runService = mock(RunControlService.class);
+        IToolRepository repository = mock(IToolRepository.class);
+        allowRun(runService, "trace");
+        ToolDispatchAuthorizationService service = new ToolDispatchAuthorizationService(runService, repository);
+        ToolInvokeContextEntity context = context();
+        context.setWorkflowKind("INTELLIGENT");
+        context.setWorkflowMcpIds(List.of("another_mcp"));
+
+        try {
+            service.claim(tool(), context, "{}");
+            Assert.fail("节点未配置的 MCP 不应取得执行权");
+        } catch (AppException exception) {
+            Assert.assertEquals("WORKFLOW_TOOL_SCOPE_DENIED", exception.getCode());
+        }
+    }
+
+    @Test
+    public void shouldAllowWorkflowSkillInsideCurrentNodeAllowlist() {
+        RunControlService runService = mock(RunControlService.class);
+        IToolRepository repository = mock(IToolRepository.class);
+        allowRun(runService, "trace");
+        when(repository.claimToolCallLog(any())).thenReturn(1);
+        ToolDispatchAuthorizationService service = new ToolDispatchAuthorizationService(runService, repository);
+        ToolCatalogEntity skill = ToolCatalogEntity.builder().toolId("skill-1").toolName("技能")
+                .toolType("skill").version("1").build();
+        ToolInvokeContextEntity context = context();
+        context.setWorkflowKind("STATIC");
+        context.setWorkflowSkillIds(List.of("skill-1"));
+
+        ToolDispatchClaimEntity result = service.claim(skill, context, "{}");
+
+        Assert.assertTrue(result.isClaimed());
+    }
+
+    @Test
+    public void shouldRejectTraceThatDoesNotMatchLockedRun() {
+        RunControlService runService = mock(RunControlService.class);
+        IToolRepository repository = mock(IToolRepository.class);
+        allowRun(runService, "trace-from-database");
+        ToolDispatchAuthorizationService service = new ToolDispatchAuthorizationService(runService, repository);
+
+        try {
+            service.claim(tool(), context(), "{}");
+            Assert.fail("运行时 Trace ID 与数据库运行不一致时不应执行工具");
+        } catch (AppException exception) {
+            Assert.assertEquals("TOOL_TRACE_SCOPE_MISMATCH", exception.getCode());
+        }
+    }
+
+    private void allowRun(RunControlService runService, String traceId) {
+        when(runService.authorizeToolDispatch("tenant", "user", "run", 3L))
+                .thenReturn(ChatRunEntity.builder().traceId(traceId).build());
     }
 
     private ToolCatalogEntity tool() {

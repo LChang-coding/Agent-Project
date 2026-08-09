@@ -101,10 +101,12 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
                                      ToolInvokeContextEntity context) {
         RagToolInvocationBudgetStore.Reservation reservation = null;
         try {
+            // 模型只能提供问题和期望文本量；租户、运行和知识库范围全部取自服务端上下文。
             validateModelArguments(input);
             String query = modelQuery(input);
             int maxContextTokens = modelTokenBudget(input);
             TrustedContext trusted = trusted(context);
+            // 先占用一次调用次数和最大 Token，防止并发工具调用同时越过本次运行的总额度。
             reservation = budgetStore.reserve(trusted.tenantId, trusted.userId, trusted.runId, maxContextTokens);
             RagRetrievalResult retrieved = retrievalService.retrieve(new RagRetrievalRequest(trusted.tenantId,
                     trusted.userId, trusted.sessionId, trusted.runId, trusted.targetType, trusted.targetId,
@@ -113,9 +115,11 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
             if (retrieved.estimatedTokenCount() > maxContextTokens) {
                 throw new IllegalArgumentException("检索结果Token超过预留预算");
             }
+            // 检索期间用户可能取消运行；写入证据前必须重新确认这次回答仍然有效。
             if (runControlService != null) {
                 runControlService.requireExecutable(trusted.tenantId, trusted.userId, trusted.runId, null);
             }
+            // 先登记这次真正返回给 Agent 的引用，再把预留额度结算为实际使用量。
             evidenceStore.record(trusted.tenantId, trusted.userId, trusted.sessionId, trusted.runId,
                     trusted.evidenceInvocationId, List.of(presentation.evidence()));
             reservation.complete(retrieved.estimatedTokenCount());
@@ -136,9 +140,11 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
         } catch (RagToolInvocationBudgetStore.BudgetExceededException exception) {
             return PlatformToolResult.failure("RAG_TOOL_BUDGET_EXCEEDED:" + exception.getMessage());
         } catch (IllegalArgumentException exception) {
+            // 参数或结果边界失败没有产生可用证据，归还本次预留，允许 Agent 修正参数后再调用。
             if (reservation != null) reservation.rollback();
             return PlatformToolResult.failure("RAG_TOOL_INVALID_REQUEST:" + exception.getMessage());
         } catch (RuntimeException exception) {
+            // 外部检索、取消检查或证据登记失败时同样归还额度，避免一次失败永久占用预算。
             if (reservation != null) reservation.rollback();
             return PlatformToolResult.failure("RAG_TOOL_RETRIEVAL_FAILED");
         }

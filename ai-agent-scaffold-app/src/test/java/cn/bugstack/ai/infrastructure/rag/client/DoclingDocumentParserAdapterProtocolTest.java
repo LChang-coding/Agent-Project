@@ -42,6 +42,8 @@ public class DoclingDocumentParserAdapterProtocolTest {
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicInteger status = new AtomicInteger(200);
     private final AtomicInteger closeWithoutResponse = new AtomicInteger();
+    private final AtomicInteger transientServerFailures = new AtomicInteger();
+    private final AtomicInteger closeOnRequestNumber = new AtomicInteger();
     private final AtomicInteger responseDelayMs = new AtomicInteger();
     private volatile byte[] responseBody;
     private HttpServer server;
@@ -250,9 +252,47 @@ public class DoclingDocumentParserAdapterProtocolTest {
     }
 
     @Test
-    public void shouldNotRetryHttpOrJsonFailuresAndMustHideRemoteBodyAndKey() throws Exception {
-        Path path = write("failed.pdf", "%PDF-failed".getBytes(StandardCharsets.US_ASCII));
+    public void shouldRetryOneServerFailureThenParseSuccessfulResponse() throws Exception {
+        transientServerFailures.set(1);
+        Path path = write("server-retry.pdf", "%PDF-server-retry".getBytes(StandardCharsets.US_ASCII));
+
+        ParsedDocument result = adapter.parse(command(path, "server-retry.pdf", "application/pdf", false));
+
+        Assert.assertEquals("# Parsed\nremote body", result.normalizedMarkdown());
+        Assert.assertEquals(2, requests.size());
+        Assert.assertEquals("2", result.metadata().get("transportAttempts"));
+    }
+
+    @Test
+    public void serverFailureFollowedByIoFailureMustStopAfterSecondRequest() throws Exception {
+        transientServerFailures.set(1);
+        closeOnRequestNumber.set(2);
+        Path path = write("server-then-io.pdf", "%PDF-server-then-io".getBytes(StandardCharsets.US_ASCII));
+
+        AppException error = expectFailure(
+                () -> adapter.parse(command(path, "server-then-io.pdf", "application/pdf", false)));
+
+        Assert.assertEquals("RAG_DOCLING_UNAVAILABLE", error.getCode());
+        Assert.assertEquals(2, requests.size());
+    }
+
+    @Test
+    public void repeatedServerFailureMustStopAfterSecondRequest() throws Exception {
+        transientServerFailures.set(1);
         status.set(503);
+        Path path = write("server-twice.pdf", "%PDF-server-twice".getBytes(StandardCharsets.US_ASCII));
+
+        AppException error = expectFailure(
+                () -> adapter.parse(command(path, "server-twice.pdf", "application/pdf", false)));
+
+        Assert.assertEquals("RAG_DOCLING_HTTP_ERROR", error.getCode());
+        Assert.assertEquals(2, requests.size());
+    }
+
+    @Test
+    public void shouldNotRetryClientOrJsonFailuresAndMustHideRemoteBodyAndKey() throws Exception {
+        Path path = write("failed.pdf", "%PDF-failed".getBytes(StandardCharsets.US_ASCII));
+        status.set(400);
         responseBody = (REMOTE_SECRET + API_KEY).getBytes(StandardCharsets.UTF_8);
 
         AppException httpError = expectFailure(
@@ -367,6 +407,10 @@ public class DoclingDocumentParserAdapterProtocolTest {
                 exchange.getRequestHeaders().getFirst("Accept"),
                 exchange.getRequestHeaders().getFirst("Content-Length"),
                 exchange.getRequestHeaders().getFirst("Transfer-Encoding"), body));
+        if (closeOnRequestNumber.get() == requests.size()) {
+            exchange.close();
+            return;
+        }
         if (closeWithoutResponse.getAndUpdate(value -> Math.max(0, value - 1)) > 0) {
             exchange.close();
             return;
@@ -384,7 +428,9 @@ public class DoclingDocumentParserAdapterProtocolTest {
         byte[] currentResponse = responseBody == null ? new byte[0] : responseBody;
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         try {
-            exchange.sendResponseHeaders(status.get(), currentResponse.length);
+            int currentStatus = transientServerFailures.getAndUpdate(value -> Math.max(0, value - 1)) > 0
+                    ? 503 : status.get();
+            exchange.sendResponseHeaders(currentStatus, currentResponse.length);
             exchange.getResponseBody().write(currentResponse);
         } catch (IOException ignored) {
             // 客户端在响应超限后会主动关闭流。

@@ -113,7 +113,9 @@ public class ContextCacheRepository implements IContextCacheRepository {
                 messages.add(objectMapper.readValue(value, new TypeReference<>() {
                 }));
             }
-            return messages;
+            // ZSet 只保留固定数量的最新消息。只有序号从请求起点连续覆盖到终点时，
+            // 这批数据才足以替代 MySQL；否则返回 null 让领域层回源补齐。
+            return coversRequestedRange(messages, fromSequenceExclusive, toSequenceInclusive) ? messages : null;
         } catch (Exception e) {
             log.debug("上下文短期消息读取失败 tenantId:{} userId:{} sessionId:{}", tenantId, userId, sessionId, e);
             return null;
@@ -176,6 +178,18 @@ public class ContextCacheRepository implements IContextCacheRepository {
         if (size != null && size > maxMessages) {
             redisTemplate.opsForZSet().removeRange(key, 0, size - maxMessages - 1);
         }
+    }
+
+    /** 校验缓存切面是否完整，防止把被窗口裁掉前半段的 100 条消息误当成完整历史。 */
+    private boolean coversRequestedRange(List<ChatMessageEntity> messages, Integer fromExclusive, Integer toInclusive) {
+        if (messages == null || messages.isEmpty()) return false;
+        int expected = fromExclusive == null ? 1 : fromExclusive + 1;
+        int upper = toInclusive == null ? messages.get(messages.size() - 1).getSequenceNo() : toInclusive;
+        for (ChatMessageEntity message : messages) {
+            if (message.getSequenceNo() == null || message.getSequenceNo() != expected) return false;
+            expected++;
+        }
+        return expected - 1 == upper;
     }
 
     /** 使用租户、用户和会话组成隔离的最近消息列表键。 */
