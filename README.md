@@ -1,205 +1,139 @@
-# AI Agent Scaffold
+# LCodeWorkflowAgent
 
-基于 **Spring Boot 3.4 + Google ADK 1.1 + Spring AI 1.1 + DeepSeek** 的智能体脚手架，通过 YAML 配置即可装配多智能体、工作流、MCP 工具和 Skills 技能。
+## 1. 总体架构
 
-## 核心能力
+![LCodeWorkflowAgent 总体架构](docs/readme-assets/lcode-workflow-agent-architecture.png)
 
-- **YAML 装配智能体** — 零代码定义 Agent 身份、指令、工具和工作流
-- **工作流编排** — 支持 Sequential（顺序）、Parallel（并行）、Loop（循环）三种模式
-- **MCP 工具集成** — 支持 SSE、Stdio、Local 三种连接方式的 MCP Server
-- **Skills 技能系统** — 通过 SKILL.md 注入领域知识，支持 classpath 和本地目录两种加载方式
-- **插件机制** — 可扩展的插件体系，在 Agent 运行前后插入自定义逻辑
-- **DeepSeek 适配** — 内置 thinking 模式禁用，兼容 deepseek-v4-flash
+## 2. 核心链路
 
-## 快速开始
+### 2.1 工作流发布与可执行工作流装配
 
-### 1. 环境要求
+![工作流发布与可执行工作流装配](docs/readme-assets/flows/01-工作流发布与可执行工作流装配.png)
 
-- JDK 17+
-- Maven 3.6+
-- MySQL 8.0+（可选，用户认证用）
+### 2.2 智能工作流启动与 Agent 执行
 
-### 2. 配置密钥
+![智能工作流启动与 Agent 执行](docs/readme-assets/flows/02-智能工作流启动与Agent执行.png)
 
-```bash
-cd ai-agent-scaffold-app/src/main/resources
-cp secrets.properties.example secrets.properties
-```
+### 2.3 Agent 提出路径、服务端确定路径并执行下一个 Agent
 
-填入你的 DeepSeek API Key 和 MCP 工具密钥：
+![Agent 提出路径、服务端确定路径并执行下一个 Agent](docs/readme-assets/flows/03-Agent提出路径服务端确定路径并执行下一个Agent.png)
 
-```properties
-deepseek.api.key=sk-xxxxxxxxxxxxxxxx
-baidu.search.sse.endpoint=sse?api_key=your-baidu-api-key
-baidu.map.sse.endpoint=sse?ak=your-baidu-map-ak
-```
+### 2.4 Agent 每轮动态发现可用工具
 
-### 3. 选择智能体
+![Agent 每轮动态发现可用工具](docs/readme-assets/flows/04-Agent每轮动态发现可用工具.png)
 
-编辑 `application-dev.yml` 中的 `spring.config.import`，选择要激活的智能体：
+### 2.5 统一 Tool Gateway 调用
 
-```yaml
-spring:
-  config:
-    import:
-      - classpath:secrets.properties
-      - classpath:agent/only-one-agent.yml    # 单一智能体
-      # - classpath:agent/test-agent.yml      # 顺序工作流：Code → Review → Refactor
-      # - classpath:agent/parallel_research_app.yml  # 并行研究 + 汇总
-```
+![统一 Tool Gateway 调用](docs/readme-assets/flows/05-统一ToolGateway调用.png)
 
-### 4. 启动
+### 2.6 Agent 主动 RAG、多次检索、预算与证据记录
 
-```bash
-mvn spring-boot:run -pl ai-agent-scaffold-app
-```
+![Agent 主动 RAG、多次检索、预算与证据记录](docs/readme-assets/flows/06-Agent主动RAG多次检索预算和证据记录.png)
 
-默认端口 `8091`，访问 `http://localhost:8091` 即可对话。
+### 2.7 Dense、Sparse、RRF、Rerank 与上下文补全
 
-## 项目结构
+![Dense、Sparse、RRF、Rerank 与上下文补全](docs/readme-assets/flows/07-DenseSparseRRF-Rerank与上下文补全.png)
 
-```
-Agent-Project
-├── ai-agent-scaffold-app            # 启动入口 & 配置资源
-│   └── src/main/resources
-│       ├── application-dev.yml      # 环境配置
-│       ├── secrets.properties       # 密钥（gitignore）
-│       ├── agent/                   # 智能体 YAML 定义
-│       │   ├── only-one-agent.yml
-│       │   ├── test-agent.yml
-│       │   ├── parallel_research_app.yml
-│       │   └── skills/              # Skills 技能文件
-│       │       ├── battle-plan/     #   电脑性能优化
-│       │       └── pdf/             #   PDF 处理
-├── ai-agent-scaffold-trigger        # HTTP 接口层
-├── ai-agent-scaffold-domain         # 核心业务逻辑
-│   └── service/armory/
-│       ├── node/                    #   装配节点链（链式责任）
-│       │   ├── AiApiNode            #     构建 OpenAiApi
-│       │   ├── ChatModelNode        #     构建 ChatModel + 工具
-│       │   ├── AgentNode            #     构建 LlmAgent
-│       │   ├── AgentWorkflowNode    #     构建工作流
-│       │   ├── RunnerNode           #     构建 Runner
-│       │   └── workflow/            #     工作流实现
-│       ├── matter/mcp/client/       #   MCP 客户端（SSE/Stdio/Local）
-│       ├── matter/skills/           #   Skills 加载器
-│       └── matter/plugin/           #   插件实现
-├── ai-agent-scaffold-infrastructure # 数据持久化
-├── ai-agent-scaffold-api            # DTO & 接口定义
-└── ai-agent-scaffold-types          # 常量 & 枚举
-```
+### 2.8 Redis 保存近期对话并组装模型上下文
 
-## 智能体配置
+![Redis 保存近期对话并组装模型上下文](docs/readme-assets/flows/08-Redis保存近期对话并组装模型上下文.png)
 
-一个典型的 Agent YAML 包含以下模块：
+### 2.9 将较早对话整理成长期摘要
 
-```yaml
-ai:
-  agent:
-    config:
-      tables:
-        myAgent:
-          agent:                         # 智能体基本信息
-            agent-id: 100001
-            agent-name: 我的智能体
-            agent-desc: 智能体描述
-          module:
-            ai-api:                      # AI API 配置
-              base-url: ${deepseek.base.url}
-              api-key: ${deepseek.api.key}
-            chat-model:                  # 模型 & 工具
-              model: deepseek-v4-flash
-              tool-mcp-list:             # MCP 工具列表
-                - sse:
-                    name: baidu-search
-                    base-uri: http://...
-                    sse-endpoint: ${baidu.search.sse.endpoint}
-              tool-skills-list:          # Skills 技能
-                - type: resource
-                  path: agent/skills
-            agents:                      # 子智能体定义
-              - name: MyAgent
-                instruction: 你的指令...
-            agent-workflows:             # 工作流编排
-              - type: sequential
-                name: MyPipeline
-                sub-agents: [AgentA, AgentB]
-            runner:                      # 运行配置
-              agent-name: MyPipeline
-```
+![将较早对话整理成长期摘要](docs/readme-assets/flows/09-将较早对话整理成长期摘要.png)
 
-## 工作流类型
+### 2.10 用同一个 Trace ID 串起同步请求与后台处理日志
 
-| 类型 | 说明 | 适用场景 |
-|---|---|---|
-| `sequential` | 按顺序执行子 Agent，前一个的输出作为后一个的输入 | 代码生成 → Review → 重构 |
-| `parallel` | 并行执行多个子 Agent，结果汇总给下游 | 多主题并行研究 |
-| `loop` | 循环执行直到满足条件 | 反复优化、自修正 |
+![用同一个 Trace ID 串起同步请求与后台处理日志](docs/readme-assets/flows/10-用同一个TraceID串起同步请求与后台处理日志.png)
 
-## MCP 工具连接方式
+### 2.11 Cobra CLI 查询 Grafana/Loki 并交给 Agent 分析
 
-| 方式 | 说明 |
+![Cobra CLI 查询 Grafana Loki 并交给 Agent 分析](docs/readme-assets/flows/11-CobraCLI查询GrafanaLoki并交给Agent分析.png)
+
+### 2.12 将 PDF、DOCX 和 Markdown 转成统一文档结构
+
+![将 PDF、DOCX 和 Markdown 转成统一文档结构](docs/readme-assets/flows/12-将PDF-DOCX和Markdown转成统一文档结构.png)
+
+### 2.13 从统一文档结构生成父子分块并启用新索引版本
+
+![从统一文档结构生成父子分块并启用新索引版本](docs/readme-assets/flows/13-从统一文档结构生成父子分块并启用新索引版本.png)
+
+### 2.14 用固定问题集比较检索策略并计算指标
+
+![用固定问题集比较检索策略并计算指标](docs/readme-assets/flows/14-用固定问题集比较检索策略并计算指标.png)
+
+### 2.15 Document IR 具体生成父块和子块
+
+![Document IR 具体生成父块和子块](docs/readme-assets/flows/15-DocumentIR具体生成父块和子块.png)
+
+### 2.16 Dense、Sparse、Hybrid RRF 与 Rerank 检索
+
+![Dense、Sparse、Hybrid RRF 与 Rerank 检索](docs/readme-assets/flows/16-DenseSparseHybridRRF与Rerank检索.png)
+
+### 2.17 命中子块后的上下文补全与证据装配
+
+![命中子块后的上下文补全与证据装配](docs/readme-assets/flows/17-命中子块后的上下文补全与证据装配.png)
+
+## 3. 测试与评测结果
+
+### 3.1 PDF / DOCX 200 份全策略检索质量
+
+每种格式包含 200 份同源文档和 800 条正式查询结果，两个正式运行均为 `0 错误 / 0 降级 / 0 空结果`。
+
+![PDF DOCX 200 份全策略检索质量](docs/readme-assets/evaluation/pdf-docx-200-retrieval-quality.png)
+
+| 格式 | 策略 | Recall@1 | Recall@5 | Recall@10 | MRR@10 | nDCG@10 | mean / p95 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| PDF | Dense | .825 | .935 | .960 | .877109 | .897501 | 2,462 / 3,920 ms |
+| PDF | Sparse | .610 | .785 | .820 | .686562 | .719277 | 2,163 / 3,577 ms |
+| PDF | Hybrid RRF | .775 | .885 | .925 | .827032 | .850781 | 2,668 / 4,361 ms |
+| PDF | Hybrid RRF + Rerank | .825 | .920 | .925 | .862222 | .877817 | 11,075 / 19,442 ms |
+| DOCX | Dense | .835 | .950 | .960 | .885429 | .904045 | 1,764 / 2,175 ms |
+| DOCX | Sparse | .630 | .805 | .830 | .700964 | .732808 | 1,508 / 1,739 ms |
+| DOCX | Hybrid RRF | .800 | .900 | .920 | .843865 | .862536 | 1,846 / 2,146 ms |
+| DOCX | Hybrid RRF + Rerank | .840 | .915 | .920 | .868542 | .881311 | 6,956 / 9,796 ms |
+
+### 3.2 SciFact Markdown 检索质量与时延
+
+正式运行包含 300 个问题和 4 种检索策略，共得到 1,200 条唯一结果，最终为 `0 错误 / 0 降级 / 0 空结果`。
+
+![SciFact Markdown 检索质量与时延](docs/readme-assets/evaluation/scifact-quality-latency.png)
+
+| 策略 | Recall@1 | Recall@5 | Recall@10 | MRR@10 | nDCG@10 | mean / p95 |
+|---|---:|---:|---:|---:|---:|---:|
+| Sparse | .243889 | .383611 | .487778 | .321922 | .355442 | 914 / 2,380 ms |
+| Dense | .552611 | .728500 | .797944 | .655835 | .683385 | 1,694 / 4,016 ms |
+| Hybrid RRF | .448611 | .669833 | .750667 | .566630 | .604539 | 2,159 / 4,704 ms |
+| Hybrid RRF + Rerank | .556111 | .714000 | .750667 | .646028 | .663244 | 13,451 / 21,100 ms |
+
+### 3.3 PDF / DOCX 50 份切块策略消融
+
+四个正式运行共完成 200 次文档摄取和 800 条查询结果，均为 `0 最终错误 / 0 降级 / 0 空结果`，瞬态重试实际发生 0 次。
+
+| 格式 / 策略 | 子块数 | 摄取 mean / p95 | Dense R@1/5/10 | Sparse R@1/5/10 | Hybrid R@1/5/10 | Rerank R@1/5/10 |
+|---|---:|---:|---:|---:|---:|---:|
+| PDF / 保留结构化切块 | 137 | 26,912 / 46,209 ms | .90 / 1 / 1 | .78 / .86 / .88 | .86 / .94 / .98 | .82 / .96 / .98 |
+| DOCX / 保留结构化切块 | 167 | 15,928 / 28,205 ms | .90 / 1 / 1 | .78 / .84 / .90 | .86 / .96 / .98 | .86 / .96 / .98 |
+| PDF / 关闭结构化切块 | 81 | 21,229 / 33,221 ms | .96 / 1 / 1 | .80 / .88 / .88 | .86 / .94 / 1 | .94 / 1 / 1 |
+| DOCX / 关闭结构化切块 | 98 | 13,493 / 22,394 ms | .90 / 1 / 1 | .78 / .88 / .90 | .84 / .94 / .96 | .92 / .96 / .96 |
+
+该结果只说明单页短科学摘要采用较粗分块时更省，并不能外推到多页长文、跨页表格或扫描 PDF。
+
+### 3.4 功能、可靠性与容量闭环
+
+![RAG 功能、可靠性与容量闭环](docs/readme-assets/evaluation/rag-functional-reliability-closure.png)
+
+| 测试范围 | 正式结果 |
 |---|---|
-| **SSE** | 通过 Server-Sent Events 连接远程 MCP Server |
-| **Stdio** | 通过子进程标准输入输出连接本地工具 |
-| **Local** | 直接注入 Spring Bean 作为 ToolCallback |
+| Markdown / DOCX / PDF 三格式摄取与检索 | 15 / 15 个证据问题通过 |
+| PDF 页码引用 | 30 条查询引用全部落在金标页 |
+| Agent / Workflow | 可回答、无答案拒答、伪造引用拦截、SSE、取消和跨租户隔离全部通过 |
+| 知识库删除 | MySQL、Qdrant、MinIO 等 13 项残留检查全部通过 |
+| MinIO 断连恢复 | 故障恢复后达到相同残留门禁 |
+| 并发 1 / 2 稳定负载 | 共 320 个正式样本，0 错误、0 降级、0 空结果 |
+| 并发 4 容量边界 | 第 39 个正式样本出现 67.19 秒 fallback，按门禁判定失败 |
 
-## Skills 技能
-
-Skills 通过 SKILL.md 定义领域知识，让 Agent 获得特定领域的专业能力：
-
-```
-agent/skills
-├── battle-plan/           # 电脑性能优化
-│   ├── SKILL.md           #   技能定义（name, description, 指令）
-│   ├── reference.md       #   参考话术
-│   └── scripts/
-│       ├── get_system_info.sh
-│       └── check_cleanable_files.sh
-└── pdf/                   # PDF 处理
-    ├── SKILL.md
-    ├── forms.md
-    ├── reference.md
-    └── scripts/*.py
-```
-
-SKILL.md 格式：
-
-```markdown
----
-name: battle-plan
-description: 电脑性能优化
-license: MIT
----
-
-这里是该技能的详细指令和操作步骤...
-```
-
-## 技术栈
-
-| 组件 | 版本 | 用途 |
-|---|---|---|
-| Spring Boot | 3.4.3 | 应用框架 |
-| Spring AI | 1.1.0-M3 | AI 模型接入 |
-| Google ADK | 1.1.0 | 智能体编排 |
-| DeepSeek | v4-flash | LLM 模型 |
-| Spring AI Agent Utils | 0.4.2 | 内置工具 & Skills |
-| HikariCP + MySQL | — | 数据库连接池 |
-
-## Maven 脚手架
-
-支持将项目导出为 Archetype，快速生成新项目：
-
-```bash
-# 导出 archetype
-mvn archetype:create-from-project
-cd target/generated-sources/archetype
-mvn install
-
-# 从本地 archetype 创建新项目
-mvn archetype:generate -X -DarchetypeCatalog=local
-```
-
-## License
-
-Apache License 2.0
+| 并发 | 吞吐 QPS | Dense mean / p95 | Sparse mean / p95 | Hybrid mean / p95 | Rerank mean / p95 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | .2379 | 695 / 1,788 ms | 255 / 582 ms | 1,130 / 2,207 ms | 13,866 / 24,493 ms |
+| 2 | .3442 | 630 / 1,526 ms | 299 / 570 ms | 986 / 2,006 ms | 20,691 / 28,701 ms |
