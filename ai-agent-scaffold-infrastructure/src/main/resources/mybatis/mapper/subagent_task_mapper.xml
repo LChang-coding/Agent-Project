@@ -6,6 +6,7 @@
         <result column="parent_run_id" property="parentRunId"/><result column="parent_session_id" property="parentSessionId"/>
         <result column="parent_agent_id" property="parentAgentId"/>
         <result column="task_id" property="taskId"/><result column="child_agent_id" property="childAgentId"/>
+        <result column="child_session_id" property="childSessionId"/>
         <result column="instruction" property="instruction"/><result column="function_call_id" property="functionCallId"/>
         <result column="trace_id" property="traceId"/><result column="status" property="status"/>
         <result column="attempt" property="attempt"/><result column="fencing_token" property="fencingToken"/>
@@ -13,15 +14,20 @@
         <result column="result_text" property="resultText"/><result column="error_code" property="errorCode"/>
         <result column="created_at" property="createdAt"/><result column="completed_at" property="completedAt"/>
         <result column="acknowledged_at" property="acknowledgedAt"/>
+        <result column="callback_status" property="callbackStatus"/>
+        <result column="callback_owner" property="callbackOwner"/>
+        <result column="callback_claimed_at" property="callbackClaimedAt"/>
+        <result column="callback_attempt" property="callbackAttempt"/>
     </resultMap>
-    <sql id="taskColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,task_id,child_agent_id,instruction,
+    <sql id="taskColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,task_id,child_agent_id,child_session_id,instruction,
         function_call_id,trace_id,status,attempt,fencing_token,lease_owner,lease_expires_at,result_text,error_code,
-        created_at,completed_at,acknowledged_at</sql>
+        created_at,completed_at,acknowledged_at,callback_status,callback_owner,callback_claimed_at,callback_attempt</sql>
     <insert id="insertTask" parameterType="cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO">
         INSERT INTO agent_subagent_task (<include refid="taskColumns"/>) VALUES
-        (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{taskId},#{childAgentId},#{instruction},
+        (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{taskId},#{childAgentId},#{childSessionId},#{instruction},
          #{functionCallId},#{traceId},#{status},#{attempt},#{fencingToken},#{leaseOwner},#{leaseExpiresAt},
-         #{resultText},#{errorCode},#{createdAt},#{completedAt},#{acknowledgedAt})
+         #{resultText},#{errorCode},#{createdAt},#{completedAt},#{acknowledgedAt},#{callbackStatus},#{callbackOwner},
+         #{callbackClaimedAt},#{callbackAttempt})
     </insert>
     <insert id="insertOutbox" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO">
         INSERT INTO agent_orchestration_outbox
@@ -54,6 +60,11 @@
         SELECT <include refid="taskColumns"/> FROM agent_subagent_task
         WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND lease_owner=#{workerId} AND deleted=0 LIMIT 1
     </select>
+    <update id="bindChildSession">
+        UPDATE agent_subagent_task SET child_session_id=#{childSessionId}
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status='RUNNING'
+          AND lease_owner=#{workerId} AND fencing_token=#{fencingToken} AND deleted=0
+    </update>
     <update id="renewLease">
         UPDATE agent_subagent_task SET lease_expires_at=#{leaseExpiresAt}
         WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status='RUNNING' AND lease_owner=#{workerId}
@@ -131,5 +142,36 @@
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND task_id=#{taskId}
           AND status IN ('SUCCEEDED','FAILED','CANCELLED') AND callback_status='DELIVERING'
           AND callback_owner=#{callbackOwner} AND deleted=0
+    </update>
+    <select id="queryExpiredExecutions" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE status='RUNNING' AND lease_expires_at &lt; #{now} AND deleted=0
+        ORDER BY lease_expires_at ASC LIMIT #{limit}
+    </select>
+    <update id="resetExpiredExecution">
+        UPDATE agent_subagent_task SET status='READY',lease_owner=NULL,lease_expires_at=NULL
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status='RUNNING'
+          AND fencing_token=#{fencingToken} AND lease_expires_at=#{leaseExpiresAt} AND deleted=0
+    </update>
+    <select id="queryExpiredCallbacks" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE callback_status='DELIVERING' AND callback_claimed_at &lt; #{staleBefore} AND deleted=0
+        ORDER BY callback_claimed_at ASC LIMIT #{limit}
+    </select>
+    <update id="resetExpiredCallback">
+        UPDATE agent_subagent_task SET callback_status='PENDING',callback_owner=NULL,callback_claimed_at=NULL
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND callback_status='DELIVERING'
+          AND callback_owner=#{callbackOwner} AND callback_claimed_at=#{callbackClaimedAt} AND deleted=0
+    </update>
+    <update id="prepareCallbackReplay">
+        UPDATE agent_subagent_task SET callback_status='PENDING'
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND task_id=#{taskId}
+          AND callback_status='RETRYING' AND callback_attempt &lt; 12 AND status IN ('SUCCEEDED','FAILED','CANCELLED')
+          AND deleted=0
+    </update>
+    <update id="markCallbackDead">
+        UPDATE agent_subagent_task SET callback_status='DEAD'
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND task_id=#{taskId}
+          AND callback_status='RETRYING' AND callback_attempt &gt;= 12 AND deleted=0
     </update>
 </mapper>

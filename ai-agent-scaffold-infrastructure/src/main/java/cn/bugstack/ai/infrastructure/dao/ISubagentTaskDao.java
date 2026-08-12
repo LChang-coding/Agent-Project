@@ -22,6 +22,9 @@ public interface ISubagentTaskDao {
               @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);
     SubagentTaskPO queryOwned(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
                               @Param("workerId") String workerId);
+    int bindChildSession(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
+                         @Param("workerId") String workerId, @Param("fencingToken") long fencingToken,
+                         @Param("childSessionId") String childSessionId);
     int renewLease(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
                    @Param("workerId") String workerId, @Param("fencingToken") long fencingToken,
                    @Param("now") LocalDateTime now, @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);
@@ -49,4 +52,17 @@ public interface ISubagentTaskDao {
     int finishCallback(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
                        @Param("taskId") String taskId, @Param("callbackOwner") String callbackOwner,
                        @Param("deliveredAt") LocalDateTime deliveredAt);
+    List<SubagentTaskPO> queryExpiredExecutions(@Param("now") LocalDateTime now, @Param("limit") int limit);
+    int resetExpiredExecution(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
+                              @Param("fencingToken") long fencingToken,
+                              @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);
+    List<SubagentTaskPO> queryExpiredCallbacks(@Param("staleBefore") LocalDateTime staleBefore,
+                                               @Param("limit") int limit);
+    int resetExpiredCallback(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
+                             @Param("callbackOwner") String callbackOwner,
+                             @Param("callbackClaimedAt") LocalDateTime callbackClaimedAt);
+    int prepareCallbackReplay(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
+                              @Param("taskId") String taskId);
+    int markCallbackDead(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
+                         @Param("taskId") String taskId);
 }

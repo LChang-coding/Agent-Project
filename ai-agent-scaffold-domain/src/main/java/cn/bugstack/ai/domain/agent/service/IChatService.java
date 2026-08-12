@@ -51,6 +51,12 @@ public interface IChatService {
      */
     String createSession(String agentId, String userId);
 
+    /** 创建不进入用户会话列表的临时子 Agent 会话。 */
+    String createSubagentSession(String agentId, String userId);
+
+    /** 删除临时子 Agent 在 ADK 中的运行会话。 */
+    void deleteSubagentRuntimeSession(String agentId, String userId, String sessionId);
+
     /**
      * 为一个工作流建立新会话，并把这次解析出的版本和模型固化进会话记录。
      *

@@ -165,6 +165,17 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(complete.contains("lease_owner=?"));
         Assert.assertTrue(complete.contains("fencing_token=?"));
         Assert.assertTrue(complete.contains("lease_expires_at >= ?"));
+
+        String expired = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.queryExpiredExecutions", parameters);
+        Assert.assertTrue(expired.contains("status='RUNNING'"));
+        Assert.assertTrue(expired.contains("lease_expires_at < ?"));
+
+        parameters.put("staleBefore", java.time.LocalDateTime.now().minusMinutes(5));
+        String callbacks = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.queryExpiredCallbacks", parameters);
+        Assert.assertTrue(callbacks.contains("callback_status='DELIVERING'"));
+        Assert.assertTrue(callbacks.contains("callback_claimed_at < ?"));
     }
 
     private void assertRagTenantAndClaimScopes(Configuration configuration) {

@@ -103,6 +103,7 @@
         SELECT <include refid="ChatSessionColumns"/>
         FROM chat_session
         WHERE user_id = #{userId} AND status != 'deleted' AND deleted = 0
+          AND COALESCE(source_type, 'agent') != 'subagent'
         <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
         <if test="cursorTime != null">
             AND (last_message_time &lt; #{cursorTime}

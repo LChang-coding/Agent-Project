@@ -292,34 +292,45 @@ export const useChatStore = defineStore('chat', {
     /**
      * 重新读取当前数据库会话的有效消息；参数是会话 ID；不受同会话切换短路影响。
      */
-    async reloadSessionMessages(sessionId: string) {
+    async reloadSessionMessages(sessionId: string, silent = false) {
       const generation = ++sessionSwitchGeneration;
-      this.loadingMessages = true;
-      this.loadingEarlierMessages = false;
-      this.nextBeforeSequence = null;
-      this.hasMoreMessages = false;
-      this.historyMessage = '';
-      this.historyErrorMessage = '';
+      if (!silent) this.loadingMessages = true;
+      if (!silent) {
+        this.loadingEarlierMessages = false;
+        this.nextBeforeSequence = null;
+        this.hasMoreMessages = false;
+        this.historyMessage = '';
+        this.historyErrorMessage = '';
+      }
       try {
         const page = await queryChatSessionMessages(sessionId, undefined, SESSION_MESSAGE_PAGE_SIZE);
         if (generation !== sessionSwitchGeneration || this.sessionId !== sessionId) {
           return;
         }
-        this.messages = page.items.map(toChatMessage);
+        const latestMessages = page.items.map(toChatMessage);
+        if (silent) {
+          const latestIds = new Set(latestMessages.map((message) => message.id));
+          const earlierMessages = this.messages.filter((message) => !latestIds.has(message.id));
+          this.messages = [...earlierMessages, ...latestMessages];
+        } else {
+          this.messages = latestMessages;
+        }
         this.lastTraceId = [...this.messages].reverse().find((message) => message.traceId)?.traceId || '';
-        this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
-        this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
+        if (!silent) {
+          this.nextBeforeSequence = page.hasMore ? page.nextBeforeSequence ?? null : null;
+          this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
+        }
         this.errorMessage = '';
         if (this.activeSourceType === 'workflow') {
           // 消息先恢复；节点事件在后台重放，避免活动 Run 阻塞会话页面可用性。
           void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
         }
       } catch (error) {
-        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
+        if (!silent && generation === sessionSwitchGeneration && this.sessionId === sessionId) {
           this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
         }
       } finally {
-        if (generation === sessionSwitchGeneration && this.sessionId === sessionId) {
+        if (!silent && generation === sessionSwitchGeneration && this.sessionId === sessionId) {
           this.loadingMessages = false;
         }
       }

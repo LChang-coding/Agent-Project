@@ -284,6 +284,18 @@ public class ChatService implements IChatService {
         return createSession(agentId, userId, aiAgentRegisterVO);
     }
 
+    @Override
+    public String createSubagentSession(String agentId, String userId) {
+        AiAgentRegisterVO agent = requirePublicAgent(agentId);
+        return createSession(currentTenantId(), agentId, userId, agent, "subagent", null, null);
+    }
+
+    @Override
+    public void deleteSubagentRuntimeSession(String agentId, String userId, String sessionId) {
+        AiAgentRegisterVO agent = requireRegisteredAgent(agentId);
+        agent.getRunner().sessionService().deleteSession(agent.getAppName(), userId, sessionId).blockingAwait();
+    }
+
     /**
      * 为一个工作流建立新会话，并把本次解析出的真实版本和模型固化进会话。
      *

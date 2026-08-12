@@ -35,7 +35,7 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         for (SubagentTaskEntity task : tasks) {
             created += dao.insertTask(toPO(task));
             dao.insertOutbox(event(task.getTenantId(), "SUBAGENT_TASK_READY", task.getTaskId(),
-                    task.getParentRunId(), Map.of("schemaVersion", 1, "taskId", task.getTaskId(), "tenantId", task.getTenantId(),
+                    task.getTaskId(), Map.of("schemaVersion", 1, "taskId", task.getTaskId(), "tenantId", task.getTenantId(),
                             "parentRunId", task.getParentRunId(), "traceId", safe(task.getTraceId()))));
         }
         return created;
@@ -58,6 +58,12 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         LocalDateTime expiresAt = now.plus(leaseDuration);
         if (dao.claim(tenantId, taskId, workerId, now, expiresAt) != 1) return null;
         return toEntity(dao.queryOwned(tenantId, taskId, workerId));
+    }
+
+    @Override
+    public int bindChildSession(String tenantId, String taskId, String workerId, long fencingToken,
+                                String childSessionId) {
+        return dao.bindChildSession(tenantId, taskId, workerId, fencingToken, childSessionId);
     }
 
     @Override
@@ -114,6 +120,49 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         return changed;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int recoverExpired(LocalDateTime now, Duration callbackLease, int limit) {
+        int recovered = 0;
+        for (SubagentTaskPO task : dao.queryExpiredExecutions(now, limit)) {
+            if (dao.resetExpiredExecution(task.getTenantId(), task.getTaskId(), task.getFencingToken(),
+                    task.getLeaseExpiresAt()) == 1) {
+                dao.insertOutbox(event(task.getTenantId(), "SUBAGENT_TASK_READY", task.getTaskId(), task.getTaskId(),
+                        Map.of("schemaVersion", 1, "tenantId", task.getTenantId(), "taskId", task.getTaskId(),
+                                "parentRunId", task.getParentRunId(), "traceId", safe(task.getTraceId()))));
+                recovered++;
+            }
+        }
+        for (SubagentTaskPO task : dao.queryExpiredCallbacks(now.minus(callbackLease), limit)) {
+            if (dao.resetExpiredCallback(task.getTenantId(), task.getTaskId(), task.getCallbackOwner(),
+                    task.getCallbackClaimedAt()) == 1) {
+                insertResultEvent(task);
+                recovered++;
+            }
+        }
+        return recovered;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean requeueCallback(String tenantId, String parentRunId, String taskId) {
+        if (dao.prepareCallbackReplay(tenantId, parentRunId, taskId) == 1) {
+            List<SubagentTaskPO> tasks = dao.queryByIds(tenantId, parentRunId, List.of(taskId));
+            if (tasks.isEmpty()) throw new IllegalStateException("SUBAGENT_CALLBACK_TASK_NOT_FOUND");
+            insertResultEvent(tasks.get(0));
+            return true;
+        }
+        dao.markCallbackDead(tenantId, parentRunId, taskId);
+        return false;
+    }
+
+    private void insertResultEvent(SubagentTaskPO task) {
+        dao.insertOutbox(event(task.getTenantId(), "SUBAGENT_RESULT_READY", task.getTaskId(), task.getParentRunId(),
+                Map.of("schemaVersion", 1, "tenantId", task.getTenantId(), "taskId", task.getTaskId(),
+                        "parentRunId", task.getParentRunId(), "status", task.getStatus(),
+                        "traceId", safe(task.getTraceId()))));
+    }
+
     private AgentOrchestrationOutboxPO event(String tenantId, String type, String aggregateId,
                                              String partitionKey, Map<String, Object> payload) {
         AgentOrchestrationOutboxPO value = new AgentOrchestrationOutboxPO();
@@ -136,11 +185,15 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         po.setTenantId(value.getTenantId()); po.setUserId(value.getUserId()); po.setParentRunId(value.getParentRunId());
         po.setParentSessionId(value.getParentSessionId());
         po.setParentAgentId(value.getParentAgentId()); po.setTaskId(value.getTaskId()); po.setChildAgentId(value.getChildAgentId());
+        po.setChildSessionId(value.getChildSessionId());
         po.setInstruction(value.getInstruction()); po.setFunctionCallId(value.getFunctionCallId()); po.setTraceId(value.getTraceId());
         po.setStatus(value.getStatus().name()); po.setAttempt(value.getAttempt()); po.setFencingToken(value.getFencingToken());
         po.setLeaseOwner(value.getLeaseOwner()); po.setLeaseExpiresAt(value.getLeaseExpiresAt());
         po.setResultText(value.getResultText()); po.setErrorCode(value.getErrorCode()); po.setCreatedAt(value.getCreatedAt());
-        po.setCompletedAt(value.getCompletedAt()); po.setAcknowledgedAt(value.getAcknowledgedAt()); return po;
+        po.setCompletedAt(value.getCompletedAt()); po.setAcknowledgedAt(value.getAcknowledgedAt());
+        po.setCallbackStatus(value.getCallbackStatus() == null ? "PENDING" : value.getCallbackStatus());
+        po.setCallbackOwner(value.getCallbackOwner()); po.setCallbackClaimedAt(value.getCallbackClaimedAt());
+        po.setCallbackAttempt(value.getCallbackAttempt() == null ? 0 : value.getCallbackAttempt()); return po;
     }
 
     private SubagentTaskEntity toEntity(SubagentTaskPO value) {
@@ -148,10 +201,13 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         return SubagentTaskEntity.builder().tenantId(value.getTenantId()).userId(value.getUserId())
                 .parentRunId(value.getParentRunId()).parentSessionId(value.getParentSessionId())
                 .parentAgentId(value.getParentAgentId()).taskId(value.getTaskId())
-                .childAgentId(value.getChildAgentId()).instruction(value.getInstruction()).functionCallId(value.getFunctionCallId())
+                .childAgentId(value.getChildAgentId()).childSessionId(value.getChildSessionId())
+                .instruction(value.getInstruction()).functionCallId(value.getFunctionCallId())
                 .traceId(value.getTraceId()).status(SubagentTaskStatus.valueOf(value.getStatus())).attempt(value.getAttempt())
                 .fencingToken(value.getFencingToken()).leaseOwner(value.getLeaseOwner()).leaseExpiresAt(value.getLeaseExpiresAt())
                 .resultText(value.getResultText()).errorCode(value.getErrorCode()).createdAt(value.getCreatedAt())
-                .completedAt(value.getCompletedAt()).acknowledgedAt(value.getAcknowledgedAt()).build();
+                .completedAt(value.getCompletedAt()).acknowledgedAt(value.getAcknowledgedAt())
+                .callbackStatus(value.getCallbackStatus()).callbackOwner(value.getCallbackOwner())
+                .callbackClaimedAt(value.getCallbackClaimedAt()).callbackAttempt(value.getCallbackAttempt()).build();
     }
 }

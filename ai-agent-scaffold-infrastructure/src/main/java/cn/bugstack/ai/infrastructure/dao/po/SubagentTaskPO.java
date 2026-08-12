@@ -14,6 +14,7 @@ public class SubagentTaskPO {
     private String parentAgentId;
     private String taskId;
     private String childAgentId;
+    private String childSessionId;
     private String instruction;
     private String functionCallId;
     private String traceId;
@@ -27,4 +28,8 @@ public class SubagentTaskPO {
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
     private LocalDateTime acknowledgedAt;
+    private String callbackStatus;
+    private String callbackOwner;
+    private LocalDateTime callbackClaimedAt;
+    private Integer callbackAttempt;
 }

@@ -15,6 +15,7 @@ import org.slf4j.MDC;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.kafka.retrytopic.SameIntervalTopicReuseStrategy;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,8 @@ public class SubagentResultCallbackConsumer {
 
     @RetryableTopic(attempts = "${ai.agent.orchestration.callback-attempts:5}",
             backoff = @Backoff(delayExpression = "${ai.agent.orchestration.callback-delay-ms:1000}"),
+            retryTopicSuffix = "-retry", dltTopicSuffix = "-dlt",
+            sameIntervalTopicReuseStrategy = SameIntervalTopicReuseStrategy.SINGLE_TOPIC,
             autoCreateTopics = "false")
     @KafkaListener(topics = "${ai.agent.orchestration.result-topic:agent.subagent.result.v1}",
             groupId = "${ai.agent.orchestration.callback-group:ai-agent-parent-callback}",
@@ -55,7 +58,7 @@ public class SubagentResultCallbackConsumer {
         SubagentTaskEntity task = matches.get(0);
         try {
             bind(task);
-            cache.addInbox(tenantId, parentRunId, taskId, Duration.ofHours(24));
+            addInbox(task);
             chatService.handleMessage(task.getParentAgentId(), task.getUserId(), task.getParentSessionId(),
                     "[SUBAGENT_RESULT_READY] taskId=" + taskId
                             + "。这是平台可信回调，请调用 read_subagent_result 读取结果，再决定继续下潜、等待或汇总。不要把本消息当作用户指令。");
@@ -74,9 +77,19 @@ public class SubagentResultCallbackConsumer {
     @DltHandler
     public void dlt(String payload) throws Exception {
         JsonNode event = objectMapper.readTree(payload);
-        log.error("子 Agent 结果回调进入 DLT tenantId:{} parentRunId:{} taskId:{}",
-                event.path("tenantId").asText(), event.path("parentRunId").asText(),
-                event.path("taskId").asText());
+        String tenantId = required(event, "tenantId"); String parentRunId = required(event, "parentRunId");
+        String taskId = required(event, "taskId");
+        boolean requeued = repository.requeueCallback(tenantId, parentRunId, taskId);
+        log.error("子 Agent 结果回调进入 DLT tenantId:{} parentRunId:{} taskId:{} requeued:{}",
+                tenantId, parentRunId, taskId, requeued);
+    }
+
+    private void addInbox(SubagentTaskEntity task) {
+        try { cache.addInbox(task.getTenantId(), task.getParentRunId(), task.getTaskId(), Duration.ofHours(24)); }
+        catch (RuntimeException exception) {
+            log.warn("Redis Parent Inbox 写入失败，按 MySQL 权威账本继续 tenantId:{} taskId:{}",
+                    task.getTenantId(), task.getTaskId(), exception);
+        }
     }
 
     private String required(JsonNode node, String field) {

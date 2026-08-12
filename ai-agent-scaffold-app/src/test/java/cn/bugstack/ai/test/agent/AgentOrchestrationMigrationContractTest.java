@@ -17,6 +17,7 @@ public class AgentOrchestrationMigrationContractTest {
         Assert.assertTrue(upgrade.contains("`fencing_token` BIGINT UNSIGNED NOT NULL DEFAULT 0"));
         Assert.assertTrue(upgrade.contains("`lease_expires_at` DATETIME(3)"));
         Assert.assertTrue(upgrade.contains("`callback_claimed_at` DATETIME(3)"));
+        Assert.assertTrue(upgrade.contains("`child_session_id` VARCHAR(128)"));
         Assert.assertTrue(upgrade.contains("CREATE TABLE IF NOT EXISTS `agent_orchestration_outbox`"));
         Assert.assertTrue(upgrade.contains("UNIQUE KEY `uk_agent_outbox_event`"));
         Assert.assertTrue(rollback.contains("DROP TABLE IF EXISTS `agent_orchestration_outbox`"));

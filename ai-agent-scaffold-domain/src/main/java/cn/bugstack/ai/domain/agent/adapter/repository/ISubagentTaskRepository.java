@@ -18,6 +18,10 @@ public interface ISubagentTaskRepository {
     /** 原子领取 READY 或租约已过期的 RUNNING 任务，并递增 fencing token。 */
     SubagentTaskEntity claim(String tenantId, String taskId, String workerId, LocalDateTime now, Duration leaseDuration);
 
+    /** 以当前执行 Lease 绑定实际创建的临时会话。 */
+    int bindChildSession(String tenantId, String taskId, String workerId, long fencingToken,
+                         String childSessionId);
+
     /** 只有当前 lease owner + fencing token 能续租。 */
     int renewLease(String tenantId, String taskId, String workerId, long fencingToken,
                    LocalDateTime now, Duration leaseDuration);
@@ -35,4 +39,10 @@ public interface ISubagentTaskRepository {
     /** 原子完成回调 ACK，并写临时实例清理 Outbox。 */
     int finishCallback(String tenantId, String parentRunId, String taskId,
                        String callbackOwner, LocalDateTime deliveredAt);
+
+    /** 扫描并重新投递已经失去执行者的任务或父回调。 */
+    int recoverExpired(LocalDateTime now, Duration callbackLease, int limit);
+
+    /** DLT 后有界地重新生成结果通知，超过最大次数进入 DEAD。 */
+    boolean requeueCallback(String tenantId, String parentRunId, String taskId);
 }

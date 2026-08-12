@@ -10,6 +10,7 @@ import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.observability.TraceContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /** 回查 MySQL、持有 Lease 并执行临时子 Agent 的 Kafka Worker。 */
+@Slf4j
 @Component
 public class SubagentTaskConsumer {
     private static final Duration LEASE = Duration.ofSeconds(60);
@@ -33,7 +35,7 @@ public class SubagentTaskConsumer {
     private final ISubagentCoordinationCache cache;
     private final IChatService chatService;
     private final String workerId = "subagent-worker-" + UUID.randomUUID();
-    private final ScheduledExecutorService heartbeat = Executors.newScheduledThreadPool(1, runnable -> {
+    private final ScheduledExecutorService heartbeat = Executors.newScheduledThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "subagent-lease-heartbeat"); thread.setDaemon(true); return thread;
     });
 
@@ -44,6 +46,7 @@ public class SubagentTaskConsumer {
 
     @KafkaListener(topics = "${ai.agent.orchestration.task-topic:agent.subagent.task.v1}",
             groupId = "${ai.agent.orchestration.task-group:ai-agent-subagent-worker}",
+            concurrency = "${ai.agent.orchestration.task-concurrency:4}",
             autoStartup = "${ai.agent.orchestration.enabled:false}")
     public void consume(String payload) throws Exception {
         JsonNode event = event(payload);
@@ -51,12 +54,22 @@ public class SubagentTaskConsumer {
         SubagentTaskEntity task = repository.claim(tenantId, taskId, workerId, LocalDateTime.now(), LEASE);
         if (task == null) return;
         bind(task);
-        cache.putInstance(task, CACHE_TTL);
         ScheduledFuture<?> leaseHeartbeat = heartbeat.scheduleAtFixedRate(
                 () -> renew(task), 20, 20, TimeUnit.SECONDS);
         try {
+            String childSessionId = task.getChildSessionId();
+            if (childSessionId == null || childSessionId.isBlank()) {
+                childSessionId = chatService.createSubagentSession(task.getChildAgentId(), task.getUserId());
+                if (repository.bindChildSession(task.getTenantId(), task.getTaskId(), workerId,
+                        task.getFencingToken(), childSessionId) != 1) {
+                    throw new IllegalStateException("SUBAGENT_LEASE_LOST");
+                }
+                task.setChildSessionId(childSessionId);
+            }
+            cache(() -> cache.putInstance(task, CACHE_TTL), "put-instance", task);
             try {
-                List<String> output = chatService.handleMessage(task.getChildAgentId(), task.getUserId(), task.getInstruction());
+                List<String> output = chatService.handleMessage(task.getChildAgentId(), task.getUserId(),
+                        childSessionId, task.getInstruction());
                 task.setStatus(SubagentTaskStatus.SUCCEEDED); task.setResultText(finalOutput(output));
                 task.setCompletedAt(LocalDateTime.now());
             } catch (RuntimeException exception) {
@@ -72,9 +85,22 @@ public class SubagentTaskConsumer {
     }
 
     private void renew(SubagentTaskEntity task) {
-        int changed = repository.renewLease(task.getTenantId(), task.getTaskId(), workerId,
-                task.getFencingToken(), LocalDateTime.now(), LEASE);
-        if (changed == 1) cache.heartbeat(task.getTenantId(), task.getTaskId(), CACHE_TTL);
+        try {
+            int changed = repository.renewLease(task.getTenantId(), task.getTaskId(), workerId,
+                    task.getFencingToken(), LocalDateTime.now(), LEASE);
+            if (changed == 1) cache(() -> cache.heartbeat(task.getTenantId(), task.getTaskId(), CACHE_TTL),
+                    "heartbeat", task);
+        } catch (RuntimeException exception) {
+            log.warn("子 Agent Lease 心跳失败 tenantId:{} taskId:{}", task.getTenantId(), task.getTaskId(), exception);
+        }
+    }
+
+    private void cache(Runnable action, String operation, SubagentTaskEntity task) {
+        try { action.run(); }
+        catch (RuntimeException exception) {
+            log.warn("Redis 缓存降级 operation:{} tenantId:{} taskId:{}", operation,
+                    task.getTenantId(), task.getTaskId(), exception);
+        }
     }
 
     private JsonNode event(String payload) throws Exception {

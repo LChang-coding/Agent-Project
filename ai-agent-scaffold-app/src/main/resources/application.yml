@@ -68,6 +68,8 @@ ai:
       result-topic: ${AI_AGENT_RESULT_TOPIC:agent.subagent.result.v1}
       cleanup-topic: ${AI_AGENT_CLEANUP_TOPIC:agent.subagent.cleanup.v1}
       outbox-poll-ms: ${AI_AGENT_OUTBOX_POLL_MS:1000}
+      recovery-poll-ms: ${AI_AGENT_RECOVERY_POLL_MS:10000}
+      task-concurrency: ${AI_AGENT_TASK_CONCURRENCY:4}
   observability:
     grafana:
       url: ${AI_GRAFANA_URL:http://127.0.0.1:13000}

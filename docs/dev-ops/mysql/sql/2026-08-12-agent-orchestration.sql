@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `agent_subagent_task` (
   `parent_agent_id` VARCHAR(128) NOT NULL,
   `task_id` VARCHAR(64) NOT NULL,
   `child_agent_id` VARCHAR(128) NOT NULL,
+  `child_session_id` VARCHAR(128) DEFAULT NULL,
   `instruction` MEDIUMTEXT NOT NULL,
   `function_call_id` VARCHAR(128) NOT NULL,
   `trace_id` VARCHAR(64) DEFAULT NULL,

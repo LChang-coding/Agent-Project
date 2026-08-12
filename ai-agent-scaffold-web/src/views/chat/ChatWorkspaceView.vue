@@ -617,13 +617,34 @@ onMounted(async () => {
   await chatStore.loadAgents();
   await toolStore.loadCatalog();
   scrollToLatest(true);
+  orchestrationRefreshTimer = window.setInterval(refreshSupervisorCallbacks, 3000);
 });
 
 onBeforeUnmount(() => {
+  if (orchestrationRefreshTimer !== null) window.clearInterval(orchestrationRefreshTimer);
   if (scrollFrame !== null) {
     window.cancelAnimationFrame(scrollFrame);
   }
 });
+
+let orchestrationRefreshTimer: number | null = null;
+let orchestrationRefreshRunning = false;
+
+/** 主 Agent 原 SSE 结束后静默拉取可信回调落库的新消息。 */
+async function refreshSupervisorCallbacks() {
+  if (chatStore.activeSourceType !== 'agent'
+      || chatStore.activeAgent?.orchestrationRole !== 'SUPERVISOR'
+      || !chatStore.sessionId || chatStore.sending || chatStore.loadingMessages
+      || orchestrationRefreshRunning) return;
+  orchestrationRefreshRunning = true;
+  try {
+    const lastMessageId = chatStore.messages.at(-1)?.id;
+    await chatStore.reloadSessionMessages(chatStore.sessionId, true);
+    if (lastMessageId !== chatStore.messages.at(-1)?.id) scrollToLatest();
+  } finally {
+    orchestrationRefreshRunning = false;
+  }
+}
 
 watch(
   () => chatStore.sessionId,

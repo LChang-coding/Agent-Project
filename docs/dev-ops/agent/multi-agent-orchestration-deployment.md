@@ -16,15 +16,15 @@
 
 | Topic | 分区键 | 生产时机 | 消费动作 |
 |---|---|---|---|
-| `agent.subagent.task.v1` | `parentRunId` | 任务与 Outbox 同事务落库 | Worker 回查任务、领取 Lease、执行子 Agent |
+| `agent.subagent.task.v1` | `taskId` | 任务与 Outbox 同事务落库 | Worker 回查任务、领取 Lease、并行执行子 Agent |
 | `agent.subagent.result.v1` | `parentRunId` | fencing CAS 成功写入终态结果 | 写 Redis Inbox，幂等领取回调权，唤醒主 Agent |
 | `agent.subagent.cleanup.v1` | `parentRunId` | 主 Agent 回调成功并原子 ACK，或任务被取消 | 删除 Redis 临时实例与 Inbox 索引 |
 
-消息统一包含 `schemaVersion=1`、`tenantId`、`taskId`、`parentRunId`，可选 `traceId`。Topic 禁止自动创建；生产环境建议副本数 3、`min.insync.replicas=2`、生产者 `acks=all`。
+消息统一包含 `schemaVersion=1`、`tenantId`、`taskId`、`parentRunId`，可选 `traceId`。Topic 禁止自动创建；生产环境建议副本数 3、`min.insync.replicas=2`、生产者 `acks=all`。结果回调还需要预建 `${result-topic}-retry` 和 `${result-topic}-dlt`，总计五个 Topic。
 
 ## Lease 与心跳
 
-Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原子推进为 `RUNNING` 后才获得执行权。每次领取递增 `fencing_token`，心跳每 20 秒续 60 秒 Lease。旧 Worker 即使恢复，也无法用旧 token 写结果。心跳表示“当前持有者仍存活”，Lease 表示“执行权何时自动失效并允许其他 Worker 接管”，两者缺一不可。
+Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原子推进为 `RUNNING` 后才获得执行权。每次领取递增 `fencing_token`，心跳每 20 秒续 60 秒 Lease。旧 Worker 即使恢复，也无法用旧 token 写结果。恢复任务每 10 秒扫描过期执行和回调 Lease，以 CAS 重置状态并重新写 Outbox，避免 Kafka 在 Lease 到期前重投并提交 offset 后永久失去唤醒消息。
 
 ## 主 Agent 等待与回调
 
@@ -41,7 +41,7 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 ## 上线步骤
 
 1. 评审并通过变更平台执行 `2026-08-12-agent-orchestration.sql`，保留回滚 SQL。
-2. 创建三个 Topic，配置 ACL：应用只拥有指定 Topic 的生产/消费权限。
+2. 创建任务、结果、结果 retry、结果 DLT、清理五个 Topic，配置 ACL。
 3. 确认 Redis TTL 与内存水位告警；Redis 不开启永久任务事实存储。
 4. 先部署代码但保持 `AI_AGENT_ORCHESTRATION_ENABLED=false`。
 5. 灰度开启一个实例，验证 Outbox 延迟、Lease 接管、重复消息、回调幂等和 ACK 清理。

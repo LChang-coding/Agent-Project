@@ -10,6 +10,8 @@ import cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao;
 import cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO;
 import cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer;
 import cn.bugstack.ai.trigger.listener.SubagentTaskConsumer;
+import cn.bugstack.ai.trigger.listener.SubagentInstanceCleanupConsumer;
+import cn.bugstack.ai.domain.session.service.SessionLifecycleService;
 import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.observability.TraceContext;
@@ -45,14 +47,20 @@ public class SubagentKafkaChainTest {
         SubagentTaskEntity task = task(SubagentTaskStatus.RUNNING);
         Mockito.when(repository.claim(Mockito.eq("tenant-1"), Mockito.eq("task-1"), Mockito.anyString(),
                 Mockito.any(LocalDateTime.class), Mockito.eq(Duration.ofSeconds(60)))).thenReturn(task);
-        Mockito.when(chatService.handleMessage("child-1", "user-1", "research it"))
+        Mockito.when(chatService.createSubagentSession("child-1", "user-1")).thenReturn("child-session-1");
+        Mockito.when(repository.bindChildSession(Mockito.eq("tenant-1"), Mockito.eq("task-1"),
+                Mockito.anyString(), Mockito.eq(7L), Mockito.eq("child-session-1"))).thenReturn(1);
+        Mockito.when(chatService.handleMessage("child-1", "user-1", "child-session-1", "research it"))
                 .thenReturn(List.of("partial", "final answer"));
         Mockito.when(repository.complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L))).thenReturn(1);
+        Mockito.doThrow(new IllegalStateException("redis down")).when(cache)
+                .putInstance(Mockito.same(task), Mockito.eq(Duration.ofHours(2)));
 
         new SubagentTaskConsumer(new ObjectMapper(), repository, cache, chatService).consume(event());
 
         Assert.assertEquals(SubagentTaskStatus.SUCCEEDED, task.getStatus());
         Assert.assertEquals("final answer", task.getResultText());
+        Assert.assertEquals("child-session-1", task.getChildSessionId());
         Mockito.verify(cache).putInstance(Mockito.same(task), Mockito.eq(Duration.ofHours(2)));
         Mockito.verify(repository).complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L));
         Assert.assertNull(TenantContextHolder.getTenantId());
@@ -70,6 +78,8 @@ public class SubagentKafkaChainTest {
                 Mockito.anyString(), Mockito.any(LocalDateTime.class))).thenReturn(true);
         Mockito.when(repository.finishCallback(Mockito.eq("tenant-1"), Mockito.eq("parent-run-1"),
                 Mockito.eq("task-1"), Mockito.anyString(), Mockito.any(LocalDateTime.class))).thenReturn(1);
+        Mockito.doThrow(new IllegalStateException("redis down")).when(cache)
+                .addInbox("tenant-1", "parent-run-1", "task-1", Duration.ofHours(24));
 
         new SubagentResultCallbackConsumer(new ObjectMapper(), repository, cache, chatService).consume(event());
 
@@ -81,6 +91,18 @@ public class SubagentKafkaChainTest {
         Assert.assertNull(AgentOrchestrationContextHolder.getRootRunId());
     }
 
+    @Test
+    public void shouldRequeueCallbackFromDlt() throws Exception {
+        ISubagentTaskRepository repository = Mockito.mock(ISubagentTaskRepository.class);
+        Mockito.when(repository.requeueCallback("tenant-1", "parent-run-1", "task-1")).thenReturn(true);
+        SubagentResultCallbackConsumer consumer = new SubagentResultCallbackConsumer(new ObjectMapper(), repository,
+                Mockito.mock(ISubagentCoordinationCache.class), Mockito.mock(IChatService.class));
+
+        consumer.dlt(event());
+
+        Mockito.verify(repository).requeueCallback("tenant-1", "parent-run-1", "task-1");
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     public void shouldPublishClaimedOutboxAndMarkItPublished() throws Exception {
@@ -88,7 +110,7 @@ public class SubagentKafkaChainTest {
         StubKafkaTemplate kafka = new StubKafkaTemplate(Mockito.mock(ProducerFactory.class));
         AgentOrchestrationOutboxPO event = new AgentOrchestrationOutboxPO();
         event.setTenantId("tenant-1"); event.setEventId("event-1");
-        event.setEventType("SUBAGENT_TASK_READY"); event.setPartitionKey("parent-run-1");
+        event.setEventType("SUBAGENT_TASK_READY"); event.setPartitionKey("task-1");
         event.setPayload(event()); event.setFencingToken(3L); event.setAttemptCount(1);
         Mockito.when(dao.queryDueOutbox(Mockito.any(LocalDateTime.class), Mockito.eq(100))).thenReturn(List.of(event));
         Mockito.when(dao.claimOutbox(Mockito.eq("tenant-1"), Mockito.eq("event-1"), Mockito.anyString(),
@@ -98,12 +120,31 @@ public class SubagentKafkaChainTest {
         new AgentOrchestrationOutboxPublisher(dao, kafka, "task-topic", "result-topic", "cleanup-topic").publishDue();
 
         Assert.assertEquals("task-topic", kafka.topic);
-        Assert.assertEquals("parent-run-1", kafka.key);
+        Assert.assertEquals("task-1", kafka.key);
         Assert.assertEquals(event(), kafka.payload);
         ArgumentCaptor<String> owner = ArgumentCaptor.forClass(String.class);
         Mockito.verify(dao).markOutboxPublished(Mockito.eq("tenant-1"), Mockito.eq("event-1"), owner.capture(),
                 Mockito.eq(3L), Mockito.any(LocalDateTime.class));
         Assert.assertTrue(owner.getValue().startsWith("agent-outbox-"));
+    }
+
+    @Test
+    public void shouldDeletePersistedTemporarySessionOnCleanup() throws Exception {
+        ISubagentTaskRepository repository = Mockito.mock(ISubagentTaskRepository.class);
+        ISubagentCoordinationCache cache = Mockito.mock(ISubagentCoordinationCache.class);
+        SessionLifecycleService lifecycle = Mockito.mock(SessionLifecycleService.class);
+        IChatService chatService = Mockito.mock(IChatService.class);
+        SubagentTaskEntity task = task(SubagentTaskStatus.ACKED);
+        task.setChildSessionId("child-session-1");
+        Mockito.when(repository.queryByIds("tenant-1", "parent-run-1", List.of("task-1")))
+                .thenReturn(List.of(task));
+
+        new SubagentInstanceCleanupConsumer(new ObjectMapper(), cache, repository, lifecycle, chatService).consume(event());
+
+        Mockito.verify(lifecycle).delete("tenant-1", "user-1", "child-session-1");
+        Mockito.verify(chatService).deleteSubagentRuntimeSession("child-1", "user-1", "child-session-1");
+        Mockito.verify(cache).removeInstance("tenant-1", "task-1");
+        Mockito.verify(cache).removeInbox("tenant-1", "parent-run-1", "task-1");
     }
 
     private SubagentTaskEntity task(SubagentTaskStatus status) {
