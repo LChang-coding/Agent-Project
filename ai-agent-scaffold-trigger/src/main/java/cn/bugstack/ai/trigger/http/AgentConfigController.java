@@ -2,9 +2,12 @@ package cn.bugstack.ai.trigger.http;
 
 import cn.bugstack.ai.api.dto.AiAgentConfigResponseDTO;
 import cn.bugstack.ai.api.dto.agent.AgentStatusUpdateRequestDTO;
+import cn.bugstack.ai.api.dto.agent.AgentToolPermissionDTO;
+import cn.bugstack.ai.api.dto.agent.AgentToolPermissionUpdateRequestDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.agent.model.entity.AgentConfigStatusEntity;
 import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
+import cn.bugstack.ai.domain.agent.service.AgentToolPermissionService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
@@ -46,13 +49,16 @@ public class AgentConfigController {
      * 声明为 final 并在构造时注入，运行期不会被替换，多个并发请求共享同一实例是安全的。</p>
      */
     private final AgentAvailabilityService service;
+    private final AgentToolPermissionService permissionService;
 
     /**
      * 启动时由 Spring 注入领域服务；注入完成后依赖不再变化，之后所有请求共用这一个引用。
      *
      * @param service Agent 租户可用性领域服务
      */
-    public AgentConfigController(AgentAvailabilityService service) { this.service = service; }
+    public AgentConfigController(AgentAvailabilityService service, AgentToolPermissionService permissionService) {
+        this.service = service; this.permissionService = permissionService;
+    }
 
     /**
      * 查询当前租户可见的内置 Agent 列表，供管理页面展示和前端下拉选择。
@@ -131,6 +137,20 @@ public class AgentConfigController {
         return update(agentId, request);
     }
 
+    @PutMapping("/{agentId}/tool-permissions/{toolCode}")
+    public Response<AgentToolPermissionDTO> updateToolPermission(@PathVariable String agentId,
+            @PathVariable String toolCode, @RequestBody AgentToolPermissionUpdateRequestDTO request) {
+        try {
+            return success(toPermission(permissionService.update(TenantContextHolder.getTenantId(),
+                    TenantContextHolder.getUserId(), TenantContextHolder.getRoleCode(), agentId, toolCode,
+                    request == null ? null : request.getMode(),
+                    request == null ? null : request.getTimeoutSeconds(),
+                    request == null ? null : request.getTimeoutDecision(),
+                    request == null ? null : request.getSuggestions(),
+                    request == null ? null : request.getExpectedRevision())));
+        } catch (AppException e) { return failure(e); }
+    }
+
     /**
      * 把领域状态实体转换成对外响应，并顺手算出前端该不该显示启停开关。
      *
@@ -147,6 +167,8 @@ public class AgentConfigController {
         dto.setOrchestrationRole(value.getOrchestrationRole()); dto.setCategory(value.getCategory());
         dto.setBestFor(value.getBestFor()); dto.setNotFor(value.getNotFor());
         dto.setCapabilities(value.getCapabilities()); dto.setAllowedSubAgentIds(value.getAllowedSubAgentIds());
+        dto.setToolPermissions(permissionService.queryByAgent(TenantContextHolder.getTenantId(), value.getAgentId())
+                .stream().map(this::toPermission).toList());
         // 搬运启停事实与版本号；revision 必须回给前端，下次改状态要原样带回来做乐观锁。
         dto.setStatus(value.getStatus()); dto.setEnabled(value.getEnabled()); dto.setRevision(value.getRevision());
         // 标明这条记录来自静态配置而非用户自建，前端据此隐藏「编辑定义」「彻底删除」之类的入口。
@@ -158,6 +180,13 @@ public class AgentConfigController {
         dto.setDisabledAt(value.getDisabledAt() == null ? null : value.getDisabledAt().toString());
         // 交回裁剪后的对外对象，参与上层的列表收集或单条响应。
         return dto;
+    }
+
+    private AgentToolPermissionDTO toPermission(cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity value) {
+        AgentToolPermissionDTO dto = new AgentToolPermissionDTO(); dto.setToolCode(value.getToolCode());
+        dto.setMode(value.getMode()); dto.setTimeoutSeconds(value.getTimeoutSeconds());
+        dto.setTimeoutDecision(value.getTimeoutDecision()); dto.setSuggestions(value.getSuggestions());
+        dto.setRevision(value.getRevision()); return dto;
     }
 
     /** 用统一的成功码和文案包装数据，让所有接口的成功响应结构一致，前端只需写一套解析逻辑。 */

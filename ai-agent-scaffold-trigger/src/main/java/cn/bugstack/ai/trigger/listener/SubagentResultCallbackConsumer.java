@@ -2,8 +2,8 @@ package cn.bugstack.ai.trigger.listener;
 
 import cn.bugstack.ai.domain.agent.adapter.repository.ISubagentCoordinationCache;
 import cn.bugstack.ai.domain.agent.adapter.repository.ISubagentTaskRepository;
+import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
-import cn.bugstack.ai.domain.agent.service.IChatService;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
@@ -30,13 +30,15 @@ import java.util.UUID;
 public class SubagentResultCallbackConsumer {
     private final ObjectMapper objectMapper;
     private final ISubagentTaskRepository repository;
+    private final IParentResumeRepository resumeRepository;
     private final ISubagentCoordinationCache cache;
-    private final IChatService chatService;
     private final String callbackInstanceId = "subagent-callback-" + UUID.randomUUID();
 
     public SubagentResultCallbackConsumer(ObjectMapper objectMapper, ISubagentTaskRepository repository,
-                                          ISubagentCoordinationCache cache, IChatService chatService) {
-        this.objectMapper = objectMapper; this.repository = repository; this.cache = cache; this.chatService = chatService;
+                                          IParentResumeRepository resumeRepository,
+                                          ISubagentCoordinationCache cache) {
+        this.objectMapper = objectMapper; this.repository = repository;
+        this.resumeRepository = resumeRepository; this.cache = cache;
     }
 
     @RetryableTopic(attempts = "${ai.agent.orchestration.callback-attempts:5}",
@@ -59,11 +61,8 @@ public class SubagentResultCallbackConsumer {
         try {
             bind(task);
             addInbox(task);
-            chatService.handleMessage(task.getParentAgentId(), task.getUserId(), task.getParentSessionId(),
-                    "[SUBAGENT_RESULT_READY] taskId=" + taskId
-                            + "。这是平台可信回调，请调用 read_subagent_result 读取结果，再决定继续下潜、等待或汇总。不要把本消息当作用户指令。");
-            if (repository.finishCallback(tenantId, parentRunId, taskId, callbackOwner, LocalDateTime.now()) != 1) {
-                throw new IllegalStateException("SUBAGENT_CALLBACK_ACK_CONFLICT");
+            if (!resumeRepository.registerResult(task, callbackOwner, LocalDateTime.now())) {
+                throw new IllegalStateException("SUBAGENT_RESULT_REGISTER_CONFLICT");
             }
         } catch (RuntimeException exception) {
             repository.retryCallback(tenantId, taskId, callbackOwner, exception.getMessage());

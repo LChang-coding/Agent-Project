@@ -62,7 +62,10 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/workflow_execution_audit_mapper.xml",
                 "mybatis/mapper/workflow_invocation_mapper.xml",
                 "mybatis/mapper/workflow_route_intent_mapper.xml",
-                "mybatis/mapper/subagent_task_mapper.xml"
+                "mybatis/mapper/subagent_task_mapper.xml",
+                "mybatis/mapper/agent_tool_permission_mapper.xml",
+                "mybatis/mapper/parent_resume_mapper.xml",
+                "mybatis/mapper/tool_approval_mapper.xml"
         }) {
             new XMLMapperBuilder(
                     Resources.getResourceAsStream(mapperResource),
@@ -176,6 +179,25 @@ public class MyBatisMapperLoadTest {
                 "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.queryExpiredCallbacks", parameters);
         Assert.assertTrue(callbacks.contains("callback_status='DELIVERING'"));
         Assert.assertTrue(callbacks.contains("callback_claimed_at < ?"));
+
+        parameters.put("parentRunId", "parent_run_1"); parameters.put("approvalId", "approval_1");
+        String resumeClaim = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.claim", parameters);
+        Assert.assertTrue(resumeClaim.contains("tenant_id=?"));
+        Assert.assertTrue(resumeClaim.contains("fencing_token=fencing_token+1"));
+        Assert.assertTrue(resumeClaim.contains("lease_expires_at < ?"));
+
+        parameters.put("requestedVersion", 2L); parameters.put("cursor", 20L);
+        parameters.put("deliveredAt", java.time.LocalDateTime.now());
+        String resumeComplete = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.completeRequest", parameters);
+        Assert.assertTrue(resumeComplete.contains("pending.id > ?"));
+        Assert.assertTrue(resumeComplete.contains("'COMPLETED','PENDING'"));
+
+        parameters.put("userId", "user_1");
+        String approvalQuery = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IToolApprovalDao.query", parameters);
+        Assert.assertTrue(approvalQuery.contains("tenant_id=?"));
+        Assert.assertTrue(approvalQuery.contains("user_id=?"));
+        Assert.assertTrue(approvalQuery.contains("approval_id=?"));
     }
 
     private void assertRagTenantAndClaimScopes(Configuration configuration) {

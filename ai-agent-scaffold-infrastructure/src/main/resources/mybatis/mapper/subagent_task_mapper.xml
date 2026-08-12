@@ -11,7 +11,9 @@
         <result column="trace_id" property="traceId"/><result column="status" property="status"/>
         <result column="attempt" property="attempt"/><result column="fencing_token" property="fencingToken"/>
         <result column="lease_owner" property="leaseOwner"/><result column="lease_expires_at" property="leaseExpiresAt"/>
-        <result column="result_text" property="resultText"/><result column="error_code" property="errorCode"/>
+        <result column="result_text" property="resultText"/><result column="result_summary" property="resultSummary"/>
+        <result column="full_context" property="fullContext"/><result column="summary_truncated" property="summaryTruncated"/>
+        <result column="error_code" property="errorCode"/>
         <result column="created_at" property="createdAt"/><result column="completed_at" property="completedAt"/>
         <result column="acknowledged_at" property="acknowledgedAt"/>
         <result column="callback_status" property="callbackStatus"/>
@@ -20,13 +22,14 @@
         <result column="callback_attempt" property="callbackAttempt"/>
     </resultMap>
     <sql id="taskColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,task_id,child_agent_id,child_session_id,instruction,
-        function_call_id,trace_id,status,attempt,fencing_token,lease_owner,lease_expires_at,result_text,error_code,
+        function_call_id,trace_id,status,attempt,fencing_token,lease_owner,lease_expires_at,result_text,result_summary,
+        full_context,summary_truncated,error_code,
         created_at,completed_at,acknowledged_at,callback_status,callback_owner,callback_claimed_at,callback_attempt</sql>
     <insert id="insertTask" parameterType="cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO">
         INSERT INTO agent_subagent_task (<include refid="taskColumns"/>) VALUES
         (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{taskId},#{childAgentId},#{childSessionId},#{instruction},
          #{functionCallId},#{traceId},#{status},#{attempt},#{fencingToken},#{leaseOwner},#{leaseExpiresAt},
-         #{resultText},#{errorCode},#{createdAt},#{completedAt},#{acknowledgedAt},#{callbackStatus},#{callbackOwner},
+         #{resultText},#{resultSummary},#{fullContext},#{summaryTruncated},#{errorCode},#{createdAt},#{completedAt},#{acknowledgedAt},#{callbackStatus},#{callbackOwner},
          #{callbackClaimedAt},#{callbackAttempt})
     </insert>
     <insert id="insertOutbox" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO">
@@ -71,7 +74,9 @@
           AND fencing_token=#{fencingToken} AND lease_expires_at &gt;= #{now} AND deleted=0
     </update>
     <update id="complete">
-        UPDATE agent_subagent_task SET status=#{task.status}, result_text=#{task.resultText}, error_code=#{task.errorCode},
+        UPDATE agent_subagent_task SET status=#{task.status}, result_text=#{task.resultText},
+            result_summary=#{task.resultSummary}, full_context=#{task.fullContext},
+            summary_truncated=#{task.summaryTruncated}, error_code=#{task.errorCode},
             completed_at=#{task.completedAt}, lease_owner=NULL, lease_expires_at=NULL
         WHERE tenant_id=#{task.tenantId} AND task_id=#{task.taskId} AND status='RUNNING'
           AND lease_owner=#{workerId} AND fencing_token=#{fencingToken}

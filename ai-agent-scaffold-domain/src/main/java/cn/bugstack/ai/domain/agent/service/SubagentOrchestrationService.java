@@ -41,7 +41,8 @@ public class SubagentOrchestrationService {
         LocalDateTime now = LocalDateTime.now();
         List<SubagentTaskEntity> tasks = requests.stream().map(request -> {
             if (request == null || !allowed.contains(request.agentId)
-                    || request.instruction == null || request.instruction.isBlank()) {
+                    || request.instruction == null || request.instruction.isBlank()
+                    || request.instruction.length() > 12000) {
                 throw error("SUBAGENT_TASK_INVALID");
             }
             availabilityService.assertEnabled(supervisor.tenantId, request.agentId);

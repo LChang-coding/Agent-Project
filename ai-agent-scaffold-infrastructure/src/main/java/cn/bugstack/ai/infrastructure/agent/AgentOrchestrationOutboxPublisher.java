@@ -22,14 +22,18 @@ public class AgentOrchestrationOutboxPublisher {
     private final String taskTopic;
     private final String resultTopic;
     private final String cleanupTopic;
+    private final String resumeTopic;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AgentOrchestrationOutboxPublisher(ISubagentTaskDao dao, KafkaTemplate<String, String> kafkaTemplate,
             @Value("${ai.agent.orchestration.task-topic:agent.subagent.task.v1}") String taskTopic,
             @Value("${ai.agent.orchestration.result-topic:agent.subagent.result.v1}") String resultTopic,
-            @Value("${ai.agent.orchestration.cleanup-topic:agent.subagent.cleanup.v1}") String cleanupTopic) {
+            @Value("${ai.agent.orchestration.cleanup-topic:agent.subagent.cleanup.v1}") String cleanupTopic,
+            @Value("${ai.agent.orchestration.resume-topic:agent.parent.resume.v1}") String resumeTopic) {
         this.dao = dao;
         this.kafkaTemplate = kafkaTemplate;
         this.taskTopic = taskTopic; this.resultTopic = resultTopic; this.cleanupTopic = cleanupTopic;
+        this.resumeTopic = resumeTopic;
     }
 
     @Scheduled(fixedDelayString = "${ai.agent.orchestration.outbox-poll-ms:1000}")
@@ -71,6 +75,7 @@ public class AgentOrchestrationOutboxPublisher {
             case "SUBAGENT_TASK_READY" -> taskTopic;
             case "SUBAGENT_RESULT_READY" -> resultTopic;
             case "SUBAGENT_INSTANCE_CLEANUP" -> cleanupTopic;
+            case "PARENT_RESUME_REQUESTED" -> resumeTopic;
             default -> throw new IllegalArgumentException("UNKNOWN_AGENT_EVENT_TYPE:" + eventType);
         };
     }

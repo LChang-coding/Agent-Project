@@ -189,7 +189,9 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
         po.setInstruction(value.getInstruction()); po.setFunctionCallId(value.getFunctionCallId()); po.setTraceId(value.getTraceId());
         po.setStatus(value.getStatus().name()); po.setAttempt(value.getAttempt()); po.setFencingToken(value.getFencingToken());
         po.setLeaseOwner(value.getLeaseOwner()); po.setLeaseExpiresAt(value.getLeaseExpiresAt());
-        po.setResultText(value.getResultText()); po.setErrorCode(value.getErrorCode()); po.setCreatedAt(value.getCreatedAt());
+        po.setResultText(value.getResultText()); po.setResultSummary(value.getResultSummary());
+        po.setFullContext(value.getFullContext()); po.setSummaryTruncated(value.getSummaryTruncated());
+        po.setErrorCode(value.getErrorCode()); po.setCreatedAt(value.getCreatedAt());
         po.setCompletedAt(value.getCompletedAt()); po.setAcknowledgedAt(value.getAcknowledgedAt());
         po.setCallbackStatus(value.getCallbackStatus() == null ? "PENDING" : value.getCallbackStatus());
         po.setCallbackOwner(value.getCallbackOwner()); po.setCallbackClaimedAt(value.getCallbackClaimedAt());
@@ -205,7 +207,9 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
                 .instruction(value.getInstruction()).functionCallId(value.getFunctionCallId())
                 .traceId(value.getTraceId()).status(SubagentTaskStatus.valueOf(value.getStatus())).attempt(value.getAttempt())
                 .fencingToken(value.getFencingToken()).leaseOwner(value.getLeaseOwner()).leaseExpiresAt(value.getLeaseExpiresAt())
-                .resultText(value.getResultText()).errorCode(value.getErrorCode()).createdAt(value.getCreatedAt())
+                .resultText(value.getResultText()).resultSummary(value.getResultSummary())
+                .fullContext(value.getFullContext()).summaryTruncated(value.getSummaryTruncated())
+                .errorCode(value.getErrorCode()).createdAt(value.getCreatedAt())
                 .completedAt(value.getCompletedAt()).acknowledgedAt(value.getAcknowledgedAt())
                 .callbackStatus(value.getCallbackStatus()).callbackOwner(value.getCallbackOwner())
                 .callbackClaimedAt(value.getCallbackClaimedAt()).callbackAttempt(value.getCallbackAttempt()).build();

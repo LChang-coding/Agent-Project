@@ -41,6 +41,41 @@
               可委派模板：{{ agent.allowedSubAgentIds.join('、') }}
             </small>
             <small>{{ agent.agentId }} · {{ sourceLabel(agent.sourceType) }} · revision {{ agent.revision }}</small>
+            <div v-if="agent.orchestrationRole === 'SUPERVISOR' && createPermission(agent)" class="tool-permission">
+              <strong>创建子 Agent 工具权限</strong>
+              <label>
+                执行策略
+                <select v-model="createPermission(agent)!.mode" :disabled="!agent.manageable">
+                  <option value="ALLOW">直接允许</option>
+                  <option value="REQUIRE_APPROVAL">需要人工审批</option>
+                  <option value="DENY">禁止调用</option>
+                </select>
+              </label>
+              <template v-if="createPermission(agent)!.mode === 'REQUIRE_APPROVAL'">
+                <label>
+                  超时秒数
+                  <input v-model.number="createPermission(agent)!.timeoutSeconds" type="number" min="60" max="3600">
+                </label>
+                <label>
+                  超时默认
+                  <select v-model="createPermission(agent)!.timeoutDecision">
+                    <option value="REJECT">默认拒绝</option>
+                    <option value="APPROVE">默认同意</option>
+                  </select>
+                </label>
+                <label>
+                  审批建议（每行一项）
+                  <textarea :value="createPermission(agent)!.suggestions.join('\n')"
+                            :disabled="!agent.manageable"
+                            @input="updateSuggestions(agent, $event)"></textarea>
+                </label>
+              </template>
+              <button class="button button--soft" type="button"
+                      :disabled="!agent.manageable || Boolean(agentStore.mutatingPermissionAgentId)"
+                      @click="savePermission(agent)">
+                {{ agentStore.mutatingPermissionAgentId === agent.agentId ? '保存中…' : '保存工具权限' }}
+              </button>
+            </div>
           </div>
           <div class="agent-actions">
             <button class="button button--soft" type="button"
@@ -131,6 +166,21 @@ async function refreshRuntimeAgents() {
  */
 function sourceLabel(sourceType: AgentConfigItem['sourceType']) {
   return sourceType === 'static_config' ? '共享基础配置' : '数据库配置';
+}
+
+function createPermission(agent: AgentConfigItem) {
+  return agent.toolPermissions?.find((item) => item.toolCode === 'create_subagent_instances');
+}
+
+function updateSuggestions(agent: AgentConfigItem, event: Event) {
+  const permission = createPermission(agent);
+  if (!permission) return;
+  permission.suggestions = (event.target as HTMLTextAreaElement).value.split(/\r?\n/).slice(0, 8);
+}
+
+async function savePermission(agent: AgentConfigItem) {
+  const permission = createPermission(agent);
+  if (permission) await agentStore.saveToolPermission(agent, permission);
 }
 </script>
 
@@ -242,6 +292,23 @@ function sourceLabel(sourceType: AgentConfigItem['sourceType']) {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.tool-permission {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.tool-permission label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 @media (max-width: 720px) {

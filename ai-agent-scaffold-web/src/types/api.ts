@@ -79,7 +79,41 @@ export interface AgentConfigItem extends AiAgentConfig {
   manageable: boolean;
   revision: number;
   disabledAt?: string;
+  toolPermissions?: AgentToolPermission[];
 }
+
+export type AgentToolPermissionMode = 'ALLOW' | 'DENY' | 'REQUIRE_APPROVAL';
+
+export interface AgentToolPermission {
+  toolCode: 'create_subagent_instances';
+  mode: AgentToolPermissionMode;
+  timeoutSeconds: number;
+  timeoutDecision: 'APPROVE' | 'REJECT';
+  suggestions: string[];
+  revision: number;
+}
+
+export interface AgentToolPermissionUpdateRequest {
+  mode: AgentToolPermissionMode;
+  timeoutSeconds: number;
+  timeoutDecision: 'APPROVE' | 'REJECT';
+  suggestions: string[];
+  expectedRevision: number;
+}
+
+export interface ToolApprovalRequest {
+  sequence: number;
+  approvalId: string;
+  parentAgentId: string;
+  toolCode: string;
+  requestedInput: Record<string, unknown>;
+  suggestions: string[];
+  status: 'PENDING';
+  expiresAt: string;
+  revision: number;
+}
+
+export type ToolApprovalDecision = 'APPROVE' | 'REJECT' | 'APPROVE_WITH_CHANGES' | 'REPLAN';
 
 export interface AgentStatusUpdateRequest {
   enabled: boolean;

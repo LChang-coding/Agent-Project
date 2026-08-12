@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia';
 
-import { deleteAgentConfig, queryAgentConfigManagement, updateAgentConfigStatus } from '@/api/agent';
-import type { AgentConfigItem } from '@/types/api';
+import { deleteAgentConfig, queryAgentConfigManagement, updateAgentConfigStatus, updateAgentToolPermission } from '@/api/agent';
+import type { AgentConfigItem, AgentToolPermission } from '@/types/api';
 
 interface AgentManagementState {
   agents: AgentConfigItem[];
   loading: boolean;
   mutatingAgentId: string;
+  mutatingPermissionAgentId: string;
   errorMessage: string;
 }
 
@@ -19,6 +20,7 @@ export const useAgentManagementStore = defineStore('agent-management', {
     agents: [],
     loading: false,
     mutatingAgentId: '',
+    mutatingPermissionAgentId: '',
     errorMessage: '',
   }),
   getters: {
@@ -87,6 +89,26 @@ export const useAgentManagementStore = defineStore('agent-management', {
       } finally {
         this.mutatingAgentId = '';
       }
+    },
+
+    async saveToolPermission(agent: AgentConfigItem, permission: AgentToolPermission) {
+      if (this.mutatingPermissionAgentId || !agent.manageable) return false;
+      this.mutatingPermissionAgentId = agent.agentId; this.errorMessage = '';
+      try {
+        const saved = await updateAgentToolPermission(agent.agentId, permission.toolCode, {
+          mode: permission.mode,
+          timeoutSeconds: permission.timeoutSeconds,
+          timeoutDecision: permission.timeoutDecision,
+          suggestions: permission.suggestions,
+          expectedRevision: permission.revision,
+        });
+        const index = agent.toolPermissions?.findIndex((item) => item.toolCode === saved.toolCode) ?? -1;
+        if (index >= 0 && agent.toolPermissions) agent.toolPermissions[index] = saved;
+        return true;
+      } catch (error) {
+        this.errorMessage = error instanceof Error ? error.message : '工具权限保存失败';
+        return false;
+      } finally { this.mutatingPermissionAgentId = ''; }
     },
 
     /**

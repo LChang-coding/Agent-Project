@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/")
 @CrossOrigin(origins = "*")
 public class AgentServiceController implements IAgentService {
+    private static final long CHAT_STREAM_TIMEOUT_MILLIS = 65 * 60 * 1000L;
 
     /**
      * 会话与对话的领域入口。
@@ -343,7 +344,7 @@ public class AgentServiceController implements IAgentService {
      *
      * <p>数据流：
      * HTTP 请求
-     * → 建立 SseEmitter（3 分钟超时）
+     * → 建立 SseEmitter（65 分钟超时）
      * → 下发 trace 事件
      * → 可信用户判定
      * → 会话补建（可选）→ 下发 session 事件
@@ -361,8 +362,8 @@ public class AgentServiceController implements IAgentService {
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Override
     public ResponseBodyEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
-        // 建立 SSE 通道并设定 3 分钟上限：超时后会走onTimeout，防止长时间挂死的连接一直占用线程。
-        SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
+        // 工具审批最长可配 60 分钟，连接需留出收尾窗口，否则审批完成前会先取消原 Run。
+        SseEmitter emitter = new SseEmitter(CHAT_STREAM_TIMEOUT_MILLIS);
         // Trace 必须在任何业务事件前确定并返回，用户才能据此查询完整链路日志。
         String traceId = TraceContext.ensureTraceId();
         // 只保护「建流阶段」：这一段失败必须立刻给前端一条 error 事件并关闭，否则前端会一直等。
@@ -469,12 +470,17 @@ public class AgentServiceController implements IAgentService {
                                       AtomicBoolean interruptRequested) {
         // 没有运行编号就无从登记，也无从取消，直接返回避免往注册表塞空键。
         if (runId == null) return;
+        Disposable heartbeat = Flowable.interval(15, 15, java.util.concurrent.TimeUnit.SECONDS)
+                .subscribe(ignored -> emitter.send(SseEmitter.event().name("heartbeat")
+                                .data(java.util.Map.of("runId", runId))),
+                        error -> log.debug("SSE 心跳已停止 runId:{}", runId, error));
         // 把「如何中断这次运行」登记下来，取消接口只需按 runId 触发这个动作。
         activeRunRegistry.register(runId, () -> {
             // CAS 保证并发下只有一次取消真正生效，重复取消不会重复关闭连接。
             if (interruptRequested.compareAndSet(false, true)) {
                 // 先掐断上游订阅，停止继续生成内容，省掉无用的模型调用。
                 dispose(disposableRef);
+                heartbeat.dispose();
                 // 再正常关闭 SSE，让前端收到结束信号而不是一直挂着。
                 emitter.complete();
             }
@@ -483,11 +489,13 @@ public class AgentServiceController implements IAgentService {
         emitter.onCompletion(() -> {
             // 确保上游订阅一定被释放，避免推送到一个已经关闭的连接上。
             dispose(disposableRef);
+            heartbeat.dispose();
             // 从注册表摘除本次运行，否则内存里的条目会越积越多。
             activeRunRegistry.remove(runId);
         });
-        // 超过 3 分钟未结束时的兜底处理。
+        // 超过连接上限未结束时的兜底处理。
         emitter.onTimeout(() -> {
+            heartbeat.dispose();
             // 优先走统一中断入口；返回 false 说明注册表里已经没有这次运行了。
             if (!activeRunRegistry.interrupt(runId)) {
                 // 中断入口没接住，就自己释放订阅。
@@ -498,6 +506,7 @@ public class AgentServiceController implements IAgentService {
         });
         // 连接异常中断（用户关页、网络断开）时的清理钩子。
         emitter.onError(error -> {
+            heartbeat.dispose();
             // 断开订阅，停止向已经不存在的客户端生成内容。
             dispose(disposableRef);
             // 清掉注册表条目，防止残留无效的中断句柄。

@@ -106,6 +106,9 @@ public class PlatformToolResolver {
             result.add(platform("read_subagent_result", "读取当前主运行已收到的子 Agent 结果",
                     "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
                             "\"taskIds\":{\"type\":\"array\",\"maxItems\":100,\"items\":{\"type\":\"string\"}}}}"));
+            result.add(platform("read_subagent_full_context", "按需读取当前主运行所属子 Agent 的完整上下文",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"taskIds\"],\"properties\":{" +
+                            "\"taskIds\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"string\"}}}}"));
             result.add(platform("cancel_subagent_instances", "取消当前主运行尚未终结的子 Agent 运行实例",
                     "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"taskIds\"],\"properties\":{" +
                             "\"taskIds\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":100,\"items\":{\"type\":\"string\"}}}}"));

@@ -2,6 +2,8 @@ package cn.bugstack.ai.domain.agent.service;
 
 import cn.bugstack.ai.domain.agent.model.entity.AgentCatalogEntryEntity;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
+import cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity;
+import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.service.PlatformToolHandler;
@@ -16,23 +18,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** 四个主 Agent 编排平台工具的统一执行入口。 */
+/** 五个主 Agent 编排平台工具的统一执行入口。 */
 @Service
 public class SubagentPlatformToolHandler implements PlatformToolHandler {
     private static final String SEARCH = "search_agent_catalog";
     private static final String DELEGATE = "create_subagent_instances";
     private static final String READ = "read_subagent_result";
+    private static final String READ_FULL = "read_subagent_full_context";
     private static final String CANCEL = "cancel_subagent_instances";
 
     private final AgentCatalogService catalogService;
     private final SubagentOrchestrationService orchestrationService;
+    private final AgentToolPermissionService permissionService;
+    private final ToolApprovalService approvalService;
 
     public SubagentPlatformToolHandler(PlatformToolRegistry registry, AgentCatalogService catalogService,
-                                       SubagentOrchestrationService orchestrationService) {
+                                       SubagentOrchestrationService orchestrationService,
+                                       AgentToolPermissionService permissionService,
+                                       ToolApprovalService approvalService) {
         this.catalogService = catalogService;
         this.orchestrationService = orchestrationService;
+        this.permissionService = permissionService; this.approvalService = approvalService;
         registry.register(SEARCH, this); registry.register(DELEGATE, this);
-        registry.register(READ, this); registry.register(CANCEL, this);
+        registry.register(READ, this); registry.register(READ_FULL, this); registry.register(CANCEL, this);
     }
 
     @Override
@@ -44,6 +52,7 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
             if (SEARCH.equals(function)) return search(input, trusted);
             if (DELEGATE.equals(function)) return delegate(input, context, trusted);
             if (READ.equals(function)) return read(input, trusted);
+            if (READ_FULL.equals(function)) return readFullContext(input, trusted);
             if (CANCEL.equals(function)) return cancel(input, trusted);
             return PlatformToolResult.failure("SUBAGENT_TOOL_UNKNOWN");
         } catch (RuntimeException exception) {
@@ -60,6 +69,8 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
     }
 
     private PlatformToolResult delegate(Map<String, Object> input, ToolInvokeContextEntity context, Trusted trusted) {
+        requireKeys(input, Set.of("tasks"), true);
+        input = approvedInput(input, context, trusted);
         requireKeys(input, Set.of("tasks"), true);
         Object raw = input.get("tasks");
         if (!(raw instanceof List<?> values)) throw new IllegalArgumentException("SUBAGENT_TASKS_INVALID");
@@ -78,6 +89,20 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
         return success(Map.of("accepted", accepted, "waitMode", "EVENT_DRIVEN"), Map.of("count", accepted.size()));
     }
 
+    private Map<String, Object> approvedInput(Map<String, Object> input, ToolInvokeContextEntity context,
+                                              Trusted trusted) {
+        AgentToolPermissionEntity policy = permissionService.resolve(trusted.tenantId, trusted.parentAgentId, DELEGATE);
+        if ("DENY".equals(policy.getMode())) throw new IllegalArgumentException("SUBAGENT_TOOL_DENIED");
+        if (!"REQUIRE_APPROVAL".equals(policy.getMode())) return input;
+        ToolApprovalRequestEntity request = approvalService.request(context, DELEGATE, input, policy);
+        ToolApprovalRequestEntity decision = approvalService.awaitDecision(request, context);
+        if ("REJECT".equals(decision.getDecision())) throw new IllegalArgumentException("SUBAGENT_TOOL_REJECTED");
+        if ("REPLAN".equals(decision.getDecision())) throw new IllegalArgumentException("SUBAGENT_TOOL_REPLAN_REQUIRED");
+        if ("APPROVE_WITH_CHANGES".equals(decision.getDecision())) return decision.getAmendedInput();
+        if (!"APPROVE".equals(decision.getDecision())) throw new IllegalArgumentException("TOOL_APPROVAL_DECISION_INVALID");
+        return input;
+    }
+
     private PlatformToolResult read(Map<String, Object> input, Trusted trusted) {
         requireKeys(input, Set.of("taskIds"), false);
         List<String> taskIds = stringList(input == null ? null : input.get("taskIds"));
@@ -93,11 +118,32 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
         return success(Map.of("cancelled", cancelled), Map.of("cancelled", cancelled));
     }
 
+    private PlatformToolResult readFullContext(Map<String, Object> input, Trusted trusted) {
+        requireKeys(input, Set.of("taskIds"), true);
+        List<String> taskIds = stringList(input.get("taskIds"));
+        if (taskIds.isEmpty()) throw new IllegalArgumentException("SUBAGENT_TASK_IDS_REQUIRED");
+        List<Map<String, Object>> results = orchestrationService
+                .read(trusted.tenantId, trusted.parentRunId, taskIds).stream()
+                .map(this::fullContextResult).toList();
+        return success(Map.of("results", results), Map.of("count", results.size()));
+    }
+
     private Map<String, Object> result(SubagentTaskEntity task) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("taskId", task.getTaskId()); value.put("agentId", task.getChildAgentId());
         value.put("status", task.getStatus().name());
-        if (task.getResultText() != null) value.put("output", task.getResultText());
+        if (task.getResultSummary() != null) value.put("summary", task.getResultSummary());
+        value.put("hasFullContext", task.getFullContext() != null && !task.getFullContext().isBlank());
+        value.put("summaryTruncated", Boolean.TRUE.equals(task.getSummaryTruncated()));
+        if (task.getErrorCode() != null) value.put("errorCode", task.getErrorCode());
+        return Map.copyOf(value);
+    }
+
+    private Map<String, Object> fullContextResult(SubagentTaskEntity task) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("taskId", task.getTaskId()); value.put("agentId", task.getChildAgentId());
+        value.put("status", task.getStatus().name());
+        if (task.getFullContext() != null) value.put("fullContext", task.getFullContext());
         if (task.getErrorCode() != null) value.put("errorCode", task.getErrorCode());
         return Map.copyOf(value);
     }

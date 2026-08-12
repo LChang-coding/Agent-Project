@@ -24,6 +24,9 @@ public class SubagentTaskPO {
     private String leaseOwner;
     private LocalDateTime leaseExpiresAt;
     private String resultText;
+    private String resultSummary;
+    private String fullContext;
+    private Boolean summaryTruncated;
     private String errorCode;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;

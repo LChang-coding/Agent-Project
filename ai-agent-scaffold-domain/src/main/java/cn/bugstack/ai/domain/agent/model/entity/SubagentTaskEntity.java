@@ -26,7 +26,14 @@ public class SubagentTaskEntity {
     private Long fencingToken;
     private String leaseOwner;
     private LocalDateTime leaseExpiresAt;
+    /** 兼容旧消费者的最终回答正文；新主 Agent 唤醒只使用 resultSummary。 */
     private String resultText;
+    /** 自动注入主 Agent 的有界结果摘要，最大 1000 个字符。 */
+    private String resultSummary;
+    /** 子 Agent 本次返回的完整内容，只能通过受信平台工具按父运行范围读取。 */
+    private String fullContext;
+    /** 摘要是否因长度上限被截断。 */
+    private Boolean summaryTruncated;
     private String errorCode;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;

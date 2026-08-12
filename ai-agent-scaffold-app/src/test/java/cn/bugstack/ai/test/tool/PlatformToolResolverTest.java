@@ -95,6 +95,7 @@ public class PlatformToolResolverTest {
         Assert.assertTrue(functions.contains("search_agent_catalog"));
         Assert.assertTrue(functions.contains("create_subagent_instances"));
         Assert.assertTrue(functions.contains("read_subagent_result"));
+        Assert.assertTrue(functions.contains("read_subagent_full_context"));
         Assert.assertTrue(functions.contains("cancel_subagent_instances"));
 
         supervisor.setOrchestrationRole("NORMAL");

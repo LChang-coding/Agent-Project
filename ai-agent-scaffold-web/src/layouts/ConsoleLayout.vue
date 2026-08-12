@@ -41,6 +41,7 @@
         </div>
       </header>
       <RouterView />
+      <ToolApprovalPanel />
     </main>
   </div>
 </template>
@@ -62,6 +63,7 @@ import {
 } from '@lucide/vue';
 
 import { useAuthStore } from '@/stores/auth';
+import ToolApprovalPanel from '@/components/agent/ToolApprovalPanel.vue';
 
 interface NavItem {
   path: string;

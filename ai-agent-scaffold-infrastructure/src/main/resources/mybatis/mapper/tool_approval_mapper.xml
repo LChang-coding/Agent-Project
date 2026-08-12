@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IToolApprovalDao">
+  <resultMap id="Map" type="cn.bugstack.ai.infrastructure.dao.po.ToolApprovalRequestPO">
+    <id column="id" property="sequence"/><result column="approval_id" property="approvalId"/>
+    <result column="tenant_id" property="tenantId"/><result column="user_id" property="userId"/>
+    <result column="parent_run_id" property="parentRunId"/><result column="source_run_id" property="sourceRunId"/>
+    <result column="parent_session_id" property="parentSessionId"/><result column="parent_agent_id" property="parentAgentId"/>
+    <result column="function_call_id" property="functionCallId"/><result column="tool_code" property="toolCode"/>
+    <result column="requested_input_json" property="requestedInputJson"/><result column="amended_input_json" property="amendedInputJson"/>
+    <result column="allowed_subagent_ids_json" property="allowedSubAgentIdsJson"/><result column="suggestions_json" property="suggestionsJson"/>
+    <result column="status" property="status"/><result column="timeout_decision" property="timeoutDecision"/>
+    <result column="expires_at" property="expiresAt"/><result column="decision" property="decision"/>
+    <result column="comment" property="comment"/><result column="revision" property="revision"/>
+    <result column="trace_id" property="traceId"/>
+  </resultMap>
+  <sql id="Columns">id,approval_id,tenant_id,user_id,parent_run_id,source_run_id,parent_session_id,parent_agent_id,
+    function_call_id,tool_code,requested_input_json,amended_input_json,allowed_subagent_ids_json,suggestions_json,
+    status,timeout_decision,expires_at,decision,comment,revision,trace_id</sql>
+  <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.ToolApprovalRequestPO">
+    INSERT INTO agent_tool_approval_request
+    (approval_id,tenant_id,user_id,parent_run_id,source_run_id,parent_session_id,parent_agent_id,function_call_id,
+     tool_code,requested_input_json,allowed_subagent_ids_json,suggestions_json,status,timeout_decision,expires_at,
+     revision,trace_id,created_at,updated_at)
+    VALUES (#{approvalId},#{tenantId},#{userId},#{parentRunId},#{sourceRunId},#{parentSessionId},#{parentAgentId},
+     #{functionCallId},#{toolCode},#{requestedInputJson},#{allowedSubAgentIdsJson},#{suggestionsJson},#{status},
+     #{timeoutDecision},#{expiresAt},#{revision},#{traceId},NOW(3),NOW(3))
+  </insert>
+  <select id="queryByFunctionCall" resultMap="Map">
+    SELECT <include refid="Columns"/> FROM agent_tool_approval_request
+    WHERE tenant_id=#{tenantId} AND source_run_id=#{sourceRunId} AND function_call_id=#{functionCallId} AND deleted=0 LIMIT 1
+  </select>
+  <select id="query" resultMap="Map">
+    SELECT <include refid="Columns"/> FROM agent_tool_approval_request
+    WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND approval_id=#{approvalId} AND deleted=0 LIMIT 1
+  </select>
+  <select id="queryAfter" resultMap="Map">
+    SELECT <include refid="Columns"/> FROM agent_tool_approval_request
+    WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND id &gt; #{afterSequence}
+      AND status='PENDING' AND deleted=0
+    ORDER BY id ASC LIMIT #{limit}
+  </select>
+  <update id="decide">
+    UPDATE agent_tool_approval_request SET status='DECIDED',decision=#{decision},comment=#{comment},
+      amended_input_json=#{amendedInputJson},decided_by=#{decidedBy},decided_at=#{decidedAt},
+      revision=revision+1,updated_at=#{decidedAt}
+    WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND approval_id=#{approvalId} AND status='PENDING'
+      AND expires_at &gt; #{decidedAt} AND revision=#{expectedRevision} AND deleted=0
+  </update>
+  <select id="queryExpired" resultMap="Map">
+    SELECT <include refid="Columns"/> FROM agent_tool_approval_request
+    WHERE status='PENDING' AND expires_at &lt;= #{now} AND deleted=0 ORDER BY id ASC LIMIT #{limit}
+  </select>
+  <update id="decideTimeout">
+    UPDATE agent_tool_approval_request SET status='DECIDED',decision=#{decision},comment='TIMEOUT_DEFAULT',
+      decided_by='system-timeout',decided_at=#{decidedAt},revision=revision+1,updated_at=#{decidedAt}
+    WHERE tenant_id=#{tenantId} AND approval_id=#{approvalId} AND status='PENDING' AND revision=#{revision} AND deleted=0
+  </update>
+</mapper>

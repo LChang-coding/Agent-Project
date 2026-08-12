@@ -3,6 +3,8 @@ import type {
   AgentConfigItem,
   AgentMutationResponse,
   AgentStatusUpdateRequest,
+  AgentToolPermission,
+  AgentToolPermissionUpdateRequest,
   AiAgentConfig,
   ChatRequest,
   ChatResponse,
@@ -11,6 +13,8 @@ import type {
   RunControlResponse,
   RunStreamEvent,
   StreamHandlers,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
 } from '@/types/api';
 
 /**
@@ -33,6 +37,46 @@ export async function updateAgentConfigStatus(agentId: string, payload: AgentSta
     method: 'PUT',
     data: payload,
   });
+}
+
+export async function updateAgentToolPermission(agentId: string, toolCode: string,
+                                                 payload: AgentToolPermissionUpdateRequest) {
+  return request<AgentToolPermission>({
+    url: `/v1/agent-configs/${encodeURIComponent(agentId)}/tool-permissions/${encodeURIComponent(toolCode)}`,
+    method: 'PUT',
+    data: payload,
+  });
+}
+
+export async function decideToolApproval(approvalId: string, payload: {
+  decision: ToolApprovalDecision; comment?: string; amendedInput?: Record<string, unknown>; expectedRevision: number;
+}) {
+  return request<{ approvalId: string; accepted: boolean }>({
+    url: `/v1/tool-approvals/${encodeURIComponent(approvalId)}/decision`, method: 'POST', data: payload,
+  });
+}
+
+export async function streamToolApprovals(afterSequence: number, signal: AbortSignal,
+                                          onApproval: (request: ToolApprovalRequest) => void,
+                                          retried = false): Promise<void> {
+  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/v1/tool-approvals/stream?afterSequence=${afterSequence}`, {
+    headers: { Accept: 'text/event-stream', Authorization: `Bearer ${getAccessToken()}` }, signal,
+  });
+  if (response.status === 401 && !retried) {
+    await refreshAccessToken();
+    return streamToolApprovals(afterSequence, signal, onApproval, true);
+  }
+  if (!response.ok || !response.body) throw new Error(`审批事件流连接失败：HTTP ${response.status}`);
+  const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\n\n|\r\n\r\n/); buffer = blocks.pop() || '';
+    for (const block of blocks) {
+      if (!block.split(/\r?\n/).some((line) => line.trim() === 'event:tool_approval')) continue;
+      const data = block.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
+      if (data) onApproval(JSON.parse(data) as ToolApprovalRequest);
+    }
+  }
 }
 
 /**
@@ -76,6 +120,7 @@ export async function sendChatMessage(payload: ChatRequest, signal?: AbortSignal
     method: 'POST',
     data: payload,
     signal,
+    timeout: 65 * 60_000,
   });
   return { ...result.data, traceId: result.traceId };
 }

@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 public class SubagentTaskConsumer {
+    private static final int SUMMARY_LIMIT = 1000;
     private static final Duration LEASE = Duration.ofSeconds(60);
     private static final Duration CACHE_TTL = Duration.ofHours(2);
     private final ObjectMapper objectMapper;
@@ -70,11 +71,16 @@ public class SubagentTaskConsumer {
             try {
                 List<String> output = chatService.handleMessage(task.getChildAgentId(), task.getUserId(),
                         childSessionId, task.getInstruction());
-                task.setStatus(SubagentTaskStatus.SUCCEEDED); task.setResultText(finalOutput(output));
+                String result = finalOutput(output);
+                String fullContext = fullContext(output);
+                task.setStatus(SubagentTaskStatus.SUCCEEDED); task.setResultText(result);
+                task.setResultSummary(summary(result)); task.setFullContext(fullContext);
+                task.setSummaryTruncated(result.length() > SUMMARY_LIMIT);
                 task.setCompletedAt(LocalDateTime.now());
             } catch (RuntimeException exception) {
                 task.setStatus(SubagentTaskStatus.FAILED); task.setErrorCode(exception.getClass().getSimpleName());
-                task.setResultText(null); task.setCompletedAt(LocalDateTime.now());
+                task.setResultText(null); task.setResultSummary(null); task.setFullContext(null);
+                task.setSummaryTruncated(false); task.setCompletedAt(LocalDateTime.now());
             }
             if (repository.complete(task, workerId, task.getFencingToken()) != 1) {
                 throw new IllegalStateException("SUBAGENT_LEASE_LOST");
@@ -115,6 +121,16 @@ public class SubagentTaskConsumer {
             String output = outputs.get(index); if (output != null && !output.isBlank()) return output;
         }
         return "";
+    }
+
+    private String fullContext(List<String> outputs) {
+        // IChatService 可能返回累计快照，最后一个非空值已是完整回答；拼接会重复放大正文。
+        return finalOutput(outputs);
+    }
+
+    private String summary(String value) {
+        if (value == null || value.length() <= SUMMARY_LIMIT) return value == null ? "" : value;
+        return value.substring(0, SUMMARY_LIMIT);
     }
 
     private String required(JsonNode node, String field) {

@@ -3,6 +3,7 @@ package cn.bugstack.ai.api.dto;
 import lombok.Data;
 
 import java.util.List;
+import cn.bugstack.ai.api.dto.agent.AgentToolPermissionDTO;
 
 /**
  * 智能体配置响应对象
@@ -33,6 +34,7 @@ public class AiAgentConfigResponseDTO {
     private List<String> notFor;
     private List<String> capabilities;
     private List<String> allowedSubAgentIds;
+    private List<AgentToolPermissionDTO> toolPermissions;
 
     /** 当前租户状态。 */
     private String status;

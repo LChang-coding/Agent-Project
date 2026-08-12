@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.IAgentToolPermissionDao">
+    <resultMap id="Map" type="cn.bugstack.ai.infrastructure.dao.po.AgentToolPermissionPO">
+        <result column="tenant_id" property="tenantId"/><result column="agent_id" property="agentId"/>
+        <result column="tool_code" property="toolCode"/><result column="mode" property="mode"/>
+        <result column="timeout_seconds" property="timeoutSeconds"/><result column="timeout_decision" property="timeoutDecision"/>
+        <result column="suggestions_json" property="suggestionsJson"/><result column="revision" property="revision"/>
+        <result column="updated_by" property="updatedBy"/>
+    </resultMap>
+    <sql id="Columns">tenant_id,agent_id,tool_code,mode,timeout_seconds,timeout_decision,suggestions_json,revision,updated_by</sql>
+    <select id="query" resultMap="Map">
+        SELECT <include refid="Columns"/> FROM agent_tool_permission
+        WHERE tenant_id=#{tenantId} AND agent_id=#{agentId} AND tool_code=#{toolCode} AND deleted=0 LIMIT 1
+    </select>
+    <select id="queryByAgent" resultMap="Map">
+        SELECT <include refid="Columns"/> FROM agent_tool_permission
+        WHERE tenant_id=#{tenantId} AND agent_id=#{agentId} AND deleted=0 ORDER BY id ASC
+    </select>
+    <insert id="insert" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentToolPermissionPO">
+        INSERT INTO agent_tool_permission
+        (tenant_id,agent_id,tool_code,mode,timeout_seconds,timeout_decision,suggestions_json,revision,updated_by)
+        VALUES (#{tenantId},#{agentId},#{toolCode},#{mode},#{timeoutSeconds},#{timeoutDecision},#{suggestionsJson},#{revision},#{updatedBy})
+    </insert>
+    <update id="update">
+        UPDATE agent_tool_permission SET mode=#{value.mode},timeout_seconds=#{value.timeoutSeconds},
+          timeout_decision=#{value.timeoutDecision},suggestions_json=#{value.suggestionsJson},
+          revision=revision+1,updated_by=#{value.updatedBy}
+        WHERE tenant_id=#{value.tenantId} AND agent_id=#{value.agentId} AND tool_code=#{value.toolCode}
+          AND revision=#{expectedRevision} AND deleted=0
+    </update>
+</mapper>
