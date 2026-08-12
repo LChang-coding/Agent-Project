@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao">
+    <resultMap id="SubagentTaskMap" type="cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO">
+        <result column="tenant_id" property="tenantId"/><result column="user_id" property="userId"/>
+        <result column="parent_run_id" property="parentRunId"/><result column="parent_session_id" property="parentSessionId"/>
+        <result column="parent_agent_id" property="parentAgentId"/>
+        <result column="task_id" property="taskId"/><result column="child_agent_id" property="childAgentId"/>
+        <result column="instruction" property="instruction"/><result column="function_call_id" property="functionCallId"/>
+        <result column="trace_id" property="traceId"/><result column="status" property="status"/>
+        <result column="attempt" property="attempt"/><result column="fencing_token" property="fencingToken"/>
+        <result column="lease_owner" property="leaseOwner"/><result column="lease_expires_at" property="leaseExpiresAt"/>
+        <result column="result_text" property="resultText"/><result column="error_code" property="errorCode"/>
+        <result column="created_at" property="createdAt"/><result column="completed_at" property="completedAt"/>
+        <result column="acknowledged_at" property="acknowledgedAt"/>
+    </resultMap>
+    <sql id="taskColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,task_id,child_agent_id,instruction,
+        function_call_id,trace_id,status,attempt,fencing_token,lease_owner,lease_expires_at,result_text,error_code,
+        created_at,completed_at,acknowledged_at</sql>
+    <insert id="insertTask" parameterType="cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO">
+        INSERT INTO agent_subagent_task (<include refid="taskColumns"/>) VALUES
+        (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{taskId},#{childAgentId},#{instruction},
+         #{functionCallId},#{traceId},#{status},#{attempt},#{fencingToken},#{leaseOwner},#{leaseExpiresAt},
+         #{resultText},#{errorCode},#{createdAt},#{completedAt},#{acknowledgedAt})
+    </insert>
+    <insert id="insertOutbox" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO">
+        INSERT INTO agent_orchestration_outbox
+        (tenant_id,event_id,event_type,aggregate_id,partition_key,payload,status,attempt_count,max_attempts,
+         next_attempt_at,lease_owner,fencing_token,lease_expires_at,created_at)
+        VALUES (#{tenantId},#{eventId},#{eventType},#{aggregateId},#{partitionKey},#{payload},#{status},
+                #{attemptCount},#{maxAttempts},#{nextAttemptAt},#{leaseOwner},#{fencingToken},#{leaseExpiresAt},#{createdAt})
+    </insert>
+    <select id="queryByFunctionCall" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND function_call_id=#{functionCallId}
+          AND deleted=0 ORDER BY id ASC
+    </select>
+    <select id="queryByIds" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND deleted=0
+        <if test="taskIds != null and taskIds.size() > 0">
+            AND task_id IN <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">#{taskId}</foreach>
+        </if>
+        ORDER BY id ASC
+    </select>
+    <update id="claim">
+        UPDATE agent_subagent_task
+        SET status='RUNNING', lease_owner=#{workerId}, lease_expires_at=#{leaseExpiresAt},
+            fencing_token=fencing_token+1, attempt=attempt+1
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND deleted=0
+          AND (status='READY' OR (status='RUNNING' AND lease_expires_at &lt; #{now}))
+    </update>
+    <select id="queryOwned" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND lease_owner=#{workerId} AND deleted=0 LIMIT 1
+    </select>
+    <update id="renewLease">
+        UPDATE agent_subagent_task SET lease_expires_at=#{leaseExpiresAt}
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status='RUNNING' AND lease_owner=#{workerId}
+          AND fencing_token=#{fencingToken} AND lease_expires_at &gt;= #{now} AND deleted=0
+    </update>
+    <update id="complete">
+        UPDATE agent_subagent_task SET status=#{task.status}, result_text=#{task.resultText}, error_code=#{task.errorCode},
+            completed_at=#{task.completedAt}, lease_owner=NULL, lease_expires_at=NULL
+        WHERE tenant_id=#{task.tenantId} AND task_id=#{task.taskId} AND status='RUNNING'
+          AND lease_owner=#{workerId} AND fencing_token=#{fencingToken}
+          AND lease_expires_at &gt;= #{task.completedAt} AND deleted=0
+    </update>
+    <update id="cancel">
+        UPDATE agent_subagent_task SET status='CANCELLED', completed_at=#{cancelledAt}, lease_owner=NULL, lease_expires_at=NULL
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status IN ('READY','RUNNING') AND deleted=0
+          AND task_id IN <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">#{taskId}</foreach>
+    </update>
+    <resultMap id="OutboxMap" type="cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO">
+        <result column="tenant_id" property="tenantId"/><result column="event_id" property="eventId"/>
+        <result column="event_type" property="eventType"/><result column="aggregate_id" property="aggregateId"/>
+        <result column="partition_key" property="partitionKey"/><result column="payload" property="payload"/>
+        <result column="status" property="status"/><result column="attempt_count" property="attemptCount"/>
+        <result column="max_attempts" property="maxAttempts"/><result column="next_attempt_at" property="nextAttemptAt"/>
+        <result column="lease_owner" property="leaseOwner"/><result column="fencing_token" property="fencingToken"/>
+        <result column="lease_expires_at" property="leaseExpiresAt"/><result column="created_at" property="createdAt"/>
+    </resultMap>
+    <sql id="outboxColumns">tenant_id,event_id,event_type,aggregate_id,partition_key,payload,status,attempt_count,
+        max_attempts,next_attempt_at,lease_owner,fencing_token,lease_expires_at,created_at</sql>
+    <select id="queryDueOutbox" resultMap="OutboxMap">
+        SELECT <include refid="outboxColumns"/> FROM agent_orchestration_outbox
+        WHERE ((status IN ('PENDING','RETRYING') AND next_attempt_at &lt;= #{now})
+          OR (status='PUBLISHING' AND lease_expires_at &lt; #{now}))
+          AND attempt_count &lt; max_attempts AND deleted=0 ORDER BY id ASC LIMIT #{limit}
+    </select>
+    <update id="claimOutbox">
+        UPDATE agent_orchestration_outbox SET status='PUBLISHING',lease_owner=#{owner},lease_expires_at=#{leaseExpiresAt},
+            fencing_token=fencing_token+1,attempt_count=attempt_count+1
+        WHERE tenant_id=#{tenantId} AND event_id=#{eventId} AND deleted=0 AND attempt_count &lt; max_attempts
+          AND ((status IN ('PENDING','RETRYING') AND next_attempt_at &lt;= #{now})
+            OR (status='PUBLISHING' AND lease_expires_at &lt; #{now}))
+    </update>
+    <select id="queryOwnedOutbox" resultMap="OutboxMap">
+        SELECT <include refid="outboxColumns"/> FROM agent_orchestration_outbox
+        WHERE tenant_id=#{tenantId} AND event_id=#{eventId} AND lease_owner=#{owner} AND status='PUBLISHING'
+          AND deleted=0 LIMIT 1
+    </select>
+    <update id="markOutboxPublished">
+        UPDATE agent_orchestration_outbox SET status='PUBLISHED',published_at=#{publishedAt},lease_owner=NULL,lease_expires_at=NULL
+        WHERE tenant_id=#{tenantId} AND event_id=#{eventId} AND status='PUBLISHING' AND lease_owner=#{owner}
+          AND fencing_token=#{fencingToken} AND deleted=0
+    </update>
+    <update id="markOutboxRetry">
+        UPDATE agent_orchestration_outbox SET status=IF(attempt_count &gt;= max_attempts,'DEAD','RETRYING'),
+            next_attempt_at=#{nextAttemptAt},last_error=#{lastError},lease_owner=NULL,lease_expires_at=NULL
+        WHERE tenant_id=#{tenantId} AND event_id=#{eventId} AND status='PUBLISHING' AND lease_owner=#{owner}
+          AND fencing_token=#{fencingToken} AND deleted=0
+    </update>
+    <update id="claimCallback">
+        UPDATE agent_subagent_task SET callback_status='DELIVERING',callback_owner=#{callbackOwner},
+            callback_claimed_at=#{now},callback_attempt=callback_attempt+1
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status IN ('SUCCEEDED','FAILED','CANCELLED','ACKED')
+          AND (callback_status IN ('PENDING','RETRYING')
+            OR (callback_status='DELIVERING' AND callback_claimed_at &lt; DATE_SUB(#{now}, INTERVAL 5 MINUTE)))
+          AND deleted=0
+    </update>
+    <update id="retryCallback">
+        UPDATE agent_subagent_task SET callback_status='RETRYING',callback_last_error=#{lastError},
+            callback_owner=NULL,callback_claimed_at=NULL
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND callback_status='DELIVERING'
+          AND callback_owner=#{callbackOwner} AND deleted=0
+    </update>
+    <update id="finishCallback">
+        UPDATE agent_subagent_task SET status='ACKED',acknowledged_at=#{deliveredAt},
+            callback_status='DELIVERED',callback_delivered_at=#{deliveredAt},callback_owner=NULL,callback_claimed_at=NULL
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND task_id=#{taskId}
+          AND status IN ('SUCCEEDED','FAILED','CANCELLED') AND callback_status='DELIVERING'
+          AND callback_owner=#{callbackOwner} AND deleted=0
+    </update>
+</mapper>

@@ -117,6 +117,8 @@ public class RunnerNode extends AbstractArmorySupport {
                 .agentId(agentId)
                 .agentName(agentName)
                 .agentDesc(agentDesc)
+                .orchestrationRole(agent.getOrchestrationRole())
+                .allowedSubAgentIds(agent.getAllowedSubAgentIds() == null ? List.of() : List.copyOf(agent.getAllowedSubAgentIds()))
                 .runner(runner)
                 .chatModel(dynamicContext.getChatModel())
                 .build();

@@ -55,9 +55,26 @@ public class AgentAvailabilityServiceTest {
                 && "owner-1".equals(item.getUpdatedBy())));
     }
 
+    @Test
+    public void shouldExposeFrozenOrchestrationMetadata() {
+        IAgentTenantOverrideRepository repository = Mockito.mock(IAgentTenantOverrideRepository.class);
+        Mockito.when(repository.queryList("tenant-a")).thenReturn(List.of());
+        AgentAvailabilityService service = new AgentAvailabilityService(repository, properties());
+
+        AgentConfigStatusEntity agent = service.queryConfigs("tenant-a", false).get(0);
+
+        Assert.assertEquals("SUPERVISOR", agent.getOrchestrationRole());
+        Assert.assertEquals("RESEARCH", agent.getCategory());
+        Assert.assertEquals(List.of("research-agent", "planning-agent"), agent.getAllowedSubAgentIds());
+        Assert.assertEquals(List.of("技术调研"), agent.getBestFor());
+    }
+
     private AiAgentAutoConfigProperties properties() {
         AiAgentConfigTableVO.Agent agent = new AiAgentConfigTableVO.Agent();
         agent.setAgentId("agent-1"); agent.setAgentName("Agent 1"); agent.setAgentDesc("测试");
+        agent.setOrchestrationRole("SUPERVISOR"); agent.setCategory("RESEARCH");
+        agent.setAllowedSubAgentIds(List.of("research-agent", "planning-agent"));
+        agent.setBestFor(List.of("技术调研"));
         AiAgentConfigTableVO table = new AiAgentConfigTableVO(); table.setAgent(agent);
         AiAgentAutoConfigProperties properties = new AiAgentAutoConfigProperties();
         properties.setTables(Map.of("agent-1", table));

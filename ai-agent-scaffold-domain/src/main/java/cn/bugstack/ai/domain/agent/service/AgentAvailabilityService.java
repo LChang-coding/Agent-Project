@@ -230,9 +230,18 @@ public class AgentAvailabilityService {
         boolean enabled = override == null || !"disabled".equalsIgnoreCase(override.getStatus());
         // 身份和文案取静态配置，状态与版本取覆盖记录；版本为空时统一按 0，和插入时的初始版本对齐。
         return AgentConfigStatusEntity.builder().agentId(agent.getAgentId()).agentName(agent.getAgentName())
-                .agentDesc(agent.getAgentDesc()).status(enabled ? "enabled" : "disabled").enabled(enabled)
+                .agentDesc(agent.getAgentDesc()).orchestrationRole(agent.getOrchestrationRole())
+                .category(agent.getCategory()).bestFor(safeList(agent.getBestFor()))
+                .notFor(safeList(agent.getNotFor())).capabilities(safeList(agent.getCapabilities()))
+                .allowedSubAgentIds(safeList(agent.getAllowedSubAgentIds()))
+                .status(enabled ? "enabled" : "disabled").enabled(enabled)
                 .revision(override == null || override.getRevision() == null ? 0L : override.getRevision())
                 .disabledAt(override == null ? null : override.getDisabledAt()).build();
+    }
+
+    /** 配置集合对外只读；空值统一为空集合，避免目录消费者反复判空。 */
+    private List<String> safeList(List<String> values) {
+        return values == null ? List.of() : List.copyOf(values);
     }
 
     /**

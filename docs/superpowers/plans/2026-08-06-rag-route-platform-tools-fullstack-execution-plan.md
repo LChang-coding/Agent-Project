@@ -758,3 +758,42 @@ AI_RAG_TOOL_MAX_CALLS_PER_RUN=3
 - RAG 工具调用次数和 Token 预算当前为单 JVM 原子仓；多实例运行同一 run 需要共享原子存储。
 - 本轮没有连接真实 MySQL、模型、Qdrant 或服务器，因此未执行真实外部依赖端到端测试和迁移实跑。
 - 工具执行中途发生取消后，外部检索可能已经完成；现有门禁能阻止后续模型推进，但若要求 evidence/intent 与取消严格线性化，需要把最终副作用与 run 锁放入同一事务编排。
+
+### 2026-08-12：分布式 Multi-Agent 编排扩展
+
+**本轮目标**
+
+- 在现有 `PLATFORM` 工具、运行控制和事件链上增加 Supervisor 动态委派临时子 Agent 的能力。
+- 子任务通过 Kafka 异步分发，结果经持久化 Parent Inbox 回调主 Agent；业务 ACK 后清理临时实例。
+- 增加研究、计划、审查、执行、总结等 Agent 元信息模板，并允许主 Agent从当前租户已授权目录中选择。
+- 前端展示 Agent 编排角色、能力与可委派白名单配置；运行态任务以工具结果和 MySQL 账本为准。
+
+**约束与门禁**
+
+- 当前机器未找到根目录 `codex.md`，也不连接共享服务器、MySQL、Kafka 或 Redis；相关迁移和部署只交付 SQL 与文档。
+- 代码继续遵守 `trigger -> domain <- infrastructure`，模型参数不得携带租户、用户、运行、权限或内部实例身份。
+- 测试先行；本地可执行的单元测试、编译和前端构建必须记录真实结果，外部中间件验证明确标记未执行。
+- 当前分支为 `feature/multi-agent-orchestration`；不创建提交，不推送。
+
+**实际交付**
+
+- 增加 Supervisor/普通 Agent 角色、用途分类、适用/不适用场景、能力标签和子 Agent 白名单；研究、编码和主控 YAML 已提供可选模板，前端配置页展示这些元信息。
+- 增加 `search_agent_catalog`、`create_subagent_instances`、`read_subagent_result`、`cancel_subagent_instances` 四个 `PLATFORM` 工具；仅可信服务端 Supervisor 上下文可发现和调用，JSON Schema 禁止额外字段。
+- 增加临时任务领域模型、MySQL 权威账本、Transactional Outbox、Kafka 任务/结果/清理消费者、Redis 临时实例与 Parent Inbox 缓存。
+- Worker 通过 Lease、20 秒心跳和 fencing token 接管宕机任务；结果与 Outbox 同事务写入。主 Agent 使用事件回调逻辑续跑，不占用请求线程；回调成功后原子写 ACK 和清理 Outbox。
+- 增加升级/回滚 SQL及中间件部署文档；功能总开关默认关闭。本机未执行迁移、建 Topic 或真实 MySQL/Kafka/Redis 联调。
+- 修复根聚合 POM 与七个子模块不一致的 `groupId`，恢复 Maven reactor 对内部模块的正确解析。
+
+**真实验证**
+
+- Multi-Agent 核心定向测试：17 项通过，覆盖工具暴露/schema、模板元信息、委派幂等/白名单、Worker、Outbox、父回调 ACK、Mapper Lease/fence 和迁移契约。
+- 平台工具、运行控制、RAG、路由和 Multi-Agent 扩展回归：61 项通过；本机 Java 26 需使用 `-Dnet.bytebuddy.experimental=true` 兼容仓库 Byte Buddy 版本。
+- Maven 七模块 `-DskipTests compile`：成功。
+- 前端 `npm run test:unit`：16 项通过；`npm run build`：成功，共转换 1926 个模块。
+- `git diff --check`：通过。未连接任何共享服务器或中间件，未提交、未推送。
+
+**目标环境待验**
+
+- 由变更平台评审并执行 SQL，创建三个 Kafka Topic/ACL，灰度开启 `AI_AGENT_ORCHESTRATION_ENABLED`。
+- 实测 Worker 宕机接管、Kafka 重投、Redis 清空、Outbox DEAD 告警、回调 DLT 重放和 ACK 后 Redis 清理。
+- 回调是 at-least-once，不宣称模型调用与数据库跨资源 exactly-once；需保留 taskId/functionCallId/run 幂等门禁并监控重复续跑。

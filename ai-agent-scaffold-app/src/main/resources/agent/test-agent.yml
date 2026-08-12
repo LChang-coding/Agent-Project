@@ -8,6 +8,15 @@ ai:
             agent-id: 100001
             agent-name: 测试智能体01
             agent-desc: 一个测试的智能体
+            orchestration-role: NORMAL
+            category: CODING
+            best-for:
+              - Java代码实现与审查
+            not-for:
+              - 开放式资料研究
+            capabilities:
+              - coding
+              - review
           module:
             ai-api:
               base-url: ${deepseek.base.url}

@@ -91,4 +91,16 @@ public class ToolInvokeContextEntity {
 
     /** 是否处于仅允许修复路由选择的模型调用阶段。 */
     private Boolean routeRepairOnly;
+
+    /** 当前执行 Agent 的服务端可信编号。 */
+    private String agentId;
+
+    /** 当前 Agent 的冻结编排角色；只有 SUPERVISOR 可见子 Agent 工具。 */
+    private String orchestrationRole;
+
+    /** 当前主 Agent 可委派的子 Agent 白名单，模型调用参数不能覆盖。 */
+    private List<String> allowedSubAgentIds;
+
+    /** 服务端跨回调延续的原始主运行编号。 */
+    private String orchestrationRootRunId;
 }

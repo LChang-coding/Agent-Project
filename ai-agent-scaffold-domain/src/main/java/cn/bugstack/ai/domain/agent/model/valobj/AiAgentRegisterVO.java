@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
 
+import java.util.List;
+
 /**
  * 一个 Agent 装配完成后的运行时句柄：身份信息 + 可以直接执行的 ADK Runner。
  *
@@ -48,6 +50,12 @@ public class AiAgentRegisterVO {
 
     /** Agent 的能力描述，来自配置；帮用户在下拉框里选对智能体，不参与执行逻辑。 */
     private String agentDesc;
+
+    /** 服务端配置的编排角色。 */
+    private String orchestrationRole;
+
+    /** 主 Agent 可创建的子 Agent 白名单。 */
+    private List<String> allowedSubAgentIds;
 
     /**
      * 已经把模型、工具、子 Agent 全部装好的 ADK 执行器，是真正跑对话的东西。

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 一个 Agent 在当前租户下的「能不能用」视图：静态配置里的身份信息 + 数据库里的租户启停结果。
@@ -32,6 +33,18 @@ public class AgentConfigStatusEntity {
     private String agentName;
     /** Agent 的能力说明，取自静态配置；帮助用户在列表里选对智能体，不参与任何判断。 */
     private String agentDesc;
+    /** 运行时编排角色，默认 NORMAL。 */
+    private String orchestrationRole;
+    /** Agent 目录分类。 */
+    private String category;
+    /** 推荐使用场景。 */
+    private List<String> bestFor;
+    /** 不推荐使用场景。 */
+    private List<String> notFor;
+    /** 结构化能力标签。 */
+    private List<String> capabilities;
+    /** 主 Agent 可委派的子 Agent 白名单。 */
+    private List<String> allowedSubAgentIds;
     /**
      * 合并租户覆盖后的状态文本，只有 enabled / disabled 两种取值。
      *

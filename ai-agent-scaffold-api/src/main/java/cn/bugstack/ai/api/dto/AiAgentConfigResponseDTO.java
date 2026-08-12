@@ -2,6 +2,8 @@ package cn.bugstack.ai.api.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 智能体配置响应对象
  *
@@ -24,6 +26,13 @@ public class AiAgentConfigResponseDTO {
      * 智能体描述
      */
     private String agentDesc;
+
+    private String orchestrationRole;
+    private String category;
+    private List<String> bestFor;
+    private List<String> notFor;
+    private List<String> capabilities;
+    private List<String> allowedSubAgentIds;
 
     /** 当前租户状态。 */
     private String status;

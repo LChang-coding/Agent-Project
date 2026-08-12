@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.tool.model.valobj.ToolType;
 import cn.bugstack.ai.domain.tool.service.PlatformToolResolver;
 import org.junit.Assert;
 import org.junit.Test;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -78,5 +79,36 @@ public class PlatformToolResolverTest {
         Assert.assertTrue(new PlatformToolResolver(false, false, false).resolve(context).isEmpty());
         context.setTraceId(null);
         Assert.assertTrue(new PlatformToolResolver(false, false, true).resolve(context).isEmpty());
+    }
+
+    @Test
+    public void exposesSupervisorToolsOnlyToTrustedSupervisorContext() {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .agentId("supervisor").orchestrationRole("SUPERVISOR")
+                .allowedSubAgentIds(List.of("research-agent", "planning-agent"))
+                .build();
+
+        List<String> functions = new PlatformToolResolver(false, false, false, true).resolve(supervisor)
+                .stream().map(tool -> tool.getFunctionName()).toList();
+
+        Assert.assertTrue(functions.contains("search_agent_catalog"));
+        Assert.assertTrue(functions.contains("create_subagent_instances"));
+        Assert.assertTrue(functions.contains("read_subagent_result"));
+        Assert.assertTrue(functions.contains("cancel_subagent_instances"));
+
+        supervisor.setOrchestrationRole("NORMAL");
+        Assert.assertTrue(new PlatformToolResolver(false, false, false, true).resolve(supervisor).isEmpty());
+    }
+
+    @Test
+    public void supervisorToolSchemasAreValidJson() throws Exception {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder().runId("run")
+                .orchestrationRole("SUPERVISOR").allowedSubAgentIds(List.of("research")).build();
+        ObjectMapper mapper = new ObjectMapper();
+        for (cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity tool
+                : new PlatformToolResolver(false, false, false, true).resolve(supervisor)) {
+            Assert.assertEquals("object", mapper.readTree(tool.getSchemaJson()).path("type").asText());
+        }
     }
 }

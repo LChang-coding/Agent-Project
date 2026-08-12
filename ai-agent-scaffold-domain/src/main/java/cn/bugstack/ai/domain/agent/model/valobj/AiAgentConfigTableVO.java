@@ -63,6 +63,24 @@ public class AiAgentConfigTableVO {
         /** 能力描述，帮用户判断该选哪个智能体，不参与执行。 */
         private String agentDesc;
 
+        /** 编排角色；只有 SUPERVISOR 能获得创建和管理临时子 Agent 的平台工具。 */
+        private String orchestrationRole = "NORMAL";
+
+        /** 目录分类，例如 RESEARCH、PLANNING、CODING，用于主 Agent 按任务类型检索。 */
+        private String category = "GENERAL";
+
+        /** 适用场景，作为 Agent 目录的结构化检索信息。 */
+        private List<String> bestFor = List.of();
+
+        /** 不适用场景，帮助主 Agent 避免错误委派。 */
+        private List<String> notFor = List.of();
+
+        /** 能力标签，供目录搜索和运行前能力校验使用。 */
+        private List<String> capabilities = List.of();
+
+        /** SUPERVISOR 可创建的子 Agent 白名单；由服务端配置冻结，模型参数不能扩大。 */
+        private List<String> allowedSubAgentIds = List.of();
+
     }
 
     /**

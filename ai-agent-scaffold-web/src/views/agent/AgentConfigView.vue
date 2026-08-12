@@ -29,6 +29,17 @@
               </span>
             </div>
             <p>{{ agent.agentDesc || '暂无 Agent 说明' }}</p>
+            <div class="agent-tags">
+              <span class="metadata-pill">{{ agent.orchestrationRole === 'SUPERVISOR' ? '主 Agent' : '执行 Agent' }}</span>
+              <span v-if="agent.category" class="metadata-pill">{{ agent.category }}</span>
+              <span v-for="capability in agent.capabilities || []" :key="capability" class="metadata-pill">
+                {{ capability }}
+              </span>
+            </div>
+            <small v-if="agent.bestFor?.length">适合：{{ agent.bestFor.join('、') }}</small>
+            <small v-if="agent.allowedSubAgentIds?.length">
+              可委派模板：{{ agent.allowedSubAgentIds.join('、') }}
+            </small>
             <small>{{ agent.agentId }} · {{ sourceLabel(agent.sourceType) }} · revision {{ agent.revision }}</small>
           </div>
           <div class="agent-actions">
@@ -210,6 +221,20 @@ function sourceLabel(sourceType: AgentConfigItem['sourceType']) {
 .status-pill--disabled {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.agent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metadata-pill {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .agent-actions {

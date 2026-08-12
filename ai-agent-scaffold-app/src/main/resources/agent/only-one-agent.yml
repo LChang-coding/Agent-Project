@@ -8,6 +8,20 @@ ai:
             agent-id: 100003
             agent-name: 单一智能体
             agent-desc: 单一智能体
+            orchestration-role: SUPERVISOR
+            category: GENERAL
+            best-for:
+              - 复杂任务拆分与并行委派
+              - 多 Agent 结果汇总
+            not-for:
+              - 单步骤确定性问答
+            capabilities:
+              - decomposition
+              - delegation
+              - synthesis
+            allowed-sub-agent-ids:
+              - "100001"
+              - "100002"
           module:
             ai-api:
               base-url: ${deepseek.base.url}

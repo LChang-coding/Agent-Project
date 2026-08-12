@@ -128,6 +128,10 @@ public class GatewayToolset implements BaseToolset {
                 .definitionHash(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.DEFINITION_HASH)))
                 .workflowVersion(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.WORKFLOW_VERSION)))
                 .routeRepairOnly(booleanValue(readonlyContext.state().get(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY)))
+                .agentId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.AGENT_ID)))
+                .orchestrationRole(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.ORCHESTRATION_ROLE)))
+                .allowedSubAgentIds(stringList(readonlyContext.state().get(ToolRuntimeContextKeys.ALLOWED_SUB_AGENT_IDS)))
+                .orchestrationRootRunId(stringValue(readonlyContext.state().get(ToolRuntimeContextKeys.ORCHESTRATION_ROOT_RUN_ID)))
                 .build();
         // 每轮重新查询，发布、停用和权限变化无需重装配 Agent。
         List<ToolCatalogEntity> tools = new ArrayList<>(toolResolver.resolve(context));

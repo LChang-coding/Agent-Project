@@ -232,6 +232,10 @@ public class GatewayAdkTool extends BaseTool {
                 .definitionHash(defaultString(stringValue(state.get(ToolRuntimeContextKeys.DEFINITION_HASH)), fallbackContext.getDefinitionHash()))
                 .workflowVersion(defaultString(stringValue(state.get(ToolRuntimeContextKeys.WORKFLOW_VERSION)), fallbackContext.getWorkflowVersion()))
                 .routeRepairOnly(defaultBoolean(booleanValue(state.get(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY)), fallbackContext.getRouteRepairOnly()))
+                .agentId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.AGENT_ID)), fallbackContext.getAgentId()))
+                .orchestrationRole(defaultString(stringValue(state.get(ToolRuntimeContextKeys.ORCHESTRATION_ROLE)), fallbackContext.getOrchestrationRole()))
+                .allowedSubAgentIds(defaultList(stringList(state.get(ToolRuntimeContextKeys.ALLOWED_SUB_AGENT_IDS)), fallbackContext.getAllowedSubAgentIds()))
+                .orchestrationRootRunId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.ORCHESTRATION_ROOT_RUN_ID)), fallbackContext.getOrchestrationRootRunId()))
                 .build();
     }
 
@@ -274,6 +278,10 @@ public class GatewayAdkTool extends BaseTool {
                 .definitionHash(fallbackContext.getDefinitionHash())
                 .workflowVersion(fallbackContext.getWorkflowVersion())
                 .routeRepairOnly(fallbackContext.getRouteRepairOnly())
+                .agentId(fallbackContext.getAgentId())
+                .orchestrationRole(fallbackContext.getOrchestrationRole())
+                .allowedSubAgentIds(copyList(fallbackContext.getAllowedSubAgentIds()))
+                .orchestrationRootRunId(fallbackContext.getOrchestrationRootRunId())
                 .build();
     }
 

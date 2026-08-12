@@ -108,6 +108,12 @@ public class AgentServiceController implements IAgentService {
                 responseDTO.setAgentName(agentConfig.getAgentName());
                 // 带上用途描述，帮助用户判断该选哪个智能体。
                 responseDTO.setAgentDesc(agentConfig.getAgentDesc());
+                responseDTO.setOrchestrationRole(agentConfig.getOrchestrationRole());
+                responseDTO.setCategory(agentConfig.getCategory());
+                responseDTO.setBestFor(agentConfig.getBestFor());
+                responseDTO.setNotFor(agentConfig.getNotFor());
+                responseDTO.setCapabilities(agentConfig.getCapabilities());
+                responseDTO.setAllowedSubAgentIds(agentConfig.getAllowedSubAgentIds());
                 // 把裁剪好的对象交回流里，参与最终收集。
                 return responseDTO;
             }).collect(Collectors.toList());

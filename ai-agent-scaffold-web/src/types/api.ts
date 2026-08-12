@@ -65,6 +65,12 @@ export interface AiAgentConfig {
   agentId: string;
   agentName: string;
   agentDesc?: string;
+  orchestrationRole?: 'NORMAL' | 'SUPERVISOR';
+  category?: string;
+  bestFor?: string[];
+  notFor?: string[];
+  capabilities?: string[];
+  allowedSubAgentIds?: string[];
 }
 
 export interface AgentConfigItem extends AiAgentConfig {

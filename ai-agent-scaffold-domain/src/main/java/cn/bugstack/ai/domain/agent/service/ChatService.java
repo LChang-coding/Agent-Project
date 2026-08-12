@@ -28,6 +28,7 @@ import cn.bugstack.ai.domain.workflow.service.IWorkflowService;
 import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
 import cn.bugstack.ai.types.context.TenantContextHolder;
+import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
 import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.ai.types.observability.AiLog;
@@ -1979,8 +1980,19 @@ public class ChatService implements IChatService {
         putStateIfPresent(state, ToolRuntimeContextKeys.SESSION_ID, sessionId);
         // 工作流编号，工作流场景下同时作为 RAG 绑定目标。
         putStateIfPresent(state, ToolRuntimeContextKeys.WORKFLOW_ID, workflowId);
+        // Agent 编排权限只能来自静态配置，绝不从模型参数或用户消息读取。
+        AiAgentConfigTableVO.Agent publicAgent = staticAgent(workflowId);
+        if (publicAgent != null) {
+            putStateIfPresent(state, ToolRuntimeContextKeys.AGENT_ID, publicAgent.getAgentId());
+            putStateIfPresent(state, ToolRuntimeContextKeys.ORCHESTRATION_ROLE, publicAgent.getOrchestrationRole());
+            state.put(ToolRuntimeContextKeys.ALLOWED_SUB_AGENT_IDS,
+                    publicAgent.getAllowedSubAgentIds() == null ? List.of() : List.copyOf(publicAgent.getAllowedSubAgentIds()));
+        }
         // 运行编号，取消门禁和证据绑定都靠它。
         putStateIfPresent(state, ToolRuntimeContextKeys.RUN_ID, runId);
+        putStateIfPresent(state, ToolRuntimeContextKeys.ORCHESTRATION_ROOT_RUN_ID,
+                AgentOrchestrationContextHolder.getRootRunId() == null
+                        ? runId : AgentOrchestrationContextHolder.getRootRunId());
         putStateIfPresent(state, ToolRuntimeContextKeys.RAG_INVOCATION_MODE, ragInvocationMode);
         // 第三层：上下文版本存在才写；它是版本冲突检测的基准。
         if (contextRevision != null) {
@@ -2015,6 +2027,14 @@ public class ChatService implements IChatService {
         }
         // 返回组装好的可信状态表。
         return state;
+    }
+
+    /** 按对外编号读取静态 Agent 定义；内部工作流运行体不会命中，也不会获得主 Agent 权限。 */
+    private AiAgentConfigTableVO.Agent staticAgent(String agentId) {
+        if (agentId == null || aiAgentAutoConfigProperties.getTables() == null) return null;
+        return aiAgentAutoConfigProperties.getTables().values().stream()
+                .map(AiAgentConfigTableVO::getAgent).filter(value -> value != null && agentId.equals(value.getAgentId()))
+                .findFirst().orElse(null);
     }
 
     /**

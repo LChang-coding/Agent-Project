@@ -66,6 +66,14 @@ public final class ToolRuntimeContextKeys {
     public static final String WORKFLOW_VERSION = "workflowVersion";
     /** 是否处于只允许补充路由意图的修复调用。 */
     public static final String ROUTE_REPAIR_ONLY = "routeRepairOnly";
+    /** 当前运行的公共 Agent 编号。 */
+    public static final String AGENT_ID = "agentId";
+    /** 服务端冻结的 Agent 编排角色。 */
+    public static final String ORCHESTRATION_ROLE = "orchestrationRole";
+    /** 主 Agent 可委派子 Agent 的服务端白名单。 */
+    public static final String ALLOWED_SUB_AGENT_IDS = "allowedSubAgentIds";
+    /** 一次多 Agent 编排最初的主运行编号；内部回调续跑时保持不变。 */
+    public static final String ORCHESTRATION_ROOT_RUN_ID = "orchestrationRootRunId";
 
     /** 私有构造：纯常量类，不允许实例化，避免被误注入或误当作上下文对象使用。 */
     private ToolRuntimeContextKeys() {

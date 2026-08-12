@@ -27,6 +27,9 @@ public class PlatformToolResolver {
     /** 是否允许 Agent 查询当前运行自己的 Trace 日志。 */
     private final boolean traceLogEnabled;
 
+    /** 是否开放临时子 Agent 编排工具。 */
+    private final boolean orchestrationEnabled;
+
     /**
      * 创建平台工具解析器。
      *
@@ -34,18 +37,26 @@ public class PlatformToolResolver {
      * @param routeEnabled 智能路由平台工具的全局开关
      * @param traceLogEnabled 当前运行日志工具的全局开关
      */
+    @org.springframework.beans.factory.annotation.Autowired
     public PlatformToolResolver(
             @Value("${ai.tools.platform.rag-enabled:true}") boolean ragEnabled,
             @Value("${ai.tools.platform.route-enabled:true}") boolean routeEnabled,
-            @Value("${ai.tools.platform.trace-log-enabled:false}") boolean traceLogEnabled) {
+            @Value("${ai.tools.platform.trace-log-enabled:false}") boolean traceLogEnabled,
+            @Value("${ai.tools.platform.orchestration-enabled:false}") boolean orchestrationEnabled) {
         this.ragEnabled = ragEnabled;
         this.routeEnabled = routeEnabled;
         this.traceLogEnabled = traceLogEnabled;
+        this.orchestrationEnabled = orchestrationEnabled;
+    }
+
+    /** 保留历史三参数装配入口。 */
+    public PlatformToolResolver(boolean ragEnabled, boolean routeEnabled, boolean traceLogEnabled) {
+        this(ragEnabled, routeEnabled, traceLogEnabled, false);
     }
 
     /** 保留测试和历史装配入口；未显式配置时不开放日志查询工具。 */
     public PlatformToolResolver(boolean ragEnabled, boolean routeEnabled) {
-        this(ragEnabled, routeEnabled, false);
+        this(ragEnabled, routeEnabled, false, false);
     }
 
     /**
@@ -79,6 +90,25 @@ public class PlatformToolResolver {
                             "\"traceId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}," +
                             "\"lookbackMinutes\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":120}," +
                             "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500}}}"));
+        }
+        if (orchestrationEnabled && "SUPERVISOR".equalsIgnoreCase(context.getOrchestrationRole())
+                && context.getRunId() != null && !context.getRunId().isBlank()
+                && context.getAllowedSubAgentIds() != null && !context.getAllowedSubAgentIds().isEmpty()) {
+            result.add(platform("search_agent_catalog", "检索当前主 Agent 被授权使用的子 Agent 模板",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
+                            "\"query\":{\"type\":\"string\",\"maxLength\":200}," +
+                            "\"category\":{\"type\":\"string\",\"maxLength\":64}}}"));
+            result.add(platform("create_subagent_instances", "批量创建临时子 Agent 运行实例并异步执行",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tasks\"],\"properties\":{" +
+                            "\"tasks\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{" +
+                            "\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"agentId\",\"instruction\"],\"properties\":{" +
+                            "\"agentId\":{\"type\":\"string\",\"minLength\":1},\"instruction\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":12000}}}}}}"));
+            result.add(platform("read_subagent_result", "读取当前主运行已收到的子 Agent 结果",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
+                            "\"taskIds\":{\"type\":\"array\",\"maxItems\":100,\"items\":{\"type\":\"string\"}}}}"));
+            result.add(platform("cancel_subagent_instances", "取消当前主运行尚未终结的子 Agent 运行实例",
+                    "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"taskIds\"],\"properties\":{" +
+                            "\"taskIds\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":100,\"items\":{\"type\":\"string\"}}}}"));
         }
         return result;
     }

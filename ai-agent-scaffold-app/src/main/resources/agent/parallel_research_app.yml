@@ -8,6 +8,16 @@ ai:
             agent-id: 100002
             agent-name: 测试智能体02
             agent-desc: 并行研究并汇总的智能体管道
+            orchestration-role: NORMAL
+            category: RESEARCH
+            best-for:
+              - 多主题资料研究
+              - 研究结论汇总
+            not-for:
+              - 代码实现
+            capabilities:
+              - research
+              - synthesis
           module:
             ai-api:
               base-url: ${deepseek.base.url}

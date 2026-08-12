@@ -61,7 +61,8 @@ public class MyBatisMapperLoadTest {
                 "mybatis/mapper/workflow_run_event_mapper.xml",
                 "mybatis/mapper/workflow_execution_audit_mapper.xml",
                 "mybatis/mapper/workflow_invocation_mapper.xml",
-                "mybatis/mapper/workflow_route_intent_mapper.xml"
+                "mybatis/mapper/workflow_route_intent_mapper.xml",
+                "mybatis/mapper/subagent_task_mapper.xml"
         }) {
             new XMLMapperBuilder(
                     Resources.getResourceAsStream(mapperResource),
@@ -137,6 +138,33 @@ public class MyBatisMapperLoadTest {
         assertContextInsightAggregateScopes(configuration);
         assertScheduleReconcileScopes(configuration);
         assertRagTenantAndClaimScopes(configuration);
+        assertSubagentLeaseAndFenceScopes(configuration);
+    }
+
+    private void assertSubagentLeaseAndFenceScopes(Configuration configuration) {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("tenantId", "tenant_1"); parameters.put("taskId", "task_1");
+        parameters.put("workerId", "worker_1"); parameters.put("now", java.time.LocalDateTime.now());
+        parameters.put("leaseExpiresAt", java.time.LocalDateTime.now().plusMinutes(1));
+        String claim = sql(configuration, "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.claim", parameters);
+        Assert.assertTrue(claim.contains("tenant_id=?"));
+        Assert.assertTrue(claim.contains("fencing_token=fencing_token+1"));
+        Assert.assertTrue(claim.contains("status='READY'"));
+        Assert.assertTrue(claim.contains("lease_expires_at < ?"));
+
+        parameters.put("fencingToken", 2L);
+        String heartbeat = sql(configuration, "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.renewLease", parameters);
+        Assert.assertTrue(heartbeat.contains("lease_owner=?"));
+        Assert.assertTrue(heartbeat.contains("fencing_token=?"));
+        Assert.assertTrue(heartbeat.contains("lease_expires_at >= ?"));
+
+        parameters.put("task", Map.of("tenantId", "tenant_1", "taskId", "task_1", "status", "SUCCEEDED",
+                "resultText", "done", "errorCode", "", "completedAt", java.time.LocalDateTime.now()));
+        String complete = sql(configuration, "cn.bugstack.ai.infrastructure.dao.ISubagentTaskDao.complete", parameters);
+        Assert.assertTrue(complete.contains("status='RUNNING'"));
+        Assert.assertTrue(complete.contains("lease_owner=?"));
+        Assert.assertTrue(complete.contains("fencing_token=?"));
+        Assert.assertTrue(complete.contains("lease_expires_at >= ?"));
     }
 
     private void assertRagTenantAndClaimScopes(Configuration configuration) {

@@ -144,6 +144,9 @@ public class AgentConfigController {
         AiAgentConfigResponseDTO dto = new AiAgentConfigResponseDTO();
         // 搬运身份与展示信息：编号供前端后续调用启停接口，名称和描述供界面展示。
         dto.setAgentId(value.getAgentId()); dto.setAgentName(value.getAgentName()); dto.setAgentDesc(value.getAgentDesc());
+        dto.setOrchestrationRole(value.getOrchestrationRole()); dto.setCategory(value.getCategory());
+        dto.setBestFor(value.getBestFor()); dto.setNotFor(value.getNotFor());
+        dto.setCapabilities(value.getCapabilities()); dto.setAllowedSubAgentIds(value.getAllowedSubAgentIds());
         // 搬运启停事实与版本号；revision 必须回给前端，下次改状态要原样带回来做乐观锁。
         dto.setStatus(value.getStatus()); dto.setEnabled(value.getEnabled()); dto.setRevision(value.getRevision());
         // 标明这条记录来自静态配置而非用户自建，前端据此隐藏「编辑定义」「彻底删除」之类的入口。
