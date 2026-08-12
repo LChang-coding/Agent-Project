@@ -74,6 +74,9 @@
           <button v-for="scope in scopes" :key="scope.value" :class="['button', { 'button--soft': toolStore.skillScope === scope.value }]" type="button" @click="loadSkills(scope.value)">
             {{ scope.label }}
           </button>
+          <button class="button button--danger" type="button" :disabled="selectedSkillIds.size === 0 || batchDeleting" @click="batchDisableSkills">
+            {{ batchDeleting ? '删除中…' : `批量删除${selectedSkillIds.size ? ` (${selectedSkillIds.size})` : ''}` }}
+          </button>
         </div>
         <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
@@ -81,6 +84,7 @@
       <table class="table resource-table">
         <thead>
           <tr>
+            <th class="selection-cell"><input type="checkbox" :checked="allSelectableSkillsSelected" aria-label="全选可删除 Skill" @change="toggleAllSkills" /></th>
             <th>名称</th>
             <th>编码</th>
             <th>范围</th>
@@ -92,6 +96,8 @@
         </thead>
         <tbody>
           <tr v-for="skill in toolStore.skills" :key="skill.skillId">
+            <td class="selection-cell" data-label="选择"><input type="checkbox" :checked="selectedSkillIds.has(skill.skillId)"
+                :disabled="skill.status === 'disabled' || batchDeleting" :aria-label="`选择 Skill ${skill.skillName}`" @change="toggleSkillSelection(skill.skillId)" /></td>
             <td data-label="名称">
               <strong>{{ skill.skillName }}</strong>
               <small>{{ skill.description || '暂无描述' }}</small>
@@ -119,7 +125,7 @@
             </td>
           </tr>
           <tr v-if="toolStore.skills.length === 0">
-            <td colspan="7">暂无 Skill，先上传一个包含 SKILL.md 的 zip。</td>
+            <td colspan="8">暂无 Skill，先上传一个包含 SKILL.md 的 zip。</td>
           </tr>
         </tbody>
       </table>
@@ -129,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
 import { useToolStore } from '@/stores/tools';
@@ -137,6 +143,11 @@ import { useToolStore } from '@/stores/tools';
 const toolStore = useToolStore();
 const selectedFile = ref<File | null>(null);
 const uploadHint = ref('');
+const selectedSkillIds = ref(new Set<string>());
+const batchDeleting = ref(false);
+const selectableSkillIds = computed(() => toolStore.skills.filter((skill) => skill.status !== 'disabled').map((skill) => skill.skillId));
+const allSelectableSkillsSelected = computed(() => selectableSkillIds.value.length > 0
+  && selectableSkillIds.value.every((skillId) => selectedSkillIds.value.has(skillId)));
 const scopes = [
   { value: 'available', label: '当前可用' },
   { value: 'mine', label: '我的 Skill' },
@@ -213,6 +224,29 @@ async function runSkillAction(type: 'publish' | 'disable', skillId: string, vers
   } catch {
     // Store 已保留行级错误，按钮解除锁定后可直接重试。
   }
+}
+
+function toggleSkillSelection(skillId: string) {
+  const next = new Set(selectedSkillIds.value);
+  next.has(skillId) ? next.delete(skillId) : next.add(skillId);
+  selectedSkillIds.value = next;
+}
+
+function toggleAllSkills() {
+  selectedSkillIds.value = allSelectableSkillsSelected.value ? new Set() : new Set(selectableSkillIds.value);
+}
+
+async function batchDisableSkills() {
+  const ids = [...selectedSkillIds.value];
+  if (!ids.length || !window.confirm(`确定批量删除选中的 ${ids.length} 个 Skill 吗？版本与调用审计会保留。`)) return;
+  batchDeleting.value = true;
+  let failed = 0;
+  for (const id of ids) {
+    try { await toolStore.disableSkill(id); } catch { failed += 1; }
+  }
+  selectedSkillIds.value = new Set();
+  batchDeleting.value = false;
+  if (failed) toolStore.errorMessage = `${ids.length - failed} 个 Skill 已删除，${failed} 个处理失败`;
 }
 
 /**
@@ -301,6 +335,8 @@ function statusClass(value: string) {
 .resource-table {
   min-width: 850px;
 }
+.selection-cell { width: 42px; text-align: center; }
+.selection-cell input { width: 17px; height: 17px; accent-color: var(--accent-deep); }
 
 .resource-actions-cell,
 .resource-table th:last-child {

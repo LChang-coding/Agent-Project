@@ -86,6 +86,9 @@ public interface IChatService {
      */
     List<String> handleMessage(String agentId, String userId, String sessionId, String message);
 
+    /** 在已有会话中处理平台内部恢复输入；输入可审计但不对用户展示。 */
+    List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message);
+
     /**
      * 同步执行一次完整工作流，只返回收敛后的最终文本。
      *

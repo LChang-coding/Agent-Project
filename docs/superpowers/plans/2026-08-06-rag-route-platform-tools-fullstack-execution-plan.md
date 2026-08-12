@@ -797,3 +797,17 @@ AI_RAG_TOOL_MAX_CALLS_PER_RUN=3
 - 由变更平台评审并执行 SQL，创建三个 Kafka Topic/ACL，灰度开启 `AI_AGENT_ORCHESTRATION_ENABLED`。
 - 实测 Worker 宕机接管、Kafka 重投、Redis 清空、Outbox DEAD 告警、回调 DLT 重放和 ACK 后 Redis 清理。
 - 回调是 at-least-once，不宣称模型调用与数据库跨资源 exactly-once；需保留 taskId/functionCallId/run 幂等门禁并监控重复续跑。
+
+### 2026-08-13：通用子 Agent 模板与回调阻断修复
+
+**问题与修复**
+
+- 线上只导入 `100003` Supervisor，子任务能落库和投递，但 Worker 无法为 `100001/100002` 创建会话；任务持续过期恢复，不会产生结果回调。
+- dev 启动配置现显式导入 Supervisor 与三个通用子模板；新增 Nacos `ai-agent-templates-dev.yml` 作为集中配置源，classpath 保留启动兜底。
+- Worker 的失败收口扩大到子会话创建、会话绑定、缓存和模型执行整段；运行时不可用时会写入 `FAILED` 并继续回调，不再无限 Lease 恢复。
+
+**真实验证**
+
+- Java 17 定向测试 10 项通过：模板导入、目录 ID 检索、Worker 会话创建失败收口和原有 Kafka 链路回归。
+- 发布到 `lcodeagent.lcode.top` 后启动日志显示 `count:4`，`100001/100002/100004/100003` 均注册成功。
+- 原卡住的两个子任务均恢复为 `ACKED`，`callback_status=DELIVERED`；其中编码流水线执行期间 Lease 心跳正常续期，未再重复领取。

@@ -85,13 +85,16 @@ public class ToolRepository implements IToolRepository {
                 .ownerUserId(userId)
                 .visibility(ToolVisibility.PRIVATE)
                 .assetId(result.getAssetId())
+                .assetKind("skill_package")
                 .assetType("skill_package")
                 .bucket(result.getBucket())
                 .objectKey(result.getObjectKey())
                 .fileName(result.getFileName())
                 .mimeType("application/zip")
                 .sizeBytes(result.getSizeBytes())
+                .sha256(result.getSha256())
                 .status(ToolStatus.ACTIVE)
+                .parseStatus("unsupported")
                 .metadata(skillAssetMetadata(result.getSha256()))
                 .build();
         artifactAssetDao.insert(po);

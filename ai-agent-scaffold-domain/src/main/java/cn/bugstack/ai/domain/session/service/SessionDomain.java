@@ -30,6 +30,8 @@ public class SessionDomain {
     public static final String ROLE_USER = "user";
     /** 持久化模型回答消息使用的角色值。 */
     public static final String ROLE_ASSISTANT = "assistant";
+    /** 平台内部恢复输入：可审计，但不属于用户发言。 */
+    public static final String ROLE_PLATFORM = "platform";
     /** 新建且未删除会话的持久化状态。 */
     private static final String STATUS_ACTIVE = "active";
     /** 当前会话消息统一保存的文本内容类型。 */
@@ -134,6 +136,22 @@ public class SessionDomain {
         command.setSessionId(sessionId);
         command.setRunId(runId);
         command.setRole(ROLE_USER);
+        command.setContentType(CONTENT_TYPE_TEXT);
+        command.setContent(content);
+        command.setTraceId(traceId);
+        return appendMessage(command);
+    }
+
+    /** 保存平台内部输入，用于运行绑定和审计，不对用户展示。 */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatMessageEntity appendPlatformMessage(String tenantId, String userId, String sessionId, String runId,
+                                                    String content, String traceId) {
+        AppendMessageCommandEntity command = new AppendMessageCommandEntity();
+        command.setTenantId(tenantId);
+        command.setUserId(userId);
+        command.setSessionId(sessionId);
+        command.setRunId(runId);
+        command.setRole(ROLE_PLATFORM);
         command.setContentType(CONTENT_TYPE_TEXT);
         command.setContent(content);
         command.setTraceId(traceId);

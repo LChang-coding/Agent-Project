@@ -32,7 +32,9 @@ public class AgentCatalogService {
 
     private boolean matches(AgentConfigStatusEntity agent, String query) {
         if (query.isEmpty()) return true;
-        return normalize(agent.getAgentName()).contains(query) || normalize(agent.getAgentDesc()).contains(query)
+        return normalize(agent.getAgentId()).contains(query)
+                || normalize("agent" + agent.getAgentId()).contains(query)
+                || normalize(agent.getAgentName()).contains(query) || normalize(agent.getAgentDesc()).contains(query)
                 || values(agent.getBestFor()).stream().map(this::normalize).anyMatch(value -> value.contains(query))
                 || values(agent.getCapabilities()).stream().map(this::normalize).anyMatch(value -> value.contains(query));
     }

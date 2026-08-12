@@ -58,17 +58,17 @@ public class SubagentTaskConsumer {
         ScheduledFuture<?> leaseHeartbeat = heartbeat.scheduleAtFixedRate(
                 () -> renew(task), 20, 20, TimeUnit.SECONDS);
         try {
-            String childSessionId = task.getChildSessionId();
-            if (childSessionId == null || childSessionId.isBlank()) {
-                childSessionId = chatService.createSubagentSession(task.getChildAgentId(), task.getUserId());
-                if (repository.bindChildSession(task.getTenantId(), task.getTaskId(), workerId,
-                        task.getFencingToken(), childSessionId) != 1) {
-                    throw new IllegalStateException("SUBAGENT_LEASE_LOST");
-                }
-                task.setChildSessionId(childSessionId);
-            }
-            cache(() -> cache.putInstance(task, CACHE_TTL), "put-instance", task);
             try {
+                String childSessionId = task.getChildSessionId();
+                if (childSessionId == null || childSessionId.isBlank()) {
+                    childSessionId = chatService.createSubagentSession(task.getChildAgentId(), task.getUserId());
+                    if (repository.bindChildSession(task.getTenantId(), task.getTaskId(), workerId,
+                            task.getFencingToken(), childSessionId) != 1) {
+                        throw new IllegalStateException("SUBAGENT_LEASE_LOST");
+                    }
+                    task.setChildSessionId(childSessionId);
+                }
+                cache(() -> cache.putInstance(task, CACHE_TTL), "put-instance", task);
                 List<String> output = chatService.handleMessage(task.getChildAgentId(), task.getUserId(),
                         childSessionId, task.getInstruction());
                 String result = finalOutput(output);
@@ -81,6 +81,9 @@ public class SubagentTaskConsumer {
                 task.setStatus(SubagentTaskStatus.FAILED); task.setErrorCode(exception.getClass().getSimpleName());
                 task.setResultText(null); task.setResultSummary(null); task.setFullContext(null);
                 task.setSummaryTruncated(false); task.setCompletedAt(LocalDateTime.now());
+                log.warn("子 Agent 任务执行失败 tenantId:{} taskId:{} childAgentId:{} errorType:{}",
+                        task.getTenantId(), task.getTaskId(), task.getChildAgentId(),
+                        exception.getClass().getSimpleName());
             }
             if (repository.complete(task, workerId, task.getFencingToken()) != 1) {
                 throw new IllegalStateException("SUBAGENT_LEASE_LOST");

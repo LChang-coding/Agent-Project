@@ -167,7 +167,8 @@ public class AgentConfigController {
         dto.setOrchestrationRole(value.getOrchestrationRole()); dto.setCategory(value.getCategory());
         dto.setBestFor(value.getBestFor()); dto.setNotFor(value.getNotFor());
         dto.setCapabilities(value.getCapabilities()); dto.setAllowedSubAgentIds(value.getAllowedSubAgentIds());
-        dto.setToolPermissions(permissionService.queryByAgent(TenantContextHolder.getTenantId(), value.getAgentId())
+        dto.setToolPermissions(permissionService.queryByAgent(TenantContextHolder.getTenantId(),
+                        TenantContextHolder.getUserId(), value.getAgentId())
                 .stream().map(this::toPermission).toList());
         // 搬运启停事实与版本号；revision 必须回给前端，下次改状态要原样带回来做乐观锁。
         dto.setStatus(value.getStatus()); dto.setEnabled(value.getEnabled()); dto.setRevision(value.getRevision());
@@ -184,6 +185,7 @@ public class AgentConfigController {
 
     private AgentToolPermissionDTO toPermission(cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity value) {
         AgentToolPermissionDTO dto = new AgentToolPermissionDTO(); dto.setToolCode(value.getToolCode());
+        dto.setToolName(value.getToolName()); dto.setToolType(value.getToolType()); dto.setDescription(value.getDescription());
         dto.setMode(value.getMode()); dto.setTimeoutSeconds(value.getTimeoutSeconds());
         dto.setTimeoutDecision(value.getTimeoutDecision()); dto.setSuggestions(value.getSuggestions());
         dto.setRevision(value.getRevision()); return dto;

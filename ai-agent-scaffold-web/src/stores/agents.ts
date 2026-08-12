@@ -93,7 +93,7 @@ export const useAgentManagementStore = defineStore('agent-management', {
 
     async saveToolPermission(agent: AgentConfigItem, permission: AgentToolPermission) {
       if (this.mutatingPermissionAgentId || !agent.manageable) return false;
-      this.mutatingPermissionAgentId = agent.agentId; this.errorMessage = '';
+      this.mutatingPermissionAgentId = `${agent.agentId}:${permission.toolCode}`; this.errorMessage = '';
       try {
         const saved = await updateAgentToolPermission(agent.agentId, permission.toolCode, {
           mode: permission.mode,

@@ -432,33 +432,63 @@ public class GatewayAdkTool extends BaseTool {
             if (!"object".equals(root.get("type")) || !(root.get("properties") instanceof Map<?, ?> properties)) {
                 throw new IllegalArgumentException("平台工具参数 Schema 不合法");
             }
-            Map<String, Schema> converted = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : properties.entrySet()) {
-                if (!(entry.getValue() instanceof Map<?, ?> definition)) throw new IllegalArgumentException("平台工具参数定义不合法");
-                Type.Known known = switch (String.valueOf(definition.get("type"))) {
-                    case "string" -> Type.Known.STRING;
-                    case "integer" -> Type.Known.INTEGER;
-                    case "number" -> Type.Known.NUMBER;
-                    case "boolean" -> Type.Known.BOOLEAN;
-                    default -> throw new IllegalArgumentException("平台工具参数类型不支持");
-                };
-                Schema.Builder builder = Schema.builder().type(known);
-                if (definition.get("description") != null) builder.description(String.valueOf(definition.get("description")));
-                if (definition.get("enum") instanceof List<?> values) {
-                    builder.enum_(values.stream().map(String::valueOf).toList());
-                }
-                if (definition.get("minLength") != null) builder.minLength(longBoundary(definition.get("minLength"), "minLength"));
-                if (definition.get("maxLength") != null) builder.maxLength(longBoundary(definition.get("maxLength"), "maxLength"));
-                if (definition.get("minimum") != null) builder.minimum(doubleBoundary(definition.get("minimum"), "minimum"));
-                if (definition.get("maximum") != null) builder.maximum(doubleBoundary(definition.get("maximum"), "maximum"));
-                converted.put(String.valueOf(entry.getKey()), builder.build());
-            }
-            List<String> required = root.get("required") instanceof List<?> values
-                    ? values.stream().map(String::valueOf).toList() : List.of();
-            return Schema.builder().type(Type.Known.OBJECT).properties(converted).required(required).build();
+            return convertPlatformSchema(root);
         } catch (Exception exception) {
             throw new IllegalArgumentException("平台工具参数 Schema 不合法", exception);
         }
+    }
+
+    /**
+     * 递归转换平台 Schema；编排工具的 tasks/taskIds 会用到数组和嵌套对象。
+     * JSON Schema 中本类未显式支持的关键字不会放宽服务端校验；真正执行时仍由 handler 做严格白名单检查。
+     */
+    private static Schema convertPlatformSchema(Map<?, ?> definition) {
+        String type = String.valueOf(definition.get("type"));
+        Type.Known known = switch (type) {
+            case "object" -> Type.Known.OBJECT;
+            case "array" -> Type.Known.ARRAY;
+            case "string" -> Type.Known.STRING;
+            case "integer" -> Type.Known.INTEGER;
+            case "number" -> Type.Known.NUMBER;
+            case "boolean" -> Type.Known.BOOLEAN;
+            default -> throw new IllegalArgumentException("平台工具参数类型不支持: " + type);
+        };
+        Schema.Builder builder = Schema.builder().type(known);
+        if (definition.get("description") != null) {
+            builder.description(String.valueOf(definition.get("description")));
+        }
+        if (definition.get("enum") instanceof List<?> values) {
+            builder.enum_(values.stream().map(String::valueOf).toList());
+        }
+        if (definition.get("minLength") != null) builder.minLength(longBoundary(definition.get("minLength"), "minLength"));
+        if (definition.get("maxLength") != null) builder.maxLength(longBoundary(definition.get("maxLength"), "maxLength"));
+        if (definition.get("minimum") != null) builder.minimum(doubleBoundary(definition.get("minimum"), "minimum"));
+        if (definition.get("maximum") != null) builder.maximum(doubleBoundary(definition.get("maximum"), "maximum"));
+        if (definition.get("minItems") != null) builder.minItems(longBoundary(definition.get("minItems"), "minItems"));
+        if (definition.get("maxItems") != null) builder.maxItems(longBoundary(definition.get("maxItems"), "maxItems"));
+
+        if (known == Type.Known.OBJECT) {
+            if (!(definition.get("properties") instanceof Map<?, ?> properties)) {
+                throw new IllegalArgumentException("平台工具对象参数缺少 properties");
+            }
+            Map<String, Schema> converted = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : properties.entrySet()) {
+                if (!(entry.getValue() instanceof Map<?, ?> child)) {
+                    throw new IllegalArgumentException("平台工具参数定义不合法");
+                }
+                converted.put(String.valueOf(entry.getKey()), convertPlatformSchema(child));
+            }
+            builder.properties(converted);
+            List<String> required = definition.get("required") instanceof List<?> values
+                    ? values.stream().map(String::valueOf).toList() : List.of();
+            builder.required(required);
+        } else if (known == Type.Known.ARRAY) {
+            if (!(definition.get("items") instanceof Map<?, ?> items)) {
+                throw new IllegalArgumentException("平台工具数组参数缺少 items");
+            }
+            builder.items(convertPlatformSchema(items));
+        }
+        return builder.build();
     }
 
     /** 读取 Schema 整数边界，拒绝非数字或超出 long 范围的配置。 */

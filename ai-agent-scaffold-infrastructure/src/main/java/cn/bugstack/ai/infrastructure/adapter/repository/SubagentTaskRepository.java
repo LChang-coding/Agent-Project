@@ -8,6 +8,7 @@ import cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO;
 import cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,13 +32,23 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int createBatchAndEnqueue(List<SubagentTaskEntity> tasks) {
-        int created = 0;
-        for (SubagentTaskEntity task : tasks) {
-            created += dao.insertTask(toPO(task));
-            dao.insertOutbox(event(task.getTenantId(), "SUBAGENT_TASK_READY", task.getTaskId(),
-                    task.getTaskId(), Map.of("schemaVersion", 1, "taskId", task.getTaskId(), "tenantId", task.getTenantId(),
-                            "parentRunId", task.getParentRunId(), "traceId", safe(task.getTraceId()))));
+        if (tasks == null || tasks.isEmpty()) return 0;
+        int created;
+        try {
+            created = insertTaskAndOutbox(tasks.get(0));
+        } catch (DuplicateKeyException duplicate) {
+            // taskId 由 functionCallId + 序号稳定生成；首任务冲突即表示并发请求已落库。
+            return 0;
         }
+        for (int index = 1; index < tasks.size(); index++) created += insertTaskAndOutbox(tasks.get(index));
+        return created;
+    }
+
+    private int insertTaskAndOutbox(SubagentTaskEntity task) {
+        int created = dao.insertTask(toPO(task));
+        dao.insertOutbox(event(task.getTenantId(), "SUBAGENT_TASK_READY", task.getTaskId(),
+                task.getTaskId(), Map.of("schemaVersion", 1, "taskId", task.getTaskId(), "tenantId", task.getTenantId(),
+                        "parentRunId", task.getParentRunId(), "traceId", safe(task.getTraceId()))));
         return created;
     }
 
@@ -49,6 +60,12 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
     @Override
     public List<SubagentTaskEntity> queryByIds(String tenantId, String parentRunId, List<String> taskIds) {
         return dao.queryByIds(tenantId, parentRunId, taskIds).stream().map(this::toEntity).toList();
+    }
+
+    @Override
+    public List<SubagentTaskEntity> queryBySession(String tenantId, String userId, String parentSessionId, int limit) {
+        return dao.queryBySession(tenantId, userId, parentSessionId, Math.max(1, Math.min(100, limit)))
+                .stream().map(this::toEntity).toList();
     }
 
     @Override

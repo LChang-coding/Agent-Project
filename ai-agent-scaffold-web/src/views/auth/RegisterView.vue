@@ -1,73 +1,60 @@
 <template>
   <section class="auth-page">
-    <div class="auth-hero">
-      <RouterLink class="auth-hero__brand" to="/auth/login">
-        <span class="brand-mark">AI</span>
-        <span>AI Agent Scaffold</span>
-      </RouterLink>
-      <div class="auth-hero__copy">
-        <h1>先有租户，再长出企业智能体生态。</h1>
-        <p>
-          第一版注册会创建一个独立租户，并把当前用户绑定为 owner，后续公共 RAG、MCP、Skill 和定时任务都会围绕这个租户授权。
-        </p>
-      </div>
-      <div class="auth-hero__metrics">
-        <div class="auth-metric">
-          <strong>Owner</strong>
-          <span>默认租户管理员</span>
-        </div>
-        <div class="auth-metric">
-          <strong>Tenant</strong>
-          <span>企业资源边界</span>
-        </div>
-        <div class="auth-metric">
-          <strong>Policy</strong>
-          <span>后续权限入口</span>
-        </div>
-      </div>
-    </div>
+    <AuthMediaShell
+      eyebrow="CREATE A SECURE TENANT"
+      title="从清晰的企业边界开始。"
+      description="创建独立租户和 Owner 身份。Agent、RAG、MCP、Skill 与定时任务将围绕同一权限边界组织。"
+      :metrics="registerMetrics"
+    />
 
-    <div class="auth-panel">
-      <form class="auth-card" @submit.prevent="submit">
-        <h2>创建企业空间</h2>
-        <p>注册成功后会自动登录，直接进入控制台。</p>
+    <main class="auth-panel auth-panel--register">
+      <form class="auth-card auth-card--register" @submit.prevent="submit">
+        <RouterLink class="auth-panel__brand" to="/auth/login" aria-label="Agent OS 首页">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <strong>Agent OS</strong>
+        </RouterLink>
+        <div class="auth-card__heading">
+          <span>NEW WORKSPACE</span>
+          <h2>创建企业空间</h2>
+          <p>一次完成租户与管理员初始化，成功后自动进入控制台。</p>
+        </div>
 
-        <div class="form-grid">
+        <div class="form-grid auth-register-grid">
           <div class="field">
             <label for="tenantName">企业 / 租户名称</label>
-            <input id="tenantName" v-model.trim="form.tenantName" class="input" />
+            <input id="tenantName" v-model.trim="form.tenantName" class="input" autocomplete="organization" required />
           </div>
           <div class="field">
             <label for="username">用户名</label>
-            <input id="username" v-model.trim="form.username" class="input" autocomplete="username" />
+            <input id="username" v-model.trim="form.username" class="input" autocomplete="username" required />
           </div>
           <div class="field">
             <label for="nickname">昵称</label>
-            <input id="nickname" v-model.trim="form.nickname" class="input" />
+            <input id="nickname" v-model.trim="form.nickname" class="input" autocomplete="nickname" />
           </div>
           <div class="field">
             <label for="email">邮箱</label>
-            <input id="email" v-model.trim="form.email" class="input" type="email" />
+            <input id="email" v-model.trim="form.email" class="input" type="email" autocomplete="email" />
           </div>
           <div class="field">
             <label for="phone">手机号</label>
-            <input id="phone" v-model.trim="form.phone" class="input" />
+            <input id="phone" v-model.trim="form.phone" class="input" type="tel" autocomplete="tel" />
           </div>
           <div class="field">
             <label for="password">密码</label>
-            <input id="password" v-model="form.password" class="input" type="password" autocomplete="new-password" />
+            <input id="password" v-model="form.password" class="input" type="password" autocomplete="new-password" required />
           </div>
-          <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
-          <button class="button button--primary" type="submit" :disabled="authStore.loading">
+          <span v-if="errorMessage" class="error-text auth-register-grid__wide" role="alert">{{ errorMessage }}</span>
+          <button class="button button--primary auth-submit auth-register-grid__wide" type="submit" :disabled="authStore.loading">
             {{ authStore.loading ? '创建中...' : '创建并登录' }}
           </button>
-          <span>
+          <span class="auth-switch auth-register-grid__wide">
             已有账号？
             <RouterLink class="link" to="/auth/login">返回登录</RouterLink>
           </span>
         </div>
       </form>
-    </div>
+    </main>
   </section>
 </template>
 
@@ -75,6 +62,7 @@
 import { reactive, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 
+import AuthMediaShell from '@/components/auth/AuthMediaShell.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
@@ -88,6 +76,11 @@ const form = reactive({
   email: '',
   phone: '',
 });
+const registerMetrics = [
+  { value: 'OWNER', label: '初始管理者' },
+  { value: 'TENANT', label: '企业资源边界' },
+  { value: 'POLICY', label: '后续授权入口' },
+];
 
 /**
  * 提交注册表单；无参数；成功后自动登录并进入总览。

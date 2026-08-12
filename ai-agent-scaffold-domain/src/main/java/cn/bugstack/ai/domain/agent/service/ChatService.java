@@ -185,6 +185,10 @@ public class ChatService implements IChatService {
     @Resource
     private AgentAvailabilityService agentAvailabilityService;
 
+    /** 会话内有未完成子任务或审批时，拒绝并发开启新的用户轮次。 */
+    @Resource
+    private SessionOrchestrationQueryService sessionOrchestrationQueryService;
+
     /**
      * RAG 证据暂存仓，记录每次模型调用真实注入了哪些知识库片段。
      *
@@ -456,8 +460,16 @@ public class ChatService implements IChatService {
         // 准入校验并取出已装配的运行体，顺带避免下游重复查注册表。
         AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
 
+        sessionOrchestrationQueryService.assertAcceptsUserMessage(currentTenantId(), userId, sessionId);
+
         // 转交内部实现执行完整的落库与模型调用流程。
-        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, false);
+    }
+
+    @Override
+    public List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message) {
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true);
     }
 
     /**
@@ -533,6 +545,7 @@ public class ChatService implements IChatService {
         String tenantId = currentTenantId();
         // 前端没给会话就补建一个，保证消息有归属。
         String actualSessionId = ensureSessionId(agentId, userId, sessionId, aiAgentRegisterVO);
+        sessionOrchestrationQueryService.assertAcceptsUserMessage(tenantId, userId, actualSessionId);
         // 第三层：startOrResume 同时处理新运行、幂等重试和引导后继运行。
         ChatRunEntity run = runControlService.startOrResume(tenantId, userId, actualSessionId,
                 "agent", agentId, requestedRunId);
@@ -924,7 +937,8 @@ public class ChatService implements IChatService {
      * <p>和复合消息入口的唯一区别是输入只有一段文本；状态处理顺序刻意保持一致，
      * 这样任意入口出问题时的排查思路都一样。</p>
      */
-    private List<String> doHandleMessage(String sessionAgentId, String userId, String sessionId, String message, AiAgentRegisterVO aiAgentRegisterVO) {
+    private List<String> doHandleMessage(String sessionAgentId, String userId, String sessionId, String message,
+                                         AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput) {
         // 第一层：取出已装配的 Runner。
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         // 取可信租户作为隔离维度。
@@ -941,7 +955,9 @@ public class ChatService implements IChatService {
         // 补发之前落库成功但异步消息丢失的压缩任务，避免历史越积越长。
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
         // 落用户消息并与运行绑定。
-        RunMessageBindingEntity binding = saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
+        RunMessageBindingEntity binding = platformInput
+                ? runControlService.appendPlatformMessage(tenantId, userId, run.getRunId(), message, traceId)
+                : saveRunUserMessage(tenantId, userId, run.getRunId(), message, traceId);
         // 取出刚落库的用户消息，它的序号决定历史可见范围。
         ChatMessageEntity userMessage = binding.getMessage();
         // 取出绑定后的最新运行状态。

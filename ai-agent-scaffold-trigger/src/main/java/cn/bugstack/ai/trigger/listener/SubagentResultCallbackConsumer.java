@@ -16,6 +16,7 @@ import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.annotation.RetryableTopic;
 import org.springframework.kafka.retrytopic.SameIntervalTopicReuseStrategy;
+import org.springframework.kafka.retrytopic.TopicSuffixingStrategy;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 
@@ -45,6 +46,7 @@ public class SubagentResultCallbackConsumer {
             backoff = @Backoff(delayExpression = "${ai.agent.orchestration.callback-delay-ms:1000}"),
             retryTopicSuffix = "-retry", dltTopicSuffix = "-dlt",
             sameIntervalTopicReuseStrategy = SameIntervalTopicReuseStrategy.SINGLE_TOPIC,
+            topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
             autoCreateTopics = "false")
     @KafkaListener(topics = "${ai.agent.orchestration.result-topic:agent.subagent.result.v1}",
             groupId = "${ai.agent.orchestration.callback-group:ai-agent-parent-callback}",

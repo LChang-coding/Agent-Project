@@ -1,57 +1,44 @@
 <template>
   <section class="auth-page">
-    <div class="auth-hero">
-      <RouterLink class="auth-hero__brand" to="/auth/login">
-        <span class="brand-mark">AI</span>
-        <span>AI Agent Scaffold</span>
-      </RouterLink>
-      <div class="auth-hero__copy">
-        <h1>让企业智能体从配置走向平台。</h1>
-        <p>
-          统一身份、会话隔离、观测日志和后续的 Skill / MCP / RAG 权限体系，会在这套控制台里逐步闭环。
-        </p>
-      </div>
-      <div class="auth-hero__metrics">
-        <div class="auth-metric">
-          <strong>JWT</strong>
-          <span>可信身份链路</span>
-        </div>
-        <div class="auth-metric">
-          <strong>Loki</strong>
-          <span>日志观测聚合</span>
-        </div>
-        <div class="auth-metric">
-          <strong>ADK</strong>
-          <span>智能体运行时</span>
-        </div>
-      </div>
-    </div>
+    <AuthMediaShell
+      eyebrow="ENTERPRISE AGENT CONTROL PLANE"
+      title="编排智能，观测每一步执行。"
+      description="在一个可控工作面中管理 Agent、工作流、RAG 与工具。每次运行都拥有可追溯的身份、节点和链路。"
+      :metrics="loginMetrics"
+    />
 
-    <div class="auth-panel">
+    <main class="auth-panel">
       <form class="auth-card" @submit.prevent="submit">
-        <h2>登录控制台</h2>
-        <p>使用后端账号登录，成功后会自动写入 Bearer Token 并恢复当前租户身份。</p>
+        <RouterLink class="auth-panel__brand" to="/auth/login" aria-label="Agent OS 首页">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <strong>Agent OS</strong>
+        </RouterLink>
+        <div class="auth-card__heading">
+          <span>WELCOME BACK</span>
+          <h2>登录控制台</h2>
+          <p>进入你的租户工作区，继续管理运行中的智能体系统。</p>
+        </div>
 
         <div class="form-grid">
           <div class="field">
             <label for="username">用户名</label>
-            <input id="username" v-model.trim="form.username" class="input" autocomplete="username" />
+            <input id="username" v-model.trim="form.username" class="input" autocomplete="username" required />
           </div>
           <div class="field">
             <label for="password">密码</label>
-            <input id="password" v-model="form.password" class="input" type="password" autocomplete="current-password" />
+            <input id="password" v-model="form.password" class="input" type="password" autocomplete="current-password" required />
           </div>
-          <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
-          <button class="button button--primary" type="submit" :disabled="authStore.loading">
+          <span v-if="errorMessage" class="error-text" role="alert">{{ errorMessage }}</span>
+          <button class="button button--primary auth-submit" type="submit" :disabled="authStore.loading">
             {{ authStore.loading ? '登录中...' : '进入工作台' }}
           </button>
-          <span>
+          <span class="auth-switch">
             还没有账号？
             <RouterLink class="link" to="/auth/register">创建租户和管理员</RouterLink>
           </span>
         </div>
       </form>
-    </div>
+    </main>
   </section>
 </template>
 
@@ -59,6 +46,7 @@
 import { reactive, ref } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 
+import AuthMediaShell from '@/components/auth/AuthMediaShell.vue';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
@@ -69,6 +57,11 @@ const form = reactive({
   username: '',
   password: '',
 });
+const loginMetrics = [
+  { value: '01', label: '身份与租户隔离' },
+  { value: '02', label: '节点级执行追踪' },
+  { value: '03', label: '知识与工具调度' },
+];
 
 /**
  * 提交登录表单；无参数；成功后进入原目标页面或总览。

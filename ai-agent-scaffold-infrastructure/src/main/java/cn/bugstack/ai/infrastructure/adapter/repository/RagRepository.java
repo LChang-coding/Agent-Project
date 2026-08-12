@@ -485,6 +485,26 @@ public class RagRepository implements IRagRepository {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    /** 失败补偿清理完成后，从 cancel_requested 前置态原子收口为 failed/dead。 */
+    public void failAfterCleanupClaimedIngestJob(String tenantId, RagIngestJobEntity failedJob,
+                                                 long expectedTaskRevision, long expectedVersionRevision,
+                                                 long expectedDocumentRevision, String leaseOwner,
+                                                 long expectedFencingToken, Instant now) {
+        if (failedJob == null || failedJob.status() != RagIngestJobStatus.FAILED
+                && failedJob.status() != RagIngestJobStatus.DEAD) {
+            throw new IllegalArgumentException("失败清理收口只允许 failed/dead 任务");
+        }
+        validateLifecycle(tenantId, failedJob, expectedTaskRevision, leaseOwner,
+                expectedFencingToken, now, failedJob.status());
+        closeVersionAndDocument(tenantId, failedJob, expectedVersionRevision,
+                expectedDocumentRevision, "failed");
+        requireChanged(ingestTaskDao.cancelClaimedByTenantFenceAndRevision(tenantId,
+                mapper.toIngestTaskPo(failedJob), expectedTaskRevision, leaseOwner,
+                expectedFencingToken));
+    }
+
+    @Override
     /** 查询指定版本的全部未删除分块。 */
     public List<RagChunkEntity> listChunks(String tenantId, String versionId) {
         return chunkDao.queryListByTenantAndVersionId(requireText(tenantId, "tenantId"),

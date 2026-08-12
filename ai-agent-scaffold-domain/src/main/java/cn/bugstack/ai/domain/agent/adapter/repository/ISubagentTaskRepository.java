@@ -15,6 +15,9 @@ public interface ISubagentTaskRepository {
 
     List<SubagentTaskEntity> queryByIds(String tenantId, String parentRunId, List<String> taskIds);
 
+    /** 查询当前用户某个父会话下最近的编排任务，供可恢复的运行面板使用。 */
+    List<SubagentTaskEntity> queryBySession(String tenantId, String userId, String parentSessionId, int limit);
+
     /** 原子领取 READY 或租约已过期的 RUNNING 任务，并递增 fencing token。 */
     SubagentTaskEntity claim(String tenantId, String taskId, String workerId, LocalDateTime now, Duration leaseDuration);
 

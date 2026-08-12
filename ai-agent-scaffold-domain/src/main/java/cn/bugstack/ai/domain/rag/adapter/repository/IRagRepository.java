@@ -315,6 +315,16 @@ public interface IRagRepository {
                               long expectedFencingToken, Instant now);
 
     /**
+     * 在同一事务中将已完成副作用清理的 cancel_requested 任务收口为失败终态。
+     * <p>普通失败从 running 收口，失败补偿清理则从 cancel_requested 收口，
+     * 两者不能共用同一个持久化前置状态。</p>
+     */
+    void failAfterCleanupClaimedIngestJob(String tenantId, RagIngestJobEntity failedJob,
+                                          long expectedTaskRevision, long expectedVersionRevision,
+                                          long expectedDocumentRevision, String leaseOwner,
+                                          long expectedFencingToken, Instant now);
+
+    /**
      * 查询租户文档版本的分块。
      * @param tenantId 分块所属租户
      * @param versionId 文档版本标识

@@ -112,4 +112,21 @@ public class PlatformToolResolverTest {
             Assert.assertEquals("object", mapper.readTree(tool.getSchemaJson()).path("type").asText());
         }
     }
+
+    @Test
+    public void delegationSchemaRestrictsAgentIdToTrustedAllowList() throws Exception {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder().runId("run")
+                .orchestrationRole("SUPERVISOR").allowedSubAgentIds(List.of("100001", "100002")).build();
+        cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity delegate =
+                new PlatformToolResolver(false, false, false, true).resolve(supervisor).stream()
+                        .filter(tool -> "create_subagent_instances".equals(tool.getFunctionName()))
+                        .findFirst().orElseThrow();
+
+        com.fasterxml.jackson.databind.JsonNode agentId = new ObjectMapper().readTree(delegate.getSchemaJson())
+                .path("properties").path("tasks").path("items").path("properties").path("agentId");
+
+        Assert.assertEquals(List.of("100001", "100002"), new ObjectMapper().convertValue(
+                agentId.path("enum"), new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { }));
+        Assert.assertTrue(delegate.getDescription().contains("agentId 和 instruction"));
+    }
 }

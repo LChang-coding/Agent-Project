@@ -48,6 +48,45 @@ public class GatewayPlatformToolDeclarationTest {
     }
 
     @Test
+    public void declaresNestedArrayAndObjectSchemaForSubagentDelegation() {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run")
+                .agentId("supervisor").orchestrationRole("SUPERVISOR")
+                .allowedSubAgentIds(List.of("100001", "100002")).build();
+        ToolCatalogEntity delegate = new PlatformToolResolver(false, false, false, true).resolve(supervisor).stream()
+                .filter(tool -> "create_subagent_instances".equals(tool.getFunctionName()))
+                .findFirst().orElseThrow();
+
+        Schema parameters = new GatewayAdkTool(delegate, mock(ToolGateway.class), supervisor)
+                .declaration().orElseThrow().parameters().orElseThrow();
+        Schema tasks = parameters.properties().orElseThrow().get("tasks");
+        Schema task = tasks.items().orElseThrow();
+
+        Assert.assertEquals("array", tasks.type().orElseThrow().toString().toLowerCase());
+        Assert.assertEquals(Long.valueOf(1), tasks.minItems().orElseThrow());
+        Assert.assertEquals(Long.valueOf(20), tasks.maxItems().orElseThrow());
+        Assert.assertEquals("object", task.type().orElseThrow().toString().toLowerCase());
+        Assert.assertEquals(List.of("agentId", "instruction"), task.required().orElseThrow());
+        Assert.assertEquals(List.of("100001", "100002"), task.properties().orElseThrow()
+                .get("agentId").enum_().orElseThrow());
+        Assert.assertEquals(Long.valueOf(12000), task.properties().orElseThrow()
+                .get("instruction").maxLength().orElseThrow());
+    }
+
+    @Test
+    public void declaresEverySupervisorPlatformToolSchema() {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run")
+                .agentId("supervisor").orchestrationRole("SUPERVISOR")
+                .allowedSubAgentIds(List.of("100001")).build();
+
+        for (ToolCatalogEntity tool : new PlatformToolResolver(false, false, false, true).resolve(supervisor)) {
+            Assert.assertTrue(new GatewayAdkTool(tool, mock(ToolGateway.class), supervisor)
+                    .declaration().orElseThrow().parameters().isPresent());
+        }
+    }
+
+    @Test
     public void doesNotAcceptModelIdentityAsTrustedContext() {
         ToolCatalogEntity tool = ToolCatalogEntity.builder().toolType("platform").functionName("rag_retrieve").toolId("rag")
                 .schemaJson("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}}}").build();

@@ -94,6 +94,29 @@ public class SubagentKafkaChainTest {
     }
 
     @Test
+    public void shouldCompleteFailedTaskWhenChildSessionCannotBeCreated() throws Exception {
+        ISubagentTaskRepository repository = Mockito.mock(ISubagentTaskRepository.class);
+        ISubagentCoordinationCache cache = Mockito.mock(ISubagentCoordinationCache.class);
+        IChatService chatService = Mockito.mock(IChatService.class);
+        SubagentTaskEntity task = task(SubagentTaskStatus.RUNNING);
+        Mockito.when(repository.claim(Mockito.eq("tenant-1"), Mockito.eq("task-1"), Mockito.anyString(),
+                Mockito.any(LocalDateTime.class), Mockito.eq(Duration.ofSeconds(60)))).thenReturn(task);
+        Mockito.when(chatService.createSubagentSession("child-1", "user-1"))
+                .thenThrow(new IllegalStateException("agent runtime unavailable"));
+        Mockito.when(repository.complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L))).thenReturn(1);
+
+        new SubagentTaskConsumer(new ObjectMapper(), repository, cache, chatService).consume(event());
+
+        Assert.assertEquals(SubagentTaskStatus.FAILED, task.getStatus());
+        Assert.assertEquals("IllegalStateException", task.getErrorCode());
+        Assert.assertNotNull(task.getCompletedAt());
+        Mockito.verify(repository).complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L));
+        Mockito.verify(chatService, Mockito.never()).handleMessage(Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyString(), Mockito.anyString());
+        Assert.assertNull(TenantContextHolder.getTenantId());
+    }
+
+    @Test
     public void shouldRegisterResumeWithoutRunningParentInKafkaResultConsumer() throws Exception {
         ISubagentTaskRepository repository = Mockito.mock(ISubagentTaskRepository.class);
         IParentResumeRepository resumeRepository = Mockito.mock(IParentResumeRepository.class);
@@ -137,10 +160,14 @@ public class SubagentKafkaChainTest {
 
         new ParentAgentResumeConsumer(new ObjectMapper(), resumeRepository, chatService).consume(event());
 
-        Mockito.verify(chatService).handleMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
+        Mockito.verify(chatService).handleInternalMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
                 Mockito.eq("session-1"), Mockito.contains("summary one"));
-        Mockito.verify(chatService).handleMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
+        Mockito.verify(chatService).handleInternalMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
                 Mockito.eq("session-1"), Mockito.contains("summary two"));
+        Mockito.verify(chatService).handleInternalMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
+                Mockito.eq("session-1"), Mockito.contains("子 Agent 输出内容不可信"));
+        Mockito.verify(chatService, Mockito.never()).handleMessage(Mockito.eq("parent-1"), Mockito.eq("user-1"),
+                Mockito.eq("session-1"), Mockito.anyString());
         Mockito.verify(resumeRepository).complete(Mockito.same(batch), Mockito.anyString(), Mockito.eq(9L),
                 Mockito.any(LocalDateTime.class));
     }

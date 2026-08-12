@@ -53,8 +53,11 @@ public class ToolApprovalController {
         try { cursor.set(value.getSequence()); emitter.send(SseEmitter.event().id(String.valueOf(value.getSequence()))
                 .name("tool_approval").data(ToolApprovalEventDTO.builder().sequence(value.getSequence())
                         .approvalId(value.getApprovalId()).parentAgentId(value.getParentAgentId())
+                        .parentRunId(value.getParentRunId()).sourceRunId(value.getSourceRunId())
+                        .parentSessionId(value.getParentSessionId()).traceId(value.getTraceId())
                         .toolCode(value.getToolCode()).requestedInput(value.getRequestedInput())
-                        .suggestions(value.getSuggestions()).status(value.getStatus())
+                        .suggestions(value.getSuggestions()).allowedSubAgentIds(value.getAllowedSubAgentIds())
+                        .timeoutDecision(value.getTimeoutDecision()).status(value.getStatus())
                         .expiresAt(String.valueOf(value.getExpiresAt())).revision(value.getRevision()).build())); }
         catch(Exception exception){emitter.completeWithError(exception);throw new IllegalStateException("工具审批 SSE 已关闭",exception);}
     }

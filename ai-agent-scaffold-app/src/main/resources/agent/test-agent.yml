@@ -6,14 +6,15 @@ ai:
           app-name: testAgent01
           agent:
             agent-id: 100001
-            agent-name: 测试智能体01
-            agent-desc: 一个测试的智能体
+            agent-name: 通用编码 Agent
+            agent-desc: 根据任意开发需求完成代码生成、审查与重构
             orchestration-role: NORMAL
             category: CODING
             best-for:
-              - Java代码实现与审查
+              - 多语言代码实现与审查
+              - 缺陷修复与重构
             not-for:
-              - 开放式资料研究
+              - 需要实时外部资料的开放式研究
             capabilities:
               - coding
               - review
@@ -25,39 +26,26 @@ ai:
               embeddings-path: v1/embeddings
             chat-model:
               model: deepseek-v4-flash
-              tool-mcp-list:
-                - sse:
-                    name: baidu-search
-                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
-                    sse-endpoint: ${baidu.search.sse.endpoint}
-                    request-timeout: 5000
-                - sse:
-                    name: baidu-map
-                    base-uri: https://mcp.map.baidu.com/
-                    sse-endpoint: ${baidu.map.sse.endpoint}
-                    request-timeout: 5000
             agents:
               - name: CodeWriterAgent
-                description: Writes initial Java code based on a specification.
+                description: Writes complete code based on the requested language and specification.
                 instruction: |
-                  You are a Java Code Generator.
-                  Based *only* on the user's request, write Java code that fulfills the requirement.
-                  Output *only* the complete Java code block, enclosed in triple backticks (```java ... ```).
+                  You are a coding agent. Implement the user's request in the requested programming language.
+                  Return complete, runnable code with necessary imports and concise design notes.
+                  Do not invent external APIs or claim tests that were not executed.
                 output-key: generated_code
               - name: CodeReviewerAgent
                 description: Reviews code and provides feedback.
                 instruction: |
-                  You are an expert Java Code Reviewer.
+                  You are an expert code reviewer.
                   Your task is to provide constructive feedback on the provided code.
                   
                   **Code to Review:**
-                  ```java
                   {generated_code}
-                  ```
                   
                   **Review Criteria:**
                   1.  **Correctness:** Does the code work as intended? Are there logic errors?
-                  2.  **Readability:** Is the code clear and easy to understand? Follows Java style guidelines?
+                  2.  **Readability:** Is the code clear and idiomatic for the requested language?
                   3.  **Efficiency:** Is the code reasonably efficient? Any obvious performance bottlenecks?
                   4.  **Edge Cases:** Does the code handle potential edge cases or invalid inputs gracefully?
                   5.  **Best Practices:** Does the code follow common Java best practices?
@@ -70,13 +58,11 @@ ai:
               - name: CodeRefactorerAgent
                 description: Refactors code based on review comments.
                 instruction: |
-                  You are a Java Code Refactoring AI.
-                  Your goal is to improve the given Java code based on the provided review comments.
+                  You are a code refactoring agent.
+                  Improve the implementation based on the review comments while preserving the requested language.
                   
                   **Original Code:**
-                  ```java
                   {generated_code}
-                  ```
                   
                   **Review Comments:**
                   {review_comments}
@@ -84,16 +70,15 @@ ai:
                   **Task:**
                   Carefully apply the suggestions from the review comments to refactor the original code.
                   If the review comments state "No major issues found," return the original code unchanged.
-                  Ensure the final code is complete, functional, and includes necessary imports and docstrings.
+                  Ensure the final code is complete, functional, and includes necessary imports and useful comments.
                   
                   **Output:**
-                  Output *only* the final, refactored Java code block, enclosed in triple backticks (```java ... ```).
-                  Do not add any other text before or after the code block.
+                  Return the complete final implementation followed by concise key design notes.
                 output-key: refactored_code
             agent-workflows:
               - type: sequential
                 name: CodePipelineAgent
-                description: Executes a sequence of code writing, reviewing, and refactoring.
+                description: Executes a language-agnostic code writing, reviewing, and refactoring pipeline.
                 sub-agents:
                   - CodeWriterAgent
                   - CodeReviewerAgent

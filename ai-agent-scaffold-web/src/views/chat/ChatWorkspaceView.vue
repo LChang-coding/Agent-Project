@@ -4,23 +4,53 @@
       <aside class="session-rail" aria-label="会话列表">
         <div class="rail-head">
           <span class="rail-kicker">Sessions</span>
-          <button class="rail-new" type="button" :disabled="!canCreateSession" @click="createSession">新建</button>
+          <div class="rail-actions">
+            <button class="rail-manage" type="button" @click="toggleSessionManagement">{{ managingSessions ? '完成' : '管理' }}</button>
+            <button class="rail-new" type="button" :disabled="!canCreateSession" @click="createSession">新建</button>
+          </div>
+        </div>
+
+        <div v-if="managingSessions" class="session-batch-bar">
+          <label><input type="checkbox" :checked="allVisibleSessionsSelected" @change="toggleAllVisibleSessions">全选</label>
+          <button type="button" :disabled="selectedSessionIds.size === 0 || batchDeletingSessions" @click="batchDeleteSessions">
+            {{ batchDeletingSessions ? '删除中…' : `删除 ${selectedSessionIds.size}` }}
+          </button>
         </div>
 
         <div class="session-list">
           <div
             v-for="session in visibleSessions"
             :key="session.sessionId"
-            :class="['session-item', { 'session-item--active': session.sessionId === chatStore.sessionId }]"
+            :class="['session-item', { 'session-item--active': session.sessionId === chatStore.sessionId, 'session-item--selecting': managingSessions }]"
           >
-            <button class="session-open" type="button" @click="switchSession(session.sessionId)">
-              <strong>{{ session.title }}</strong>
-              <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}</span>
-            </button>
+            <input v-if="managingSessions" class="session-select" type="checkbox" :checked="selectedSessionIds.has(session.sessionId)"
+                   :aria-label="`选择会话 ${session.title}`" @change="toggleSessionSelection(session.sessionId)" />
+            <div class="session-primary">
+              <button class="session-expand" type="button" :aria-expanded="sessionExpanded(session.sessionId)"
+                      :aria-label="`${sessionExpanded(session.sessionId) ? '收起' : '展开'}会话 ${session.title}`"
+                      @click="toggleSession(session.sessionId)">{{ sessionExpanded(session.sessionId) ? '⌄' : '›' }}</button>
+              <button class="session-open" type="button" @click="openMainAgent(session.sessionId)">
+                <strong>{{ session.title }}</strong>
+                <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}</span>
+              </button>
+            </div>
             <button class="session-delete" type="button" :disabled="chatStore.deletingSessionId === session.sessionId"
                     :aria-label="`删除会话 ${session.title}`" @click.stop="deleteSession(session.sessionId, session.title)">
               {{ chatStore.deletingSessionId === session.sessionId ? '…' : '×' }}
             </button>
+            <div v-if="sessionExpanded(session.sessionId)" class="session-children">
+              <button type="button" :class="{ active: session.sessionId === chatStore.sessionId && !selectedTaskId }"
+                      @click="openMainAgent(session.sessionId)">
+                <span class="tree-line" /><span class="agent-glyph">M</span><span><strong>主 Agent</strong><small>对话与最终汇总</small></span>
+              </button>
+              <button v-for="task in sessionTasks(session.sessionId)" :key="task.taskId" type="button"
+                      :class="{ active: selectedTaskId === task.taskId }" @click="openSubagent(session.sessionId, task.taskId)">
+                <span class="tree-line" /><span :class="['agent-glyph', `agent-glyph--${taskStatusTone(task.status)}`]">{{ task.childAgentId.slice(-2) }}</span>
+                <span><strong>{{ agentDisplayName(task.childAgentId) }}</strong><small>{{ taskStatusLabel(task.status, task.callbackStatus) }}</small></span>
+              </button>
+              <span v-if="orchestrationStore.loadingSessionIds.includes(session.sessionId)" class="session-child-empty">正在恢复运行状态…</span>
+              <span v-else-if="sessionTasks(session.sessionId).length === 0" class="session-child-empty">该会话暂无子 Agent</span>
+            </div>
           </div>
           <div v-if="visibleSessions.length === 0" class="session-empty">
             还没有会话，发送第一条消息后会自动归档在这里。
@@ -33,21 +63,21 @@
           <div class="chat-title">
             <span class="status-dot" />
             <div>
-              <h1>智能体会话</h1>
-              <p>{{ currentTargetText }}</p>
+              <h1>Agent 编排工作台</h1>
+              <p>{{ currentTargetText }} · {{ orchestrationCapabilityText }}</p>
             </div>
           </div>
 
           <div class="runtime-controls">
             <label class="compact-field">
-              <span>运行</span>
+              <span>模式</span>
               <select v-model="chatStore.activeSourceType" class="select select--compact" :disabled="chatStore.sending" @change="onSourceChanged">
-                <option value="agent">系统 Agent</option>
-                <option value="workflow">数据库工作流</option>
+                <option value="agent">Agent 编排</option>
+                <option value="workflow">DAG 工作流</option>
               </select>
             </label>
             <label v-if="chatStore.activeSourceType === 'agent'" class="compact-field compact-field--wide">
-              <span>目标</span>
+              <span>入口 Agent</span>
               <select v-model="chatStore.activeAgentId" class="select select--compact" :disabled="chatStore.sending" @change="onAgentChanged">
                 <option v-for="agent in chatStore.agents" :key="agent.agentId" :value="agent.agentId">
                   {{ agent.agentName }}
@@ -147,7 +177,12 @@
           </div>
         </div>
 
-        <div ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
+        <SubagentTaskDetail v-if="selectedTask" :task="selectedTask" :agent-name="agentDisplayName(selectedTask.childAgentId)"
+                            :cancelling="orchestrationStore.cancellingTaskId === selectedTask.taskId"
+                            @back="selectedTaskId = ''" @cancel="cancelSelectedTask" />
+
+        <div v-else ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
+          <OrchestrationRunCard :snapshot="currentOrchestration" :agents="chatStore.agents" @select-task="selectedTaskId = $event" />
           <div v-if="chatStore.loadingMessages" class="empty-chat" role="status" aria-live="polite">
             <span class="empty-orb">···</span>
             <h2>正在载入最近消息</h2>
@@ -215,7 +250,7 @@
           </template>
         </div>
 
-        <form class="composer" @submit.prevent="send">
+        <form v-if="!selectedTask" class="composer" @submit.prevent="send">
           <Transition name="insight-drawer">
             <section v-if="insightPanelOpen" class="insight-panel">
               <nav class="insight-tabs" aria-label="会话洞察">
@@ -330,7 +365,8 @@
             <textarea
               v-model="draft"
               class="composer-input"
-              :placeholder="chatStore.sending ? '输入新指令引导当前运行' : '输入消息，Enter 发送，Shift + Enter 换行'"
+              aria-label="输入会话消息或运行引导指令"
+              :placeholder="orchestrationLocked ? '子 Agent 正在协作；可继续编辑，完成后发送' : chatStore.sending ? '输入新指令引导当前运行' : '输入消息，Enter 发送，Shift + Enter 换行'"
               @compositionstart="onCompositionStart"
               @compositionend="onCompositionEnd"
               @keydown.enter="onComposerEnter"
@@ -338,7 +374,7 @@
 
             <div class="composer-actions">
               <span class="composer-hint">
-                {{ chatStore.sending ? '输入新指令后可引导当前运行' : 'Enter 发送 · 输入法候选期间不会误发' }}
+                {{ orchestrationLocked ? orchestrationLockHint : chatStore.sending ? '输入新指令后可引导当前运行' : 'Enter 发送 · 输入法候选期间不会误发' }}
               </span>
               <div class="button-row">
                 <button
@@ -353,7 +389,7 @@
                 <button
                   :class="['button', chatStore.sending ? 'button--danger' : 'button--primary']"
                   :type="chatStore.sending ? 'button' : 'submit'"
-                  :disabled="chatStore.cancelling || chatStore.steering || (!chatStore.sending && (!draft.trim() || !canCreateSession))"
+                  :disabled="orchestrationLocked || chatStore.cancelling || chatStore.steering || (!chatStore.sending && (!draft.trim() || !canCreateSession))"
                   @click="chatStore.sending ? cancelRun() : undefined"
                 >
                   {{ chatStore.cancelling ? '取消中' : chatStore.sending ? '取消' : '发送' }}
@@ -442,12 +478,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue';
 
 import { createSessionShare } from '@/api/share';
+import OrchestrationRunCard from '@/components/agent/OrchestrationRunCard.vue';
+import SubagentTaskDetail from '@/components/agent/SubagentTaskDetail.vue';
 import WorkflowNodeExecutionPanel from '@/components/chat/WorkflowNodeExecutionPanel.vue';
 import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
+import { useOrchestrationStore } from '@/stores/orchestration';
 import { useToolStore } from '@/stores/tools';
-import type { ArtifactAsset, ChatMessage, RagInvocationMode, SessionRagMode } from '@/types/api';
+import type { ArtifactAsset, ChatMessage, RagInvocationMode, SessionRagMode, SubagentTaskView } from '@/types/api';
+import { copyText } from '@/utils/clipboard';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 interface MessageScrollAnchor {
@@ -459,6 +499,7 @@ const chatStore = useChatStore();
 const assetStore = useAssetStore();
 const insightStore = useInsightStore();
 const toolStore = useToolStore();
+const orchestrationStore = useOrchestrationStore();
 const draft = ref('');
 const isComposing = ref(false);
 const insightPanelOpen = ref(false);
@@ -476,6 +517,11 @@ const manualDialogRef = ref<HTMLElement | null>(null);
 const manualTriggerRef = ref<HTMLButtonElement | null>(null);
 const firstBindingRef = ref<HTMLInputElement | null>(null);
 const ragPolicyGroupRef = ref<HTMLElement | null>(null);
+const expandedSessionIds = ref<string[]>([]);
+const selectedTaskId = ref('');
+const managingSessions = ref(false);
+const selectedSessionIds = ref(new Set<string>());
+const batchDeletingSessions = ref(false);
 let scrollFrame: number | null = null;
 const MESSAGE_WINDOW_SIZE = 100;
 const MESSAGE_WINDOW_STEP = 50;
@@ -511,12 +557,24 @@ const visibleSessions = computed(() => {
     return (session.sourceType || 'agent') === 'agent' && session.agentId === chatStore.activeAgentId;
   });
 });
+const allVisibleSessionsSelected = computed(() => visibleSessions.value.length > 0
+  && visibleSessions.value.every((session) => selectedSessionIds.value.has(session.sessionId)));
+const currentOrchestration = computed(() => orchestrationStore.current(chatStore.sessionId));
+const orchestrationLocked = computed(() => Boolean(currentOrchestration.value?.inputLocked));
+const orchestrationLockHint = computed(() => currentOrchestration.value?.phase === 'WAITING_APPROVAL'
+  ? '等待工具审批；草稿会保留' : currentOrchestration.value?.phase === 'SUMMARIZING'
+    ? '主 Agent 正在汇总；草稿会保留' : '子 Agent 正在协作；草稿会保留');
+const selectedTask = computed(() => orchestrationStore.task(chatStore.sessionId, selectedTaskId.value));
 const currentTargetText = computed(() => {
   if (chatStore.activeSourceType === 'workflow') {
     const workflow = chatStore.activeWorkflow;
     return `${workflow?.workflowName || '未选择工作流'} · ${modelLabel(chatStore.activeModelCode)}`;
   }
   return chatStore.activeAgent?.agentName || '未选择智能体';
+});
+const orchestrationCapabilityText = computed(() => {
+  if (chatStore.activeSourceType === 'workflow') return '按已发布拓扑执行';
+  return chatStore.activeAgent?.orchestrationRole === 'SUPERVISOR' ? '可委派多个子 Agent' : '单 Agent 执行';
 });
 const sessionText = computed(() => {
   return chatStore.sessionId ? `session ${chatStore.sessionId.slice(0, 8)}` : '首条消息自动创建会话';
@@ -617,17 +675,15 @@ onMounted(async () => {
   await chatStore.loadAgents();
   await toolStore.loadCatalog();
   scrollToLatest(true);
-  orchestrationRefreshTimer = window.setInterval(refreshSupervisorCallbacks, 3000);
 });
 
 onBeforeUnmount(() => {
-  if (orchestrationRefreshTimer !== null) window.clearInterval(orchestrationRefreshTimer);
+  orchestrationStore.disconnect();
   if (scrollFrame !== null) {
     window.cancelAnimationFrame(scrollFrame);
   }
 });
 
-let orchestrationRefreshTimer: number | null = null;
 let orchestrationRefreshRunning = false;
 
 /** 主 Agent 原 SSE 结束后静默拉取可信回调落库的新消息。 */
@@ -654,11 +710,24 @@ watch(
       messageWindowStart.value = 0;
       windowFeedback.value = '';
       followingLatest.value = true;
+      selectedTaskId.value = '';
     }
+    orchestrationStore.connect(sessionId);
+    if (sessionId && !expandedSessionIds.value.includes(sessionId)) expandedSessionIds.value.push(sessionId);
     void refreshSessionResources(sessionId);
   },
   { immediate: true },
 );
+
+watch(() => currentOrchestration.value?.version, async (version, previous) => {
+  if (!version || version === previous || !chatStore.sessionId || chatStore.sending || orchestrationRefreshRunning) return;
+  orchestrationRefreshRunning = true;
+  try {
+    const lastMessageId = chatStore.messages.at(-1)?.id;
+    await chatStore.reloadSessionMessages(chatStore.sessionId, true);
+    if (lastMessageId !== chatStore.messages.at(-1)?.id) scrollToLatest();
+  } finally { orchestrationRefreshRunning = false; }
+});
 
 watch(
   attachmentScope,
@@ -725,6 +794,39 @@ async function switchSession(sessionId: string) {
   scrollToLatest(true);
 }
 
+function sessionExpanded(sessionId: string) { return expandedSessionIds.value.includes(sessionId); }
+async function toggleSession(sessionId: string) {
+  if (sessionExpanded(sessionId)) {
+    expandedSessionIds.value = expandedSessionIds.value.filter((id) => id !== sessionId);
+    return;
+  }
+  expandedSessionIds.value.push(sessionId);
+  await orchestrationStore.load(sessionId);
+}
+function sessionTasks(sessionId: string): SubagentTaskView[] {
+  return orchestrationStore.current(sessionId)?.runs.flatMap((run) => run.tasks) || [];
+}
+async function openMainAgent(sessionId: string) {
+  selectedTaskId.value = '';
+  if (chatStore.sessionId !== sessionId) await switchSession(sessionId);
+}
+async function openSubagent(sessionId: string, taskId: string) {
+  if (chatStore.sessionId !== sessionId) await switchSession(sessionId);
+  selectedTaskId.value = taskId;
+  await orchestrationStore.loadTask(sessionId, taskId);
+}
+function agentDisplayName(agentId: string) { return chatStore.agents.find((agent) => agent.agentId === agentId)?.agentName || `Agent ${agentId}`; }
+function taskStatusTone(status: string) { return ['READY', 'RUNNING'].includes(status) ? 'active' : status === 'FAILED' ? 'error' : status === 'CANCELLED' ? 'muted' : 'done'; }
+function taskStatusLabel(status: string, callback?: string) {
+  if (status === 'READY') return '等待执行'; if (status === 'RUNNING') return '执行中';
+  if (status === 'FAILED') return '失败'; if (status === 'CANCELLED') return '已取消';
+  return callback === 'DELIVERED' ? '已回调' : '等待汇总';
+}
+async function cancelSelectedTask() {
+  if (!selectedTask.value || !chatStore.sessionId) return;
+  await orchestrationStore.cancelTask(chatStore.sessionId, selectedTask.value.taskId);
+}
+
 /**
  * 删除会话；参数是会话ID和标题；确认后调用服务端软删除。
  */
@@ -737,6 +839,38 @@ async function deleteSession(sessionId: string, title: string) {
   } catch {
     // Store 已保存可展示的服务端错误。
   }
+}
+
+function toggleSessionManagement() {
+  managingSessions.value = !managingSessions.value;
+  if (!managingSessions.value) selectedSessionIds.value = new Set();
+}
+
+function toggleSessionSelection(sessionId: string) {
+  const next = new Set(selectedSessionIds.value);
+  next.has(sessionId) ? next.delete(sessionId) : next.add(sessionId);
+  selectedSessionIds.value = next;
+}
+
+function toggleAllVisibleSessions() {
+  selectedSessionIds.value = allVisibleSessionsSelected.value
+    ? new Set() : new Set(visibleSessions.value.map((session) => session.sessionId));
+}
+
+async function batchDeleteSessions() {
+  const selected = chatStore.sessions.filter((session) => selectedSessionIds.value.has(session.sessionId));
+  if (!selected.length || !window.confirm(`确定删除选中的 ${selected.length} 个会话吗？历史审计记录仍会保留。`)) return;
+  batchDeletingSessions.value = true;
+  let failed = 0;
+  const ordered = [...selected].sort((left, right) =>
+    Number(left.sessionId === chatStore.sessionId) - Number(right.sessionId === chatStore.sessionId));
+  for (const session of ordered) {
+    try { await chatStore.deleteSession(session.sessionId); } catch { failed += 1; }
+  }
+  selectedSessionIds.value = new Set();
+  batchDeletingSessions.value = false;
+  managingSessions.value = false;
+  if (failed) chatStore.errorMessage = `${selected.length - failed} 个会话已删除，${failed} 个处理失败`;
 }
 
 /**
@@ -994,7 +1128,7 @@ function onComposerEnter(event: KeyboardEvent) {
  */
 async function send() {
   const message = draft.value.trim();
-  if (!message || chatStore.sending) {
+  if (!message || chatStore.sending || orchestrationLocked.value) {
     return;
   }
   const attachmentIds = [...assetStore.selectedAssetIds];
@@ -1062,7 +1196,7 @@ async function copyShareLink() {
     return;
   }
   try {
-    await navigator.clipboard.writeText(shareLink.value);
+    await copyText(shareLink.value);
   } catch {
     chatStore.errorMessage = '链接已生成，但浏览器未授权访问剪贴板，请手动复制';
   }
@@ -1072,7 +1206,7 @@ async function copyShareLink() {
 async function copyTraceId(traceId: string) {
   if (!traceId) return;
   try {
-    await navigator.clipboard.writeText(traceId);
+    await copyText(traceId);
     windowFeedback.value = `已复制链路号 ${compactTraceId(traceId)}`;
   } catch {
     chatStore.errorMessage = `浏览器未授权访问剪贴板，请手动复制链路号：${traceId}`;
@@ -1428,6 +1562,7 @@ function formatOptionalTokens(value?: number) {
 }
 
 .rail-new,
+.rail-manage,
 .icon-button {
   min-height: 30px;
   padding: 0 9px;
@@ -1442,10 +1577,18 @@ function formatOptionalTokens(value?: number) {
 }
 
 .rail-new:hover,
+.rail-manage:hover,
 .icon-button:hover {
-  border-color: rgba(30, 90, 103, 0.16);
-  background: #d7e8e9;
+  border-color: rgba(214, 83, 50, 0.22);
+  background: var(--accent-soft);
 }
+.rail-actions { display: flex; align-items: center; gap: 5px; }
+.rail-manage { color: var(--muted); background: transparent; border-color: var(--line); }
+.session-batch-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; }
+.session-batch-bar label { display: flex; align-items: center; gap: 6px; font-weight: 800; }
+.session-batch-bar input,.session-select { width: 16px; height: 16px; accent-color: var(--accent-deep); }
+.session-batch-bar button { border: 0; background: transparent; color: var(--danger); font-weight: 850; cursor: pointer; }
+.session-batch-bar button:disabled { opacity: .45; cursor: not-allowed; }
 
 .rail-new:disabled {
   cursor: not-allowed;
@@ -1464,8 +1607,9 @@ function formatOptionalTokens(value?: number) {
 }
 
 .session-item {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   width: 100%;
   padding: 10px;
   text-align: left;
@@ -1473,6 +1617,28 @@ function formatOptionalTokens(value?: number) {
   border-radius: 9px;
   background: transparent;
   transition: transform var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
+}
+.session-item--selecting { grid-template-columns: 22px minmax(0, 1fr) auto; }
+.session-select { margin-top: 7px; }
+
+.session-primary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.session-expand {
+  display: grid;
+  width: 28px;
+  height: 32px;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
 }
 
 .session-open {
@@ -1498,6 +1664,42 @@ function formatOptionalTokens(value?: number) {
   cursor: pointer;
 }
 
+.session-children {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+  margin: 8px -4px -4px 10px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
+}
+
+.session-children > button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 10px 28px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-height: 44px;
+  padding: 5px 7px 5px 0;
+  text-align: left;
+  color: var(--ink);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.session-children > button:hover,
+.session-children > button.active { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.tree-line { width: 10px; border-top: 1px solid var(--line-strong); }
+.agent-glyph { display:grid;width:26px;height:26px;place-items:center;border:1px solid var(--line);background:var(--surface);font-size:9px;font-weight:900;color:var(--muted) }
+.agent-glyph--active { border-color: color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--accent);background:var(--accent-soft) }
+.agent-glyph--done { color:var(--success);background:color-mix(in srgb,var(--success) 8%,var(--surface)) }
+.agent-glyph--error { color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,var(--surface)) }
+.session-children strong,.session-children small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.session-children strong { font-size:11px }.session-children small{margin-top:2px;color:var(--muted);font-size:10px}
+.session-child-empty { padding:8px 9px 8px 18px;font-size:10px!important }
+
 .session-delete:hover {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
@@ -1509,7 +1711,7 @@ function formatOptionalTokens(value?: number) {
 }
 
 .session-item--active {
-  border-color: rgba(30, 90, 103, 0.16);
+  border-color: rgba(214, 83, 50, 0.22);
   background: var(--accent-soft);
 }
 
@@ -1878,8 +2080,8 @@ function formatOptionalTokens(value?: number) {
   height: 48px;
   color: var(--accent-deep);
   place-items: center;
-  border: 1px solid rgba(31, 83, 98, 0.18);
-  border-radius: 14px;
+  border: 1px solid rgba(214, 83, 50, 0.22);
+  border-radius: 8px;
   background: var(--accent-soft);
   box-shadow: none;
   font-weight: 900;
@@ -1888,7 +2090,7 @@ function formatOptionalTokens(value?: number) {
 .empty-chat h2 {
   margin: 14px 0 6px;
   color: var(--ink);
-  font-family: "Fraunces", "Songti SC", serif;
+  font-family: "Newsreader Variable", "Songti SC", serif;
   font-size: clamp(24px, 3vw, 34px);
   letter-spacing: -0.06em;
 }
@@ -1913,7 +2115,7 @@ function formatOptionalTokens(value?: number) {
 .message--user {
   justify-self: end;
   color: #fffaf0;
-  border-color: rgba(31, 83, 98, 0.82);
+  border-color: var(--accent-deep);
   background: var(--accent);
 }
 
@@ -1980,7 +2182,7 @@ function formatOptionalTokens(value?: number) {
 .mini-badge {
   padding: 2px 6px;
   border-radius: 5px;
-  background: rgba(31, 83, 98, 0.1);
+  background: rgba(214, 83, 50, 0.1);
 }
 
 .mini-badge--red {
@@ -2032,9 +2234,9 @@ function formatOptionalTokens(value?: number) {
   height: 30px;
   color: var(--accent-deep);
   place-items: center;
-  border: 1px solid rgba(31, 83, 98, 0.16);
-  border-radius: 8px;
-  background: rgba(31, 83, 98, 0.07);
+  border: 1px solid rgba(214, 83, 50, 0.2);
+  border-radius: 5px;
+  background: rgba(214, 83, 50, 0.08);
   cursor: pointer;
   font-size: 19px;
   line-height: 1;
@@ -2071,12 +2273,16 @@ function formatOptionalTokens(value?: number) {
 }
 
 .attachment-chip button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
   padding: 0;
   color: inherit;
   border: 0;
   background: transparent;
   cursor: pointer;
   font-weight: 900;
+  place-items: center;
 }
 
 .composer-input {
@@ -2149,7 +2355,7 @@ function formatOptionalTokens(value?: number) {
   height: 18px;
   place-items: center;
   border-radius: 5px;
-  background: rgba(31, 83, 98, 0.12);
+  background: rgba(214, 83, 50, 0.12);
   font-size: 11px;
 }
 

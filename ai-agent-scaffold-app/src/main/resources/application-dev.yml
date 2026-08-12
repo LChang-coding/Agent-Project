@@ -39,9 +39,11 @@ spring:
     import:
             - optional:nacos:ai-agent-scaffold-app-dev.yml?group=DEFAULT_GROUP&refreshEnabled=true
     #        - classpath:agent/test-agent-02.yml
-       #     - classpath:agent/test-agent.yml
+            - classpath:agent/test-agent.yml
             - classpath:agent/only-one-agent.yml
-        #    - classpath:agent/parallel_research_app.yml
+            - classpath:agent/parallel_research_app.yml
+            - classpath:agent/review-agent.yml
+            - optional:nacos:ai-agent-templates-dev.yml?group=DEFAULT_GROUP&refreshEnabled=false
   datasource:
     username: ${MYSQL_USERNAME:ai_agent_app}
     password: ${MYSQL_PASSWORD:}

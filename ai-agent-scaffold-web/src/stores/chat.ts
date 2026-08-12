@@ -69,6 +69,7 @@ let steerPromise: Promise<boolean> | null = null;
 let sessionSwitchGeneration = 0;
 let ragSettingGeneration = 0;
 const SESSION_MESSAGE_PAGE_SIZE = 50;
+const LAST_SESSION_KEY = 'ai_agent_scaffold_last_session_id';
 const historyWorkflowControllers = new Map<string, AbortController>();
 
 interface ChatState {
@@ -190,6 +191,10 @@ export const useChatStore = defineStore('chat', {
         if (this.activeSourceType === 'workflow' && !this.activeWorkflowId && this.agents.length > 0) {
           this.activeSourceType = 'agent';
         }
+        const lastSessionId = localStorage.getItem(LAST_SESSION_KEY) || '';
+        if (!this.sessionId && this.sessions.some((session) => session.sessionId === lastSessionId)) {
+          await this.switchSession(lastSessionId);
+        }
       } finally {
         this.loadingAgents = false;
         this.loadingWorkflows = false;
@@ -240,6 +245,7 @@ export const useChatStore = defineStore('chat', {
       const auth = useAuthStore();
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
+      localStorage.setItem(LAST_SESSION_KEY, result.sessionId);
       this.messages = [];
       this.lastTraceId = '';
       this.resetRagSettingState();
@@ -273,6 +279,7 @@ export const useChatStore = defineStore('chat', {
         this.activeWorkflowKind = 'STATIC';
       }
       this.sessionId = session.sessionId;
+      localStorage.setItem(LAST_SESSION_KEY, session.sessionId);
       this.contextRevision = session.contextRevision || 0;
       this.ragEnabled = Boolean(session.ragEnabled);
       this.ragMode = session.ragMode || (session.ragEnabled ? 'AUTO' : 'OFF');
@@ -996,6 +1003,7 @@ export const useChatStore = defineStore('chat', {
       this.errorMessage = '';
       try {
         if (sessionId === this.sessionId) {
+          if (localStorage.getItem(LAST_SESSION_KEY) === sessionId) localStorage.removeItem(LAST_SESSION_KEY);
           await this.cancelActiveRun('删除会话');
         }
         await deleteChatSession(sessionId);
@@ -1027,6 +1035,7 @@ export const useChatStore = defineStore('chat', {
       if (!this.sessionId || !this.hasActiveTarget()) {
         return;
       }
+      localStorage.setItem(LAST_SESSION_KEY, this.sessionId);
       const activeAgent = this.activeAgent;
       const activeWorkflow = this.activeWorkflow;
       const existingSession = this.sessions.find((item) => item.sessionId === this.sessionId);
@@ -1244,7 +1253,9 @@ export const useChatStore = defineStore('chat', {
  * 生成前端临时 ID；无参数；返回可用于列表渲染的字符串。
  */
 function createId() {
-  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }
 
 /** 会话切换时主动结束历史 SSE，防止旧页面后台占用连接。 */
@@ -1394,7 +1405,7 @@ function isAbortError(error: unknown) {
  * 创建浏览器侧可预知运行ID；无参数；返回符合服务端约束的运行ID。
  */
 function createRunId() {
-  return `run_${crypto.randomUUID()}`;
+  return `run_${createId()}`;
 }
 
 /**

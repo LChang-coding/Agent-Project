@@ -2,7 +2,7 @@
 
 ## 本次代码边界
 
-本机无法访问 `codex.md` 所述业务服务器，仓库内也未发现该文件。因此本次只交付代码、SQL、配置契约和本地静态/单元验证，不连接共享 MySQL、Redis、Kafka，不创建 Topic，不执行迁移。
+本交付包含代码、SQL、Kafka Topic 初始化脚本、配置契约和本地回归验证。执行迁移前必须核对目标库与 Kafka 集群，先备份再执行，不得依赖 Broker 自动建 Topic。
 
 ## 权威数据与加速数据
 
@@ -23,7 +23,7 @@
 | `agent.subagent.cleanup.v1` | `parentRunId` | 摘要被主 Agent 接收并提交业务 ACK，或任务取消 | 删除 Redis 临时实例与 Inbox 索引 |
 | `agent.parent.resume.v1` | `parentRunId` | 结果登记与 Resume Request 同事务落库 | Resume Worker 单飞领取摘要批次并续跑主 Agent |
 
-消息统一带 `schemaVersion=1` 和租户、聚合标识；子任务事件使用 `taskId/parentRunId`，可选 `traceId`。Topic 禁止自动创建；生产环境建议副本数 3、`min.insync.replicas=2`、生产者 `acks=all`。结果回调还需要预建 `${result-topic}-retry` 和 `${result-topic}-dlt`，因此共四个业务 Topic、两个回调重试 Topic。工具审批不经 Kafka。
+消息统一带 `schemaVersion=1` 和租户、聚合标识；子任务事件使用 `taskId/parentRunId`，可选 `traceId`。Topic 禁止自动创建；生产环境建议副本数 3、`min.insync.replicas=2`、生产者 `acks=all`。结果回调还需要预建 `${result-topic}-retry-0` 和 `${result-topic}-dlt`；`-retry-0` 来自 Spring Kafka `@RetryableTopic` 默认的索引后缀策略。因此共四个业务 Topic、两个回调重试 Topic。工具审批不经 Kafka。
 
 ## Lease、心跳与恢复
 
@@ -43,7 +43,7 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 
 ## 人工审批链路
 
-只有工具策略为 `REQUIRE_APPROVAL` 时，`create_subagent_instances` 才创建持久审批请求，不创建子 Agent。后端通过带 Bearer Token 的 SSE `GET /api/v1/tool-approvals/stream` 向当前用户推送安全裁剪后的待审批事件；前端通过 `POST /api/v1/tool-approvals/{approvalId}/decision` 单点提交 `APPROVE`、`REJECT`、`APPROVE_WITH_CHANGES` 或 `REPLAN`。SSE 断线可按序号重连，HTTP 决定使用 revision 和数据库 CAS 防重复。
+任意平台工具、MCP 或 Skill 的策略为 `REQUIRE_APPROVAL` 时，ToolGateway 都会在领取幂等执行权和产生外部副作用前创建持久审批请求。后端通过带 Bearer Token 的 SSE `GET /api/v1/tool-approvals/stream` 向当前用户推送安全裁剪后的待审批事件；前端通过 `POST /api/v1/tool-approvals/{approvalId}/decision` 单点提交 `APPROVE`、`REJECT`、`APPROVE_WITH_CHANGES` 或 `REPLAN`。SSE 断线可按序号重连，HTTP 决定使用 revision 和数据库 CAS 防重复。
 
 创建审批请求后，当前工具调用保持在原 Java/HTTP 执行栈中，每秒轮询 MySQL 决定，默认最长等待 600 秒，可配置 60–3600 秒。`APPROVE` 用原参数继续同一个 `functionCallId`；`APPROVE_WITH_CHANGES` 先以原 Schema 校验修改参数，再继续同一调用；`REJECT` 和 `REPLAN` 作为当前工具失败返回 Agent。审批扫描器和等待线程均可用数据库 CAS 落超时默认决定；不再存在审批 Kafka Topic、审批 Worker 或新建对话续跑。
 
@@ -51,18 +51,21 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 
 ## Agent 模板与工具权限
 
-静态 YAML 内置 `orchestration-role`、`category`、`best-for`、`not-for`、`capabilities` 和 `allowed-sub-agent-ids`。只有服务端可信角色为 `SUPERVISOR` 且白名单非空时，模型才能发现编排工具。工具权限配置接口仅允许 owner/admin 修改 Supervisor 的 `create_subagent_instances` 策略。委派时再次校验白名单、租户启停状态、任务数量和指令长度。
+静态 YAML 内置 `orchestration-role`、`category`、`best-for`、`not-for`、`capabilities` 和 `allowed-sub-agent-ids`。只有服务端可信角色为 `SUPERVISOR` 且白名单非空时，模型才能发现编排工具。owner/admin 可以按 Agent 分别为其实际可见的平台工具、MCP 与 Skill 配置 `ALLOW`、`REQUIRE_APPROVAL` 或 `DENY`；动态工具使用稳定的 `mcp:<id>` / `skill:<code>` 权限键。委派时仍会再次校验白名单、租户启停状态、任务数量和指令长度。
+
+通用模板集中维护在 Nacos `DEFAULT_GROUP/ai-agent-templates-dev.yml`，并在 classpath 保留同等的启动兜底。当前内置 `100001` 通用编码、`100002` 通用调查、`100004` 通用审查和 `100003` Supervisor。Nacos 可以修改模板指令、能力元数据和 Supervisor 白名单，但 Armory 目前只在 `ApplicationReadyEvent` 中构建运行时 Bean；变更模板后必须重启应用，不得将属性刷新误称为 Agent 运行时热更新。
 
 五个稳定工具协议为：`search_agent_catalog` 查询可用模板；`create_subagent_instances` 批量创建临时实例；`read_subagent_result` 读取状态与摘要；`read_subagent_full_context` 按需读取完整上下文；`cancel_subagent_instances` 取消实例。所有 schema 均禁止额外字段，Agent 身份、租户、父运行和白名单只取服务端上下文。
 
 ## 上线步骤
 
 1. 评审并通过变更平台执行 `2026-08-12-agent-orchestration.sql`，保留回滚 SQL。
-2. 创建任务、结果、清理、主 Agent 恢复四个业务 Topic，以及结果 retry、结果 DLT，配置 ACL。
-3. 确认 Redis TTL 与内存水位告警；Redis 不存永久任务事实。
-4. 先部署代码但保持 `AI_AGENT_ORCHESTRATION_ENABLED=false`。
-5. 灰度开启一个实例，验证 Outbox 延迟、Lease 接管、重复消息、审批超时、回调幂等和业务 ACK 清理。
-6. 扩大 Worker，并监控任务积压、过期 Lease、Outbox `DEAD`、回调重试、重复续跑率和端到端耗时。
+2. 执行只读 `2026-08-12-agent-orchestration-verify.sql`，确认 6 张表、关键列和唯一索引全部为 `OK`。
+3. 先以默认 dry-run 执行 `docs/dev-ops/kafka/bootstrap-agent-orchestration-topics.sh`，复核分区和副本数后设置 `APPLY=true`，幂等创建四个业务 Topic 与结果 retry/DLT，并按环境配置 ACL。
+4. 确认 Redis TTL 与内存水位告警；Redis 不存永久任务事实。
+5. 先部署代码但保持 `AI_AGENT_ORCHESTRATION_ENABLED=false`。
+6. 灰度开启一个实例，验证 Outbox 延迟、Lease 接管、重复消息、审批超时、回调幂等和业务 ACK 清理。
+7. 扩大 Worker，并监控任务积压、过期 Lease、Outbox `DEAD`、回调重试、重复续跑率和端到端耗时。
 
 ## 必测故障场景
 
@@ -80,4 +83,20 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 
 ## 本地验证与未验证项
 
-本地可执行 Maven 定向测试、MyBatis 映射装载测试和前端 TypeScript/Vite 构建。由于当前机器无法连接目标环境，Topic、ACL、MySQL 迁移、Redis TTL、真实模型续跑和故障注入均属于部署后验收项，不能写成已验证。
+本地已执行 Maven 定向测试、MyBatis 映射装载测试、前端 TypeScript/Vite 构建和应用打包。MySQL 迁移、Kafka Topic 与应用灰度启动的实际结果见下方部署记录。Redis TTL、真实 Supervisor 多 Agent 续跑以及宕机/重复投递故障注入尚未执行，不能写成已验证。
+
+## 2026-08-12 部署记录
+
+- 业务 MySQL 执行迁移前已生成全库一致性备份：`/opt/ai-agent-rag/backups/agent-orchestration-20260812-220146`；6 张表、关键列与唯一索引的只读校验全部为 `OK`。
+- Kafka 为单 Broker，因此按现有环境约定创建 6 分区、1 副本 Topic，初始基线保存在 `/root/ai-agent-kafka/backups/agent-orchestration-20260812-220328`。灰度时确认 Spring Kafka 实际重试 Topic 为 `agent.subagent.result.v1-retry-0`，已显式固定后缀策略、修正脚本并补建 Topic；修正脚本快照保存在 `/root/ai-agent-kafka/backups/agent-orchestration-contract-fix-20260812-221021`。误创建的空 Topic `agent.subagent.result.v1-retry` 暂时保留，避免部署过程执行破坏性删除。
+- 应用发布包位于 `/Users/codeliu/.ai-agent-scaffold/releases/20260812-221205-multi-agent`，编排开关已开启。业务库连接显式走 `127.0.0.1:13306` SSH 隧道，避免公网 MySQL 链路的偶发读超时。
+- 上线门禁已验证：应用启动、Hikari 建连、编排主 Topic/retry/DLT 全分区分配、本机与域名 HTTP 链路、Trace ID 响应头均正常；启动后观察窗口无新的数据库或 Kafka 异常。真实 Supervisor 委派、人工审批和故障接管仍属于业务验收项。
+
+## 2026-08-13 在线验收记录
+
+- 当前发布目录：`/opt/ai-agent-scaffold/releases/20260813-023000-unified-tool-policy`，线上入口为 `http://lcodeagent.lcode.top`。
+- 已真实验证主 Agent 创建子 Agent、异步回调、左侧二级任务树、子任务详情和刷新恢复；审批期间输入区锁定，审批后继续原调用。
+- 已真实验证普通平台工具 `search_agent_catalog` 的通用审批，证明权限门禁不再只覆盖创建子 Agent；Agent 管理页可展示 Supervisor 的完整平台工具清单，MCP 与 Skill 发布后动态进入权限列表。
+- 会话采用软删除，Agent/MCP/Skill 采用作用域禁用语义；四个页面均支持多选、全选、批量删除和部分失败反馈。在线浏览器已分别完成会话、Agent、MCP、Skill 批量删除。
+- Skill 上传在线测试发现并修复资产记录缺失 `asset_kind`、`parse_status` 与 `sha256` 的问题；修复后 ZIP 上传、草稿创建和批量禁用已闭环通过。
+- 桌面端治理链无页面异常或 5xx；390px 移动端文档宽度与视口均为 390px，无横向溢出。

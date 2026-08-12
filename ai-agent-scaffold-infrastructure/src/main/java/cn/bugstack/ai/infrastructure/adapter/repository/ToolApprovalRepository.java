@@ -28,6 +28,11 @@ public class ToolApprovalRepository implements IToolApprovalRepository {
     @Override public List<ToolApprovalRequestEntity> queryAfter(String tenantId, String userId, long afterSequence, int limit) {
         return dao.queryAfter(tenantId, userId, afterSequence, limit).stream().map(this::entity).toList();
     }
+    @Override public List<ToolApprovalRequestEntity> queryPendingBySession(String tenantId, String userId,
+                                                                           String parentSessionId, int limit) {
+        return dao.queryPendingBySession(tenantId, userId, parentSessionId, Math.max(1, Math.min(100, limit)))
+                .stream().map(this::entity).toList();
+    }
     @Override public ToolApprovalRequestEntity query(String tenantId, String userId, String approvalId) {
         return entity(dao.query(tenantId, userId, approvalId));
     }

@@ -17,6 +17,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -61,26 +62,14 @@ public class SubagentPlatformToolHandlerTest {
     }
 
     @Test
-    public void shouldContinueOriginalToolCallAfterApproval() {
+    public void shouldCreateSubagentsAfterGatewayAuthorization() {
         SubagentOrchestrationService orchestration = Mockito.mock(SubagentOrchestrationService.class);
-        AgentToolPermissionService permissions = Mockito.mock(AgentToolPermissionService.class);
-        ToolApprovalService approvals = Mockito.mock(ToolApprovalService.class);
-        Mockito.when(permissions.resolve("tenant-1", "parent-1", "create_subagent_instances"))
-                .thenReturn(AgentToolPermissionEntity.builder().mode("REQUIRE_APPROVAL").timeoutSeconds(60)
-                        .timeoutDecision("REJECT").suggestions(List.of("同意")).build());
-        Mockito.when(approvals.request(Mockito.any(), Mockito.eq("create_subagent_instances"), Mockito.anyMap(), Mockito.any()))
-                .thenReturn(ToolApprovalRequestEntity.builder().approvalId("approval-1").status("PENDING")
-                        .expiresAt(java.time.LocalDateTime.now().plusMinutes(1)).build());
-        Mockito.when(approvals.awaitDecision(Mockito.any(), Mockito.any())).thenReturn(
-                ToolApprovalRequestEntity.builder().approvalId("approval-1").status("DECIDED")
-                        .decision("APPROVE").build());
         SubagentTaskEntity created = SubagentTaskEntity.builder().taskId("task-1").childAgentId("child-1")
                 .status(SubagentTaskStatus.READY).build();
         Mockito.when(orchestration.delegate(Mockito.any(), Mockito.eq("call-1"), Mockito.anyList()))
                 .thenReturn(List.of(created));
         PlatformToolRegistry registry = new PlatformToolRegistry();
-        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration,
-                permissions, approvals);
+        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration);
         ToolInvokeContextEntity context = context(); context.setRunId("run-1"); context.setFunctionCallId("call-1");
 
         PlatformToolResult result = registry.dispatch(tool("create_subagent_instances"), Map.of("tasks",
@@ -92,30 +81,33 @@ public class SubagentPlatformToolHandlerTest {
     }
 
     @Test
-    public void shouldRejectAmendedInputOutsideOriginalSchema() {
+    public void shouldRejectInputOutsideOriginalSchema() {
         SubagentOrchestrationService orchestration = Mockito.mock(SubagentOrchestrationService.class);
-        AgentToolPermissionService permissions = Mockito.mock(AgentToolPermissionService.class);
-        ToolApprovalService approvals = Mockito.mock(ToolApprovalService.class);
-        Mockito.when(permissions.resolve("tenant-1", "parent-1", "create_subagent_instances"))
-                .thenReturn(AgentToolPermissionEntity.builder().mode("REQUIRE_APPROVAL").timeoutSeconds(60)
-                        .timeoutDecision("REJECT").build());
-        Mockito.when(approvals.request(Mockito.any(), Mockito.anyString(), Mockito.anyMap(), Mockito.any()))
-                .thenReturn(ToolApprovalRequestEntity.builder().approvalId("approval-1").status("PENDING").build());
-        Mockito.when(approvals.awaitDecision(Mockito.any(), Mockito.any())).thenReturn(
-                ToolApprovalRequestEntity.builder().status("DECIDED").decision("APPROVE_WITH_CHANGES")
-                        .amendedInput(Map.of("tasks", List.of(Map.of("agentId", "child-1", "instruction", "brief")),
-                                "untrustedField", true)).build());
         PlatformToolRegistry registry = new PlatformToolRegistry();
-        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration,
-                permissions, approvals);
+        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration);
         ToolInvokeContextEntity context = context(); context.setRunId("run-1"); context.setFunctionCallId("call-1");
 
         PlatformToolResult result = registry.dispatch(tool("create_subagent_instances"), Map.of("tasks",
-                List.of(Map.of("agentId", "child-1", "instruction", "research"))), context);
+                List.of(Map.of("agentId", "child-1", "instruction", "brief")), "untrustedField", true), context);
 
         Assert.assertFalse(result.success());
         Assert.assertEquals("SUBAGENT_INPUT_INVALID", result.error());
         Mockito.verifyNoInteractions(orchestration);
+    }
+
+    @Test
+    public void shouldRejectOversizedTaskIdListsAtRuntime() {
+        SubagentOrchestrationService service = Mockito.mock(SubagentOrchestrationService.class);
+        PlatformToolRegistry registry = new PlatformToolRegistry();
+        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), service,
+                allowPermissions(), Mockito.mock(ToolApprovalService.class));
+
+        PlatformToolResult result = registry.dispatch(tool("read_subagent_result"),
+                Map.of("taskIds", Collections.nCopies(101, "task")), context());
+
+        Assert.assertFalse(result.success());
+        Assert.assertEquals("SUBAGENT_TASK_IDS_INVALID", result.error());
+        Mockito.verifyNoInteractions(service);
     }
 
     private SubagentTaskEntity resultTask() {

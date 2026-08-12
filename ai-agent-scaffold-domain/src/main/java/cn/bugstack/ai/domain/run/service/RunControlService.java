@@ -312,6 +312,22 @@ public class RunControlService {
                 .run(require(run.getTenantId(), run.getUserId(), runId)).message(message).build();
     }
 
+    /** 在运行锁内写入并绑定平台内部输入，不伪装成用户消息。 */
+    @Transactional(rollbackFor = Exception.class)
+    public RunMessageBindingEntity appendPlatformMessage(String tenantId, String userId, String runId,
+                                                          String content, String traceId) {
+        ChatRunEntity run = lockExecutableWithSessionFirst(tenantId, userId, runId);
+        ChatMessageEntity message = sessionDomain.appendPlatformMessage(run.getTenantId(), run.getUserId(),
+                run.getSessionId(), runId, content, traceId);
+        if (runRepository.bindUserMessage(run.getTenantId(), run.getUserId(), runId, message.getMessageId(),
+                run.getVersion()) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "写入平台消息时运行状态已变化");
+        }
+        invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
+        return RunMessageBindingEntity.builder()
+                .run(require(run.getTenantId(), run.getUserId(), runId)).message(message).build();
+    }
+
     /**
      * 在运行锁内保存助手消息并完成运行。
      */

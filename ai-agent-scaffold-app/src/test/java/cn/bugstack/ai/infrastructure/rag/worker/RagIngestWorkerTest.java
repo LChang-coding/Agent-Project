@@ -503,6 +503,14 @@ public class RagIngestWorkerTest {
                 return null;
             }).when(repository).failClaimedIngestJob(anyString(), any(), anyLong(), anyLong(), anyLong(),
                     anyString(), anyLong(), any());
+            doAnswer(invocation -> {
+                RagIngestJobEntity failed = invocation.getArgument(1);
+                job.set(failed);
+                version.set(version.get().failed());
+                document.set(document.get().failProcessing());
+                return null;
+            }).when(repository).failAfterCleanupClaimedIngestJob(anyString(), any(), anyLong(), anyLong(),
+                    anyLong(), anyString(), anyLong(), any());
         }
 
         private int heartbeat(String owner, long fence, Instant now, Instant until) {

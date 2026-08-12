@@ -1,6 +1,10 @@
 package cn.bugstack.ai.domain.tool.service;
 
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
+import cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity;
+import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
+import cn.bugstack.ai.domain.agent.service.AgentToolPermissionService;
+import cn.bugstack.ai.domain.agent.service.ToolApprovalService;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolDispatchClaimEntity;
@@ -78,6 +82,10 @@ public class ToolGateway {
     private final PlatformToolRegistry platformToolRegistry;
     /** 工作流运行中持久化工具开始、完成和失败事件。 */
     private final WorkflowEventStreamService workflowEventStreamService;
+    /** 按 Agent + 工具解析租户级允许、审批或禁止策略。 */
+    private final AgentToolPermissionService toolPermissionService;
+    /** 为需要人工确认的任意工具创建审批并恢复原调用。 */
+    private final ToolApprovalService toolApprovalService;
     /**
      * JSON 工具。只做三件事：把入参序列化成审计文本、把历史输出反序列化用于重放、解析 MCP 参数。
      *
@@ -102,7 +110,7 @@ public class ToolGateway {
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
                        SkillPackageReader skillPackageReader) {
         this(objectStorageService, mcpProtocolClientSupport, dispatchAuthorizationService, skillPackageReader,
-                new PlatformToolRegistry(), null);
+                new PlatformToolRegistry(), null, null, null);
     }
 
     /**
@@ -118,7 +126,7 @@ public class ToolGateway {
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
                        SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry) {
         this(objectStorageService, mcpProtocolClientSupport, dispatchAuthorizationService, skillPackageReader,
-                platformToolRegistry, null);
+                platformToolRegistry, null, null, null);
     }
 
     /**
@@ -131,17 +139,29 @@ public class ToolGateway {
      * @param platformToolRegistry 平台内置工具注册表
      * @param workflowEventStreamService 工作流工具事件发布服务；非工作流装配时可以为空
      */
-    @Autowired
     public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
                        ToolDispatchAuthorizationService dispatchAuthorizationService,
                        SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry,
                        WorkflowEventStreamService workflowEventStreamService) {
+        this(objectStorageService, mcpProtocolClientSupport, dispatchAuthorizationService, skillPackageReader,
+                platformToolRegistry, workflowEventStreamService, null, null);
+    }
+
+    /** 生产环境完整网关；所有 Skill、MCP 和平台工具都在统一门禁中应用策略。 */
+    @Autowired
+    public ToolGateway(ObjectStorageService objectStorageService, McpProtocolClientSupport mcpProtocolClientSupport,
+                       ToolDispatchAuthorizationService dispatchAuthorizationService,
+                       SkillPackageReader skillPackageReader, PlatformToolRegistry platformToolRegistry,
+                       WorkflowEventStreamService workflowEventStreamService,
+                       AgentToolPermissionService toolPermissionService, ToolApprovalService toolApprovalService) {
         this.objectStorageService = objectStorageService;
         this.mcpProtocolClientSupport = mcpProtocolClientSupport;
         this.dispatchAuthorizationService = dispatchAuthorizationService;
         this.skillPackageReader = skillPackageReader;
         this.platformToolRegistry = platformToolRegistry;
         this.workflowEventStreamService = workflowEventStreamService;
+        this.toolPermissionService = toolPermissionService;
+        this.toolApprovalService = toolApprovalService;
     }
 
   /**
@@ -177,7 +197,8 @@ public class ToolGateway {
      // 记录整体开始时间，用于统计包含门禁在内的端到端耗时。
         long begin = System.currentTimeMillis();
    // 把模型给的参数序列化成审计文本；序列化失败会退化成空对象，不会因为记日志失败而阻断调用。
-        String inputJson = toJson(input);
+        Map<String, Object> effectiveInput = authorizeByConfiguredPolicy(tool, input, context);
+        String inputJson = toJson(effectiveInput);
     // 单独记一次门禁阶段的开始时间，好把「等锁」的耗时和「工具执行」的耗时区分开。
         long claimStarted = System.currentTimeMillis();
         // 打一条门禁开始日志：工具调用是最容易出问题的一环，分阶段留痕才能定位到底卡在哪一步。
@@ -233,7 +254,7 @@ public class ToolGateway {
                     runtimeName(tool.getToolType()),
                     "completed", 0L));
             // 此处是通过授权和幂等门禁后唯一的真实工具执行点。
-            ToolExecutionResult execution = dispatch(tool, input, context);
+            ToolExecutionResult execution = dispatch(tool, effectiveInput, context);
    // 算出端到端耗时，写进审计供发现慢工具。
             long costMs = System.currentTimeMillis() - begin;
    // 第四层：把结果闭环写进审计。审计成功后这次调用才真正「有据可查」，重试也能安全重放它。
@@ -259,6 +280,30 @@ public class ToolGateway {
    // 把失败转成结构化返回而不是继续抛：模型需要看到一句可读的原因，才能换参数重试或换个说法回答用户。
             return Map.of("success", false, "error", safeMessage(e));
         }
+    }
+
+    /** 在幂等领取和外部副作用之前，对所有工具应用同一套 Agent 权限策略。 */
+    private Map<String, Object> authorizeByConfiguredPolicy(ToolCatalogEntity tool, Map<String, Object> input,
+                                                             ToolInvokeContextEntity context) {
+        Map<String, Object> original = input == null ? Map.of() : input;
+        if (toolPermissionService == null || toolApprovalService == null || context == null
+                || context.getAgentId() == null || context.getAgentId().isBlank()) return original;
+        String toolCode = AgentToolPermissionService.permissionCode(tool);
+        AgentToolPermissionEntity policy = toolPermissionService.resolve(context.getTenantId(), context.getAgentId(), toolCode);
+        if ("DENY".equals(policy.getMode())) {
+            throw new AppException("AGENT_TOOL_PERMISSION_DENIED", "当前 Agent 已禁止调用该工具");
+        }
+        if (!"REQUIRE_APPROVAL".equals(policy.getMode())) return original;
+        ToolApprovalRequestEntity request = toolApprovalService.request(context, toolCode, original, policy);
+        ToolApprovalRequestEntity decision = toolApprovalService.awaitDecision(request, context);
+        if ("APPROVE".equals(decision.getDecision())) return original;
+        if ("APPROVE_WITH_CHANGES".equals(decision.getDecision()) && decision.getAmendedInput() != null) {
+            return decision.getAmendedInput();
+        }
+        if ("REPLAN".equals(decision.getDecision())) {
+            throw new AppException("TOOL_APPROVAL_REPLAN_REQUIRED", "请根据审批意见重新规划工具调用");
+        }
+        throw new AppException("TOOL_APPROVAL_REJECTED", "本次工具调用已被拒绝");
     }
 
     /**

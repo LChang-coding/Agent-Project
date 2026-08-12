@@ -47,6 +47,20 @@ public class SessionDomainTest {
     }
 
     @Test
+    public void shouldPersistPlatformInputWithInternalRole() {
+        FakeSessionRepository repository = new FakeSessionRepository();
+        SessionDomain sessionDomain = new SessionDomain(repository);
+        sessionDomain.createSession(createSessionCommand());
+
+        ChatMessageEntity message = sessionDomain.appendPlatformMessage(
+                "tenant_1", "user_1", "session_1", "run_1", "platform callback", "trace_1");
+
+        Assert.assertEquals(SessionDomain.ROLE_PLATFORM, message.getRole());
+        Assert.assertEquals("run_1", message.getRunId());
+        Assert.assertEquals("platform callback", message.getContent());
+    }
+
+    @Test
     public void shouldPersistWorkflowRuntimeTargetFacts() {
         FakeSessionRepository repository = new FakeSessionRepository();
         CreateSessionCommandEntity command = createSessionCommand();

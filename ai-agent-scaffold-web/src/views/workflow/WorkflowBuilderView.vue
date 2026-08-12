@@ -189,10 +189,12 @@
               },
             ]"
             :style="nodeStyle(node)"
-            role="button"
+            role="group"
+            :aria-label="`节点 ${node.name}，点击选中，回车或空格键确认`"
             tabindex="0"
             @click.stop="selectOrConnectNode(node)"
             @keydown.enter.prevent="selectOrConnectNode(node)"
+            @keydown.space.prevent="selectOrConnectNode(node)"
             @pointerdown="startDrag($event, node)"
           >
             <div class="node-topline">
@@ -719,6 +721,7 @@ function startDrag(event: PointerEvent, node: WorkflowNode) {
   };
   window.addEventListener('pointermove', onDragMove);
   window.addEventListener('pointerup', stopDrag);
+  window.addEventListener('pointercancel', stopDrag);
 }
 
 /**
@@ -748,6 +751,7 @@ function stopDrag() {
   dragState.value = null;
   window.removeEventListener('pointermove', onDragMove);
   window.removeEventListener('pointerup', stopDrag);
+  window.removeEventListener('pointercancel', stopDrag);
   window.setTimeout(() => {
     dragMoved.value = false;
   }, 0);
@@ -1050,6 +1054,41 @@ function clamp(value: number, min: number, max: number) {
 
 <style scoped>
 .workflow-kind-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}.workflow-kind-tabs button{display:grid;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}.workflow-kind-tabs button.active{border-color:#6366f1;box-shadow:0 0 0 2px rgb(99 102 241/.12)}.workflow-kind-tabs span{color:var(--muted);font-size:12px}.intelligent-budget{display:flex;align-items:end;gap:16px;padding:14px;margin-bottom:14px}.intelligent-budget label{display:grid;gap:6px;font-size:12px}.intelligent-budget span{color:var(--muted);font-size:12px}.routing-tool-card{display:grid;gap:7px;padding:12px;border:1px solid rgb(99 102 241/.35);border-radius:12px;background:rgb(99 102 241/.06)}.routing-tool-card code{font-size:12px}.routing-tool-card span,.rag-tool-toggle small{color:var(--muted);font-size:12px}.routing-tool-card__routes{display:flex;flex-wrap:wrap;gap:6px}.routing-tool-card__routes span{padding:4px 7px;border-radius:999px;background:var(--surface)}.rag-tool-toggle{display:flex;align-items:flex-start;gap:9px;padding:10px;border:1px solid var(--line);border-radius:10px}.rag-tool-toggle span{display:grid;gap:3px}.route-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.route-edge-editor{display:grid;gap:7px;padding:10px;border:1px solid var(--line);border-radius:10px}.route-edge-editor strong{font-size:12px}@media(max-width:800px){.workflow-kind-tabs{grid-template-columns:1fr}.intelligent-budget{align-items:stretch;flex-direction:column}}
+.workflow-kind-tabs {
+  gap: 1px;
+  overflow: hidden;
+  padding: 1px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--line);
+}
+
+.workflow-kind-tabs button {
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.workflow-kind-tabs button.active {
+  color: var(--accent-deep);
+  border: 0;
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.workflow-kind-tabs span { font-size: 10px; }
+
+.routing-tool-card {
+  border-color: rgba(214, 83, 50, .28);
+  border-radius: 7px;
+  background: rgba(214, 83, 50, .06);
+}
+
+.routing-tool-card__routes span {
+  border-radius: 4px;
+}
 .workflow-template-library {
   display: grid;
   gap: 14px;
@@ -1230,7 +1269,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 .workflow-item--active {
-  border-color: rgba(31, 83, 98, 0.45);
+  border-color: rgba(214, 83, 50, 0.42);
   background: var(--accent-soft);
 }
 
@@ -1261,7 +1300,7 @@ function clamp(value: number, min: number, max: number) {
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid rgba(31, 83, 98, 0.16);
+  border: 1px solid rgba(214, 83, 50, 0.2);
   border-radius: 9px;
   background: var(--accent-soft);
 }
@@ -1308,11 +1347,9 @@ function clamp(value: number, min: number, max: number) {
   position: relative;
   min-height: 660px;
   overflow: auto;
-  background:
-    linear-gradient(rgba(30, 90, 103, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 90, 103, 0.045) 1px, transparent 1px),
-    var(--surface);
-  background-size: 24px 24px, 24px 24px, auto;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='1' cy='1' r='.75' fill='%23c8cec7'/%3E%3C/svg%3E");
+  background-size: 24px 24px;
 }
 
 .workflow-canvas::after {
@@ -1342,7 +1379,7 @@ function clamp(value: number, min: number, max: number) {
 
 .edge-path {
   fill: none;
-  stroke: rgba(31, 83, 98, 0.72);
+  stroke: rgba(214, 83, 50, 0.78);
   stroke-linecap: round;
   stroke-width: 2.5;
 }
@@ -1375,6 +1412,7 @@ function clamp(value: number, min: number, max: number) {
   background: var(--surface);
   box-shadow: none;
   cursor: grab;
+  touch-action: none;
   user-select: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
@@ -1384,8 +1422,8 @@ function clamp(value: number, min: number, max: number) {
 }
 
 .canvas-node--active {
-  border-color: rgba(31, 83, 98, 0.68);
-  box-shadow: 0 0 0 3px rgba(30, 90, 103, 0.1);
+  border-color: rgba(214, 83, 50, 0.72);
+  box-shadow: 0 0 0 3px rgba(214, 83, 50, 0.1);
 }
 
 .canvas-node--linking {
@@ -1447,9 +1485,9 @@ function clamp(value: number, min: number, max: number) {
   flex: 1;
   padding: 6px 7px;
   color: var(--accent-deep);
-  border: 1px solid rgba(31, 83, 98, 0.16);
+  border: 1px solid rgba(214, 83, 50, 0.2);
   border-radius: 7px;
-  background: rgba(220, 233, 234, 0.42);
+  background: var(--accent-soft);
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;
@@ -1483,9 +1521,9 @@ function clamp(value: number, min: number, max: number) {
 .edge-chip {
   padding: 5px 8px;
   color: var(--accent-deep);
-  border: 1px solid rgba(31, 83, 98, 0.16);
+  border: 1px solid rgba(214, 83, 50, 0.2);
   border-radius: 6px;
-  background: rgba(220, 233, 234, 0.38);
+  background: var(--accent-soft);
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;

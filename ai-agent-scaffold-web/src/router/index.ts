@@ -51,6 +51,30 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 });
 
+const routeTitles: Record<string, string> = {
+  login: '登录',
+  register: '创建企业空间',
+  dashboard: '总览',
+  chat: 'Agent 编排工作台',
+  agents: 'Agent 管理',
+  workflow: '工作流编排',
+  schedules: '定时任务',
+  mcp: 'MCP 中心',
+  skills: 'Skill 中心',
+  rag: 'RAG 知识库',
+  assets: '附件资产',
+  tenant: '租户与成员',
+  context: '上下文管理',
+  tokens: 'Token 用量',
+  observability: '可观测性',
+  settings: '账号设置',
+};
+
+router.afterEach((to) => {
+  const title = routeTitles[String(to.name || '')];
+  document.title = title ? `${title} · Agent OS` : 'Agent OS · 企业智能体控制面';
+});
+
 router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   await authStore.bootstrap();

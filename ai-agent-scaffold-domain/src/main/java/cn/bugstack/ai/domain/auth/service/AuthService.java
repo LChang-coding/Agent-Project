@@ -66,7 +66,7 @@ public class AuthService implements IAuthService {
         String passwordHash = passwordEncoder.encode(command.getPassword());
 
         authRepository.registerTenantOwner(tenantId, tenantName, tenantCode, userId, username,
-                nickname, command.getEmail(), command.getPhone(), passwordHash);
+                nickname, blankToNull(command.getEmail()), blankToNull(command.getPhone()), passwordHash);
 
         return RegisterResultEntity.builder()
                 .tenantId(tenantId)
@@ -195,6 +195,11 @@ public class AuthService implements IAuthService {
                 || isBlank(command.getPassword())) {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "用户名和密码不能为空");
         }
+    }
+
+    /** 可选唯一字段不能以空串落库，否则第二个未填写用户会命中唯一索引。 */
+    private String blankToNull(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 
     /**

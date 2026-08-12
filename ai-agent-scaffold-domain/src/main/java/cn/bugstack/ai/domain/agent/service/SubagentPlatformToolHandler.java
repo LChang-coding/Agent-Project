@@ -2,8 +2,6 @@ package cn.bugstack.ai.domain.agent.service;
 
 import cn.bugstack.ai.domain.agent.model.entity.AgentCatalogEntryEntity;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
-import cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity;
-import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.tool.service.PlatformToolHandler;
@@ -29,18 +27,22 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
 
     private final AgentCatalogService catalogService;
     private final SubagentOrchestrationService orchestrationService;
-    private final AgentToolPermissionService permissionService;
-    private final ToolApprovalService approvalService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public SubagentPlatformToolHandler(PlatformToolRegistry registry, AgentCatalogService catalogService,
-                                       SubagentOrchestrationService orchestrationService,
-                                       AgentToolPermissionService permissionService,
-                                       ToolApprovalService approvalService) {
+                                       SubagentOrchestrationService orchestrationService) {
         this.catalogService = catalogService;
         this.orchestrationService = orchestrationService;
-        this.permissionService = permissionService; this.approvalService = approvalService;
         registry.register(SEARCH, this); registry.register(DELEGATE, this);
         registry.register(READ, this); registry.register(READ_FULL, this); registry.register(CANCEL, this);
+    }
+
+    /** 保留历史测试构造入口；权限已上移到 ToolGateway 统一执行。 */
+    public SubagentPlatformToolHandler(PlatformToolRegistry registry, AgentCatalogService catalogService,
+                                       SubagentOrchestrationService orchestrationService,
+                                       AgentToolPermissionService ignoredPermissionService,
+                                       ToolApprovalService ignoredApprovalService) {
+        this(registry, catalogService, orchestrationService);
     }
 
     @Override
@@ -70,8 +72,6 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
 
     private PlatformToolResult delegate(Map<String, Object> input, ToolInvokeContextEntity context, Trusted trusted) {
         requireKeys(input, Set.of("tasks"), true);
-        input = approvedInput(input, context, trusted);
-        requireKeys(input, Set.of("tasks"), true);
         Object raw = input.get("tasks");
         if (!(raw instanceof List<?> values)) throw new IllegalArgumentException("SUBAGENT_TASKS_INVALID");
         List<SubagentOrchestrationService.TaskRequest> requests = new ArrayList<>();
@@ -89,23 +89,9 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
         return success(Map.of("accepted", accepted, "waitMode", "EVENT_DRIVEN"), Map.of("count", accepted.size()));
     }
 
-    private Map<String, Object> approvedInput(Map<String, Object> input, ToolInvokeContextEntity context,
-                                              Trusted trusted) {
-        AgentToolPermissionEntity policy = permissionService.resolve(trusted.tenantId, trusted.parentAgentId, DELEGATE);
-        if ("DENY".equals(policy.getMode())) throw new IllegalArgumentException("SUBAGENT_TOOL_DENIED");
-        if (!"REQUIRE_APPROVAL".equals(policy.getMode())) return input;
-        ToolApprovalRequestEntity request = approvalService.request(context, DELEGATE, input, policy);
-        ToolApprovalRequestEntity decision = approvalService.awaitDecision(request, context);
-        if ("REJECT".equals(decision.getDecision())) throw new IllegalArgumentException("SUBAGENT_TOOL_REJECTED");
-        if ("REPLAN".equals(decision.getDecision())) throw new IllegalArgumentException("SUBAGENT_TOOL_REPLAN_REQUIRED");
-        if ("APPROVE_WITH_CHANGES".equals(decision.getDecision())) return decision.getAmendedInput();
-        if (!"APPROVE".equals(decision.getDecision())) throw new IllegalArgumentException("TOOL_APPROVAL_DECISION_INVALID");
-        return input;
-    }
-
     private PlatformToolResult read(Map<String, Object> input, Trusted trusted) {
         requireKeys(input, Set.of("taskIds"), false);
-        List<String> taskIds = stringList(input == null ? null : input.get("taskIds"));
+        List<String> taskIds = stringList(input == null ? null : input.get("taskIds"), 100);
         List<SubagentTaskEntity> tasks = orchestrationService.read(trusted.tenantId, trusted.parentRunId, taskIds);
         List<Map<String, Object>> results = tasks.stream().map(this::result).toList();
         return success(Map.of("results", results), Map.of("count", results.size()));
@@ -114,13 +100,13 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
     private PlatformToolResult cancel(Map<String, Object> input, Trusted trusted) {
         requireKeys(input, Set.of("taskIds"), true);
         int cancelled = orchestrationService.cancel(trusted.tenantId, trusted.parentRunId,
-                stringList(input.get("taskIds")));
+                stringList(input.get("taskIds"), 100));
         return success(Map.of("cancelled", cancelled), Map.of("cancelled", cancelled));
     }
 
     private PlatformToolResult readFullContext(Map<String, Object> input, Trusted trusted) {
         requireKeys(input, Set.of("taskIds"), true);
-        List<String> taskIds = stringList(input.get("taskIds"));
+        List<String> taskIds = stringList(input.get("taskIds"), 20);
         if (taskIds.isEmpty()) throw new IllegalArgumentException("SUBAGENT_TASK_IDS_REQUIRED");
         List<Map<String, Object>> results = orchestrationService
                 .read(trusted.tenantId, trusted.parentRunId, taskIds).stream()
@@ -194,9 +180,10 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
         return text;
     }
 
-    private List<String> stringList(Object value) {
+    private List<String> stringList(Object value, int maxItems) {
         if (value == null) return List.of();
-        if (!(value instanceof List<?> list) || list.stream().anyMatch(item -> !(item instanceof String))) {
+        if (!(value instanceof List<?> list) || list.size() > maxItems
+                || list.stream().anyMatch(item -> !(item instanceof String text) || text.isBlank())) {
             throw new IllegalArgumentException("SUBAGENT_TASK_IDS_INVALID");
         }
         return list.stream().map(String.class::cast).toList();

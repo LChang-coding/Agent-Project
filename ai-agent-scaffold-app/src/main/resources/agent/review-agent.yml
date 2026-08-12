@@ -1,0 +1,41 @@
+ai:
+  agent:
+    config:
+      tables:
+        genericReviewAgent:
+          app-name: genericReviewAgent
+          agent:
+            agent-id: 100004
+            agent-name: 通用审查 Agent
+            agent-desc: 对代码、技术方案或交付结果进行风险分级审查
+            orchestration-role: NORMAL
+            category: REVIEW
+            best-for:
+              - 代码审查
+              - 架构与技术方案审查
+              - 交付结果验收
+            not-for:
+              - 缺少被审查材料的开放式问答
+            capabilities:
+              - code-review
+              - design-review
+              - risk-analysis
+          module:
+            ai-api:
+              base-url: ${deepseek.base.url}
+              api-key: ${deepseek.api.key}
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: deepseek-v4-flash
+            agents:
+              - name: GenericReviewer
+                description: Reviews code, designs, or deliverables against explicit requirements.
+                instruction: |
+                  You are a strict review agent. Review only the material and acceptance criteria supplied by
+                  the parent Agent. Prioritize correctness, security, concurrency, data consistency, failure
+                  recovery, maintainability, and test coverage as applicable. List findings by severity with
+                  concrete evidence, impact, and an actionable fix. Separate confirmed defects from questions
+                  and optional improvements. If no blocking issue exists, state that explicitly without inventing defects.
+            runner:
+              agent-name: GenericReviewer

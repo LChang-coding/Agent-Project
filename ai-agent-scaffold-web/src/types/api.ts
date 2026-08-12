@@ -85,7 +85,10 @@ export interface AgentConfigItem extends AiAgentConfig {
 export type AgentToolPermissionMode = 'ALLOW' | 'DENY' | 'REQUIRE_APPROVAL';
 
 export interface AgentToolPermission {
-  toolCode: 'create_subagent_instances';
+  toolCode: string;
+  toolName?: string;
+  toolType?: 'platform' | 'mcp' | 'skill';
+  description?: string;
   mode: AgentToolPermissionMode;
   timeoutSeconds: number;
   timeoutDecision: 'APPROVE' | 'REJECT';
@@ -105,12 +108,57 @@ export interface ToolApprovalRequest {
   sequence: number;
   approvalId: string;
   parentAgentId: string;
+  parentRunId: string;
+  sourceRunId: string;
+  parentSessionId: string;
+  traceId?: string;
   toolCode: string;
   requestedInput: Record<string, unknown>;
   suggestions: string[];
+  allowedSubAgentIds: string[];
+  timeoutDecision: 'APPROVE' | 'REJECT';
   status: 'PENDING';
   expiresAt: string;
   revision: number;
+}
+
+export type SessionOrchestrationPhase = 'IDLE' | 'WAITING_APPROVAL' | 'EXECUTING' | 'SUMMARIZING'
+  | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'CANCELLED';
+
+export interface SubagentTaskView {
+  taskId: string;
+  childAgentId: string;
+  childSessionId?: string;
+  instruction: string;
+  traceId?: string;
+  status: 'READY' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'ACKED';
+  callbackStatus?: string;
+  attempt?: number;
+  resultSummary?: string;
+  fullContext?: string;
+  errorCode?: string;
+  createdAt?: string;
+  completedAt?: string;
+}
+
+export interface SubagentRunView {
+  parentRunId: string;
+  parentAgentId: string;
+  phase: SessionOrchestrationPhase;
+  createdAt?: string;
+  completedAt?: string;
+  tasks: SubagentTaskView[];
+}
+
+export interface SessionOrchestrationSnapshot {
+  sessionId: string;
+  version: string;
+  active: boolean;
+  inputLocked: boolean;
+  phase: SessionOrchestrationPhase;
+  currentRunId?: string;
+  runs: SubagentRunView[];
+  approvals: Array<{ approvalId: string; parentRunId: string; parentAgentId: string; toolCode: string; expiresAt: string; revision: number }>;
 }
 
 export type ToolApprovalDecision = 'APPROVE' | 'REJECT' | 'APPROVE_WITH_CHANGES' | 'REPLAN';

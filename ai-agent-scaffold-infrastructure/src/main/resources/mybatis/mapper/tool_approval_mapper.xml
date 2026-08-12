@@ -40,6 +40,12 @@
       AND status='PENDING' AND deleted=0
     ORDER BY id ASC LIMIT #{limit}
   </select>
+  <select id="queryPendingBySession" resultMap="Map">
+    SELECT <include refid="Columns"/> FROM agent_tool_approval_request
+    WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND parent_session_id=#{parentSessionId}
+      AND status='PENDING' AND deleted=0
+    ORDER BY id ASC LIMIT #{limit}
+  </select>
   <update id="decide">
     UPDATE agent_tool_approval_request SET status='DECIDED',decision=#{decision},comment=#{comment},
       amended_input_json=#{amendedInputJson},decided_by=#{decidedBy},decided_at=#{decidedAt},

@@ -271,6 +271,11 @@ function handleSseBlock(block: string, handlers: StreamHandlers) {
     }
     return;
   }
+  // 心跳只用于维持长连接，不属于模型正文。若继续向 onChunk 分发，
+  // 页面会每 15 秒把 {"runId":"..."} 追加到 Assistant 消息中。
+  if (eventName === 'heartbeat') {
+    return;
+  }
   if (eventName === 'error') {
     let message = data;
     try {

@@ -604,7 +604,7 @@ public class RagIngestWorker {
                 || RagIngestJobEntity.FAILURE_CLEANUP_DEAD.equals(current.cancelReason())) {
             RagIngestJobEntity failed = current.markFailedAfterCleanup(
                     leaseOwner, current.fencingToken(), clock.instant());
-            repository.failClaimedIngestJob(current.tenantId(), failed, expectedTaskRevision,
+            repository.failAfterCleanupClaimedIngestJob(current.tenantId(), failed, expectedTaskRevision,
                     scope.version().revision(), scope.document().revision(), leaseOwner,
                     current.fencingToken(), clock.instant());
             AiLog.warn(AiLog.rag().ingestFailed(current.tenantId(), current.jobId(), current.documentId(),

@@ -14,6 +14,10 @@ public interface IToolApprovalDao {
                                 @Param("approvalId") String approvalId);
     List<ToolApprovalRequestPO> queryAfter(@Param("tenantId") String tenantId, @Param("userId") String userId,
                                            @Param("afterSequence") long afterSequence, @Param("limit") int limit);
+    List<ToolApprovalRequestPO> queryPendingBySession(@Param("tenantId") String tenantId,
+                                                      @Param("userId") String userId,
+                                                      @Param("parentSessionId") String parentSessionId,
+                                                      @Param("limit") int limit);
     int decide(@Param("tenantId") String tenantId, @Param("userId") String userId, @Param("approvalId") String approvalId,
                @Param("decision") String decision, @Param("comment") String comment,
                @Param("amendedInputJson") String amendedInputJson, @Param("decidedBy") String decidedBy,

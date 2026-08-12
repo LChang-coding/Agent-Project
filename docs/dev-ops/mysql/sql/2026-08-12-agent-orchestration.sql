@@ -1,5 +1,5 @@
 -- 分布式 Multi-Agent 编排：任务账本 + Transactional Outbox。
--- 仅供评审和目标环境变更平台执行；不要在开发机直接连接共享数据库运行。
+-- 在目标环境执行前先核对 DATABASE() 并保留可恢复备份。
 
 CREATE TABLE IF NOT EXISTS `agent_tool_permission` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -154,6 +154,12 @@ CREATE TABLE IF NOT EXISTS `agent_orchestration_outbox` (
 
 -- 兼容早期已执行过本迁移的环境：CREATE TABLE IF NOT EXISTS 不会为旧表补列。
 SET @schema_name = DATABASE();
+
+SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_subagent_task' AND COLUMN_NAME='child_session_id') = 0,
+  'ALTER TABLE `agent_subagent_task` ADD COLUMN `child_session_id` VARCHAR(128) DEFAULT NULL AFTER `child_agent_id`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_subagent_task' AND COLUMN_NAME='result_summary') = 0,

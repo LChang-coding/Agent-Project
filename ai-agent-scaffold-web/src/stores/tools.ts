@@ -143,7 +143,7 @@ export const useToolStore = defineStore('tools', {
       this.errorMessage = '';
       try {
         const result = await createSkill(payload);
-        await this.loadSkills(this.skillScope);
+        await this.loadSkills('mine');
         await this.loadCatalog();
         return result;
       } catch (error) {
@@ -223,7 +223,7 @@ export const useToolStore = defineStore('tools', {
       this.errorMessage = '';
       try {
         const result = await createMcp(payload);
-        await this.loadMcps(this.mcpScope);
+        await this.loadMcps('mine');
         return result;
       } catch (error) {
         this.errorMessage = error instanceof Error ? error.message : 'MCP 创建失败';

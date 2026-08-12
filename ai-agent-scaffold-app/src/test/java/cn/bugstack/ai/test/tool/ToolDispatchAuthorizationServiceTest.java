@@ -16,6 +16,7 @@ import org.mockito.InOrder;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -116,6 +117,21 @@ public class ToolDispatchAuthorizationServiceTest {
         } catch (AppException exception) {
             Assert.assertEquals("TOOL_TRACE_SCOPE_MISMATCH", exception.getCode());
         }
+    }
+
+    @Test
+    public void shouldTruncatePersistedErrorMessageToDatabaseLimit() {
+        RunControlService runService = mock(RunControlService.class);
+        IToolRepository repository = mock(IToolRepository.class);
+        when(repository.finishToolCallLog(eq("key"), eq(null), eq("failed"), eq("AppException"),
+                any(), eq(12L))).thenReturn(1);
+        ToolDispatchAuthorizationService service = new ToolDispatchAuthorizationService(runService, repository);
+
+        service.finish(ToolCallLogEntity.builder().idempotencyKey("key").build(), null,
+                "failed", "AppException", "x".repeat(4000), 12L);
+
+        verify(repository).finishToolCallLog(eq("key"), eq(null), eq("failed"), eq("AppException"),
+                org.mockito.ArgumentMatchers.argThat(message -> message != null && message.length() == 1024), eq(12L));
     }
 
     private void allowRun(RunControlService runService, String traceId) {

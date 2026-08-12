@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vue-tsc --noEmit && vite build",
-    "test:unit": "esbuild tests/workflow-event-reducer.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-event-test.cjs && esbuild tests/workflow-templates.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-template-test.cjs && esbuild tests/session-rag-contract.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-session-rag-contract-test.cjs && node --test /tmp/ai-agent-workflow-event-test.cjs /tmp/ai-agent-workflow-template-test.cjs /tmp/ai-agent-session-rag-contract-test.cjs",
+    "test:unit": "esbuild tests/workflow-event-reducer.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-event-test.cjs && esbuild tests/workflow-templates.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-workflow-template-test.cjs && esbuild tests/session-rag-contract.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-session-rag-contract-test.cjs && esbuild tests/clipboard.test.mjs --bundle --platform=node --format=cjs --alias:@=./src --outfile=/tmp/ai-agent-clipboard-test.cjs && node --test tests/chat-run-id-contract.test.mjs /tmp/ai-agent-workflow-event-test.cjs /tmp/ai-agent-workflow-template-test.cjs /tmp/ai-agent-session-rag-contract-test.cjs /tmp/ai-agent-clipboard-test.cjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
     "@lucide/vue": "^1.23.0",
     "@vueuse/core": "^13.5.0",
     "axios": "^1.10.0",

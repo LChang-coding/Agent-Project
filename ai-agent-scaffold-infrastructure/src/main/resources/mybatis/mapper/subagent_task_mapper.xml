@@ -51,6 +51,12 @@
             AND task_id IN <foreach collection="taskIds" item="taskId" open="(" separator="," close=")">#{taskId}</foreach>
         </if>
         ORDER BY id ASC
+        LIMIT 100
+    </select>
+    <select id="queryBySession" resultMap="SubagentTaskMap">
+        SELECT <include refid="taskColumns"/> FROM agent_subagent_task
+        WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND parent_session_id=#{parentSessionId} AND deleted=0
+        ORDER BY created_at DESC, id DESC LIMIT #{limit}
     </select>
     <update id="claim">
         UPDATE agent_subagent_task

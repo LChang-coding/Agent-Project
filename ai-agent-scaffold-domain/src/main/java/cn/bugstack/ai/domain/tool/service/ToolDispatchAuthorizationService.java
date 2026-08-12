@@ -28,6 +28,8 @@ import java.util.UUID;
 @Service
 public class ToolDispatchAuthorizationService {
 
+    private static final int ERROR_MESSAGE_MAX_LENGTH = 1024;
+
     /** 锁住数据库运行记录并检查取消、上下文版本和 Trace ID。 */
     private final RunControlService runControlService;
     /** 创建和更新数据库工具调用记录，并用唯一索引识别重复调用。 */
@@ -118,9 +120,13 @@ public class ToolDispatchAuthorizationService {
     public void finish(ToolCallLogEntity log, String outputJson, String status, String errorType,
                        String errorMessage, Long costMs) {
         if (toolRepository.finishToolCallLog(log.getIdempotencyKey(), outputJson, status,
-                errorType, errorMessage, costMs) != 1) {
+                errorType, truncate(errorMessage, ERROR_MESSAGE_MAX_LENGTH), costMs) != 1) {
             throw new AppException("TOOL_CALL_LOG_FINISH_FAILED", "工具调用结果审计更新失败");
         }
+    }
+
+    private String truncate(String value, int maxLength) {
+        return value == null || value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     /**

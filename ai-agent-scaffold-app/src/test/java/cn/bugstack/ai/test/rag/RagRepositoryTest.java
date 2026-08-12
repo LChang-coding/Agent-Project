@@ -425,6 +425,30 @@ public class RagRepositoryTest {
     }
 
     @Test
+    public void shouldCloseFailureCleanupFromCancelRequestedWithCancelFenceCas() {
+        Instant now = Instant.parse("2026-07-18T15:00:00Z");
+        Mockito.when(documentVersionDao.closeByTenantAndRevision(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.anyString(), Mockito.anyLong())).thenReturn(1);
+        Mockito.when(documentDao.closeTargetGenerationByTenantAndRevision(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.anyLong())).thenReturn(1);
+        Mockito.when(ingestTaskDao.cancelClaimedByTenantFenceAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
+                Mockito.anyLong())).thenReturn(1);
+
+        repository.failAfterCleanupClaimedIngestJob("tenant-a", terminalJob(RagIngestJobStatus.DEAD),
+                8L, 5L, 6L, "worker-a", 11L, now);
+
+        Mockito.verify(ingestTaskDao).cancelClaimedByTenantFenceAndRevision(
+                Mockito.eq("tenant-a"), Mockito.any(), Mockito.eq(8L),
+                Mockito.eq("worker-a"), Mockito.eq(11L));
+        Mockito.verify(ingestTaskDao, Mockito.never()).updateClaimedByTenantFenceAndRevision(
+                Mockito.anyString(), Mockito.any(), Mockito.anyLong(), Mockito.anyString(),
+                Mockito.anyLong(), Mockito.any());
+    }
+
+    @Test
     public void shouldLockKnowledgeBaseAndAtomicallyRequeueFailedIngestAggregate() {
         RagIngestJobEntity failed = terminalJob(RagIngestJobStatus.FAILED);
         RagIngestJobEntity requeued = failed.requeueIngest();

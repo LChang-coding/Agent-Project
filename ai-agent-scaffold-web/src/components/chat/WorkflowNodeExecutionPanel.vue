@@ -41,13 +41,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { WorkflowRunViewState } from '@/types/intelligent-workflow';
+import { copyText } from '@/utils/clipboard';
 
 const props = defineProps<{ run: WorkflowRunViewState }>();
 const statusLabel = computed(() => ({ running: '工作流运行中', completed: '工作流已完成', failed: '工作流失败', cancelled: '工作流已取消' }[props.run.status]));
 function nodeStatus(status: string) { return ({ running: '执行中', completed: '已完成', failed: '失败', cancelled: '已取消' } as Record<string, string>)[status] || status; }
 function toolStatus(status: string) { return ({ running: '调用中', completed: '已完成', failed: '失败' } as Record<string, string>)[status] || status; }
 function routeLabel(category?: string) { return category === 'FAILURE' ? '技术失败路由' : category === 'DEFAULT' ? '默认兜底' : '工具裁决'; }
-async function copyTrace() { await navigator.clipboard.writeText(props.run.traceId); }
+async function copyTrace() { await copyText(props.run.traceId); }
 </script>
 
 <style scoped>

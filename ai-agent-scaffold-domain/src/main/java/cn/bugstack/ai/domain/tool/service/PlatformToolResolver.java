@@ -94,15 +94,19 @@ public class PlatformToolResolver {
         if (orchestrationEnabled && "SUPERVISOR".equalsIgnoreCase(context.getOrchestrationRole())
                 && context.getRunId() != null && !context.getRunId().isBlank()
                 && context.getAllowedSubAgentIds() != null && !context.getAllowedSubAgentIds().isEmpty()) {
+            String allowedAgentIdEnum = context.getAllowedSubAgentIds().stream()
+                    .filter(value -> value != null && !value.isBlank()).distinct()
+                    .map(value -> "\"" + escape(value) + "\"").reduce((a, b) -> a + "," + b).orElse("");
             result.add(platform("search_agent_catalog", "检索当前主 Agent 被授权使用的子 Agent 模板",
                     "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
                             "\"query\":{\"type\":\"string\",\"maxLength\":200}," +
                             "\"category\":{\"type\":\"string\",\"maxLength\":64}}}"));
-            result.add(platform("create_subagent_instances", "批量创建临时子 Agent 运行实例并异步执行",
+            result.add(platform("create_subagent_instances", "批量创建临时子 Agent 运行实例并异步执行。tasks 每项只允许 agentId 和 instruction，不要传 taskId、agentTemplateId、fullContext 或 resultSummary",
                     "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tasks\"],\"properties\":{" +
                             "\"tasks\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{" +
                             "\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"agentId\",\"instruction\"],\"properties\":{" +
-                            "\"agentId\":{\"type\":\"string\",\"minLength\":1},\"instruction\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":12000}}}}}}"));
+                            "\"agentId\":{\"type\":\"string\",\"enum\":[" + allowedAgentIdEnum + "],\"description\":\"从 search_agent_catalog 返回的 agentId 中选择\"}," +
+                            "\"instruction\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":12000,\"description\":\"交给该子 Agent 的完整任务指令\"}}}}}}"));
             result.add(platform("read_subagent_result", "读取当前主运行已收到的子 Agent 结果",
                     "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" +
                             "\"taskIds\":{\"type\":\"array\",\"maxItems\":100,\"items\":{\"type\":\"string\"}}}}"));

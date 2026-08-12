@@ -5,9 +5,10 @@ import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
 import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,7 +27,6 @@ public class SubagentOrchestrationService {
         this.availabilityService = availabilityService;
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public List<SubagentTaskEntity> delegate(TrustedSupervisor supervisor, String functionCallId,
                                              List<TaskRequest> requests) {
         validateSupervisor(supervisor);
@@ -39,22 +39,36 @@ public class SubagentOrchestrationService {
         }
         Set<String> allowed = new HashSet<>(supervisor.allowedSubAgentIds);
         LocalDateTime now = LocalDateTime.now();
-        List<SubagentTaskEntity> tasks = requests.stream().map(request -> {
+        List<SubagentTaskEntity> tasks = new ArrayList<>(requests.size());
+        for (int index = 0; index < requests.size(); index++) {
+            TaskRequest request = requests.get(index);
             if (request == null || !allowed.contains(request.agentId)
                     || request.instruction == null || request.instruction.isBlank()
                     || request.instruction.length() > 12000) {
                 throw error("SUBAGENT_TASK_INVALID");
             }
             availabilityService.assertEnabled(supervisor.tenantId, request.agentId);
-            return SubagentTaskEntity.builder().tenantId(supervisor.tenantId).userId(supervisor.userId)
+            tasks.add(SubagentTaskEntity.builder().tenantId(supervisor.tenantId).userId(supervisor.userId)
                     .parentRunId(supervisor.parentRunId).parentSessionId(supervisor.parentSessionId)
                     .parentAgentId(supervisor.parentAgentId)
-                    .taskId(UUID.randomUUID().toString()).childAgentId(request.agentId)
+                    .taskId(stableTaskId(supervisor, functionCallId, index)).childAgentId(request.agentId)
                     .instruction(request.instruction).functionCallId(functionCallId).traceId(supervisor.traceId)
-                    .status(SubagentTaskStatus.READY).attempt(0).fencingToken(0L).createdAt(now).build();
-        }).toList();
-        if (repository.createBatchAndEnqueue(tasks) != tasks.size()) throw error("SUBAGENT_TASK_CREATE_FAILED");
+                    .status(SubagentTaskStatus.READY).attempt(0).fencingToken(0L)
+                    .summaryTruncated(false).createdAt(now).build());
+        }
+        if (repository.createBatchAndEnqueue(tasks) != tasks.size()) {
+            // 另一容器可能在“首次查询”后先提交了同一 function call。
+            List<SubagentTaskEntity> winner = repository.queryByFunctionCall(supervisor.tenantId,
+                    supervisor.parentRunId, functionCallId);
+            if (winner != null && winner.size() == tasks.size()) return winner;
+            throw error("SUBAGENT_TASK_CREATE_FAILED");
+        }
         return tasks;
+    }
+
+    private String stableTaskId(TrustedSupervisor supervisor, String functionCallId, int index) {
+        String identity = supervisor.tenantId + '\0' + supervisor.parentRunId + '\0' + functionCallId + '\0' + index;
+        return UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     public List<SubagentTaskEntity> read(String tenantId, String parentRunId, List<String> taskIds) {

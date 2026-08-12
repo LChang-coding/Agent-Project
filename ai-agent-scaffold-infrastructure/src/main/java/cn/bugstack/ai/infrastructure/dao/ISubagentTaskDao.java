@@ -17,6 +17,10 @@ public interface ISubagentTaskDao {
     List<SubagentTaskPO> queryByIds(@Param("tenantId") String tenantId,
                                     @Param("parentRunId") String parentRunId,
                                     @Param("taskIds") List<String> taskIds);
+    List<SubagentTaskPO> queryBySession(@Param("tenantId") String tenantId,
+                                        @Param("userId") String userId,
+                                        @Param("parentSessionId") String parentSessionId,
+                                        @Param("limit") int limit);
     int claim(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
               @Param("workerId") String workerId, @Param("now") LocalDateTime now,
               @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);

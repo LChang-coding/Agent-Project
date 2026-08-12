@@ -34,6 +34,7 @@ public class SubagentOrchestrationServiceTest {
         Assert.assertEquals(1, created.size());
         Assert.assertEquals("root-run", created.get(0).getParentRunId());
         Assert.assertEquals("READY", created.get(0).getStatus().name());
+        Assert.assertEquals(Boolean.FALSE, created.get(0).getSummaryTruncated());
 
         Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-1")).thenReturn(created);
         Assert.assertSame(created, service.delegate(supervisor(), "call-1",
@@ -55,6 +56,42 @@ public class SubagentOrchestrationServiceTest {
         } catch (AppException exception) {
             Assert.assertEquals("SUBAGENT_TASK_INVALID", exception.getCode());
         }
+    }
+
+    @Test
+    public void shouldUseStableTaskIdsForConcurrentFunctionCallRetries() {
+        ISubagentTaskRepository tasks = Mockito.mock(ISubagentTaskRepository.class);
+        Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-stable")).thenReturn(List.of());
+        Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList()))
+                .thenAnswer(value -> value.<List<?>>getArgument(0).size());
+        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
+                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()));
+
+        List<SubagentTaskEntity> first = service.delegate(supervisor(), "call-stable",
+                List.of(new SubagentOrchestrationService.TaskRequest("research", "same request")));
+        List<SubagentTaskEntity> retry = service.delegate(supervisor(), "call-stable",
+                List.of(new SubagentOrchestrationService.TaskRequest("research", "same request")));
+
+        Assert.assertEquals(first.get(0).getTaskId(), retry.get(0).getTaskId());
+    }
+
+    @Test
+    public void shouldReplayConcurrentWinnerWhenStableTaskInsertConflicts() {
+        ISubagentTaskRepository tasks = Mockito.mock(ISubagentTaskRepository.class);
+        SubagentTaskEntity winner = SubagentTaskEntity.builder().tenantId("tenant").parentRunId("root-run")
+                .taskId("winner").childAgentId("research").status(cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus.READY)
+                .build();
+        Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-race"))
+                .thenReturn(List.of(), List.of(winner));
+        Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList())).thenReturn(0);
+        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
+                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()));
+
+        List<SubagentTaskEntity> replay = service.delegate(supervisor(), "call-race",
+                List.of(new SubagentOrchestrationService.TaskRequest("research", "race request")));
+
+        Assert.assertEquals(List.of(winner), replay);
+        Mockito.verify(tasks, Mockito.times(2)).queryByFunctionCall("tenant", "root-run", "call-race");
     }
 
     private SubagentOrchestrationService.TrustedSupervisor supervisor() {

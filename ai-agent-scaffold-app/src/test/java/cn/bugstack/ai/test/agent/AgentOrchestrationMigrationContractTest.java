@@ -18,6 +18,7 @@ public class AgentOrchestrationMigrationContractTest {
         Assert.assertTrue(upgrade.contains("`lease_expires_at` DATETIME(3)"));
         Assert.assertTrue(upgrade.contains("`callback_claimed_at` DATETIME(3)"));
         Assert.assertTrue(upgrade.contains("`child_session_id` VARCHAR(128)"));
+        Assert.assertTrue(upgrade.contains("COLUMN_NAME='child_session_id'"));
         Assert.assertTrue(upgrade.contains("COLUMN_NAME='result_summary'"));
         Assert.assertTrue(upgrade.contains("COLUMN_NAME='full_context'"));
         Assert.assertTrue(upgrade.contains("COLUMN_NAME='summary_truncated'"));

@@ -99,6 +99,9 @@
           <button v-for="scope in scopes" :key="scope.value" :class="['button', { 'button--soft': toolStore.mcpScope === scope.value }]" type="button" @click="toolStore.loadMcps(scope.value)">
             {{ scope.label }}
           </button>
+          <button class="button button--danger" type="button" :disabled="selectedMcpIds.size === 0 || batchDeleting" @click="batchDisableMcps">
+            {{ batchDeleting ? '删除中…' : `批量删除${selectedMcpIds.size ? ` (${selectedMcpIds.size})` : ''}` }}
+          </button>
         </div>
         <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
@@ -106,6 +109,7 @@
       <table class="table resource-table">
         <thead>
           <tr>
+            <th class="selection-cell"><input type="checkbox" :checked="allSelectableMcpsSelected" aria-label="全选可删除 MCP" @change="toggleAllMcps" /></th>
             <th>名称</th>
             <th>类型</th>
             <th>范围</th>
@@ -117,6 +121,8 @@
         </thead>
         <tbody>
           <tr v-for="mcp in toolStore.mcps" :key="mcp.mcpId">
+            <td class="selection-cell" data-label="选择"><input type="checkbox" :checked="selectedMcpIds.has(mcp.mcpId)"
+                :disabled="mcp.status === 'disabled' || batchDeleting" :aria-label="`选择 MCP ${mcp.mcpName}`" @change="toggleMcpSelection(mcp.mcpId)" /></td>
             <td data-label="名称">
               <strong>{{ mcp.mcpName }}</strong>
               <small>{{ mcp.endpoint || mcp.description || '已配置服务端 stdio 命令' }}</small>
@@ -150,7 +156,7 @@
             </td>
           </tr>
           <tr v-if="toolStore.mcps.length === 0">
-            <td colspan="7">暂无 MCP 配置，先创建一个 HTTP、SSE 或 stdio MCP。</td>
+            <td colspan="8">暂无 MCP 配置，先创建一个 HTTP、SSE 或 stdio MCP。</td>
           </tr>
         </tbody>
       </table>
@@ -160,12 +166,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
 import { useToolStore } from '@/stores/tools';
 
 const toolStore = useToolStore();
+const selectedMcpIds = ref(new Set<string>());
+const batchDeleting = ref(false);
+const selectableMcpIds = computed(() => toolStore.mcps.filter((mcp) => mcp.status !== 'disabled').map((mcp) => mcp.mcpId));
+const allSelectableMcpsSelected = computed(() => selectableMcpIds.value.length > 0
+  && selectableMcpIds.value.every((mcpId) => selectedMcpIds.value.has(mcpId)));
 const scopes = [
   { value: 'available', label: '当前可用' },
   { value: 'mine', label: '我的 MCP' },
@@ -228,6 +239,29 @@ async function runMcpAction(type: 'test' | 'publish' | 'disable', mcpId: string,
   } catch {
     // Store 已保留行级错误，按钮解除锁定后可直接重试。
   }
+}
+
+function toggleMcpSelection(mcpId: string) {
+  const next = new Set(selectedMcpIds.value);
+  next.has(mcpId) ? next.delete(mcpId) : next.add(mcpId);
+  selectedMcpIds.value = next;
+}
+
+function toggleAllMcps() {
+  selectedMcpIds.value = allSelectableMcpsSelected.value ? new Set() : new Set(selectableMcpIds.value);
+}
+
+async function batchDisableMcps() {
+  const ids = [...selectedMcpIds.value];
+  if (!ids.length || !window.confirm(`确定批量删除选中的 ${ids.length} 个 MCP 吗？版本与调用审计会保留。`)) return;
+  batchDeleting.value = true;
+  let failed = 0;
+  for (const id of ids) {
+    try { await toolStore.disableMcp(id); } catch { failed += 1; }
+  }
+  selectedMcpIds.value = new Set();
+  batchDeleting.value = false;
+  if (failed) toolStore.errorMessage = `${ids.length - failed} 个 MCP 已删除，${failed} 个处理失败`;
 }
 
 /**
@@ -355,6 +389,8 @@ function testStatusClass(value?: string) {
 .resource-table {
   min-width: 920px;
 }
+.selection-cell { width: 42px; text-align: center; }
+.selection-cell input { width: 17px; height: 17px; accent-color: var(--accent-deep); }
 
 .resource-actions-cell,
 .resource-table th:last-child {

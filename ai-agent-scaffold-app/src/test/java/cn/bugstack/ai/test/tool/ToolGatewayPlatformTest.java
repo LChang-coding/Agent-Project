@@ -1,6 +1,10 @@
 package cn.bugstack.ai.test.tool;
 
 import cn.bugstack.ai.domain.storage.service.ObjectStorageService;
+import cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity;
+import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
+import cn.bugstack.ai.domain.agent.service.AgentToolPermissionService;
+import cn.bugstack.ai.domain.agent.service.ToolApprovalService;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCallLogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolCatalogEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolDispatchClaimEntity;
@@ -119,6 +123,35 @@ public class ToolGatewayPlatformTest {
                 .traceId("trace-root").build());
 
         verifyNoInteractions(events);
+    }
+
+    @Test
+    public void appliesConfiguredApprovalToPlatformToolBeforeClaim() {
+        ToolDispatchAuthorizationService authorization = mock(ToolDispatchAuthorizationService.class);
+        AgentToolPermissionService permissions = mock(AgentToolPermissionService.class);
+        ToolApprovalService approvals = mock(ToolApprovalService.class);
+        PlatformToolRegistry registry = new PlatformToolRegistry();
+        registry.register("rag_retrieve", (tool, input, context) -> PlatformToolResult.success(input));
+        when(permissions.resolve("tenant", "agent-1", "rag_retrieve")).thenReturn(
+                AgentToolPermissionEntity.builder().toolCode("rag_retrieve").mode("REQUIRE_APPROVAL")
+                        .timeoutSeconds(60).timeoutDecision("REJECT").build());
+        when(approvals.request(any(), eq("rag_retrieve"), anyMap(), any())).thenReturn(
+                ToolApprovalRequestEntity.builder().approvalId("approval-1").build());
+        when(approvals.awaitDecision(any(), any())).thenReturn(ToolApprovalRequestEntity.builder()
+                .decision("APPROVE_WITH_CHANGES").amendedInput(Map.of("query", "approved query")).build());
+        when(authorization.claim(any(), any(), any())).thenReturn(ToolDispatchClaimEntity.builder()
+                .claimed(true).callLog(ToolCallLogEntity.builder().status(ToolStatus.STARTED).build()).build());
+        ToolGateway gateway = new ToolGateway(mock(ObjectStorageService.class),
+                mock(cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport.class), authorization,
+                mock(cn.bugstack.ai.domain.tool.service.support.SkillPackageReader.class), registry,
+                mock(WorkflowEventStreamService.class), permissions, approvals);
+        ToolInvokeContextEntity context = ToolInvokeContextEntity.builder().tenantId("tenant").userId("user")
+                .agentId("agent-1").sessionId("session").runId("run").functionCallId("call").build();
+
+        Map<String, Object> result = gateway.invoke(platformTool(), Map.of("query", "original"), context);
+
+        Assert.assertEquals("approved query", ((Map<?, ?>) result.get("result")).get("query"));
+        verify(authorization).claim(any(), eq(context), contains("approved query"));
     }
 
     private ToolGateway gateway(ToolDispatchAuthorizationService authorization, PlatformToolRegistry registry,
