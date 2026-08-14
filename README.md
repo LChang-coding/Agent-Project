@@ -74,9 +74,63 @@
 
 ![命中子块后的上下文补全与证据装配](docs/readme-assets/flows/17-命中子块后的上下文补全与证据装配.png)
 
-## 3. 测试与评测结果
+### 2.18 工具权限配置、运行时判断与审批触发
 
-### 3.1 PDF / DOCX 200 份全策略检索质量
+![工具权限配置、运行时判断与审批触发](docs/readme-assets/flows/18-工具权限配置运行时判断与审批触发.png)
+
+### 2.19 SSE + HTTP 人机审批、同步等待与断线恢复
+
+![SSE + HTTP 人机审批、同步等待与断线恢复](docs/readme-assets/flows/19-SSE-HTTP人机审批同步等待与断线恢复.png)
+
+### 2.20 主 Agent 创建多个子 Agent 与 Kafka 可靠投递
+
+![主 Agent 创建多个子 Agent 与 Kafka 可靠投递](docs/readme-assets/flows/20-主Agent创建多个子Agent与Kafka可靠投递.png)
+
+### 2.21 子 Agent 执行、心跳租约与 Worker 故障接管
+
+![子 Agent 执行、心跳租约与 Worker 故障接管](docs/readme-assets/flows/21-子Agent执行心跳租约与Worker故障接管.png)
+
+### 2.22 子 Agent 结果回调、主 Agent 自动续跑与实例清理
+
+![子 Agent 结果回调、主 Agent 自动续跑与实例清理](docs/readme-assets/flows/22-子Agent结果回调主Agent自动续跑与实例清理.png)
+
+## 3. 数据库领域设计
+
+### 3.1 数据库领域总览
+
+![数据库领域总览](docs/readme-assets/database/01-数据库领域总览.png)
+
+### 3.2 租户、用户与 Agent 工具配置
+
+![租户、用户与 Agent 工具配置](docs/readme-assets/database/02-租户用户与Agent工具配置.png)
+
+### 3.3 会话、运行、记忆、资产与用量
+
+![会话、运行、记忆、资产与用量](docs/readme-assets/database/03-会话运行记忆资产与用量.png)
+
+### 3.4 RAG 知识库、摄取、检索与评测
+
+![RAG 知识库、摄取、检索与评测](docs/readme-assets/database/04-RAG知识库摄取检索与评测.png)
+
+### 3.5 工作流定义、运行、路由与事件
+
+![工作流定义、运行、路由与事件](docs/readme-assets/database/05-工作流定义运行路由与事件.png)
+
+### 3.6 定时调度、执行与故障恢复
+
+![定时调度、执行与故障恢复](docs/readme-assets/database/06-定时调度执行与故障恢复.png)
+
+### 3.7 工具权限、审批与调用审计
+
+![工具权限、审批与调用审计](docs/readme-assets/database/07-工具权限审批与调用审计.png)
+
+### 3.8 多 Agent 编排、回调与清理
+
+![多 Agent 编排、回调与清理](docs/readme-assets/database/08-多Agent编排回调与清理.png)
+
+## 4. 测试与评测结果
+
+### 4.1 PDF / DOCX 200 份全策略检索质量
 
 每种格式包含 200 份同源文档和 800 条正式查询结果，两个正式运行均为 `0 错误 / 0 降级 / 0 空结果`。
 
@@ -93,7 +147,7 @@
 | DOCX | Hybrid RRF | .800 | .900 | .920 | .843865 | .862536 | 1,846 / 2,146 ms |
 | DOCX | Hybrid RRF + Rerank | .840 | .915 | .920 | .868542 | .881311 | 6,956 / 9,796 ms |
 
-### 3.2 SciFact Markdown 检索质量与时延
+### 4.2 SciFact Markdown 检索质量与时延
 
 正式运行包含 300 个问题和 4 种检索策略，共得到 1,200 条唯一结果，最终为 `0 错误 / 0 降级 / 0 空结果`。
 
@@ -106,7 +160,7 @@
 | Hybrid RRF | .448611 | .669833 | .750667 | .566630 | .604539 | 2,159 / 4,704 ms |
 | Hybrid RRF + Rerank | .556111 | .714000 | .750667 | .646028 | .663244 | 13,451 / 21,100 ms |
 
-### 3.3 PDF / DOCX 50 份切块策略消融
+### 4.3 PDF / DOCX 50 份切块策略消融
 
 四个正式运行共完成 200 次文档摄取和 800 条查询结果，均为 `0 最终错误 / 0 降级 / 0 空结果`，瞬态重试实际发生 0 次。
 
@@ -119,7 +173,7 @@
 
 该结果只说明单页短科学摘要采用较粗分块时更省，并不能外推到多页长文、跨页表格或扫描 PDF。
 
-### 3.4 功能、可靠性与容量闭环
+### 4.4 功能、可靠性与容量闭环
 
 ![RAG 功能、可靠性与容量闭环](docs/readme-assets/evaluation/rag-functional-reliability-closure.png)
 
