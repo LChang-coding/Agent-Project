@@ -33,6 +33,10 @@ public interface IChatRunDao {
                                              @Param("userId") String userId,
                                              @Param("sessionId") String sessionId);
 
+    ChatRunPO queryLatestBySession(@Param("tenantId") String tenantId,
+                                   @Param("userId") String userId,
+                                   @Param("sessionId") String sessionId);
+
     /** 查询来源上的可执行运行；参数是租户、来源类型和来源ID；返回活动运行。 */
     List<ChatRunPO> queryExecutableBySource(@Param("tenantId") String tenantId,
                                             @Param("sourceType") String sourceType,

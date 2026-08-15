@@ -62,6 +62,12 @@ ai:
       trace-log-enabled: ${AI_PLATFORM_TRACE_LOG_TOOL_ENABLED:false}
       orchestration-enabled: ${AI_AGENT_ORCHESTRATION_ENABLED:false}
   agent:
+    thinking:
+      mode: ${AI_AGENT_THINKING_MODE:medium}
+      visible: ${AI_AGENT_THINKING_VISIBLE:true}
+      persist: ${AI_AGENT_THINKING_PERSIST:true}
+      max-chars: ${AI_AGENT_THINKING_MAX_CHARS:4000}
+      fallback-disabled: ${AI_AGENT_THINKING_FALLBACK_DISABLED:true}
     orchestration:
       enabled: ${AI_AGENT_ORCHESTRATION_ENABLED:false}
       task-topic: ${AI_AGENT_TASK_TOPIC:agent.subagent.task.v1}

@@ -327,10 +327,8 @@ export const useChatStore = defineStore('chat', {
           this.hasMoreMessages = page.hasMore && this.nextBeforeSequence !== null;
         }
         this.errorMessage = '';
-        if (this.activeSourceType === 'workflow') {
-          // 消息先恢复；节点事件在后台重放，避免活动 Run 阻塞会话页面可用性。
-          void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
-        }
+        // Agent 与工作流共用运行事件账本；消息先恢复，事件在后台重放。
+        void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
       } catch (error) {
         if (silent) throw error;
         if (!silent && generation === sessionSwitchGeneration && this.sessionId === sessionId) {
@@ -871,9 +869,47 @@ export const useChatStore = defineStore('chat', {
       }
       request.runId = run.runId;
       this.currentRunId = run.runId;
+      const userMessage = this.messages.find((message) => message.id === request.userMessageId);
+      const assistantMessage = this.messages.find((message) => message.id === request.assistantMessageId);
+      if (userMessage) userMessage.runId = run.runId;
+      if (assistantMessage) assistantMessage.runId = run.runId;
       this.contextRevision = run.contextRevision;
       this.bindTrace(request, run.traceId || '');
+      const traceId = run.traceId || request.traceId;
+      if (traceId && !this.workflowRuns[run.runId]) {
+        this.workflowRuns[run.runId] = createWorkflowRunState(run.runId, traceId);
+        void this.connectAgentRunEvents(request.sessionId || this.sessionId, run.runId, traceId);
+      }
       request.resolveRunReady();
+    },
+
+    /** 普通 Agent 的文本 SSE 与可恢复运行事件并行连接，思考和工具进度不再等待最终正文。 */
+    async connectAgentRunEvents(sessionId: string, runId: string, traceId: string) {
+      const controller = new AbortController();
+      historyWorkflowControllers.get(runId)?.abort();
+      historyWorkflowControllers.set(runId, controller);
+      let attempts = 0;
+      try {
+        while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running') {
+          try {
+            await streamWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
+              signal: controller.signal,
+              onEvent: (event) => {
+                const current = this.workflowRuns[runId];
+                if (current) this.workflowRuns[runId] = reduceWorkflowEvent(current, event);
+              },
+            });
+            attempts = 0;
+          } catch (error) {
+            if (controller.signal.aborted || this.sessionId !== sessionId || ++attempts > 3) throw error;
+            await wait(250 * attempts);
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) this.errorMessage = error instanceof Error ? error.message : 'Agent 运行事件流已断开';
+      } finally {
+        if (historyWorkflowControllers.get(runId) === controller) historyWorkflowControllers.delete(runId);
+      }
     },
 
     /**

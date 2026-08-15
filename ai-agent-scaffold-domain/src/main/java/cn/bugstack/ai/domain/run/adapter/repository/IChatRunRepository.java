@@ -64,6 +64,9 @@ public interface IChatRunRepository {
      */
     List<ChatRunEntity> queryExecutableBySession(String tenantId, String userId, String sessionId);
 
+    /** 查询会话最近一次运行，用于刷新后恢复隐藏子 Agent 的执行时间线。 */
+    ChatRunEntity queryLatestBySession(String tenantId, String userId, String sessionId);
+
     /**
      * 查出某个执行来源（某个 Agent 或某个工作流）下还在跑的运行。
      *

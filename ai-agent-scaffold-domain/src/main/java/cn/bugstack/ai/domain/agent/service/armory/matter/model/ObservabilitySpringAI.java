@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.adk.models.BaseLlmConnection;
 import com.google.adk.models.LlmRequest;
 import com.google.adk.models.LlmResponse;
-import com.google.adk.models.springai.MessageConverter;
 import com.google.adk.models.springai.SpringAI;
-import com.google.adk.models.springai.StreamingResponseAggregator;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningAwareMessageConverter;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningStreamingResponseAggregator;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import io.reactivex.rxjava3.core.BackpressureStrategy;
 import io.reactivex.rxjava3.core.Flowable;
@@ -54,7 +54,7 @@ public class ObservabilitySpringAI extends SpringAI {
      *
      * <p>每个适配器实例持有一份；它是无状态的，多线程并发调用是安全的。</p>
      */
-    private final MessageConverter messageConverter;
+    private final ReasoningAwareMessageConverter messageConverter;
     /**
      * 装配时配置的模型代码，作为模型版本的最后一道兜底。
      *
@@ -82,7 +82,7 @@ public class ObservabilitySpringAI extends SpringAI {
             this.streamingChatModel = null;
         }
         // 建立请求响应转换器，负责 ADK 与 Spring AI 之间的结构互转。
-        this.messageConverter = new MessageConverter(new ObjectMapper());
+        this.messageConverter = new ReasoningAwareMessageConverter(new ObjectMapper());
         // 记下配置的模型代码，作为模型版本的最终兜底值。
         this.configuredModelName = configuredModelName;
     }
@@ -185,7 +185,7 @@ public class ObservabilitySpringAI extends SpringAI {
             // 把 ADK 请求转成 Spring AI 提示。
             Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
             // 聚合器负责把一串分片拼成完整内容。
-            StreamingResponseAggregator aggregator = new StreamingResponseAggregator();
+            ReasoningStreamingResponseAggregator aggregator = new ReasoningStreamingResponseAggregator();
             // 记住最近一帧已补齐观测字段的响应，流结束时要从它身上把元数据搬到终帧。
             AtomicReference<LlmResponse> latestResponse = new AtomicReference<>();
 
@@ -195,7 +195,7 @@ public class ObservabilitySpringAI extends SpringAI {
                         // 第三层：每个分片先聚合内容，再附加该分片可获得的最新元数据。
                         LlmResponse partial = messageConverter.toLlmResponse(chatResponse, true);
                         // 把这一片并入累计内容，得到「到目前为止」的完整响应。
-                        LlmResponse aggregated = aggregator.processStreamingResponse(partial);
+                        LlmResponse aggregated = aggregator.process(partial);
                         // 补上模型版本和 Token 用量，同时写进线程桥接点。
                         LlmResponse enriched = enrich(aggregated, chatResponse, llmRequest);
                         // 记为最新一帧，供结束时补终帧使用。
@@ -212,7 +212,7 @@ public class ObservabilitySpringAI extends SpringAI {
                                 // 第四层：聚合器终态可能丢失最后分片元数据，显式复制回来。
                                 if (!aggregator.isEmpty()) {
                                     // 把最新帧的模型版本、用量和终止原因搬到聚合终帧上再发出去。
-                                    emitter.onNext(copyTerminalMetadata(aggregator.getFinalResponse(), latestResponse.get()));
+                                    emitter.onNext(copyTerminalMetadata(aggregator.finish(), latestResponse.get()));
                                 }
                                 // 通知下游流已正常结束。
                                 emitter.onComplete();

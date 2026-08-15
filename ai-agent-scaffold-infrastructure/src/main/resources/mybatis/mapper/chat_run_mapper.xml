@@ -77,6 +77,13 @@
         ORDER BY id ASC
     </select>
 
+    <select id="queryLatestBySession" resultMap="ChatRunMap">
+        SELECT <include refid="ChatRunColumns"/> FROM chat_run
+        WHERE user_id = #{userId} AND session_id = #{sessionId} AND deleted = 0
+        <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>
+        ORDER BY id DESC LIMIT 1
+    </select>
+
     <select id="queryExecutableBySource" resultMap="ChatRunMap">
         SELECT <include refid="ChatRunColumns"/> FROM chat_run
         WHERE source_type = #{sourceType} AND source_id = #{sourceId}

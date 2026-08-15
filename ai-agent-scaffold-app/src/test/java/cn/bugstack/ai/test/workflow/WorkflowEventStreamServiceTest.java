@@ -39,8 +39,8 @@ public class WorkflowEventStreamServiceTest {
         Assert.assertEquals("trace_root", run.getTraceId());
     }
 
-    @Test(expected = AppException.class)
-    public void shouldRejectNonWorkflowChatRun() {
+    @Test
+    public void shouldAcceptGenericAgentRunForUnifiedExecutionEvents() {
         IWorkflowEventRepository events = mock(IWorkflowEventRepository.class);
         IIntelligentWorkflowRunRepository runs = mock(IIntelligentWorkflowRunRepository.class);
         IChatRunRepository chatRuns = mock(IChatRunRepository.class);
@@ -48,8 +48,11 @@ public class WorkflowEventStreamServiceTest {
                 .tenantId("tenant_1").userId("user_1").runId("run_1")
                 .sourceType("agent").traceId("trace_root").build());
 
-        new WorkflowEventStreamService(events, runs, chatRuns)
+        ChatRunEntity run = new WorkflowEventStreamService(events, runs, chatRuns)
                 .requireWorkflowRun("tenant_1", "user_1", "run_1");
+
+        Assert.assertEquals("agent", run.getSourceType());
+        Assert.assertEquals("trace_root", run.getTraceId());
     }
 
     @Test

@@ -130,21 +130,22 @@ test('子 Agent Trace ID 复制失败时提供可见反馈', () => {
   assert.match(subagentTaskDetailSource, /role="status"/);
 });
 
-test('子 Agent 详情展示真实运行阶段、协议边界并支持复制结果', () => {
+test('子 Agent 详情展示真实运行阶段、独立事件面板并支持复制结果', () => {
   assert.match(subagentTaskDetailSource, /aria-label="子 Agent 执行进度"\s+aria-live="polite"/);
   assert.match(subagentTaskDetailSource, /任务已创建/);
   assert.match(subagentTaskDetailSource, /子 Agent 执行/);
   assert.match(subagentTaskDetailSource, /结果回调/);
-  assert.match(subagentTaskDetailSource, /当前协议不提供子 Agent Token 级输出/);
+  assert.match(subagentTaskDetailSource, /WorkflowNodeExecutionPanel/);
+  assert.match(subagentTaskDetailSource, /childRunId/);
   assert.match(subagentTaskDetailSource, /await copyText\(outputText\.value\)/);
   assert.match(subagentTaskDetailSource, /aria-label="resultCopied \? '子任务结果已复制' : '复制子任务结果'"/);
 });
 
-test('编排 SSE 快照为多个子 Agent 独立更新状态，不宣称 Token 级流式输出', () => {
+test('编排 SSE 快照为多个子 Agent 独立更新状态并引导查看时间线', () => {
   assert.match(orchestrationStoreSource, /for \(const task of value\.runs\.flatMap\(\(run\) => run\.tasks\)\)/);
   assert.match(orchestrationStoreSource, /this\.applySnapshot\(sessionId, value\)/);
-  assert.match(orchestrationRunCardSource, /各子任务状态与回调结果通过编排 SSE 独立更新/);
-  assert.match(orchestrationRunCardSource, /当前不提供 Token 级输出/);
+  assert.match(orchestrationRunCardSource, /各子任务状态与回调结果独立更新/);
+  assert.match(orchestrationRunCardSource, /思考与工具时间线/);
 });
 
 test('切换子 Agent 详情时重建详情视图，避免复制反馈串到下一任务', () => {

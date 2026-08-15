@@ -418,18 +418,18 @@ public class ToolGateway {
         }
     }
 
-    /** 在工作流节点范围完整时发布工具事件；普通 Agent 调用不伪造节点事件。 */
+    /** 所有 Agent 运行都发布工具事件；工作流额外携带节点执行编号。 */
     private void publishToolEvent(ToolInvokeContextEntity context, ToolCatalogEntity tool, String eventType,
                                   Map<String, Object> details) {
-        if (workflowEventStreamService == null || blank(context.getWorkflowId())
-                || blank(context.getNodeExecutionId())) {
+        if (workflowEventStreamService == null || context == null || blank(context.getRunId())
+                || blank(context.getTraceId())) {
             return;
         }
         Map<String, Object> payload = new LinkedHashMap<>(details);
         payload.put("toolCode", defaultString(tool.getToolCode(), defaultString(tool.getFunctionName(), tool.getToolId())));
         payload.put("displayName", defaultString(tool.getToolName(), tool.getToolId()));
         payload.put("functionCallId", context.getFunctionCallId());
-        payload.put("nodeExecutionId", context.getNodeExecutionId());
+        if (!blank(context.getNodeExecutionId())) payload.put("nodeExecutionId", context.getNodeExecutionId());
         workflowEventStreamService.publish(context.getTenantId(), context.getUserId(), context.getRunId(),
                 context.getTraceId(), eventType, context.getNodeExecutionId(), null, toJson(payload));
     }

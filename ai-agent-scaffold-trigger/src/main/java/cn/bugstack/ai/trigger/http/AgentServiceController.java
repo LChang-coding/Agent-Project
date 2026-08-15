@@ -5,6 +5,7 @@ import cn.bugstack.ai.api.dto.*;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.service.IChatService;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.AgentEventContent;
 import cn.bugstack.ai.domain.run.model.RunStreamEntity;
 import cn.bugstack.ai.domain.run.service.ActiveRunRegistry;
 import cn.bugstack.ai.domain.rag.model.entity.RagAnswerCitationValidation;
@@ -614,7 +615,8 @@ public class AgentServiceController implements IAgentService {
         return chatService.handleMessageStream(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage())
                 .subscribe(
                         // 先把事件内容转成文本、再减去已推送部分，只把新增片段发给前端。
-                        event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
+                        event -> sendMessage(emitter, disposableRef,
+                                streamDelta(lastContentRef, AgentEventContent.snapshot(event).answer())),
                         // 出错时转成 error 事件并关闭连接。
                         error -> completeSseWithError(emitter, error),
                         // 正常结束直接关闭，这条旧路径不补发引用信息。
@@ -651,7 +653,8 @@ public class AgentServiceController implements IAgentService {
         // 订阅事件流并返回句柄，三个回调覆盖数据、异常和完成。
         return stream.subscribe(
                 // 把累计文本转成本次新增片段后推送，避免前端重复显示同一段回答。
-                event -> sendMessage(emitter, disposableRef, streamDelta(lastContentRef, event.stringifyContent())),
+                event -> sendMessage(emitter, disposableRef,
+                        streamDelta(lastContentRef, AgentEventContent.snapshot(event).answer())),
                 // 出错时下发带 traceId 的 error 事件并关闭连接。
                 error -> completeSseWithError(emitter, error, traceId),
                 // 正常结束后读取已落库的引用快照，补发引用事件再关闭连接。

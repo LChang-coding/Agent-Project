@@ -5,15 +5,19 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningAdapterFactory;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningAwareOpenAiApi;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningMode;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningModelAdapter;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.annotation.Resource;
 
@@ -40,6 +44,12 @@ public class  AiApiNode extends AbstractArmorySupport {
      */
     @Resource
     private ChatModelNode chatModelNode;
+
+    @Value("${ai.agent.thinking.mode:medium}")
+    private String thinkingMode;
+
+    @Value("${ai.agent.thinking.fallback-disabled:true}")
+    private boolean fallbackDisabled;
     /**
      * 构造 OpenAI 兼容的 API 客户端，并写入本次装配的共享上下文。
      *
@@ -69,46 +79,24 @@ public class  AiApiNode extends AbstractArmorySupport {
         // 每张配置表只声明一个基础 API，节点级模型可共享连接配置。
         AiAgentConfigTableVO.Module.AiApi aiApiConfig = aiAgentConfigTableVO.getModule().getAiApi();
 
-        // 第二层：准备 JSON 工具，用于在拦截器里改写请求体。
-        // 对聊天补全请求显式关闭思考字段，避免兼容端点返回框架无法消费的 reasoning_content。
+        // 第二层：由独立模型适配层统一处理思考协议，不再在 HTTP 拦截器里硬编码关闭。
         ObjectMapper objectMapper = new ObjectMapper();
-        // 给客户端装一个请求拦截器；所有走这个客户端的请求都会经过它。
-        RestClient.Builder restClientBuilder = RestClient.builder()
-            .requestInterceptor((request, body, execution) -> {
-                // 取出请求路径，用来判断这是不是一次聊天补全调用。
-                String path = request.getURI().getPath();
-                // 只改写有请求体的聊天补全请求；向量化请求和空请求体都不能碰。
-                if (body != null && body.length > 0 && path != null && path.contains("/chat/completions")) {
-                    // 只重写 JSON 聊天请求；嵌入请求和空请求体保持原样。
-                    try {
-                        // 把请求体解析成 JSON 树，准备往里加字段。
-                        JsonNode rootNode = objectMapper.readTree(body);
-                        // 构造 thinking 节点，用来告诉服务端不要返回思考过程。
-                        ObjectNode thinking = objectMapper.createObjectNode();
-                        // 明确写 disabled：框架无法消费 reasoning_content，返回了反而会解析失败。
-                        thinking.put("type", "disabled");
-                        // 把 thinking 挂到请求体根节点上，已有同名字段会被覆盖。
-                        ((ObjectNode) rootNode).set("thinking", thinking);
-                        // 序列化回字节数组，作为真正发出去的请求体。
-                        body = objectMapper.writeValueAsBytes(rootNode);
-                    } catch (Exception e) {
-                        // 重写失败不阻断原始请求，兼容不接受该扩展字段的供应商。
-                        log.warn("请求体添加 thinking 参数失败", e);
-                    }
-                }
-                // 无论有没有改写，都把请求交给后续执行链真正发出去。
-                return execution.execute(request, body);
-            });
+        RestClient.Builder restClientBuilder = RestClient.builder();
+        WebClient.Builder webClientBuilder = WebClient.builder();
 
         // 第三层：用配置里的地址、密钥和路径构造客户端。
         // 未配置路径时使用 OpenAI 兼容默认值。
-        OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl(aiApiConfig.getBaseUrl())
-                .apiKey(aiApiConfig.getApiKey())
-                .completionsPath(StringUtils.isNotBlank(aiApiConfig.getCompletionsPath()) ? aiApiConfig.getCompletionsPath() : "v1/chat/completions")
-                .embeddingsPath(StringUtils.isNotBlank(aiApiConfig.getEmbeddingsPath()) ? aiApiConfig.getEmbeddingsPath() : "v1/embeddings")
-                .restClientBuilder(restClientBuilder)
-                .build();
+        String model = aiAgentConfigTableVO.getModule().getChatModel().getModel();
+        ReasoningMode mode = ReasoningMode.resolve(thinkingMode);
+        ReasoningModelAdapter adapter = ReasoningAdapterFactory.resolve(aiApiConfig.getBaseUrl(), model, mode);
+        String completionsPath = StringUtils.isNotBlank(aiApiConfig.getCompletionsPath())
+                ? aiApiConfig.getCompletionsPath() : "v1/chat/completions";
+        String embeddingsPath = StringUtils.isNotBlank(aiApiConfig.getEmbeddingsPath())
+                ? aiApiConfig.getEmbeddingsPath() : "v1/embeddings";
+        OpenAiApi openAiApi = new ReasoningAwareOpenAiApi(aiApiConfig.getBaseUrl(), aiApiConfig.getApiKey(),
+                completionsPath, embeddingsPath, restClientBuilder, webClientBuilder, objectMapper,
+                adapter, mode, fallbackDisabled);
+        log.info("Ai Agent 思考适配器已装配 provider:{} mode:{} model:{}", adapter.provider(), mode, model);
 
         // 第四层：后续节点只能从本次 DynamicContext 取得该客户端，保证一张表只有一份连接池。
         dynamicContext.setOpenAiApi(openAiApi);

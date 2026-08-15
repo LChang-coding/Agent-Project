@@ -18,7 +18,7 @@
       </button>
     </div>
     <footer v-if="snapshot.inputLocked">
-      <span>当前会话暂时锁定发送；各子任务状态与回调结果通过编排 SSE 独立更新，当前不提供 Token 级输出。</span>
+      <span>当前会话暂时锁定发送；各子任务状态与回调结果独立更新，点击子 Agent 可查看思考与工具时间线。</span>
       <button v-if="cancellableCount" type="button" :disabled="stopping" @click="$emit('stop')">
         {{ stopping ? '停止中…' : `停止 ${cancellableCount} 个子任务` }}
       </button>

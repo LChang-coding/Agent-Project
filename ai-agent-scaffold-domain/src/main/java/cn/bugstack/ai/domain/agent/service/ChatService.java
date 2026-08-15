@@ -5,6 +5,7 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.AgentEventContent;
 import cn.bugstack.ai.domain.context.service.ConversationMemoryService;
 import cn.bugstack.ai.domain.context.model.RagContextEvidence;
 import cn.bugstack.ai.domain.rag.model.valobj.RagBindingTargetType;
@@ -45,6 +46,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.BackpressureStrategy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -150,6 +152,15 @@ public class ChatService implements IChatService {
      */
     @Resource
     private WorkflowEventStreamService workflowEventStreamService;
+
+    @Value("${ai.agent.thinking.visible:true}")
+    private boolean thinkingVisible = true;
+
+    @Value("${ai.agent.thinking.persist:true}")
+    private boolean thinkingPersist = true;
+
+    @Value("${ai.agent.thinking.max-chars:4000}")
+    private int thinkingMaxChars = 4000;
 
     /**
      * 工作流运行的收尾服务，把最终消息和工作流终态事件放在同一个事务里写。
@@ -883,7 +894,8 @@ public class ChatService implements IChatService {
         ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), chatCommandEntity.getUserId(), adkSessionId);
 
         // 第五层：message 在这里作为 content 交给 ADK Runner；state 同时注入可信运行身份和上下文切面。
-        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder().build(),
+        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder()
+                        .streamingMode(RunConfig.StreamingMode.SSE).build(),
                 runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
@@ -891,8 +903,9 @@ public class ChatService implements IChatService {
                         ragQuery(activeRun, describeContent(chatCommandEntity)),
                         activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
 
-        // 收集模型输出的全部事件文本。
-        List<String> outputs = new ArrayList<>();
+        StringBuilder assistantContent = new StringBuilder();
+        StringBuilder thinkingContent = new StringBuilder();
+        publishAgentEvent(activeRun, "AGENT_STARTED", Map.of("agentId", chatCommandEntity.getAgentId()));
         // 收集和终态推进都可能抛异常，必须统一收尾，否则运行会永远停在"进行中"。
         boolean deferred;
         try {
@@ -900,18 +913,20 @@ public class ChatService implements IChatService {
             events.blockingForEach(event -> {
                 // 每个事件前复核取消状态，取消后不再接受输出或继续工具链。
                 runControlService.requireExecutable(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(), null);
-                // 把事件内容转成文本收进结果；注意这些文本是累计式的，展示前需要去重合并。
-                outputs.add(event.stringifyContent());
+                observeAgentEvent(activeRun, event, thinkingContent, assistantContent, null,
+                        !isSupervisor(chatCommandEntity.getAgentId()) || AgentOrchestrationContextHolder.isSummaryOnly());
             });
             // 第六层：只有事件流正常结束才原子写助手消息并推进运行成功。
             deferred = completeRunWithAssistant(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(),
-                    String.join("\n", outputs), traceId);
+                    assistantContent.toString(), traceId);
+            publishAgentTerminal(activeRun, deferred, null, null);
         } catch (RuntimeException e) {
             // 区分"被取消"和"真失败"：只有真失败才写错误消息。
             if (!runControlService.cancelled(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId())) {
                 // 非取消异常保留已生成片段，便于审计实际失败点。
                 failRunWithAssistantError(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(), traceId, e,
-                        String.join("\n", outputs));
+                        assistantContent.toString());
+                publishAgentTerminal(activeRun, false, e, null);
             } else {
                 // 取消是用户的正常操作，不写失败记录，但必须清掉证据避免被后续回答引用。
                 clearEvidence(activeRun);
@@ -921,7 +936,7 @@ public class ChatService implements IChatService {
         }
 
         // 返回收集到的全部输出文本。
-        return deferred ? List.of() : outputs;
+        return deferred ? List.of() : List.of(assistantContent.toString());
     }
 
     /**
@@ -990,15 +1005,17 @@ public class ChatService implements IChatService {
         // 把用户这句话包成模型输入。
         Content userMsg = Content.fromParts(Part.fromText(message));
         // 第四层：message 在此进入 ADK Agent；插件从 state 读取上下文、RAG 与工具身份。
-        Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder().build(),
+        Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder()
+                        .streamingMode(RunConfig.StreamingMode.SSE).build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
                         activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
 
-        // 收集模型输出的全部事件文本。
-        List<String> outputs = new ArrayList<>();
+        StringBuilder assistantContent = new StringBuilder();
+        StringBuilder thinkingContent = new StringBuilder();
+        publishAgentEvent(activeRun, "AGENT_STARTED", Map.of("agentId", sessionAgentId));
         // 无论成败都要给运行一个明确终态，否则前端会一直显示进行中。
         boolean deferred;
         try {
@@ -1006,16 +1023,18 @@ public class ChatService implements IChatService {
             events.blockingForEach(event -> {
                 // 每个事件前复核取消状态，取消后立即中断，不再消耗模型额度。
                 runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
-                // 收集事件文本；这些文本是累计式的，展示前需要去重合并。
-                outputs.add(event.stringifyContent());
+                observeAgentEvent(activeRun, event, thinkingContent, assistantContent, null,
+                        !isSupervisor(sessionAgentId) || AgentOrchestrationContextHolder.isSummaryOnly());
             });
             // 第五层：正常结束才写助手消息并推进运行成功。
-            deferred = completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), String.join("\n", outputs), traceId);
+            deferred = completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), assistantContent.toString(), traceId);
+            publishAgentTerminal(activeRun, deferred, null, null);
         } catch (RuntimeException e) {
             // 区分取消与真失败。
             if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
                 // 真失败：写错误消息并保留已生成片段，便于定位失败点。
-                failRunWithAssistantError(tenantId, userId, activeRun.getRunId(), traceId, e, String.join("\n", outputs));
+                failRunWithAssistantError(tenantId, userId, activeRun.getRunId(), traceId, e, assistantContent.toString());
+                publishAgentTerminal(activeRun, false, e, null);
             } else {
                 // 被取消：不写失败记录，但必须清掉证据。
                 clearEvidence(activeRun);
@@ -1025,7 +1044,7 @@ public class ChatService implements IChatService {
         }
 
         // 返回全部输出文本。
-        return deferred ? List.of() : outputs;
+        return deferred ? List.of() : List.of(assistantContent.toString());
     }
 
     /**
@@ -1096,6 +1115,7 @@ public class ChatService implements IChatService {
                 .build();
         // 第四层：累计助手回答文本的缓冲区，流结束时整段写库。
         StringBuilder assistantContent = new StringBuilder();
+        StringBuilder thinkingContent = new StringBuilder();
         // 完成、异常和取消可能竞争，只允许一个分支写助手终态。
         AtomicBoolean assistantSaved = new AtomicBoolean(false);
         // 子任务一旦创建，当前流只继续内部累计，不再把主 Agent 草稿当作最终答案下发。
@@ -1103,6 +1123,7 @@ public class ChatService implements IChatService {
         // Lambda 需要一个有效不变的引用，所以把最新运行状态另存一份。
         ChatRunEntity activeRun = run;
         boolean supervisor = isSupervisor(sessionAgentId);
+        publishAgentEvent(activeRun, "AGENT_STARTED", Map.of("agentId", sessionAgentId, "supervisor", supervisor));
         // 第五层：这是普通会话真正调用 Agent 的位置；用户 message 作为 userMsg 输入。
         Flowable<Event> response = runner.runAsync(userId, adkSessionId, userMsg, runConfig,
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
@@ -1116,15 +1137,16 @@ public class ChatService implements IChatService {
                 .doOnNext(event -> {
                     // 每片到达时先复核取消，取消后立刻中断，不再消耗模型额度。
                     runControlService.requireExecutable(tenantId, userId, activeRun.getRunId(), null);
-                    // 把这片内容累计进缓冲区；内部会自动识别累计快照，不会把同一段话拼多遍。
-                    appendContent(assistantContent, event.stringifyContent());
+                    observeAgentEvent(activeRun, event, thinkingContent, assistantContent, null, !supervisor);
                 })
                 .doOnComplete(() -> {
                     // 正常完成才保存聚合后的助手文本。
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
                         // 用一次性开关保护，避免和异常、取消分支重复写库。
-                        if (completeRunWithAssistantOnce(assistantSaved, tenantId, userId, activeRun.getRunId(),
-                                assistantContent.toString(), traceId)) suppressParentOutput.set(true);
+                        boolean deferred = completeRunWithAssistantOnce(assistantSaved, tenantId, userId,
+                                activeRun.getRunId(), assistantContent.toString(), traceId);
+                        if (deferred) suppressParentOutput.set(true);
+                        publishAgentTerminal(activeRun, deferred, null, null);
                     }
                 })
                 .doOnError(throwable -> {
@@ -1133,6 +1155,7 @@ public class ChatService implements IChatService {
                         // 同样用一次性开关保护，并把已生成的片段一起留下便于定位失败点。
                         if (failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId, activeRun.getRunId(), traceId,
                                 throwable, assistantContent.toString())) suppressParentOutput.set(true);
+                        publishAgentTerminal(activeRun, false, throwable, null);
                     }
                 })
                 .doOnCancel(() -> {
@@ -1142,6 +1165,7 @@ public class ChatService implements IChatService {
                                 activeRun.getRunId(), assistantContent.toString());
                         if (deferred) suppressParentOutput.set(true);
                         else runControlService.cancel(tenantId, userId, activeRun.getRunId(), "流式连接已中断");
+                        publishAgentTerminal(activeRun, deferred, null, deferred ? null : "cancelled");
                     }
                 })
                 .doFinally(() -> {
@@ -1558,6 +1582,7 @@ public class ChatService implements IChatService {
         Content content = Content.fromParts(Part.fromText(prompt));
         // 累积本次调用的输出文本。
         StringBuilder output = new StringBuilder();
+        StringBuilder thinking = new StringBuilder();
         // 第四层：invocationId 将上下文插件写入的证据精确绑定到本节点调用。
         String evidenceInvocationId = "wf_" + node.getNodeId() + "_" + UUID.randomUUID();
         // 组装运行状态：身份、链路、上下文切面和 RAG 参数，全部来自可信来源。
@@ -1592,8 +1617,14 @@ public class ChatService implements IChatService {
                 .blockingForEach(event -> {
                     // 每片到达前复核取消，取消后立即中断本节点。
                     runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
-                    // 把供应商的累计快照减去已输出部分，得到本次真正新增的文本。
-                    String delta = contentDelta(output.toString(), event.stringifyContent());
+                    AgentEventContent.Snapshot snapshot = AgentEventContent.snapshot(event);
+                    String thinkingDelta = contentDelta(thinking.toString(), snapshot.thinking());
+                    if (!thinkingDelta.isEmpty()) {
+                        appendContent(thinking, snapshot.thinking());
+                        publishThinkingDelta(run, thinkingDelta, nodeExecutionId);
+                    }
+                    // 把供应商的累计答案快照减去已输出部分，得到本次真正新增的正文。
+                    String delta = contentDelta(output.toString(), snapshot.answer());
                     // 只有确实有新内容才处理，空增量说明这片是重复快照。
                     if (!delta.isEmpty()) {
                         // 累积进节点输出。
@@ -2531,6 +2562,58 @@ public class ChatService implements IChatService {
             return content.substring(current.length());
         }
         return content;
+    }
+
+    /** 把一帧 ADK 内容拆成思考与正文两条通道，并分别追加到持久事件账本。 */
+    private void observeAgentEvent(ChatRunEntity run, Event event, StringBuilder thinking,
+                                   StringBuilder answer, String nodeExecutionId, boolean publishAnswer) {
+        AgentEventContent.Snapshot snapshot = AgentEventContent.snapshot(event);
+        String thinkingDelta = contentDelta(thinking.toString(), snapshot.thinking());
+        if (!thinkingDelta.isEmpty()) {
+            int publishedBefore = Math.min(thinking.length(), Math.max(0, thinkingMaxChars));
+            appendContent(thinking, snapshot.thinking());
+            int remaining = Math.max(0, thinkingMaxChars - publishedBefore);
+            if (remaining > 0) publishThinkingDelta(run,
+                    thinkingDelta.substring(0, Math.min(remaining, thinkingDelta.length())), nodeExecutionId);
+        }
+        String answerDelta = contentDelta(answer.toString(), snapshot.answer());
+        if (!answerDelta.isEmpty()) {
+            appendContent(answer, snapshot.answer());
+            if (publishAnswer) publishAgentEvent(run, "ANSWER_DELTA", nodeExecutionId, Map.of("delta", answerDelta));
+        }
+    }
+
+    private void publishThinkingDelta(ChatRunEntity run, String delta, String nodeExecutionId) {
+        if (!thinkingVisible || !thinkingPersist || delta == null || delta.isEmpty()) return;
+        publishAgentEvent(run, "THINKING_DELTA", nodeExecutionId, Map.of("delta", delta, "mode", "medium"));
+    }
+
+    private void publishAgentTerminal(ChatRunEntity run, boolean deferred, Throwable error, String explicitStatus) {
+        if (deferred) {
+            publishAgentEvent(run, "WAITING_ALL", Map.of("message", "等待全部子 Agent 完成后统一汇总"));
+            return;
+        }
+        if ("cancelled".equals(explicitStatus)) {
+            publishAgentEvent(run, "WORKFLOW_CANCELLED", Map.of("message", "运行已取消"));
+            return;
+        }
+        if (error != null) {
+            publishAgentEvent(run, "WORKFLOW_FAILED", Map.of("message", safeMessage(error),
+                    "errorCode", error instanceof AppException app ? app.getCode() : "AGENT_EXECUTION_FAILED"));
+            return;
+        }
+        publishAgentEvent(run, "FINAL_ANSWER_COMPLETED", Map.of());
+        publishAgentEvent(run, "WORKFLOW_COMPLETED", Map.of("sourceType", "agent"));
+    }
+
+    private void publishAgentEvent(ChatRunEntity run, String eventType, Map<String, ?> payload) {
+        publishAgentEvent(run, eventType, null, payload);
+    }
+
+    private void publishAgentEvent(ChatRunEntity run, String eventType, String nodeExecutionId, Map<String, ?> payload) {
+        if (workflowEventStreamService == null || run == null || run.getTraceId() == null) return;
+        workflowEventStreamService.publish(run.getTenantId(), run.getUserId(), run.getRunId(), run.getTraceId(),
+                eventType, nodeExecutionId, null, jsonPayload(payload));
     }
 
     /** 将普通 DAG 事件写入统一账本；序号和根 Trace 由事件服务校验。 */

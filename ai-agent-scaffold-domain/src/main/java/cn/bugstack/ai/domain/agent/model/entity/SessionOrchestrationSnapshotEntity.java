@@ -36,6 +36,8 @@ public class SessionOrchestrationSnapshotEntity {
         private String taskId;
         private String childAgentId;
         private String childSessionId;
+        private String childRunId;
+        private String childRunTraceId;
         private String instruction;
         private String traceId;
         private String status;

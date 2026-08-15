@@ -5,7 +5,11 @@ import cn.bugstack.ai.domain.agent.model.entity.AgentToolPermissionEntity;
 import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
 import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.exception.AppException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,8 +24,16 @@ public class ToolApprovalService {
     private static final Set<String> DECISIONS = Set.of("APPROVE", "REJECT", "APPROVE_WITH_CHANGES", "REPLAN");
     private final IToolApprovalRepository repository;
     private final RunControlService runControlService;
-    public ToolApprovalService(IToolApprovalRepository repository, RunControlService runControlService) {
+    private final WorkflowEventStreamService eventStreamService;
+    private final ObjectMapper objectMapper;
+    @Autowired
+    public ToolApprovalService(IToolApprovalRepository repository, RunControlService runControlService,
+                               WorkflowEventStreamService eventStreamService, ObjectMapper objectMapper) {
         this.repository = repository; this.runControlService = runControlService;
+        this.eventStreamService = eventStreamService; this.objectMapper = objectMapper;
+    }
+    public ToolApprovalService(IToolApprovalRepository repository, RunControlService runControlService) {
+        this(repository, runControlService, null, null);
     }
 
     public ToolApprovalRequestEntity request(ToolInvokeContextEntity context, String toolCode,
@@ -38,7 +50,10 @@ public class ToolApprovalService {
                 .suggestions(policy.getSuggestions() == null ? List.of() : List.copyOf(policy.getSuggestions()))
                 .status("PENDING").timeoutDecision(policy.getTimeoutDecision()).expiresAt(LocalDateTime.now().plusSeconds(timeout))
                 .revision(0L).traceId(context.getTraceId()).build();
-        return repository.createOrReplay(request);
+        ToolApprovalRequestEntity stored = repository.createOrReplay(request);
+        publish(context, "APPROVAL_REQUIRED", Map.of("approvalId", stored.getApprovalId(),
+                "toolCode", toolCode, "message", "等待用户授权"));
+        return stored;
     }
 
     public List<ToolApprovalRequestEntity> streamPage(String tenantId, String userId, long afterSequence) {
@@ -72,6 +87,9 @@ public class ToolApprovalService {
             if ("DECIDED".equals(current.getStatus())) {
                 runControlService.authorizeToolDispatch(context.getTenantId(), context.getUserId(),
                         context.getRunId(), context.getContextRevision());
+                publish(context, "APPROVAL_RESOLVED", Map.of("approvalId", current.getApprovalId(),
+                        "toolCode", current.getToolCode() == null ? "" : current.getToolCode(),
+                        "decision", current.getDecision() == null ? "" : safe(current.getDecision())));
                 return current;
             }
             if (!"PENDING".equals(current.getStatus())) throw error("TOOL_APPROVAL_STATE_INVALID");
@@ -83,6 +101,17 @@ public class ToolApprovalService {
             }
             sleep(Math.min(POLL_INTERVAL_MILLIS,
                     Math.max(1L, java.time.Duration.between(now, current.getExpiresAt()).toMillis())));
+        }
+    }
+
+    private void publish(ToolInvokeContextEntity context, String eventType, Map<String, ?> payload) {
+        if (eventStreamService == null || objectMapper == null || context == null
+                || !text(context.getRunId()) || !text(context.getTraceId())) return;
+        try {
+            eventStreamService.publish(context.getTenantId(), context.getUserId(), context.getRunId(),
+                    context.getTraceId(), eventType, null, null, objectMapper.writeValueAsString(payload));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("TOOL_APPROVAL_EVENT_SERIALIZE_FAILED", exception);
         }
     }
 

@@ -1,7 +1,7 @@
 <template>
   <div class="page chat-page">
     <section class="chat-workbench">
-      <aside class="session-rail" aria-label="会话列表">
+      <aside :class="['session-rail', { 'session-rail--managing': managingSessions }]" aria-label="会话列表">
         <div class="rail-head">
           <span class="rail-kicker">Sessions</span>
           <div class="rail-actions">
@@ -1790,6 +1790,7 @@ function formatOptionalTokens(value?: number) {
   min-height: 0;
   border-radius: var(--radius-lg);
 }
+.session-rail--managing { grid-template-rows: auto auto minmax(0, 1fr); }
 
 .rail-head {
   display: flex;
@@ -1831,11 +1832,11 @@ function formatOptionalTokens(value?: number) {
 }
 .rail-actions { display: flex; align-items: center; gap: 5px; }
 .rail-manage { color: var(--muted); background: transparent; border-color: var(--line); }
-.session-batch-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; }
+.session-batch-bar { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; min-width: 0; min-height: 44px; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; }
 .session-batch-bar label { display: flex; align-items: center; gap: 6px; font-weight: 800; }
 .session-batch-bar input,.session-select { width: 16px; height: 16px; accent-color: var(--accent-deep); }
 .session-batch-note { flex: 1; color: var(--warning); font-size: 10px; line-height: 1.35; }
-.session-batch-bar button { border: 0; background: transparent; color: var(--danger); font-weight: 850; cursor: pointer; }
+.session-batch-bar button { flex: none; border: 0; background: transparent; color: var(--danger); font-weight: 850; cursor: pointer; white-space: nowrap; }
 .session-batch-bar button:disabled { opacity: .45; cursor: not-allowed; }
 
 .rail-new:disabled {

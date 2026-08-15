@@ -126,3 +126,29 @@ test('工具失败、路由修复和扩展裁决保持权威来源及路由类�
   assert.equal(node.routeCostMs, 32);
   assert.equal(node.routeCategory, 'DEFAULT');
 });
+
+test('Agent 思考、工具、授权和 WAIT_ALL 按原运行事件恢复', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'AGENT_STARTED'));
+  state = reduceWorkflowEvent(state, event(2, 'THINKING_DELTA', { delta: '先确认时间范围' }));
+  state = reduceWorkflowEvent(state, event(3, 'TOOL_CALL_STARTED', {
+    functionCallId: 'call_1', toolCode: 'search', displayName: '联网检索',
+  }));
+  state = reduceWorkflowEvent(state, event(4, 'APPROVAL_REQUIRED', {
+    approvalId: 'approval_1', toolCode: 'search', message: '等待用户授权',
+  }));
+  state = reduceWorkflowEvent(state, event(5, 'APPROVAL_RESOLVED', {
+    approvalId: 'approval_1', toolCode: 'search', decision: 'APPROVE',
+  }));
+  state = reduceWorkflowEvent(state, event(6, 'TOOL_CALL_COMPLETED', { functionCallId: 'call_1', costMs: 25 }));
+  state = reduceWorkflowEvent(state, event(7, 'WAITING_ALL', { message: '等待全部子 Agent' }));
+  state = reduceWorkflowEvent(state, event(8, 'ANSWER_DELTA', { delta: '统一汇总' }));
+  state = reduceWorkflowEvent(state, event(9, 'WORKFLOW_COMPLETED'));
+
+  assert.equal(state.thinking, '先确认时间范围');
+  assert.equal(state.finalAnswer, '统一汇总');
+  assert.equal(state.activities.find((item) => item.id === 'call_1').status, 'completed');
+  assert.equal(state.activities.find((item) => item.id === 'approval_1').status, 'completed');
+  assert.equal(state.waitingAll, false);
+  assert.equal(state.status, 'completed');
+});

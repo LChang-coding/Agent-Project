@@ -36,7 +36,7 @@ public class WorkflowEventStreamService {
     private final IWorkflowEventRepository eventRepository;
     /** 查询智能工作流扩展运行状态。 */
     private final IIntelligentWorkflowRunRepository runRepository;
-    /** 校验通用工作流运行的租户、用户和跟踪标识。 */
+    /** 校验通用 Agent/工作流运行的租户、用户和跟踪标识。 */
     private final IChatRunRepository chatRunRepository;
     /** 只发送运行 ID 唤醒本进程订阅者，事件正文始终从持久化仓储续读。 */
     private final FlowableProcessor<String> wakeups = PublishProcessor.<String>create().toSerialized();
@@ -143,7 +143,7 @@ public class WorkflowEventStreamService {
     }
 
     /**
-     * 校验通用运行属于当前用户、类型为 workflow 且包含有效跟踪标识。
+     * 校验通用运行属于当前用户且包含有效跟踪标识。
      *
      * @param tenantId 运行所属租户
      * @param userId 运行所属用户
@@ -152,11 +152,15 @@ public class WorkflowEventStreamService {
      */
     public ChatRunEntity requireWorkflowRun(String tenantId, String userId, String runId) {
         ChatRunEntity run = chatRunRepository.query(tenantId, userId, runId);
-        if (run == null || !"workflow".equals(run.getSourceType())
-                || run.getTraceId() == null || run.getTraceId().isBlank()) {
-            throw new AppException("WORKFLOW_RUN_NOT_FOUND", "工作流运行不存在或无权访问");
+        if (run == null || run.getTraceId() == null || run.getTraceId().isBlank()) {
+            throw new AppException("WORKFLOW_RUN_NOT_FOUND", "运行不存在或无权访问");
         }
         return run;
+    }
+
+    /** 恢复 Worker 重投前用于判断原运行的展示事件是否已经收口。 */
+    public boolean hasTerminalEvent(String tenantId, String userId, String runId) {
+        return eventRepository.queryTerminal(tenantId, userId, runId) != null;
     }
 
     /** 组合本机唤醒通知的租户与运行标识，分隔符避免字符串拼接冲突。 */

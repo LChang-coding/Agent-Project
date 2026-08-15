@@ -161,8 +161,12 @@ public class SessionOrchestrationQueryService {
     }
 
     private SessionOrchestrationSnapshotEntity.Task task(SubagentTaskEntity value, boolean includeFullContext) {
+        ChatRunEntity childRun = value.getChildSessionId() == null ? null
+                : runRepository.queryLatestBySession(value.getTenantId(), value.getUserId(), value.getChildSessionId());
         return SessionOrchestrationSnapshotEntity.Task.builder().taskId(value.getTaskId())
                 .childAgentId(value.getChildAgentId()).childSessionId(value.getChildSessionId())
+                .childRunId(childRun == null ? null : childRun.getRunId())
+                .childRunTraceId(childRun == null ? null : childRun.getTraceId())
                 .instruction(value.getInstruction()).traceId(value.getTraceId()).status(value.getStatus().name())
                 .callbackStatus(value.getCallbackStatus()).attempt(value.getAttempt()).resultSummary(value.getResultSummary())
                 .fullContext(includeFullContext ? value.getFullContext() : null).errorCode(value.getErrorCode()).createdAt(value.getCreatedAt())

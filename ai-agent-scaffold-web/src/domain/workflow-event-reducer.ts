@@ -15,6 +15,9 @@ export function createWorkflowRunState(runId: string, traceId: string): Workflow
     lastSequence: 0,
     seenEventIds: [],
     nodes: [],
+    thinking: '',
+    waitingAll: false,
+    activities: [],
     finalAnswer: '',
     errorMessage: '',
   };
@@ -34,11 +37,40 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     lastSequence: event.sequence,
     seenEventIds: [...state.seenEventIds, event.eventId],
     nodes: state.nodes.map((node) => ({ ...node, toolCalls: node.toolCalls.map((call) => ({ ...call })) })),
+    activities: state.activities.map((activity) => ({ ...activity })),
   };
   const payload = parsePayload(event.payloadJson);
   const node = event.nodeExecutionId ? findNode(next.nodes, event.nodeExecutionId) : undefined;
 
   switch (event.eventType) {
+    case 'AGENT_STARTED':
+      next.activities.push({ id: event.eventId, type: 'agent', label: 'Agent 开始分析', status: 'running', startedAt: event.occurredAt });
+      break;
+    case 'THINKING_DELTA':
+      next.thinking += text(payload.delta);
+      break;
+    case 'ANSWER_DELTA':
+      next.finalAnswer += text(payload.delta);
+      break;
+    case 'WAITING_ALL':
+      next.waitingAll = true;
+      next.activities.push({ id: event.eventId, type: 'wait', label: '等待全部子 Agent', status: 'waiting',
+        detail: text(payload.message), startedAt: event.occurredAt });
+      break;
+    case 'APPROVAL_REQUIRED':
+      next.activities.push({ id: requiredText(payload.approvalId, 'APPROVAL_REQUIRED 缺少 approvalId'),
+        type: 'approval', label: `等待授权·${text(payload.toolCode) || '工具调用'}`, status: 'waiting',
+        detail: text(payload.message), startedAt: event.occurredAt });
+      break;
+    case 'APPROVAL_RESOLVED': {
+      const approvalId = requiredText(payload.approvalId, 'APPROVAL_RESOLVED 缺少 approvalId');
+      const approval = next.activities.find((candidate) => candidate.id === approvalId);
+      if (!approval) throw new Error('APPROVAL_RESOLVED 找不到对应的 APPROVAL_REQUIRED');
+      approval.status = text(payload.decision) === 'REJECT' ? 'failed' : 'completed';
+      approval.detail = text(payload.decision);
+      approval.finishedAt = event.occurredAt;
+      break;
+    }
     case 'NODE_STARTED':
       if (!event.nodeExecutionId || !event.nodeId) throw new Error('NODE_STARTED 缺少节点执行标识');
       next.nodes.push({
@@ -78,8 +110,13 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
       break;
     }
     case 'TOOL_CALL_STARTED': {
-      const owner = requireNode(node, event);
       const functionCallId = requiredText(payload.functionCallId, 'TOOL_CALL_STARTED 缺少 functionCallId');
+      if (!node) {
+        next.activities.push({ id: functionCallId, type: 'tool',
+          label: text(payload.displayName) || text(payload.toolCode) || '工具调用', status: 'running', startedAt: event.occurredAt });
+        break;
+      }
+      const owner = requireNode(node, event);
       owner.toolCalls.push({
         functionCallId,
         toolCode: text(payload.toolCode),
@@ -91,8 +128,17 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     }
     case 'TOOL_CALL_COMPLETED':
     case 'TOOL_CALL_FAILED': {
-      const owner = requireNode(node, event);
       const functionCallId = requiredText(payload.functionCallId, `${event.eventType} 缺少 functionCallId`);
+      if (!node) {
+        const activity = next.activities.find((candidate) => candidate.id === functionCallId);
+        if (!activity) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
+        activity.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
+        activity.finishedAt = event.occurredAt;
+        activity.detail = optionalText(payload.reason) || optionalText(payload.errorCode);
+        activity.costMs = number(payload.costMs, undefined);
+        break;
+      }
+      const owner = requireNode(node, event);
       const call = owner.toolCalls.find((candidate) => candidate.functionCallId === functionCallId);
       if (!call) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
       call.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
@@ -142,6 +188,9 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
       break;
     case 'WORKFLOW_COMPLETED':
       next.status = 'completed';
+      next.waitingAll = false;
+      next.activities = next.activities.map((activity) => activity.status === 'running'
+        ? { ...activity, status: 'completed', finishedAt: event.occurredAt } : activity);
       break;
     case 'WORKFLOW_FAILED':
       next.status = 'failed';

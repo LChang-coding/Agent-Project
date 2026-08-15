@@ -129,6 +129,8 @@ export interface SubagentTaskView {
   taskId: string;
   childAgentId: string;
   childSessionId?: string;
+  childRunId?: string;
+  childRunTraceId?: string;
   instruction: string;
   traceId?: string;
   status: 'READY' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'ACKED';

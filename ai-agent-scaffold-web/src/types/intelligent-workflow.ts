@@ -2,6 +2,12 @@ export const WORKFLOW_EVENT_SCHEMA = 'workflow-event-v1' as const;
 
 export type WorkflowEventType =
   | 'WORKFLOW_STARTED'
+  | 'AGENT_STARTED'
+  | 'THINKING_DELTA'
+  | 'ANSWER_DELTA'
+  | 'WAITING_ALL'
+  | 'APPROVAL_REQUIRED'
+  | 'APPROVAL_RESOLVED'
   | 'NODE_STARTED'
   | 'NODE_OUTPUT_DELTA'
   | 'NODE_COMPLETED'
@@ -125,6 +131,20 @@ export interface WorkflowRunViewState {
   lastSequence: number;
   seenEventIds: string[];
   nodes: WorkflowNodeExecutionView[];
+  thinking: string;
+  waitingAll: boolean;
+  activities: AgentRunActivityView[];
   finalAnswer: string;
   errorMessage: string;
+}
+
+export interface AgentRunActivityView {
+  id: string;
+  type: 'agent' | 'tool' | 'wait' | 'approval';
+  label: string;
+  status: 'running' | 'completed' | 'failed' | 'waiting';
+  startedAt: string;
+  finishedAt?: string;
+  detail?: string;
+  costMs?: number;
 }

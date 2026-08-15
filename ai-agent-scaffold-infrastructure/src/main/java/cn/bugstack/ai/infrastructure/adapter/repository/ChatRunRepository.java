@@ -60,6 +60,11 @@ public class ChatRunRepository implements IChatRunRepository {
     }
 
     @Override
+    public ChatRunEntity queryLatestBySession(String tenantId, String userId, String sessionId) {
+        return toEntity(dao.queryLatestBySession(blankToNull(tenantId), userId, sessionId));
+    }
+
+    @Override
     /** 删除 Agent/Workflow 前查询其全部未完成运行。 */
     public List<ChatRunEntity> queryExecutableBySource(String tenantId, String sourceType, String sourceId) {
         return dao.queryExecutableBySource(blankToNull(tenantId), sourceType, sourceId).stream()

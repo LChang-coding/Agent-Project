@@ -3,6 +3,7 @@ package cn.bugstack.ai.trigger.listener;
 import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
 import cn.bugstack.ai.domain.agent.model.entity.ParentResumeBatchEntity;
 import cn.bugstack.ai.domain.agent.service.IChatService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.context.TenantContext;
 import cn.bugstack.ai.types.context.TenantContextHolder;
@@ -16,6 +17,7 @@ import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -40,14 +42,23 @@ public class ParentAgentResumeConsumer {
     private final ObjectMapper objectMapper;
     private final IParentResumeRepository repository;
     private final IChatService chatService;
+    private final WorkflowEventStreamService eventStreamService;
     private final String workerId = "parent-resume-" + UUID.randomUUID();
     private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "parent-resume-lease-heartbeat"); thread.setDaemon(true); return thread;
     });
 
+    @Autowired
+    public ParentAgentResumeConsumer(ObjectMapper objectMapper, IParentResumeRepository repository,
+                                     IChatService chatService, WorkflowEventStreamService eventStreamService) {
+        this.objectMapper = objectMapper; this.repository = repository; this.chatService = chatService;
+        this.eventStreamService = eventStreamService;
+    }
+
+    /** 仅供不关心运行事件的纯单元测试复用。 */
     public ParentAgentResumeConsumer(ObjectMapper objectMapper, IParentResumeRepository repository,
                                      IChatService chatService) {
-        this.objectMapper = objectMapper; this.repository = repository; this.chatService = chatService;
+        this(objectMapper, repository, chatService, null);
     }
 
     @KafkaListener(topics = "${ai.agent.orchestration.resume-topic:agent.parent.resume.v1}",
@@ -65,13 +76,17 @@ public class ParentAgentResumeConsumer {
         ScheduledFuture<?> leaseHeartbeat = heartbeat.scheduleAtFixedRate(
                 () -> renew(batch), 20, 20, TimeUnit.SECONDS);
         try {
+            String finalAnswer = "";
             if (batch.getItems() != null && !batch.getItems().isEmpty()) {
                 List<String> outputs = chatService.handleInternalMessage(batch.getParentAgentId(), batch.getUserId(),
                         batch.getParentSessionId(), prompt(batch), resumeRunId(batch));
                 if (outputs == null || outputs.stream().allMatch(value -> value == null || value.isBlank())) {
                     throw new IllegalStateException("PARENT_RESUME_EMPTY_OUTPUT");
                 }
+                finalAnswer = outputs.stream().filter(value -> value != null && !value.isBlank())
+                        .reduce((first, second) -> second).orElseThrow();
             }
+            publishParentCompletion(batch, finalAnswer);
             if (repository.complete(batch, workerId, batch.getFencingToken(), LocalDateTime.now()) != 1) {
                 throw new IllegalStateException("PARENT_RESUME_FENCE_CONFLICT");
             }
@@ -90,6 +105,26 @@ public class ParentAgentResumeConsumer {
                     LocalDateTime.now().plusSeconds(5), exception.getMessage());
             throw exception;
         } finally { leaseHeartbeat.cancel(false); clear(); }
+    }
+
+    /** 稳定恢复 run 产生最终消息，原始父 run 仍是前端订阅的交互锚点，因此必须在原账本上唯一收口。 */
+    private void publishParentCompletion(ParentResumeBatchEntity batch, String finalAnswer) {
+        if (eventStreamService == null) return;
+        if (eventStreamService.hasTerminalEvent(batch.getTenantId(), batch.getUserId(), batch.getParentRunId())) return;
+        try {
+            if (finalAnswer != null && !finalAnswer.isBlank()) {
+                eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
+                        batch.getTraceId(), "ANSWER_DELTA", null, null,
+                        objectMapper.writeValueAsString(Map.of("delta", finalAnswer)));
+            }
+            eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
+                    batch.getTraceId(), "FINAL_ANSWER_COMPLETED", null, null, "{}");
+            eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
+                    batch.getTraceId(), "WORKFLOW_COMPLETED", null, null,
+                    "{\"sourceType\":\"agent\",\"resumed\":true}");
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("PARENT_RESUME_EVENT_SERIALIZE_FAILED", exception);
+        }
     }
 
     private void renew(ParentResumeBatchEntity batch) {
