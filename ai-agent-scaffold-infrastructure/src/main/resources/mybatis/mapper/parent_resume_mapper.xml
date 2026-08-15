@@ -171,9 +171,9 @@
           OR (status='RUNNING' AND lease_expires_at &lt; #{now})
           OR (status='WAITING' AND parent_ready=0 AND EXISTS (
             SELECT 1 FROM chat_run run
-            WHERE run.tenant_id=agent_parent_resume_request.tenant_id
-              AND run.user_id=agent_parent_resume_request.user_id
-              AND run.run_id=agent_parent_resume_request.parent_run_id
+            WHERE run.tenant_id COLLATE utf8mb4_unicode_ci=agent_parent_resume_request.tenant_id COLLATE utf8mb4_unicode_ci
+              AND run.user_id COLLATE utf8mb4_unicode_ci=agent_parent_resume_request.user_id COLLATE utf8mb4_unicode_ci
+              AND run.run_id COLLATE utf8mb4_unicode_ci=agent_parent_resume_request.parent_run_id COLLATE utf8mb4_unicode_ci
               AND run.status IN ('completed','failed','cancelled','superseded') AND run.deleted=0
           )))
           AND (recovery_notified_at IS NULL OR recovery_notified_at &lt; #{staleBefore})

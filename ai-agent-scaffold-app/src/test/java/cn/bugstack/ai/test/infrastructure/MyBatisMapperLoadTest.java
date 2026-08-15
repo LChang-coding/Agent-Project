@@ -29,6 +29,8 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue("父 Agent 宕机后的 WAITING 记录必须进入过期恢复扫描",
                 recovery.contains("status='WAITING'") || recovery.contains("status IN ('WAITING'"));
         Assert.assertTrue("恢复扫描只能收口尚未就绪的父侧屏障", recovery.contains("parent_ready=0"));
+        Assert.assertEquals("恢复扫描跨新旧表比较时必须显式统一 collation，避免生产 MySQL 1267",
+                6, recovery.split("COLLATE utf8mb4_unicode_ci", -1).length - 1);
     }
 
     @Test
