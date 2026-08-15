@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -95,6 +96,8 @@ public class IntelligentWorkflowRuntimeServiceTest {
         verify(chatService).completeCompiledWorkflowRun(eq(run), eq("审核通过"), eq("trace_root_1234"), any());
         verify(events).publish(eq("tenant_1"), eq("user_1"), eq("run_1"), eq("trace_root_1234"),
                 eq("WORKFLOW_COMPLETED"), any(), any(), anyString());
+        verify(events, never()).publish(eq("tenant_1"), eq("user_1"), eq("run_1"), eq("trace_root_1234"),
+                eq("FINAL_ANSWER_DELTA"), any(), any(), anyString());
         verify(audit).startNode(any());
         verify(audit).completeNode(any());
         verify(audit).decideRoute(any());

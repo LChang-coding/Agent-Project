@@ -289,8 +289,8 @@ public class IntelligentWorkflowRuntimeService {
                 // 节点成功后收集文本输出和本次真实注入过的 RAG 证据。
                 String output = safe(result.getOutput());
                 if (result.getEvidence() != null) evidence.addAll(result.getEvidence());
-                // 将节点输出保存为事件，浏览器断线后可从上次序号继续读取遗漏内容。
-                if (!output.isEmpty()) publish(run, "NODE_OUTPUT_DELTA", nodeExecutionId, currentNodeId, Map.of("delta", output));
+                // 节点输出已由 ChatService 在模型分片到达时实时写入 NODE_OUTPUT_DELTA；
+                // 这里不再补发整段内容，避免真流式与节点收口各追加一次。
                 // 重新从用量账本汇总 Run 级 Token，不信任模型返回的估算值。
                 long usedTokens = modelUsageService.summarizeSession(run.getTenantId(), run.getUserId(), sessionId,
                         run.getRunId()).getTotalTokens();
@@ -413,8 +413,8 @@ public class IntelligentWorkflowRuntimeService {
             // 跳出循环只表示指针已到 END。收尾前再检查一次取消，
             // 避免“刚到 END 就被取消”时仍错误写入 COMPLETED。
             runControlService.requireExecutable(run.getTenantId(), run.getUserId(), run.getRunId(), null);
-            // 最后一个节点的输出成为工作流最终回答。
-            if (!previousOutput.isEmpty()) publish(run, "FINAL_ANSWER_DELTA", null, null, Map.of("delta", previousOutput));
+            // 直达 END 的末端节点已随模型分片发布 FINAL_ANSWER_DELTA。
+            // 收口只发完整快照做校准，避免再追加一遍整段回答。
             // 保存 assistant 消息并使用累积 evidence 校验回答中的 RAG 引用。
             chatService.completeCompiledWorkflowRun(run, previousOutput, run.getTraceId(), evidence);
             // 先完成最终回答，再发工作流终态，前端 reducer 按此顺序收口。

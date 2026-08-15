@@ -1519,10 +1519,9 @@ public class ChatService implements IChatService {
     }
 
     /**
-     * 执行一次节点模型调用，不需要增量回调的场景用这个重载。
+     * 执行一次节点模型调用，不需要向调度器透出增量回调的场景用这个重载。
      *
-     * <p>把增量回调换成空操作后转交完整实现；用在智能工作流运行时那条路径上，
-     * 那里的进度展示由它自己的调度器负责。</p>
+     * <p>把增量回调换成空操作后转交完整实现；主要用在不需要中间输出的内部调用路径。</p>
      */
     private NodeExecutionResult runDagNodeOnce(WorkflowDagPlanEntity.Node node, String tenantId, String userId,
                                                String sessionId, String workflowId, String prompt, String traceId,
@@ -1612,7 +1611,9 @@ public class ChatService implements IChatService {
             state.put(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY, routeRepairOnly);
         }
         // 第五层：prompt 在这里作为 Content 进入节点 Agent，state 提供可信工作流和运行身份。
-        runner.runAsync(userId, adkSessionId, content, RunConfig.builder().build(),
+        runner.runAsync(userId, adkSessionId, content, RunConfig.builder()
+                        .streamingMode(RunConfig.StreamingMode.SSE)
+                        .build(),
                         state)
                 .blockingForEach(event -> {
                     // 每片到达前复核取消，取消后立即中断本节点。
@@ -1669,11 +1670,33 @@ public class ChatService implements IChatService {
             throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "智能工作流运行不能为空");
         }
         // 复用单节点执行逻辑，身份直接从运行记录里取，保证与权威状态一致。
+        boolean streamFinalAnswer = !routeRepairOnly && streamsDirectlyToEnd(node, plan);
         NodeExecutionResult result = runDagNodeOnce(node, run.getTenantId(), run.getUserId(), sessionId,
                 workflowId, prompt, traceId, roleCode, historyCutoffSequence, upstreamOutput, run,
-                delta -> {}, plan, nodeExecutionId, routeRepairOnly);
+                delta -> {
+                    publishWorkflowEvent(run, "NODE_OUTPUT_DELTA", nodeExecutionId, node.getNodeId(),
+                            Map.of("delta", delta));
+                    if (streamFinalAnswer) {
+                        publishWorkflowEvent(run, "FINAL_ANSWER_DELTA", null, null, Map.of("delta", delta));
+                    }
+                }, plan, nodeExecutionId, routeRepairOnly);
         // 包成对外结果返回：节点输出 + 本次真实注入的证据。
         return WorkflowNodeInvocationResultEntity.builder().output(result.output()).evidence(result.evidence()).build();
+    }
+
+    /**
+     * 只有当前节点无条件结束工作流时，才把它的正文同步映射到会话最终回答。
+     * 多分支节点的输出只展示在节点时间线中，避免路由分析过程混进最终答复。
+     */
+    private boolean streamsDirectlyToEnd(WorkflowDagPlanEntity.Node node, WorkflowDagPlanEntity plan) {
+        if (node == null) return false;
+        if (Boolean.TRUE.equals(node.getTerminal())) return true;
+        if (plan == null || plan.getEdges() == null) return false;
+        List<WorkflowDagPlanEntity.Edge> outgoing = plan.getEdges().stream()
+                .filter(edge -> edge != null && node.getNodeId().equals(edge.getSourceNodeId()))
+                .toList();
+        return !outgoing.isEmpty() && outgoing.stream()
+                .allMatch(edge -> "END".equalsIgnoreCase(edge.getTargetNodeId()));
     }
 
     /** 从当前节点冻结出边生成路由工具描述，只暴露允许模型选择的键和目标摘要。 */
