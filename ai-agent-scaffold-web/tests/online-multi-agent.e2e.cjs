@@ -7,6 +7,7 @@ const { chromium } = require('playwright');
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const username = process.env.E2E_USER || `e2e_agent_${Date.now()}`;
+  const runMarker = Date.now();
   const password = 'E2eAgent!2026';
   const errors = [];
   page.on('pageerror', (error) => errors.push(`pageerror:${error.message}`));
@@ -78,22 +79,25 @@ const { chromium } = require('playwright');
       const button = document.querySelector('.session-item--active .session-delete');
       return button instanceof HTMLButtonElement && !button.disabled;
     }, null, { timeout: 240000 });
-    const activeSession = page.locator('.session-item--active');
-    const activeSessionId = await activeSession.getAttribute('data-session-id');
-    if (!activeSessionId) throw new Error('当前会话缺少稳定识别属性');
-    await page.getByRole('button', { name: '管理' }).click();
-    await activeSession.locator('.session-select').check();
-    page.once('dialog', (dialog) => dialog.accept());
-    await page.locator('.session-batch-bar').getByRole('button', { name: /删除 1/ }).click();
-    await page.waitForFunction((sessionId) => !document.querySelector(`[data-session-id="${sessionId}"]`),
-      activeSessionId, { timeout: 30000 });
+    if (!process.env.E2E_KEEP_SESSION) {
+      const activeSession = page.locator('.session-item--active');
+      const activeSessionId = await activeSession.getAttribute('data-session-id');
+      if (!activeSessionId) throw new Error('当前会话缺少稳定识别属性');
+      await page.getByRole('button', { name: '管理' }).click();
+      await activeSession.locator('.session-select').check();
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.locator('.session-batch-bar').getByRole('button', { name: /删除 1/ }).click();
+      await page.waitForFunction((sessionId) => !document.querySelector(`[data-session-id="${sessionId}"]`),
+        activeSessionId, { timeout: 30000 });
+    }
 
     await page.goto('http://lcodeagent.lcode.top/mcp', { waitUntil: 'domcontentloaded' });
-    await page.locator('input[placeholder="例如：订单查询 MCP"]').fill(`E2E batch ${username}`);
+    const mcpName = `E2E batch ${username} ${runMarker}`;
+    await page.locator('input[placeholder="例如：订单查询 MCP"]').fill(mcpName);
     await page.locator('textarea[placeholder="这个 MCP 提供哪些工具能力"]').fill('批量删除闭环测试资源');
     await page.locator('input[placeholder="https://example.com/mcp"]').fill('http://127.0.0.1:1/mcp');
     await page.getByRole('button', { name: '创建 MCP 草稿' }).click();
-    const createdMcpRow = page.locator('tbody tr').filter({ hasText: `E2E batch ${username}` });
+    const createdMcpRow = page.locator('tbody tr').filter({ hasText: mcpName });
     await createdMcpRow.waitFor({ state: 'visible', timeout: 30000 });
     await createdMcpRow.locator('input[type=checkbox]').check();
     page.once('dialog', (dialog) => dialog.accept());

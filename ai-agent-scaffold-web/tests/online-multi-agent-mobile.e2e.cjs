@@ -22,14 +22,23 @@ const { chromium } = require('playwright');
     await page.waitForURL('**/dashboard', { timeout: 30000 });
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Agent 编排工作台' }).waitFor();
+    await page.locator('.compact-field--wide select').first().selectOption('100003');
+    await page.waitForTimeout(800);
 
-    const multiAgentSession = page.locator('.session-item').filter({ hasText: 'Multi' }).first();
-    if (await multiAgentSession.count()) {
-      await multiAgentSession.locator('.session-open').click();
-      const expand = multiAgentSession.locator('.session-expand');
-      if (await expand.count() && await expand.getAttribute('aria-expanded') === 'false') await expand.click();
-      await page.waitForTimeout(800);
+    let childCount = 0;
+    const sessionCount = await page.locator('.session-item').count();
+    for (let index = 0; index < sessionCount && childCount < 2; index += 1) {
+      const candidate = page.locator('.session-item').nth(index);
+      await candidate.locator('.session-open').click();
+      const expand = candidate.locator('.session-expand');
+      if (await expand.getAttribute('aria-expanded') === 'false') await expand.click();
+      await page.waitForTimeout(500);
+      childCount = await candidate.locator('.session-children button').count();
     }
+    if (childCount < 2) throw new Error('移动端未找到可打开的真实子 Agent 任务');
+    await page.locator('.session-item--active .session-children button').nth(1).click();
+    await page.locator('.task-detail').waitFor({ state: 'visible', timeout: 30000 });
+    await page.getByRole('button', { name: '复制子任务结果' }).waitFor();
 
     const geometry = await page.evaluate(() => ({
       viewport: window.innerWidth,
@@ -41,7 +50,7 @@ const { chromium } = require('playwright');
     }
     if (errors.length) throw new Error(`online errors: ${errors.join(', ')}`);
     await page.screenshot({ path: '/tmp/lcodeagent-mobile.png', fullPage: true });
-    console.log(JSON.stringify({ ok: true, username, geometry, childCount: await page.locator('.session-children button').count(), errors }, null, 2));
+    console.log(JSON.stringify({ ok: true, username, geometry, childCount, errors }, null, 2));
   } finally {
     await browser.close();
   }
