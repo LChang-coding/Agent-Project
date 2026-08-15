@@ -25,7 +25,7 @@ const { chromium } = require('playwright');
 
     const multiAgentSession = page.locator('.session-item').filter({ hasText: 'Multi' }).first();
     if (await multiAgentSession.count()) {
-      await multiAgentSession.locator('.session-main').click();
+      await multiAgentSession.locator('.session-open').click();
       const expand = multiAgentSession.locator('.session-expand');
       if (await expand.count() && await expand.getAttribute('aria-expanded') === 'false') await expand.click();
       await page.waitForTimeout(800);

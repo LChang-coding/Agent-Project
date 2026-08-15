@@ -74,11 +74,18 @@ const { chromium } = require('playwright');
     const restoredChildren = await page.locator('.session-children button').count();
     if (restoredChildren < 3) throw new Error(`刷新后子 Agent 树未恢复: ${restoredChildren}`);
 
+    await page.waitForFunction(() => {
+      const button = document.querySelector('.session-item--active .session-delete');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, null, { timeout: 240000 });
+    const activeSession = page.locator('.session-item--active');
+    const activeSessionTitle = await activeSession.locator('.session-open strong').innerText();
     await page.getByRole('button', { name: '管理' }).click();
-    await page.locator('.session-select').first().check();
+    await activeSession.locator('.session-select').check();
     page.once('dialog', (dialog) => dialog.accept());
     await page.locator('.session-batch-bar').getByRole('button', { name: /删除 1/ }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.session-item').length === 0, null, { timeout: 30000 });
+    await page.waitForFunction((title) => !Array.from(document.querySelectorAll('.session-open strong'))
+      .some((element) => element.textContent?.trim() === title), activeSessionTitle, { timeout: 30000 });
 
     await page.goto('http://lcodeagent.lcode.top/mcp', { waitUntil: 'domcontentloaded' });
     await page.locator('input[placeholder="例如：订单查询 MCP"]').fill(`E2E batch ${username}`);

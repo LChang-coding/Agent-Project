@@ -1,6 +1,8 @@
 package cn.bugstack.ai.test.run;
 
 import cn.bugstack.ai.domain.asset.service.AssetService;
+import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
+import cn.bugstack.ai.domain.agent.service.SessionOrchestrationQueryService;
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
@@ -18,14 +20,17 @@ import cn.bugstack.ai.domain.session.service.SessionDomain;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
@@ -35,6 +40,100 @@ import cn.bugstack.ai.types.exception.AppException;
  * 运行取消领域测试。
  */
 public class RunControlServiceTest {
+
+    @Test
+    public void shouldRecheckWaitAllAfterSessionLockBeforeStartingUserRun() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        SessionOrchestrationQueryService orchestration = mock(SessionOrchestrationQueryService.class);
+        ChatSessionEntity session = ChatSessionEntity.builder().tenantId("tenant-1").userId("user-1")
+                .sessionId("session-1").agentId("agent-1").contextRevision(0L).build();
+        when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", "agent-1"))
+                .thenReturn(session);
+        org.mockito.Mockito.doThrow(new AppException(
+                        "SESSION_ORCHESTRATION_ACTIVE", "当前会话仍在执行 Multi-Agent 任务"))
+                .when(orchestration).assertAcceptsUserMessage("tenant-1", "user-1", "session-1");
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class), null, orchestration);
+
+        try {
+            service.start("tenant-1", "user-1", "session-1", "agent", "agent-1", null, null);
+            fail("WAIT_ALL 建立后普通发送必须在会话锁内被拒绝");
+        } catch (AppException exception) {
+            assertEquals("SESSION_ORCHESTRATION_ACTIVE", exception.getCode());
+        }
+
+        org.mockito.InOrder order = inOrder(sessionDomain, orchestration);
+        order.verify(sessionDomain).lockSessionAccess("tenant-1", "user-1", "session-1", "agent-1");
+        order.verify(orchestration).assertAcceptsUserMessage("tenant-1", "user-1", "session-1");
+        verify(runRepository, never()).insert(any());
+    }
+
+    @Test
+    public void shouldBypassUserMessageGateForStableInternalResumeCreation() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        SessionOrchestrationQueryService orchestration = mock(SessionOrchestrationQueryService.class);
+        ChatSessionEntity session = ChatSessionEntity.builder().tenantId("tenant-1").userId("user-1")
+                .sessionId("session-1").agentId("agent-1").contextRevision(0L).ragEnabled(false).build();
+        when(runRepository.query("tenant-1", "user-1", "run_resume_stable")).thenReturn(null);
+        when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "session-1", "agent-1"))
+                .thenReturn(session);
+        when(runRepository.insert(any())).thenReturn(1);
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class), null, orchestration);
+
+        ChatRunEntity run = service.startOrReuseInternal("tenant-1", "user-1", "session-1",
+                "agent", "agent-1", "run_resume_stable");
+
+        assertEquals("run_resume_stable", run.getRunId());
+        verify(orchestration, never()).assertAcceptsUserMessage(any(), any(), any());
+        verify(runRepository).insert(any());
+    }
+
+    @Test
+    public void shouldRecheckWaitAllAfterParentRunLockBeforeCancelling() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        SessionOrchestrationQueryService orchestration = mock(SessionOrchestrationQueryService.class);
+        ChatRunEntity running = ChatRunEntity.builder().runId("run-1").tenantId("tenant-1")
+                .userId("user-1").sessionId("session-1").status(RunStatus.RUNNING).version(0).build();
+        when(runRepository.query("tenant-1", "user-1", "run-1")).thenReturn(running);
+        when(runRepository.lock("tenant-1", "user-1", "run-1")).thenReturn(running);
+        org.mockito.Mockito.doThrow(new AppException(
+                        "SESSION_ORCHESTRATION_ACTIVE", "当前运行正在等待 Multi-Agent 统一汇总"))
+                .when(orchestration).assertAcceptsRunMutation("tenant-1", "run-1");
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class), null, orchestration);
+
+        try {
+            service.cancel("tenant-1", "user-1", "run-1", "用户取消");
+            fail("WAIT_ALL 建立后取消必须在父运行锁内被拒绝");
+        } catch (AppException exception) {
+            assertEquals("SESSION_ORCHESTRATION_ACTIVE", exception.getCode());
+        }
+
+        org.mockito.InOrder order = inOrder(sessionDomain, runRepository, orchestration);
+        order.verify(sessionDomain).lockSessionAccess("tenant-1", "user-1", "session-1", null);
+        order.verify(runRepository).lock("tenant-1", "user-1", "run-1");
+        order.verify(orchestration).assertAcceptsRunMutation("tenant-1", "run-1");
+        verify(runRepository, never()).transition(any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyInt(), any(), any(), any());
+    }
+
+    @Test
+    public void shouldKeepWaitAllCancelGateInsideTransactionalRunService() {
+        boolean hasTransactionalWaitAllGuard = Arrays.stream(RunControlService.class.getDeclaredFields())
+                .map(java.lang.reflect.Field::getType)
+                .anyMatch(type -> SessionOrchestrationQueryService.class.isAssignableFrom(type)
+                        || IParentResumeRepository.class.isAssignableFrom(type));
+
+        assertTrue("取消与委派必须在 RunControlService 事务内共享 WAIT_ALL 权威闸门，"
+                + "不能只依赖 Controller 的事前检查", hasTransactionalWaitAllGuard);
+    }
 
     @Test
     public void shouldBindAttachmentsInsideUserMessageOperation() {
@@ -78,6 +177,80 @@ public class RunControlServiceTest {
         assertEquals(RunStatus.RUNNING, run.getStatus());
         assertEquals(Long.valueOf(4L), run.getCurrentContextRevision());
         verify(runRepository).insert(argThat(item -> "run_client-1".equals(item.getRunId())));
+    }
+
+    @Test
+    public void shouldReuseStableInternalRunWithoutCreatingAnotherRun() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        ChatRunEntity completed = ChatRunEntity.builder().runId("run_resume_stable")
+                .tenantId("tenant-1").userId("user-1").sessionId("session-1")
+                .sourceType("agent").sourceId("agent-1").status(RunStatus.COMPLETED).build();
+        when(runRepository.query("tenant-1", "user-1", "run_resume_stable")).thenReturn(completed);
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+
+        ChatRunEntity result = service.startOrReuseInternal("tenant-1", "user-1", "session-1",
+                "agent", "agent-1", "run_resume_stable");
+
+        assertEquals(RunStatus.COMPLETED, result.getStatus());
+        verify(runRepository, never()).insert(any());
+        verify(sessionDomain, never()).lockSessionAccess(any(), any(), any(), any());
+    }
+
+    @Test
+    public void shouldMakeFailedStableInternalRunExecutableForResumeRetry() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        ChatRunEntity failed = ChatRunEntity.builder().runId("run_resume_stable")
+                .tenantId("tenant-1").userId("user-1").sessionId("session-1")
+                .sourceType("agent").sourceId("agent-1").status(RunStatus.FAILED).version(2).build();
+        ChatRunEntity running = ChatRunEntity.builder().runId("run_resume_stable")
+                .tenantId("tenant-1").userId("user-1").sessionId("session-1")
+                .sourceType("agent").sourceId("agent-1").status(RunStatus.RUNNING).version(3).build();
+        when(runRepository.query("tenant-1", "user-1", "run_resume_stable"))
+                .thenReturn(failed, running, running);
+        when(runRepository.lock("tenant-1", "user-1", "run_resume_stable")).thenReturn(failed);
+        when(runRepository.transition(eq("tenant-1"), eq("user-1"), eq("run_resume_stable"),
+                eq(RunStatus.FAILED), eq(RunStatus.RUNNING), eq(2), eq(null), eq(null), eq(null)))
+                .thenReturn(1);
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+
+        ChatRunEntity retry = service.startOrReuseInternal("tenant-1", "user-1", "session-1",
+                "agent", "agent-1", "run_resume_stable");
+        ChatRunEntity duplicateDelivery = service.startOrReuseInternal("tenant-1", "user-1", "session-1",
+                "agent", "agent-1", "run_resume_stable");
+
+        assertTrue("恢复模型首次失败后必须重新进入可执行态，不能重放错误消息后 ACK",
+                retry.getStatus().executable());
+        assertEquals("重投必须继续复用同一稳定 run", "run_resume_stable", duplicateDelivery.getRunId());
+        assertEquals(RunStatus.RUNNING, duplicateDelivery.getStatus());
+        verify(runRepository).transition(eq("tenant-1"), eq("user-1"), eq("run_resume_stable"),
+                eq(RunStatus.FAILED), eq(RunStatus.RUNNING), eq(2), eq(null), eq(null), eq(null));
+        verify(runRepository, never()).insert(any());
+    }
+
+    @Test
+    public void shouldRejectStableInternalRunFromAnotherScope() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        ChatRunEntity existing = ChatRunEntity.builder().runId("run_resume_stable")
+                .tenantId("tenant-1").userId("user-1").sessionId("other-session")
+                .sourceType("agent").sourceId("agent-1").status(RunStatus.COMPLETED).build();
+        when(runRepository.query("tenant-1", "user-1", "run_resume_stable")).thenReturn(existing);
+        RunControlService service = new RunControlService(runRepository, mock(SessionDomain.class),
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+
+        try {
+            service.startOrReuseInternal("tenant-1", "user-1", "session-1",
+                    "agent", "agent-1", "run_resume_stable");
+            fail("稳定恢复运行不得跨会话复用");
+        } catch (AppException exception) {
+            assertEquals("RUN_SCOPE_MISMATCH", exception.getCode());
+        }
     }
 
     @Test

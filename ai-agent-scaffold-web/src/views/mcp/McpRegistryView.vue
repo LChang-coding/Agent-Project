@@ -96,14 +96,15 @@
     <div class="table-card">
       <div class="table-toolbar">
         <div class="button-row">
-          <button v-for="scope in scopes" :key="scope.value" :class="['button', { 'button--soft': toolStore.mcpScope === scope.value }]" type="button" @click="toolStore.loadMcps(scope.value)">
+          <button v-for="scope in scopes" :key="scope.value" :class="['button', { 'button--soft': toolStore.mcpScope === scope.value }]" type="button" @click="loadMcps(scope.value)">
             {{ scope.label }}
           </button>
           <button class="button button--danger" type="button" :disabled="selectedMcpIds.size === 0 || batchDeleting" @click="batchDisableMcps">
             {{ batchDeleting ? '删除中…' : `批量删除${selectedMcpIds.size ? ` (${selectedMcpIds.size})` : ''}` }}
           </button>
         </div>
-        <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
+        <span v-if="batchFeedback" :class="['batch-feedback', { 'batch-feedback--error': batchFeedbackFailed }]" role="status" aria-live="polite">{{ batchFeedback }}</span>
+        <span v-else-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
       <div class="resource-table-scroll" tabindex="0" aria-label="MCP 资源列表，可横向滚动">
       <table class="table resource-table">
@@ -122,7 +123,7 @@
         <tbody>
           <tr v-for="mcp in toolStore.mcps" :key="mcp.mcpId">
             <td class="selection-cell" data-label="选择"><input type="checkbox" :checked="selectedMcpIds.has(mcp.mcpId)"
-                :disabled="mcp.status === 'disabled' || batchDeleting" :aria-label="`选择 MCP ${mcp.mcpName}`" @change="toggleMcpSelection(mcp.mcpId)" /></td>
+                :disabled="mcp.status === 'disabled' || mcp.manageable === false || batchDeleting" :aria-label="`选择 MCP ${mcp.mcpName}`" @change="toggleMcpSelection(mcp.mcpId)" /></td>
             <td data-label="名称">
               <strong>{{ mcp.mcpName }}</strong>
               <small>{{ mcp.endpoint || mcp.description || '已配置服务端 stdio 命令' }}</small>
@@ -134,16 +135,16 @@
               <span :class="['badge', testStatusClass(mcp.testStatus)]">{{ testStatusLabel(mcp.testStatus) }}</span>
               <small v-if="mcp.testMessage">{{ mcp.testMessage }}</small>
             </td>
-            <td data-label="状态"><span :class="['badge', statusClass(mcp.status)]">{{ statusLabel(mcp.status) }}</span></td>
+            <td data-label="状态"><span :class="['badge', statusClass(mcp.status)]">{{ statusLabel(mcp.status) }}</span><small v-if="mcp.manageable === false">只读</small></td>
             <td class="resource-actions-cell" data-label="操作">
               <div class="button-row resource-actions">
-                <button class="button" type="button" :disabled="isMcpPending(mcp.mcpId)" @click="runMcpAction('test', mcp.mcpId)">
+                <button class="button" type="button" :disabled="mcp.manageable === false || isMcpPending(mcp.mcpId)" @click="runMcpAction('test', mcp.mcpId)">
                   {{ mcpOperationLabel(mcp.mcpId, 'test', '测试') }}
                 </button>
-                <button class="button" type="button" :disabled="mcp.testStatus !== 'success' || isMcpPending(mcp.mcpId)" @click="runMcpAction('publish', mcp.mcpId, mcp.currentVersion)">
+                <button class="button" type="button" :disabled="mcp.manageable === false || mcp.testStatus !== 'success' || isMcpPending(mcp.mcpId)" @click="runMcpAction('publish', mcp.mcpId, mcp.currentVersion)">
                   {{ mcpOperationLabel(mcp.mcpId, 'publish', '发布') }}
                 </button>
-                <button class="button" type="button" :disabled="isMcpPending(mcp.mcpId)" @click="runMcpAction('disable', mcp.mcpId)">
+                <button class="button" type="button" :disabled="mcp.manageable === false || isMcpPending(mcp.mcpId)" @click="runMcpAction('disable', mcp.mcpId)">
                   {{ mcpOperationLabel(mcp.mcpId, 'disable', '禁用') }}
                 </button>
               </div>
@@ -169,12 +170,16 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
+import { executeBatchOperation } from '@/domain/tool-governance';
 import { useToolStore } from '@/stores/tools';
 
 const toolStore = useToolStore();
 const selectedMcpIds = ref(new Set<string>());
 const batchDeleting = ref(false);
-const selectableMcpIds = computed(() => toolStore.mcps.filter((mcp) => mcp.status !== 'disabled').map((mcp) => mcp.mcpId));
+const batchFeedback = ref('');
+const batchFeedbackFailed = ref(false);
+const selectableMcpIds = computed(() => toolStore.mcps
+  .filter((mcp) => mcp.status !== 'disabled' && mcp.manageable !== false).map((mcp) => mcp.mcpId));
 const allSelectableMcpsSelected = computed(() => selectableMcpIds.value.length > 0
   && selectableMcpIds.value.every((mcpId) => selectedMcpIds.value.has(mcpId)));
 const scopes = [
@@ -198,6 +203,13 @@ const form = reactive({
 onMounted(async () => {
   await Promise.all([toolStore.loadMcps('available'), toolStore.loadCatalog()]);
 });
+
+/** 切换 MCP 查询范围并清理旧列表选中态。 */
+async function loadMcps(scope: string) {
+  selectedMcpIds.value = new Set();
+  batchFeedback.value = '';
+  await toolStore.loadMcps(scope);
+}
 
 /**
  * 创建 MCP；无参数；把当前表单提交为草稿。
@@ -255,13 +267,16 @@ async function batchDisableMcps() {
   const ids = [...selectedMcpIds.value];
   if (!ids.length || !window.confirm(`确定批量删除选中的 ${ids.length} 个 MCP 吗？版本与调用审计会保留。`)) return;
   batchDeleting.value = true;
-  let failed = 0;
-  for (const id of ids) {
-    try { await toolStore.disableMcp(id); } catch { failed += 1; }
+  batchFeedback.value = '';
+  try {
+    const result = await executeBatchOperation(ids, (id) => toolStore.disableMcp(id));
+    selectedMcpIds.value = new Set(result.failedIds);
+    batchFeedback.value = result.message;
+    batchFeedbackFailed.value = result.failedIds.length > 0;
+    toolStore.errorMessage = result.failedIds.length ? result.message : '';
+  } finally {
+    batchDeleting.value = false;
   }
-  selectedMcpIds.value = new Set();
-  batchDeleting.value = false;
-  if (failed) toolStore.errorMessage = `${ids.length - failed} 个 MCP 已删除，${failed} 个处理失败`;
 }
 
 /**
@@ -416,6 +431,8 @@ function testStatusClass(value?: string) {
 .row-feedback--error {
   color: var(--danger);
 }
+.batch-feedback { color: var(--success); font-size: 12px; font-weight: 700; }
+.batch-feedback--error { color: var(--danger); }
 
 @media (max-width: 768px) {
   .two-cols {

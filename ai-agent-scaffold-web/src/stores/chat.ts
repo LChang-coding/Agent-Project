@@ -13,6 +13,7 @@ import { traceIdOfError } from '@/api/http';
 import { queryWorkflowDetail, queryWorkflowNodeOptions, queryWorkflows } from '@/api/workflow';
 import { createWorkflowRunState, reduceWorkflowEvent } from '@/domain/workflow-event-reducer';
 import { workflowHistoryRunTargets } from '@/domain/workflow-history';
+import { mergeAuthoritativeMessages } from '@/domain/chat-orchestration-state';
 import {
   deleteChatSession,
   queryChatSessionMessages,
@@ -316,9 +317,7 @@ export const useChatStore = defineStore('chat', {
         }
         const latestMessages = page.items.map(toChatMessage);
         if (silent) {
-          const latestIds = new Set(latestMessages.map((message) => message.id));
-          const earlierMessages = this.messages.filter((message) => !latestIds.has(message.id));
-          this.messages = [...earlierMessages, ...latestMessages];
+          this.messages = mergeAuthoritativeMessages(this.messages, latestMessages);
         } else {
           this.messages = latestMessages;
         }
@@ -333,6 +332,7 @@ export const useChatStore = defineStore('chat', {
           void this.restoreIntelligentWorkflowHistory(sessionId, this.messages);
         }
       } catch (error) {
+        if (silent) throw error;
         if (!silent && generation === sessionSwitchGeneration && this.sessionId === sessionId) {
           this.errorMessage = error instanceof Error ? error.message : '读取会话消息失败';
         }
@@ -518,6 +518,7 @@ export const useChatStore = defineStore('chat', {
         content: message.trim(),
         createdAt: new Date().toISOString(),
         status: 'done',
+        localOnly: true,
       };
       const assistantMessage: ChatMessage = {
         id: createId(),
@@ -526,6 +527,7 @@ export const useChatStore = defineStore('chat', {
         content: '',
         createdAt: new Date().toISOString(),
         status: this.streaming ? 'streaming' : 'sending',
+        localOnly: true,
       };
 
       this.messages.push(userMessage, assistantMessage);

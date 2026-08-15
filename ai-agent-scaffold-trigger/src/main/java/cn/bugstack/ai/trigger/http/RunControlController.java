@@ -5,6 +5,7 @@ import cn.bugstack.ai.api.dto.RunControlResponseDTO;
 import cn.bugstack.ai.api.dto.SteerRunRequestDTO;
 import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
+import cn.bugstack.ai.domain.agent.service.SessionOrchestrationQueryService;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.workflow.service.IntelligentWorkflowRuntimeService;
 import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
@@ -66,6 +67,7 @@ public class RunControlController {
      * 正在看 SSE 的前端就会一直等。它的作用就是补上这条唯一的取消终态事件，让事件流能正常结束。</p>
      */
     private final WorkflowRunFinalizationService workflowRunFinalizationService;
+    private final SessionOrchestrationQueryService sessionOrchestrationQueryService;
 
     /**
      * 启动时由 Spring 注入三个领域服务：一个改运行状态，两个负责把两种工作流的终态事件补齐。
@@ -76,13 +78,15 @@ public class RunControlController {
      */
     public RunControlController(RunControlService runControlService,
                                 IntelligentWorkflowRuntimeService intelligentWorkflowRuntimeService,
-                                WorkflowRunFinalizationService workflowRunFinalizationService) {
+                                WorkflowRunFinalizationService workflowRunFinalizationService,
+                                SessionOrchestrationQueryService sessionOrchestrationQueryService) {
         // 保存运行控制服务引用，取消和引导都要用它。
         this.runControlService = runControlService;
         // 保存智能工作流运行时服务引用，仅用于取消后的状态收口。
         this.intelligentWorkflowRuntimeService = intelligentWorkflowRuntimeService;
         // 保存普通 DAG 终态服务引用，仅用于取消后补发终态事件。
         this.workflowRunFinalizationService = workflowRunFinalizationService;
+        this.sessionOrchestrationQueryService = sessionOrchestrationQueryService;
     }
 
     /**
@@ -116,6 +120,7 @@ public class RunControlController {
                                                   @RequestBody(required = false) CancelRunRequestDTO request) {
         // 取消要改状态、失效消息、递增上下文版本，任何一步失败都必须转成统一响应，不能把异常抛给前端。
         try {
+            sessionOrchestrationQueryService.assertAcceptsRunMutation(TenantContextHolder.getTenantId(), runId);
             // 身份只取服务端认证上下文，运行归属和可取消状态由领域服务原子校验。
             ChatRunEntity run = runControlService.cancel(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), runId, request == null ? null : request.getReason());
@@ -171,6 +176,7 @@ public class RunControlController {
                                                  @RequestBody SteerRunRequestDTO request) {
         // 引导会失效已有消息并新建运行，属于写操作，异常必须收敛成统一响应。
         try {
+            sessionOrchestrationQueryService.assertAcceptsRunMutation(TenantContextHolder.getTenantId(), runId);
             // 领域服务决定当前运行能否被引导，并负责冻结前驱与建立后继关系。
             ChatRunEntity successor = runControlService.steer(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), runId, request == null ? null : request.getInstruction());

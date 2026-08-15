@@ -48,7 +48,7 @@ ai:
                   2.  **Readability:** Is the code clear and idiomatic for the requested language?
                   3.  **Efficiency:** Is the code reasonably efficient? Any obvious performance bottlenecks?
                   4.  **Edge Cases:** Does the code handle potential edge cases or invalid inputs gracefully?
-                  5.  **Best Practices:** Does the code follow common Java best practices?
+                  5.  **Best Practices:** Does the code follow common best practices for the requested language and ecosystem?
                   
                   **Output:**
                   Provide your feedback as a concise, bulleted list. Focus on the most important points for improvement.

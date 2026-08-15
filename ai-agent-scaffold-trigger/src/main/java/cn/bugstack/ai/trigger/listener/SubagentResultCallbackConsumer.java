@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** 任一子 Agent 完成后，按父运行分区顺序唤醒主 Agent 继续推理。 */
+/** 登记子 Agent 终态结果；只有父子双屏障齐备时才唯一唤醒主 Agent。 */
 @Slf4j
 @Component
 public class SubagentResultCallbackConsumer {

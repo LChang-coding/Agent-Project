@@ -16,6 +16,43 @@ import java.util.Map;
 public class MyBatisMapperLoadTest {
 
     @Test
+    public void shouldSelectExpiredUnreadyWaitAllForCrashRecovery() throws Exception {
+        Configuration configuration = loadMapper("mybatis/mapper/parent_resume_mapper.xml");
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("now", java.time.LocalDateTime.now());
+        parameters.put("staleBefore", java.time.LocalDateTime.now().minusSeconds(30));
+        parameters.put("limit", 100);
+
+        String recovery = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.queryRecoveryCandidates", parameters);
+
+        Assert.assertTrue("父 Agent 宕机后的 WAITING 记录必须进入过期恢复扫描",
+                recovery.contains("status='WAITING'") || recovery.contains("status IN ('WAITING'"));
+        Assert.assertTrue("恢复扫描只能收口尚未就绪的父侧屏障", recovery.contains("parent_ready=0"));
+    }
+
+    @Test
+    public void shouldValidateAndLockParentScopeWhenPreparingWaitAll() throws Exception {
+        Configuration configuration = loadMapper("mybatis/mapper/parent_resume_mapper.xml");
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("tenantId", "tenant_1");
+        parameters.put("userId", "user_1");
+        parameters.put("parentRunId", "parent_run_1");
+        parameters.put("parentSessionId", "session_1");
+        parameters.put("parentAgentId", "agent_1");
+        parameters.put("traceId", "trace_1");
+        parameters.put("nextAttemptAt", java.time.LocalDateTime.now());
+
+        String prepare = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.insertWaitOnce", parameters);
+
+        Assert.assertTrue("委派与删除必须通过同一父会话权威行串行化",
+                prepare.contains("chat_session"));
+        Assert.assertTrue("建立 WAIT_ALL 前必须在数据库内复核父运行仍可执行",
+                prepare.contains("chat_run"));
+    }
+
+    @Test
     public void shouldLoadSplitMapperXml() throws Exception {
         SqlSessionFactory sqlSessionFactory;
         try (Reader reader = Resources.getResourceAsReader("mybatis/config/mybatis-config.xml")) {
@@ -181,23 +218,74 @@ public class MyBatisMapperLoadTest {
         Assert.assertTrue(callbacks.contains("callback_claimed_at < ?"));
 
         parameters.put("parentRunId", "parent_run_1"); parameters.put("approvalId", "approval_1");
+        parameters.put("userId", "user_1"); parameters.put("parentSessionId", "session_1");
+        parameters.put("parentAgentId", "agent_1"); parameters.put("traceId", "trace_1");
+        parameters.put("nextAttemptAt", java.time.LocalDateTime.now());
+        String prepareWait = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.prepareWait", parameters);
+        Assert.assertTrue(prepareWait.contains("'WAITING',0,NULL,0"));
+        Assert.assertTrue(prepareWait.contains("ON DUPLICATE KEY UPDATE"));
+        Assert.assertFalse(prepareWait.contains("requested_version=requested_version+1"));
+
+        parameters.put("parentDraft", "parent draft");
+        String parentReady = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.markParentReady", parameters);
+        Assert.assertTrue(parentReady.contains("parent_ready=1"));
+        Assert.assertTrue(parentReady.contains("status='WAITING'"));
+
+        String waitAll = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.activateIfReady", parameters);
+        Assert.assertTrue(waitAll.contains("parent_ready=1"));
+        Assert.assertTrue(waitAll.contains("NOT EXISTS"));
+        Assert.assertTrue(waitAll.contains("task.status NOT IN ('SUCCEEDED','FAILED','CANCELLED')"));
+        Assert.assertTrue(waitAll.contains("task.status<>'CANCELLED'"));
+        Assert.assertTrue(waitAll.contains("task.callback_status NOT IN"));
+        Assert.assertTrue(waitAll.contains("'REGISTERED'"));
+        Assert.assertTrue(waitAll.contains("'DEAD'"));
+
         String resumeClaim = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.claim", parameters);
         Assert.assertTrue(resumeClaim.contains("tenant_id=?"));
         Assert.assertTrue(resumeClaim.contains("fencing_token=fencing_token+1"));
         Assert.assertTrue(resumeClaim.contains("lease_expires_at < ?"));
 
+        String allResults = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.queryAllTerminalResults", parameters);
+        Assert.assertTrue(allResults.contains("FROM agent_subagent_task task"));
+        Assert.assertTrue(allResults.contains("LEFT JOIN agent_parent_inbox inbox"));
+        Assert.assertTrue(allResults.contains("task.status IN ('SUCCEEDED','FAILED','CANCELLED')"));
+        Assert.assertFalse(allResults.contains("inbox_cursor"));
+        Assert.assertFalse(allResults.contains("LIMIT"));
+
+        parameters.put("taskIds", java.util.List.of("task_1"));
+        String finishDelivery = sql(configuration,
+                "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.finishTaskDelivery", parameters);
+        Assert.assertTrue(finishDelivery.contains("status IN"));
+        Assert.assertTrue(finishDelivery.contains("'CANCELLED'"));
+        Assert.assertTrue(finishDelivery.contains("callback_status IN ('REGISTERED','DEAD')"));
+
         parameters.put("requestedVersion", 2L); parameters.put("cursor", 20L);
         parameters.put("deliveredAt", java.time.LocalDateTime.now());
         String resumeComplete = sql(configuration,
                 "cn.bugstack.ai.infrastructure.dao.IParentResumeDao.completeRequest", parameters);
-        Assert.assertTrue(resumeComplete.contains("pending.id > ?"));
-        Assert.assertTrue(resumeComplete.contains("'COMPLETED','PENDING'"));
+        Assert.assertTrue(resumeComplete.contains("status='COMPLETED'"));
+        Assert.assertFalse(resumeComplete.contains("'PENDING'"));
+        Assert.assertFalse(resumeComplete.contains("agent_parent_inbox pending"));
 
-        parameters.put("userId", "user_1");
         String approvalQuery = sql(configuration, "cn.bugstack.ai.infrastructure.dao.IToolApprovalDao.query", parameters);
         Assert.assertTrue(approvalQuery.contains("tenant_id=?"));
         Assert.assertTrue(approvalQuery.contains("user_id=?"));
         Assert.assertTrue(approvalQuery.contains("approval_id=?"));
+    }
+
+    private Configuration loadMapper(String mapperResource) throws Exception {
+        SqlSessionFactory sqlSessionFactory;
+        try (Reader reader = Resources.getResourceAsReader("mybatis/config/mybatis-config.xml")) {
+            sqlSessionFactory = new SqlSessionFactoryBuilder().build(reader);
+        }
+        Configuration configuration = sqlSessionFactory.getConfiguration();
+        new XMLMapperBuilder(Resources.getResourceAsStream(mapperResource), configuration,
+                mapperResource, configuration.getSqlFragments()).parse();
+        return configuration;
     }
 
     private void assertRagTenantAndClaimScopes(Configuration configuration) {

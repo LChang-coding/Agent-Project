@@ -74,6 +74,8 @@ public final class ToolRuntimeContextKeys {
     public static final String ALLOWED_SUB_AGENT_IDS = "allowedSubAgentIds";
     /** 一次多 Agent 编排最初的主运行编号；内部回调续跑时保持不变。 */
     public static final String ORCHESTRATION_ROOT_RUN_ID = "orchestrationRootRunId";
+    /** 主 Agent 是否处于 WAIT_ALL 后的唯一汇总阶段。 */
+    public static final String ORCHESTRATION_SUMMARY_ONLY = "orchestrationSummaryOnly";
 
     /** 私有构造：纯常量类，不允许实例化，避免被误注入或误当作上下文对象使用。 */
     private ToolRuntimeContextKeys() {

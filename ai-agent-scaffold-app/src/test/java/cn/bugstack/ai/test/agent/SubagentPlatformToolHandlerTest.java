@@ -110,6 +110,27 @@ public class SubagentPlatformToolHandlerTest {
         Mockito.verifyNoInteractions(service);
     }
 
+    @Test
+    public void shouldCodeGateCreateAndCancelDuringSummaryOnlyResume() {
+        SubagentOrchestrationService orchestration = Mockito.mock(SubagentOrchestrationService.class);
+        PlatformToolRegistry registry = new PlatformToolRegistry();
+        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration);
+        ToolInvokeContextEntity context = context();
+        context.setFunctionCallId("call-1");
+        context.setOrchestrationSummaryOnly(true);
+
+        PlatformToolResult create = registry.dispatch(tool("create_subagent_instances"), Map.of("tasks",
+                List.of(Map.of("agentId", "child-1", "instruction", "research"))), context);
+        PlatformToolResult cancel = registry.dispatch(tool("cancel_subagent_instances"),
+                Map.of("taskIds", List.of("task-1")), context);
+
+        Assert.assertFalse(create.success());
+        Assert.assertEquals("SUBAGENT_SUMMARY_ONLY", create.error());
+        Assert.assertFalse(cancel.success());
+        Assert.assertEquals("SUBAGENT_SUMMARY_ONLY", cancel.error());
+        Mockito.verifyNoInteractions(orchestration);
+    }
+
     private SubagentTaskEntity resultTask() {
         return SubagentTaskEntity.builder().taskId("task-1").childAgentId("child-1")
                 .status(SubagentTaskStatus.SUCCEEDED).resultText("legacy result")

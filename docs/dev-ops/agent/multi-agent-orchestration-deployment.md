@@ -21,7 +21,7 @@
 | `agent.subagent.task.v1` | `taskId` | 任务与 Outbox 同事务落库 | Worker 回查任务、领取 Lease、执行子 Agent |
 | `agent.subagent.result.v1` | `parentRunId` | fencing CAS 写入任务终态 | 结果消费者登记 Parent Inbox 和 Resume Request |
 | `agent.subagent.cleanup.v1` | `parentRunId` | 摘要被主 Agent 接收并提交业务 ACK，或任务取消 | 删除 Redis 临时实例与 Inbox 索引 |
-| `agent.parent.resume.v1` | `parentRunId` | 结果登记与 Resume Request 同事务落库 | Resume Worker 单飞领取摘要批次并续跑主 Agent |
+| `agent.parent.resume.v1` | `parentRunId` | 父侧就绪且全部子任务终态后，由数据库 CAS 只激活一次 | Resume Worker 单飞读取完整终态结果并续跑主 Agent |
 
 消息统一带 `schemaVersion=1` 和租户、聚合标识；子任务事件使用 `taskId/parentRunId`，可选 `traceId`。Topic 禁止自动创建；生产环境建议副本数 3、`min.insync.replicas=2`、生产者 `acks=all`。结果回调还需要预建 `${result-topic}-retry-0` 和 `${result-topic}-dlt`；`-retry-0` 来自 Spring Kafka `@RetryableTopic` 默认的索引后缀策略。因此共四个业务 Topic、两个回调重试 Topic。工具审批不经 Kafka。
 
@@ -33,11 +33,13 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 
 ## 主 Agent 等待、结果与回调
 
-主 Agent 调用 `create_subagent_instances` 后不占用 HTTP 线程或 Java 线程等待。任一 `SUBAGENT_RESULT_READY` 到达时，结果消费者只登记 MySQL Parent Inbox 和 Resume Request，不直接调用模型。独立 Resume Worker 按 `tenantId + parentRunId` 领取单飞 Lease，按游标每批最多读取 20 条摘要，成功续跑后才推进游标、写业务 ACK 和清理 Outbox；若仍有未消费摘要，会继续产生下一次恢复事件。Redis Inbox 只是可丢失索引，恢复扫描以 MySQL 为准补发唤醒。
+主 Agent 调用 `create_subagent_instances` 后仍可完成自己的分析以及 MCP、Skill、RAG 调用；当前轮结束时保存隐藏草稿并打开父侧屏障，不占用 HTTP 线程或 Java 线程等待。每个 `SUBAGENT_RESULT_READY` 到达时，结果消费者只登记 MySQL Parent Inbox 和任务回调状态，不直接调用模型。只有父侧已就绪、至少存在一个子任务、且全部子任务都进入终态并完成回调登记后，数据库 CAS 才会把 Resume Request 从 `WAITING` 激活为 `PENDING` 并产生唯一恢复事件。
+
+独立 Resume Worker 按 `tenantId + parentRunId` 领取单飞 Lease，一次读取该父运行的全部终态结果和主 Agent 草稿，以稳定的恢复 Run ID 续跑主 Agent。最终回答落库后才统一写业务 ACK、推进恢复请求为 `COMPLETED` 并清理 Outbox。重复或乱序回调只会重复触发条件检查，不会形成阶段性回答。Redis Inbox 只是可丢失索引，恢复扫描以 MySQL 为准补发唤醒。
 
 子 Agent 结果采用“两级载荷”：最多 1000 字符的 `resultSummary` 自动进入 Parent Inbox；`fullContext` 留在 MySQL。主 Agent 只有判断确有必要时，才调用 `read_subagent_full_context` 获取完整上下文，减少 Kafka 载荷和模型上下文占用。`read_subagent_result` 与完整上下文工具均只读，不提前确认交付。
 
-回调采用 at-least-once 语义：若进程在主 Agent 模型调用已完成、数据库游标提交前崩溃，过期 Resume Lease 会允许重试。任务创建依赖 `functionCallId` 幂等，但跨模型调用与数据库事务不宣称 exactly-once；上线时必须观察重复续跑率。
+回调采用 at-least-once 语义：若进程在主 Agent 模型调用已完成、数据库收口提交前崩溃，过期 Resume Lease 会允许重试。稳定恢复 Run ID 与消息终态 CAS 保证最终回答只落库和展示一次，但租约接管仍可能重复调用模型、重复消耗 Token；跨模型调用与数据库事务不宣称 exactly-once，上线时必须观察重复执行率。
 
 这里有三类不同的确认语义：Kafka consumer ACK/offset commit 只表示消息已消费；Kafka producer `acks=all` 只表示 ISR 已确认写入；任务 `ACKED` 表示摘要已被主 Agent 成功接收并提交游标。三者不可混称。
 
@@ -59,7 +61,7 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 
 ## 上线步骤
 
-1. 评审并通过变更平台执行 `2026-08-12-agent-orchestration.sql`，保留回滚 SQL。
+1. 停止旧服务并完成数据库备份后，评审并执行 `2026-08-12-agent-orchestration.sql`。本次普通发布或应用回滚禁止执行会删除六张表的 `2026-08-12-agent-orchestration-rollback.sql`。
 2. 执行只读 `2026-08-12-agent-orchestration-verify.sql`，确认 6 张表、关键列和唯一索引全部为 `OK`。
 3. 先以默认 dry-run 执行 `docs/dev-ops/kafka/bootstrap-agent-orchestration-topics.sh`，复核分区和副本数后设置 `APPLY=true`，幂等创建四个业务 Topic 与结果 retry/DLT，并按环境配置 ACL。
 4. 确认 Redis TTL 与内存水位告警；Redis 不存永久任务事实。
@@ -79,7 +81,7 @@ Worker 只有成功把任务从 `READY`（或 Lease 已过期的 `RUNNING`）原
 - Outbox 扫描实例全部宕机：积压保留在 MySQL，实例恢复后继续扫描。
 - SSE 断线或 Token 过期：前端刷新 Token 后按 `afterSequence` 重连，审批决定仍以 MySQL 为准。
 - 审批超时：即使用户页面关闭，等待线程或超时扫描器也会用 CAS 落默认决定，等待线程随后继续或返回失败。
-- 同一父运行超过一个摘要批次：每批推进游标后自动续发恢复事件，不丢弃后续 Inbox 项。
+- 同一父运行的回调乱序、重复或包含失败/取消：全部任务终态后只激活一次恢复，主 Agent 同时获得完整结果集合。
 
 ## 本地验证与未验证项
 

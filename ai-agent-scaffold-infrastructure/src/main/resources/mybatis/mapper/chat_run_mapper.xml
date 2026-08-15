@@ -89,10 +89,10 @@
     <!-- 状态迁移必须命中预期 version；影响行数为 0 表示并发状态已经变化。 -->
     <update id="transition">
         UPDATE chat_run SET status = #{targetStatus}, version = version + 1,
-            terminal_reason = COALESCE(#{reason}, terminal_reason),
+            terminal_reason = CASE WHEN #{targetStatus} = 'running' THEN NULL ELSE COALESCE(#{reason}, terminal_reason) END,
             cancel_requested_at = COALESCE(#{cancelRequestedAt}, cancel_requested_at),
             started_at = CASE WHEN #{targetStatus} = 'running' THEN COALESCE(started_at, CURRENT_TIMESTAMP(3)) ELSE started_at END,
-            finished_at = COALESCE(#{finishedAt}, finished_at)
+            finished_at = CASE WHEN #{targetStatus} = 'running' THEN NULL ELSE COALESCE(#{finishedAt}, finished_at) END
         WHERE user_id = #{userId} AND run_id = #{runId} AND status = #{expectedStatus}
           AND version = #{expectedVersion} AND deleted = 0
         <choose><when test="tenantId == null or tenantId == ''">AND (tenant_id IS NULL OR tenant_id = '')</when><otherwise>AND tenant_id = #{tenantId}</otherwise></choose>

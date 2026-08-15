@@ -102,6 +102,8 @@ public class AgentToolPermissionService {
     private List<ToolDescriptor> configurableTools(String tenantId, String userId, String agentId) {
         List<ToolDescriptor> result = new ArrayList<>();
         result.add(new ToolDescriptor("rag_retrieve", "RAG 检索", ToolType.PLATFORM, "检索当前运行已绑定的知识库"));
+        result.add(new ToolDescriptor("select_workflow_route", "智能路由选择", ToolType.PLATFORM,
+                "从当前节点的合法出边中选择后续路径"));
         result.add(new ToolDescriptor("query_trace_logs", "Trace 日志查询", ToolType.PLATFORM, "查询并分析当前运行链路日志"));
         List<AgentConfigStatusEntity> agents = availabilityService.queryConfigs(tenantId, true);
         AgentConfigStatusEntity agent = (agents == null ? List.<AgentConfigStatusEntity>of() : agents).stream()

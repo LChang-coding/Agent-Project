@@ -17,13 +17,19 @@ public class ParentResumeBatchEntity {
     private String traceId;
     private Long requestedVersion;
     private Long fencingToken;
+    private String parentDraft;
     private List<InboxItem> items;
 
     public long lastSequence() {
-        return items == null || items.isEmpty() ? 0L : items.get(items.size() - 1).sequence();
+        return items == null ? 0L : items.stream().mapToLong(InboxItem::sequence).max().orElse(0L);
     }
 
     /** 按数据库自增序列有序合并的一条子 Agent 摘要。 */
     public record InboxItem(long sequence, String taskId, String childAgentId,
-                            String summary, String taskStatus) { }
+                            String summary, String taskStatus, String callbackStatus) {
+        public InboxItem(long sequence, String taskId, String childAgentId,
+                         String summary, String taskStatus) {
+            this(sequence, taskId, childAgentId, summary, taskStatus, null);
+        }
+    }
 }

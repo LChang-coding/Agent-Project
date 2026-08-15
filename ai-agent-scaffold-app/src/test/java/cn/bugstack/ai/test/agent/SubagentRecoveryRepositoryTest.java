@@ -1,5 +1,6 @@
 package cn.bugstack.ai.test.agent;
 
+import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
 import cn.bugstack.ai.infrastructure.adapter.repository.SubagentTaskRepository;
@@ -23,11 +24,15 @@ public class SubagentRecoveryRepositoryTest {
         ISubagentTaskDao dao = Mockito.mock(ISubagentTaskDao.class);
         Mockito.when(dao.insertTask(Mockito.any())).thenReturn(1);
         Mockito.when(dao.insertOutbox(Mockito.any())).thenReturn(1);
-        SubagentTaskRepository repository = new SubagentTaskRepository(dao, new ObjectMapper());
+        IParentResumeRepository parentResumeRepository = Mockito.mock(IParentResumeRepository.class);
+        Mockito.when(parentResumeRepository.tryPrepareWait(Mockito.any(), Mockito.any(LocalDateTime.class)))
+                .thenReturn(true);
+        SubagentTaskRepository repository = new SubagentTaskRepository(dao, new ObjectMapper(), parentResumeRepository);
         SubagentTaskEntity task = task();
 
         repository.createBatchAndEnqueue(List.of(task));
 
+        Mockito.verify(parentResumeRepository).tryPrepareWait(Mockito.same(task), Mockito.any(LocalDateTime.class));
         ArgumentCaptor<AgentOrchestrationOutboxPO> outbox = ArgumentCaptor.forClass(AgentOrchestrationOutboxPO.class);
         Mockito.verify(dao).insertOutbox(outbox.capture());
         Assert.assertEquals("task-1", outbox.getValue().getPartitionKey());
@@ -46,6 +51,37 @@ public class SubagentRecoveryRepositoryTest {
 
         Assert.assertEquals(2, repository.recoverExpired(LocalDateTime.now(), Duration.ofMinutes(5), 100));
         Mockito.verify(dao, Mockito.times(3)).insertOutbox(Mockito.any());
+    }
+
+    @Test
+    public void shouldTryWaitAllActivationAfterCancellationWithoutAResultCallback() {
+        ISubagentTaskDao dao = Mockito.mock(ISubagentTaskDao.class);
+        IParentResumeRepository parentResumeRepository = Mockito.mock(IParentResumeRepository.class);
+        SubagentTaskRepository repository = new SubagentTaskRepository(dao, new ObjectMapper(), parentResumeRepository);
+        LocalDateTime cancelledAt = LocalDateTime.now();
+        Mockito.when(dao.cancel("tenant-1", "parent-1", List.of("task-1"), cancelledAt)).thenReturn(1);
+
+        Assert.assertEquals(1, repository.cancel("tenant-1", "parent-1", List.of("task-1"), cancelledAt));
+
+        Mockito.verify(parentResumeRepository).tryActivate("tenant-1", "parent-1", cancelledAt);
+    }
+
+    @Test
+    public void shouldTreatExhaustedCallbackAsDeadAndReleaseWaitAll() {
+        ISubagentTaskDao dao = Mockito.mock(ISubagentTaskDao.class);
+        IParentResumeRepository parentResumeRepository = Mockito.mock(IParentResumeRepository.class);
+        SubagentTaskRepository repository = new SubagentTaskRepository(dao, new ObjectMapper(), parentResumeRepository);
+        Mockito.when(dao.prepareCallbackReplay("tenant-1", "parent-1", "task-1")).thenReturn(0);
+        Mockito.when(dao.markCallbackDead("tenant-1", "parent-1", "task-1")).thenReturn(1);
+        Mockito.when(dao.insertOutbox(Mockito.any())).thenReturn(1);
+
+        Assert.assertFalse(repository.requeueCallback("tenant-1", "parent-1", "task-1"));
+
+        ArgumentCaptor<AgentOrchestrationOutboxPO> cleanup = ArgumentCaptor.forClass(AgentOrchestrationOutboxPO.class);
+        Mockito.verify(dao).insertOutbox(cleanup.capture());
+        Assert.assertEquals("SUBAGENT_INSTANCE_CLEANUP", cleanup.getValue().getEventType());
+        Mockito.verify(parentResumeRepository).tryActivate(
+                Mockito.eq("tenant-1"), Mockito.eq("parent-1"), Mockito.any(LocalDateTime.class));
     }
 
     private SubagentTaskEntity task() {

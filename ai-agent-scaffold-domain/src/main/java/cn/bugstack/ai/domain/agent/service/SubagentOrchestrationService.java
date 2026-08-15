@@ -3,8 +3,10 @@ package cn.bugstack.ai.domain.agent.service;
 import cn.bugstack.ai.domain.agent.adapter.repository.ISubagentTaskRepository;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
+import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -20,20 +22,30 @@ public class SubagentOrchestrationService {
     private static final int MAX_TASKS = 20;
     private final ISubagentTaskRepository repository;
     private final AgentAvailabilityService availabilityService;
+    private final RunControlService runControlService;
 
     public SubagentOrchestrationService(ISubagentTaskRepository repository,
-                                        AgentAvailabilityService availabilityService) {
+                                        AgentAvailabilityService availabilityService,
+                                        RunControlService runControlService) {
         this.repository = repository;
         this.availabilityService = availabilityService;
+        this.runControlService = runControlService;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public List<SubagentTaskEntity> delegate(TrustedSupervisor supervisor, String functionCallId,
                                              List<TaskRequest> requests) {
         validateSupervisor(supervisor);
         if (functionCallId == null || functionCallId.isBlank()) throw error("SUBAGENT_FUNCTION_CALL_REQUIRED");
+        // 锁必须早于幂等查询，否则取消/删除可能在查询和建批之间穿过。
+        runControlService.lockParentForDelegation(supervisor.tenantId, supervisor.userId,
+                supervisor.parentSessionId, supervisor.parentRunId, supervisor.parentAgentId);
         List<SubagentTaskEntity> replay = repository.queryByFunctionCall(supervisor.tenantId,
                 supervisor.parentRunId, functionCallId);
         if (replay != null && !replay.isEmpty()) return replay;
+        if (!repository.queryByIds(supervisor.tenantId, supervisor.parentRunId, List.of()).isEmpty()) {
+            throw error("SUBAGENT_BATCH_ALREADY_CREATED");
+        }
         if (requests == null || requests.isEmpty() || requests.size() > MAX_TASKS) {
             throw error("SUBAGENT_TASK_COUNT_INVALID");
         }

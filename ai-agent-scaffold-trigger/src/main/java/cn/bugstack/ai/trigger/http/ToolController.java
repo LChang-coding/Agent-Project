@@ -355,6 +355,7 @@ public class ToolController implements IToolApiService {
         responseDTO.setCurrentVersion(entity.getCurrentVersion());
         responseDTO.setPublishedVersion(entity.getPublishedVersion());
         responseDTO.setStatus(entity.getStatus());
+        responseDTO.setManageable(manageable(entity.getOwnerUserId(), entity.getVisibility()));
         return responseDTO;
     }
 
@@ -375,7 +376,17 @@ public class ToolController implements IToolApiService {
         responseDTO.setTestMessage(entity.getTestMessage());
         responseDTO.setLastTestTime(entity.getLastTestTime());
         responseDTO.setStatus(entity.getStatus());
+        responseDTO.setManageable(manageable(entity.getOwnerUserId(), entity.getVisibility()));
         return responseDTO;
+    }
+
+    /** 返回当前身份对工具定义的管理权，规则与领域层写操作保持一致。 */
+    private boolean manageable(String ownerUserId, String visibility) {
+        String roleCode = TenantContextHolder.getRoleCode();
+        boolean administrator = "owner".equalsIgnoreCase(roleCode) || "admin".equalsIgnoreCase(roleCode);
+        boolean owner = ownerUserId != null && ownerUserId.equals(TenantContextHolder.getUserId());
+        boolean tenantPublic = "tenant_public".equalsIgnoreCase(visibility);
+        return administrator || (owner && !tenantPublic);
     }
 
     /**

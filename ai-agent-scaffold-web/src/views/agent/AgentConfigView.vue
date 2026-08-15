@@ -161,12 +161,14 @@ async function batchRemoveAgents() {
   const targets = agentStore.agents.filter((agent) => selectedAgentIds.value.has(agent.agentId) && agent.manageable);
   if (!targets.length || !window.confirm(`确定批量删除选中的 ${targets.length} 个 Agent 吗？该操作等同于在当前作用域禁用。`)) return;
   batchDeleting.value = true;
-  let failed = 0;
-  for (const agent of targets) if (!(await agentStore.remove(agent))) failed += 1;
-  selectedAgentIds.value = new Set();
+  const failedIds: string[] = [];
+  for (const agent of targets) if (!(await agentStore.remove(agent))) failedIds.push(agent.agentId);
+  selectedAgentIds.value = new Set(failedIds);
   batchDeleting.value = false;
   await refreshRuntimeAgents();
-  if (failed) agentStore.errorMessage = `${targets.length - failed} 个 Agent 已删除，${failed} 个处理失败，请刷新后重试`;
+  if (failedIds.length) {
+    agentStore.errorMessage = `${targets.length - failedIds.length} 个 Agent 已删除，${failedIds.length} 个处理失败；已保留失败项便于重试`;
+  }
 }
 
 /**

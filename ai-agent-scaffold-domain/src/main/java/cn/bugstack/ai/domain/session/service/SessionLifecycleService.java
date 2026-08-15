@@ -1,5 +1,6 @@
 package cn.bugstack.ai.domain.session.service;
 
+import cn.bugstack.ai.domain.agent.service.SessionOrchestrationQueryService;
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
@@ -30,17 +31,21 @@ public class SessionLifecycleService {
     private final ContextInvalidationService contextInvalidationService;
     /** 撤销该会话已经创建的分享授权。 */
     private final ISessionShareRepository shareRepository;
+    /** WAIT_ALL 活跃期间阻止删除父会话。 */
+    private final SessionOrchestrationQueryService orchestrationQueryService;
 
     /**
      * 创建会话生命周期服务。
      */
     public SessionLifecycleService(SessionDomain sessionDomain, RunControlService runControlService,
                                    ContextInvalidationService contextInvalidationService,
-                                   ISessionShareRepository shareRepository) {
+                                   ISessionShareRepository shareRepository,
+                                   SessionOrchestrationQueryService orchestrationQueryService) {
         this.sessionDomain = sessionDomain;
         this.runControlService = runControlService;
         this.contextInvalidationService = contextInvalidationService;
         this.shareRepository = shareRepository;
+        this.orchestrationQueryService = orchestrationQueryService;
     }
 
     /**
@@ -48,8 +53,12 @@ public class SessionLifecycleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public long delete(String tenantId, String userId, String sessionId) {
+        orchestrationQueryService.assertAcceptsSessionMutation(tenantId, userId, sessionId);
         // 固定锁序先锁会话，阻止删除期间创建新运行或追加消息。
         ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, null);
+        // 必须在取得会话锁后再查一次，封住事前检查与加锁之间新建 WAIT_ALL 的窗口。
+        orchestrationQueryService.assertAcceptsSessionMutation(
+                session.getTenantId(), session.getUserId(), session.getSessionId());
         List<ChatRunEntity> runs = runControlService.queryExecutableBySession(session.getTenantId(),
                 session.getUserId(), session.getSessionId());
         for (ChatRunEntity run : runs) {

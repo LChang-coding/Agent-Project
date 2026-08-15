@@ -7,9 +7,13 @@ import cn.bugstack.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.bugstack.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.bugstack.ai.domain.agent.service.AgentAvailabilityService;
 import cn.bugstack.ai.domain.agent.service.SubagentOrchestrationService;
+import cn.bugstack.ai.domain.run.model.ChatRunEntity;
+import cn.bugstack.ai.domain.run.model.RunStatus;
+import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.InOrder;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 
@@ -25,8 +29,8 @@ public class SubagentOrchestrationServiceTest {
         Mockito.when(overrides.query("tenant", "research")).thenReturn(null);
         Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-1")).thenReturn(List.of());
         Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList())).thenAnswer(value -> value.<List<?>>getArgument(0).size());
-        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
-                new AgentAvailabilityService(overrides, properties()));
+        SubagentOrchestrationService service = service(tasks,
+                new AgentAvailabilityService(overrides, properties()), Mockito.mock(RunControlService.class));
 
         List<SubagentTaskEntity> created = service.delegate(supervisor(), "call-1",
                 List.of(new SubagentOrchestrationService.TaskRequest("research", "调研方案")));
@@ -47,8 +51,7 @@ public class SubagentOrchestrationServiceTest {
         ISubagentTaskRepository tasks = Mockito.mock(ISubagentTaskRepository.class);
         Mockito.when(tasks.queryByFunctionCall(ArgumentMatchers.anyString(), ArgumentMatchers.anyString(),
                 ArgumentMatchers.anyString())).thenReturn(List.of());
-        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
-                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()));
+        SubagentOrchestrationService service = service(tasks);
         try {
             service.delegate(supervisor(), "call-2",
                     List.of(new SubagentOrchestrationService.TaskRequest("planning", "越权")));
@@ -64,8 +67,7 @@ public class SubagentOrchestrationServiceTest {
         Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-stable")).thenReturn(List.of());
         Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList()))
                 .thenAnswer(value -> value.<List<?>>getArgument(0).size());
-        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
-                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()));
+        SubagentOrchestrationService service = service(tasks);
 
         List<SubagentTaskEntity> first = service.delegate(supervisor(), "call-stable",
                 List.of(new SubagentOrchestrationService.TaskRequest("research", "same request")));
@@ -84,14 +86,51 @@ public class SubagentOrchestrationServiceTest {
         Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-race"))
                 .thenReturn(List.of(), List.of(winner));
         Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList())).thenReturn(0);
-        SubagentOrchestrationService service = new SubagentOrchestrationService(tasks,
-                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()));
+        SubagentOrchestrationService service = service(tasks);
 
         List<SubagentTaskEntity> replay = service.delegate(supervisor(), "call-race",
                 List.of(new SubagentOrchestrationService.TaskRequest("research", "race request")));
 
         Assert.assertEquals(List.of(winner), replay);
         Mockito.verify(tasks, Mockito.times(2)).queryByFunctionCall("tenant", "root-run", "call-race");
+    }
+
+    @Test
+    public void shouldLockParentScopeBeforeCheckingReplayAndCreatingDelegationBatch() {
+        ISubagentTaskRepository tasks = Mockito.mock(ISubagentTaskRepository.class);
+        RunControlService runControlService = Mockito.mock(RunControlService.class);
+        Mockito.when(runControlService.lockParentForDelegation(
+                        "tenant", "user", "session", "root-run", "supervisor"))
+                .thenReturn(ChatRunEntity.builder().tenantId("tenant").userId("user")
+                        .sessionId("session").runId("root-run").sourceId("supervisor")
+                        .status(RunStatus.RUNNING).build());
+        Mockito.when(tasks.queryByFunctionCall("tenant", "root-run", "call-locked"))
+                .thenReturn(List.of());
+        Mockito.when(tasks.createBatchAndEnqueue(ArgumentMatchers.anyList())).thenReturn(1);
+        SubagentOrchestrationService service = service(tasks,
+                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()),
+                runControlService);
+
+        service.delegate(supervisor(), "call-locked",
+                List.of(new SubagentOrchestrationService.TaskRequest("research", "locked request")));
+
+        InOrder order = Mockito.inOrder(runControlService, tasks);
+        order.verify(runControlService).lockParentForDelegation(
+                "tenant", "user", "session", "root-run", "supervisor");
+        order.verify(tasks).queryByFunctionCall("tenant", "root-run", "call-locked");
+        order.verify(tasks).createBatchAndEnqueue(ArgumentMatchers.anyList());
+    }
+
+    private SubagentOrchestrationService service(ISubagentTaskRepository tasks) {
+        return service(tasks,
+                new AgentAvailabilityService(Mockito.mock(IAgentTenantOverrideRepository.class), properties()),
+                Mockito.mock(RunControlService.class));
+    }
+
+    private SubagentOrchestrationService service(ISubagentTaskRepository tasks,
+                                                  AgentAvailabilityService availabilityService,
+                                                  RunControlService runControlService) {
+        return new SubagentOrchestrationService(tasks, availabilityService, runControlService);
     }
 
     private SubagentOrchestrationService.TrustedSupervisor supervisor() {

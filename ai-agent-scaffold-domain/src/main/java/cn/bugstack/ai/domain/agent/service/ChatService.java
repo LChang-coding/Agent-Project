@@ -189,6 +189,10 @@ public class ChatService implements IChatService {
     @Resource
     private SessionOrchestrationQueryService sessionOrchestrationQueryService;
 
+    /** 主 Agent 委派子任务后，将自身输出暂存为草稿并等待全部结果统一汇总。 */
+    @Resource
+    private ParentWaitAllFinalizationService parentWaitAllFinalizationService;
+
     /**
      * RAG 证据暂存仓，记录每次模型调用真实注入了哪些知识库片段。
      *
@@ -463,13 +467,20 @@ public class ChatService implements IChatService {
         sessionOrchestrationQueryService.assertAcceptsUserMessage(currentTenantId(), userId, sessionId);
 
         // 转交内部实现执行完整的落库与模型调用流程。
-        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, false);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, false, null);
     }
 
     @Override
     public List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message) {
         AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
-        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true, null);
+    }
+
+    @Override
+    public List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message,
+                                              String requestedRunId) {
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true, requestedRunId);
     }
 
     /**
@@ -883,6 +894,7 @@ public class ChatService implements IChatService {
         // 收集模型输出的全部事件文本。
         List<String> outputs = new ArrayList<>();
         // 收集和终态推进都可能抛异常，必须统一收尾，否则运行会永远停在"进行中"。
+        boolean deferred;
         try {
             // 阻塞逐个消费事件，直到流正常结束。
             events.blockingForEach(event -> {
@@ -892,7 +904,7 @@ public class ChatService implements IChatService {
                 outputs.add(event.stringifyContent());
             });
             // 第六层：只有事件流正常结束才原子写助手消息并推进运行成功。
-            completeRunWithAssistant(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(),
+            deferred = completeRunWithAssistant(tenantId, chatCommandEntity.getUserId(), activeRun.getRunId(),
                     String.join("\n", outputs), traceId);
         } catch (RuntimeException e) {
             // 区分"被取消"和"真失败"：只有真失败才写错误消息。
@@ -909,7 +921,7 @@ public class ChatService implements IChatService {
         }
 
         // 返回收集到的全部输出文本。
-        return outputs;
+        return deferred ? List.of() : outputs;
     }
 
     /**
@@ -938,7 +950,8 @@ public class ChatService implements IChatService {
      * 这样任意入口出问题时的排查思路都一样。</p>
      */
     private List<String> doHandleMessage(String sessionAgentId, String userId, String sessionId, String message,
-                                         AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput) {
+                                         AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput,
+                                         String requestedRunId) {
         // 第一层：取出已装配的 Runner。
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         // 取可信租户作为隔离维度。
@@ -950,8 +963,15 @@ public class ChatService implements IChatService {
         // 取链路标识，贯穿落库与日志。
         String traceId = TraceContext.currentOrNewTraceId();
         // 第二层：运行和用户消息先落库，保证失败、取消和重试均有稳定锚点。
-        ChatRunEntity run = runControlService.start(tenantId, userId, actualSessionId, "agent", sessionAgentId,
-                null, null);
+        ChatRunEntity run = platformInput && requestedRunId != null
+                ? runControlService.startOrReuseInternal(tenantId, userId, actualSessionId,
+                "agent", sessionAgentId, requestedRunId)
+                : runControlService.start(tenantId, userId, actualSessionId, "agent", sessionAgentId, null, null);
+        if (platformInput && run.getStatus().terminal()) {
+            return sessionDomain.queryRunMessages(tenantId, userId, actualSessionId, run.getRunId()).stream()
+                    .filter(value -> SessionDomain.ROLE_ASSISTANT.equals(value.getRole()))
+                    .map(ChatMessageEntity::getContent).filter(java.util.Objects::nonNull).toList();
+        }
         // 补发之前落库成功但异步消息丢失的压缩任务，避免历史越积越长。
         conversationMemoryService.republishUnfinished(tenantId, userId, actualSessionId);
         // 落用户消息并与运行绑定。
@@ -980,6 +1000,7 @@ public class ChatService implements IChatService {
         // 收集模型输出的全部事件文本。
         List<String> outputs = new ArrayList<>();
         // 无论成败都要给运行一个明确终态，否则前端会一直显示进行中。
+        boolean deferred;
         try {
             // 阻塞逐个消费事件直到流结束。
             events.blockingForEach(event -> {
@@ -989,7 +1010,7 @@ public class ChatService implements IChatService {
                 outputs.add(event.stringifyContent());
             });
             // 第五层：正常结束才写助手消息并推进运行成功。
-            completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), String.join("\n", outputs), traceId);
+            deferred = completeRunWithAssistant(tenantId, userId, activeRun.getRunId(), String.join("\n", outputs), traceId);
         } catch (RuntimeException e) {
             // 区分取消与真失败。
             if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
@@ -1004,7 +1025,7 @@ public class ChatService implements IChatService {
         }
 
         // 返回全部输出文本。
-        return outputs;
+        return deferred ? List.of() : outputs;
     }
 
     /**
@@ -1077,10 +1098,13 @@ public class ChatService implements IChatService {
         StringBuilder assistantContent = new StringBuilder();
         // 完成、异常和取消可能竞争，只允许一个分支写助手终态。
         AtomicBoolean assistantSaved = new AtomicBoolean(false);
+        // 子任务一旦创建，当前流只继续内部累计，不再把主 Agent 草稿当作最终答案下发。
+        AtomicBoolean suppressParentOutput = new AtomicBoolean(false);
         // Lambda 需要一个有效不变的引用，所以把最新运行状态另存一份。
         ChatRunEntity activeRun = run;
+        boolean supervisor = isSupervisor(sessionAgentId);
         // 第五层：这是普通会话真正调用 Agent 的位置；用户 message 作为 userMsg 输入。
-        return runner.runAsync(userId, adkSessionId, userMsg, runConfig,
+        Flowable<Event> response = runner.runAsync(userId, adkSessionId, userMsg, runConfig,
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision(),
@@ -1099,30 +1123,39 @@ public class ChatService implements IChatService {
                     // 正常完成才保存聚合后的助手文本。
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
                         // 用一次性开关保护，避免和异常、取消分支重复写库。
-                        completeRunWithAssistantOnce(assistantSaved, tenantId, userId, activeRun.getRunId(),
-                                assistantContent.toString(), traceId);
+                        if (completeRunWithAssistantOnce(assistantSaved, tenantId, userId, activeRun.getRunId(),
+                                assistantContent.toString(), traceId)) suppressParentOutput.set(true);
                     }
                 })
                 .doOnError(throwable -> {
                     // 取消不写错误消息；真实异常写入可审计终态。
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
                         // 同样用一次性开关保护，并把已生成的片段一起留下便于定位失败点。
-                        failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId, activeRun.getRunId(), traceId,
-                                throwable, assistantContent.toString());
+                        if (failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId, activeRun.getRunId(), traceId,
+                                throwable, assistantContent.toString())) suppressParentOutput.set(true);
                     }
                 })
                 .doOnCancel(() -> {
-                    // 下游主动断开（浏览器关页）时，若数据库还没标记取消就补写一次，
-                    // 这样别处的工具门禁也能感知到并停止执行。
+                    // Supervisor 已委派时，浏览器断开只结束首轮推理，不得取消持久化子任务。
                     if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
-                        // 写入取消状态和原因。
-                        runControlService.cancel(tenantId, userId, activeRun.getRunId(), "流式连接已中断");
+                        boolean deferred = completeParentDraftOnDisconnectOnce(assistantSaved, tenantId, userId,
+                                activeRun.getRunId(), assistantContent.toString());
+                        if (deferred) suppressParentOutput.set(true);
+                        else runControlService.cancel(tenantId, userId, activeRun.getRunId(), "流式连接已中断");
                     }
                 })
                 .doFinally(() -> {
                     // 被取消的运行不能留下可被后续回答引用的 RAG 证据。
                     if (runControlService.cancelled(tenantId, userId, activeRun.getRunId())) clearEvidence(activeRun);
                 });
+        if (!supervisor) return response;
+        // Supervisor 首轮整轮缓冲：未委派时结束后一次下发，已委派时正文全部留作隐藏草稿。
+        return response
+                .onErrorResumeNext(throwable -> suppressParentOutput.get()
+                        ? Flowable.empty() : Flowable.error(throwable))
+                .toList()
+                .flatMapPublisher(events -> suppressParentOutput.get()
+                        ? Flowable.empty() : Flowable.fromIterable(events));
     }
 
     /**
@@ -2021,6 +2054,8 @@ public class ChatService implements IChatService {
         putStateIfPresent(state, ToolRuntimeContextKeys.ORCHESTRATION_ROOT_RUN_ID,
                 AgentOrchestrationContextHolder.getRootRunId() == null
                         ? runId : AgentOrchestrationContextHolder.getRootRunId());
+        state.put(ToolRuntimeContextKeys.ORCHESTRATION_SUMMARY_ONLY,
+                AgentOrchestrationContextHolder.isSummaryOnly());
         putStateIfPresent(state, ToolRuntimeContextKeys.RAG_INVOCATION_MODE, ragInvocationMode);
         // 第三层：上下文版本存在才写；它是版本冲突检测的基准。
         if (contextRevision != null) {
@@ -2063,6 +2098,11 @@ public class ChatService implements IChatService {
         return aiAgentAutoConfigProperties.getTables().values().stream()
                 .map(AiAgentConfigTableVO::getAgent).filter(value -> value != null && agentId.equals(value.getAgentId()))
                 .findFirst().orElse(null);
+    }
+
+    private boolean isSupervisor(String agentId) {
+        AiAgentConfigTableVO.Agent agent = staticAgent(agentId);
+        return agent != null && "SUPERVISOR".equalsIgnoreCase(agent.getOrchestrationRole());
     }
 
     /**
@@ -2306,10 +2346,10 @@ public class ChatService implements IChatService {
     /**
      * 从证据仓读取普通 Agent 的本轮证据，再完成运行。
      */
-    private void completeRunWithAssistant(String tenantId, String userId, String runId,
-                                          String content, String traceId) {
+    private boolean completeRunWithAssistant(String tenantId, String userId, String runId,
+                                             String content, String traceId) {
         ChatRunEntity run = runControlService.require(tenantId, userId, runId);
-        completeRunWithAssistant(tenantId, userId, runId, content, traceId,
+        return completeRunWithAssistant(tenantId, userId, runId, content, traceId,
                 ragInvocationEvidenceStore.snapshot(run.getTenantId(), run.getUserId(), run.getSessionId(), runId));
     }
 
@@ -2334,8 +2374,16 @@ public class ChatService implements IChatService {
     }
 
     /** 校验回答引用、原子写助手消息与成功终态，再清除临时证据。 */
-    private void completeRunWithAssistant(String tenantId, String userId, String runId,
-                                          String content, String traceId, List<RagContextEvidence> evidence) {
+    private boolean completeRunWithAssistant(String tenantId, String userId, String runId,
+                                             String content, String traceId, List<RagContextEvidence> evidence) {
+        if (AgentOrchestrationContextHolder.isSummaryOnly() && (content == null || content.isBlank())) {
+            throw new AppException("PARENT_RESUME_EMPTY_OUTPUT", "主 Agent 恢复未生成有效汇总，将保留任务并重试");
+        }
+        if (parentWaitAllFinalizationService != null
+                && parentWaitAllFinalizationService.completeAsDraftIfWaiting(tenantId, userId, runId, content)) {
+            clearEvidence(runControlService.require(tenantId, userId, runId));
+            return true;
+        }
         ChatRunEntity run = runControlService.require(tenantId, userId, runId);
         // 引用白名单校验先于落库，消息元数据保存可审计的接受/拒绝结果。
         RagAnswerCitationValidation validation = ragAnswerCitationValidator.validate(content, evidence);
@@ -2345,28 +2393,48 @@ public class ChatService implements IChatService {
         if (message != null) {
             conversationMemoryService.onAssistantMessageSaved(message);
         }
+        return false;
     }
 
     /** 防止响应完成与取消/异常竞态重复写助手消息。 */
-    private void completeRunWithAssistantOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
-                                              String content, String traceId) {
-        if (saved.compareAndSet(false, true)) {
-            completeRunWithAssistant(tenantId, userId, runId, content, traceId);
+    private boolean completeRunWithAssistantOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
+                                                 String content, String traceId) {
+        if (!saved.compareAndSet(false, true)) return false;
+        try {
+            return completeRunWithAssistant(tenantId, userId, runId, content, traceId);
+        } catch (RuntimeException exception) {
+            saved.set(false);
+            throw exception;
         }
     }
 
     /**
      * 将非取消异常和已生成片段写入助手错误消息，并清除不可再引用的证据。
      */
-    private void failRunWithAssistantError(String tenantId, String userId, String runId, String traceId,
-                                           Throwable throwable, String partialContent) {
+    private boolean failRunWithAssistantError(String tenantId, String userId, String runId, String traceId,
+                                              Throwable throwable, String partialContent) {
+        String failureContent = errorContent(throwable, partialContent);
+        String failureReason = safeMessage(throwable);
+        if (parentWaitAllFinalizationService != null
+                && parentWaitAllFinalizationService.failAsDraftIfWaiting(
+                tenantId, userId, runId, failureContent, failureReason)) {
+            clearEvidence(runControlService.require(tenantId, userId, runId));
+            return true;
+        }
+        // WAIT_ALL 的稳定恢复 run 首次失败只记录运行终态，禁止把中间错误写进用户会话。
+        if (AgentOrchestrationContextHolder.isSummaryOnly()) {
+            runControlService.fail(tenantId, userId, runId, failureReason);
+            clearEvidence(runControlService.require(tenantId, userId, runId));
+            return true;
+        }
         ChatMessageEntity message = runControlService.failWithAssistantMessage(tenantId, userId, runId,
-                errorContent(throwable, partialContent), traceId, safeMessage(throwable));
+                failureContent, traceId, failureReason);
         if (message != null) {
             conversationMemoryService.onMessageSaved(message);
         }
         ChatRunEntity run = runControlService.require(tenantId, userId, runId);
         ragInvocationEvidenceStore.clear(run.getTenantId(), run.getUserId(), run.getSessionId(), runId);
+        return false;
     }
 
     /** 将引用校验结果序列化为带 schema 的稳定消息元数据。 */
@@ -2388,10 +2456,29 @@ public class ChatService implements IChatService {
     }
 
     /** 保证流式异常终态最多落库一次。 */
-    private void failRunWithAssistantErrorOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
-                                               String traceId, Throwable throwable, String partialContent) {
-        if (saved.compareAndSet(false, true)) {
-            failRunWithAssistantError(tenantId, userId, runId, traceId, throwable, partialContent);
+    private boolean failRunWithAssistantErrorOnce(AtomicBoolean saved, String tenantId, String userId, String runId,
+                                                  String traceId, Throwable throwable, String partialContent) {
+        if (!saved.compareAndSet(false, true)) return false;
+        try {
+            return failRunWithAssistantError(tenantId, userId, runId, traceId, throwable, partialContent);
+        } catch (RuntimeException exception) {
+            saved.set(false);
+            throw exception;
+        }
+    }
+
+    /** SSE 断开时若已进入 WAIT_ALL，保存当前草稿并打开父侧屏障，而不是取消整条编排。 */
+    private boolean completeParentDraftOnDisconnectOnce(AtomicBoolean saved, String tenantId, String userId,
+                                                        String runId, String parentDraft) {
+        if (parentWaitAllFinalizationService == null
+                || !parentWaitAllFinalizationService.isAwaitingSummary(tenantId, runId)
+                || !saved.compareAndSet(false, true)) return false;
+        try {
+            return parentWaitAllFinalizationService.completeAsDraftIfWaiting(
+                    tenantId, userId, runId, parentDraft);
+        } catch (RuntimeException exception) {
+            saved.set(false);
+            throw exception;
         }
     }
 

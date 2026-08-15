@@ -106,7 +106,9 @@ CREATE TABLE IF NOT EXISTS `agent_parent_resume_request` (
   `parent_session_id` VARCHAR(64) NOT NULL,
   `parent_agent_id` VARCHAR(128) NOT NULL,
   `trace_id` VARCHAR(64) DEFAULT NULL,
-  `status` VARCHAR(24) NOT NULL DEFAULT 'PENDING',
+  `status` VARCHAR(24) NOT NULL DEFAULT 'WAITING',
+  `parent_ready` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  `parent_draft` MEDIUMTEXT DEFAULT NULL,
   `requested_version` BIGINT UNSIGNED NOT NULL DEFAULT 0,
   `processed_version` BIGINT UNSIGNED NOT NULL DEFAULT 0,
   `inbox_cursor` BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -178,3 +180,44 @@ SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
   'ALTER TABLE `agent_subagent_task` ADD COLUMN `summary_truncated` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `full_context`',
   'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @parent_ready_was_missing = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_parent_resume_request' AND COLUMN_NAME='parent_ready') = 0;
+
+SET @ddl = IF(@parent_ready_was_missing,
+  'ALTER TABLE `agent_parent_resume_request` ADD COLUMN `parent_ready` TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER `status`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_parent_resume_request' AND COLUMN_NAME='status'
+    AND COLUMN_TYPE='varchar(24)' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT='WAITING') <> 1,
+  'ALTER TABLE `agent_parent_resume_request` MODIFY COLUMN `status` VARCHAR(24) NOT NULL DEFAULT ''WAITING''',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_parent_resume_request' AND COLUMN_NAME='parent_ready'
+    AND COLUMN_TYPE='tinyint unsigned' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT='0') <> 1,
+  'ALTER TABLE `agent_parent_resume_request` MODIFY COLUMN `parent_ready` TINYINT UNSIGNED NOT NULL DEFAULT 0',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_parent_resume_request' AND COLUMN_NAME='parent_draft') = 0,
+  'ALTER TABLE `agent_parent_resume_request` ADD COLUMN `parent_draft` MEDIUMTEXT DEFAULT NULL AFTER `parent_ready`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl = IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=@schema_name AND TABLE_NAME='agent_parent_resume_request' AND COLUMN_NAME='parent_draft'
+    AND COLUMN_TYPE='mediumtext' AND IS_NULLABLE='YES') <> 1,
+  'ALTER TABLE `agent_parent_resume_request` MODIFY COLUMN `parent_draft` MEDIUMTEXT DEFAULT NULL',
+  'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 旧协议的 PENDING/RUNNING/RETRYING 已经由主 Agent 产生过可见正文，迁移时视为父侧就绪；
+-- claim 仍会复核全部子任务终态，避免直接消费不完整结果。
+UPDATE `agent_parent_resume_request`
+SET `parent_ready`=1,`parent_draft`=COALESCE(`parent_draft`,'')
+WHERE `status` IN ('PENDING','RUNNING','RETRYING') AND `parent_ready`=0 AND `deleted`=0;

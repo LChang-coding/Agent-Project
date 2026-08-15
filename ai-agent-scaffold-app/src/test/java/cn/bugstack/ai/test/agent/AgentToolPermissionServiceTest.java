@@ -63,6 +63,7 @@ public class AgentToolPermissionServiceTest {
 
         List<AgentToolPermissionEntity> result = service.queryByAgent("tenant-1", "admin-1", "parent-1");
 
+        Assert.assertTrue(result.stream().anyMatch(value -> "select_workflow_route".equals(value.getToolCode())));
         Assert.assertTrue(result.stream().anyMatch(value -> "create_subagent_instances".equals(value.getToolCode())));
         Assert.assertTrue(result.stream().anyMatch(value -> "mcp:mcp-1".equals(value.getToolCode())
                 && "时间 MCP".equals(value.getToolName())));

@@ -47,4 +47,9 @@ public class SkillResponseDTO {
      * 状态。
      */
     private String status;
+
+    /**
+     * 当前身份是否可以发布、停用或删除该 Skill。
+     */
+    private Boolean manageable;
 }

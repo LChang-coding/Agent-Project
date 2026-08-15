@@ -13,6 +13,8 @@ public class ParentResumeRequestPO {
     private String parentAgentId;
     private String traceId;
     private String status;
+    private Boolean parentReady;
+    private String parentDraft;
     private Long requestedVersion;
     private Long processedVersion;
     private Long inboxCursor;

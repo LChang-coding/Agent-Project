@@ -1,6 +1,7 @@
 package cn.bugstack.ai.domain.run.service;
 
 import cn.bugstack.ai.domain.asset.service.AssetService;
+import cn.bugstack.ai.domain.agent.service.SessionOrchestrationQueryService;
 import cn.bugstack.ai.domain.rag.model.entity.SessionRagRunSnapshotEntity;
 import cn.bugstack.ai.domain.rag.model.valobj.SessionRagMode;
 import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
@@ -14,6 +15,7 @@ import cn.bugstack.ai.domain.session.service.SessionDomain;
 import cn.bugstack.ai.domain.context.service.ContextInvalidationService;
 import cn.bugstack.ai.domain.usage.service.ModelUsageService;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.observability.AiLog;
 import cn.bugstack.ai.types.observability.AiLogFields;
 import cn.bugstack.ai.types.observability.TraceContext;
@@ -52,6 +54,8 @@ public class RunControlService {
     private final RunStateSnapshotCache runStateSnapshots;
     /** 在创建运行时取得并保存会话当前的 RAG 策略。 */
     private final SessionRagSettingService sessionRagSettingService;
+    /** 在会话锁内复核 WAIT_ALL，防止前端检查与真实写入之间发生竞态。 */
+    private final SessionOrchestrationQueryService orchestrationQueryService;
 
     /**
      * 创建运行控制服务。
@@ -60,9 +64,10 @@ public class RunControlService {
     public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                              ModelUsageService modelUsageService, AssetService assetService,
-                             SessionRagSettingService sessionRagSettingService) {
+                             SessionRagSettingService sessionRagSettingService,
+                             SessionOrchestrationQueryService orchestrationQueryService) {
         this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
-                assetService, new RunStateSnapshotCache(), sessionRagSettingService);
+                assetService, new RunStateSnapshotCache(), sessionRagSettingService, orchestrationQueryService);
     }
 
     /** 保留领域单测和旧装配入口；生产Spring装配使用带RAG策略服务的构造器。 */
@@ -70,7 +75,16 @@ public class RunControlService {
                              ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                              ModelUsageService modelUsageService, AssetService assetService) {
         this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
-                assetService, new RunStateSnapshotCache(), null);
+                assetService, new RunStateSnapshotCache(), null, null);
+    }
+
+    /** 保留可注入 RAG 快照服务的测试装配入口。 */
+    public RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
+                             ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
+                             ModelUsageService modelUsageService, AssetService assetService,
+                             SessionRagSettingService sessionRagSettingService) {
+        this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
+                assetService, new RunStateSnapshotCache(), sessionRagSettingService, null);
     }
 
     /** 注入可控快照缓存的领域测试构造器。 */
@@ -79,14 +93,15 @@ public class RunControlService {
                       ModelUsageService modelUsageService, AssetService assetService,
                       RunStateSnapshotCache runStateSnapshots) {
         this(runRepository, sessionDomain, activeRunRegistry, contextInvalidationService, modelUsageService,
-                assetService, runStateSnapshots, null);
+                assetService, runStateSnapshots, null, null);
     }
 
     /** 汇总全部依赖的内部构造器，生产与测试最终都进入此处。 */
     RunControlService(IChatRunRepository runRepository, SessionDomain sessionDomain,
                       ActiveRunRegistry activeRunRegistry, ContextInvalidationService contextInvalidationService,
                       ModelUsageService modelUsageService, AssetService assetService,
-                      RunStateSnapshotCache runStateSnapshots, SessionRagSettingService sessionRagSettingService) {
+                      RunStateSnapshotCache runStateSnapshots, SessionRagSettingService sessionRagSettingService,
+                      SessionOrchestrationQueryService orchestrationQueryService) {
         this.runRepository = runRepository;
         this.sessionDomain = sessionDomain;
         this.activeRunRegistry = activeRunRegistry;
@@ -95,6 +110,7 @@ public class RunControlService {
         this.assetService = assetService;
         this.runStateSnapshots = runStateSnapshots;
         this.sessionRagSettingService = sessionRagSettingService;
+        this.orchestrationQueryService = orchestrationQueryService;
     }
 
     /**
@@ -103,8 +119,19 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity start(String tenantId, String userId, String sessionId, String sourceType,
                                String sourceId, String requestedRunId, String predecessorRunId) {
+        return createRun(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId, predecessorRunId, false);
+    }
+
+    /** 内部恢复和普通用户发送共用建 Run 逻辑，但内部恢复必须绕过 WAIT_ALL 输入闸门。 */
+    private ChatRunEntity createRun(String tenantId, String userId, String sessionId, String sourceType,
+                                    String sourceId, String requestedRunId, String predecessorRunId,
+                                    boolean internalResume) {
         // 先锁会话再创建 run，保证创建时的上下文与 RAG 策略快照一致。
         ChatSessionEntity session = sessionDomain.lockSessionAccess(tenantId, userId, sessionId, sourceId);
+        if (!internalResume && orchestrationQueryService != null) {
+            orchestrationQueryService.assertAcceptsUserMessage(
+                    session.getTenantId(), session.getUserId(), session.getSessionId());
+        }
         SessionRagRunSnapshotEntity ragSnapshot = resolveRagSnapshot(session);
         long revision = session.getContextRevision() == null ? 0L : session.getContextRevision();
         LocalDateTime now = LocalDateTime.now();
@@ -152,6 +179,40 @@ public class RunControlService {
     }
 
     /**
+     * 为平台内部恢复调用复用稳定运行。恢复 Worker 可能在最终消息落库后重投，
+     * 因此已存在的 RUNNING 或终态运行都必须原样返回，不能再创建第二条运行。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity startOrReuseInternal(String tenantId, String userId, String sessionId,
+                                              String sourceType, String sourceId, String requestedRunId) {
+        validateRequestedRunId(requestedRunId);
+        ChatRunEntity existing = runRepository.query(tenantId, userId, requestedRunId);
+        if (existing == null) {
+            return createRun(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId, null, true);
+        }
+        if (!equals(existing.getSessionId(), sessionId) || !equals(existing.getSourceType(), sourceType)
+                || !equals(existing.getSourceId(), sourceId)) {
+            throw new AppException("RUN_SCOPE_MISMATCH", "内部恢复运行与当前会话或执行源不匹配");
+        }
+        if (existing.getStatus() != RunStatus.FAILED) return existing;
+
+        // 汇总模型失败后保留同一稳定 runId，但必须把 FAILED 重新打开为 RUNNING 才会再次调用模型。
+        sessionDomain.lockSessionAccess(existing.getTenantId(), existing.getUserId(), existing.getSessionId(), null);
+        ChatRunEntity failed = runRepository.lock(existing.getTenantId(), existing.getUserId(), requestedRunId);
+        if (failed == null || !equals(failed.getSessionId(), sessionId)
+                || !equals(failed.getSourceType(), sourceType) || !equals(failed.getSourceId(), sourceId)) {
+            throw new AppException("RUN_SCOPE_MISMATCH", "内部恢复运行与当前会话或执行源不匹配");
+        }
+        if (failed.getStatus() != RunStatus.FAILED) return failed;
+        if (runRepository.transition(failed.getTenantId(), failed.getUserId(), requestedRunId,
+                RunStatus.FAILED, RunStatus.RUNNING, failed.getVersion(), null, null, null) != 1) {
+            throw new AppException("RUN_CONCURRENT_MODIFICATION", "内部恢复运行重试状态已变化");
+        }
+        invalidateSnapshotAfterCommit(failed.getTenantId(), failed.getUserId(), requestedRunId);
+        return require(failed.getTenantId(), failed.getUserId(), requestedRunId);
+    }
+
+    /**
      * 启动已由引导预建的后继运行。
      */
     @Transactional(rollbackFor = Exception.class)
@@ -190,6 +251,9 @@ public class RunControlService {
         ChatRunEntity run = runRepository.lock(scope.getTenantId(), scope.getUserId(), runId);
         if (run == null || !equals(scope.getSessionId(), run.getSessionId())) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
+        }
+        if (orchestrationQueryService != null) {
+            orchestrationQueryService.assertAcceptsRunMutation(run.getTenantId(), run.getRunId());
         }
         if (!blank(run.getSuccessorRunId())) {
             // 相同指令的重试返回既有后继；不同指令必须显式冲突，不能分叉同一旧运行。
@@ -316,7 +380,18 @@ public class RunControlService {
     @Transactional(rollbackFor = Exception.class)
     public RunMessageBindingEntity appendPlatformMessage(String tenantId, String userId, String runId,
                                                           String content, String traceId) {
-        ChatRunEntity run = lockExecutableWithSessionFirst(tenantId, userId, runId);
+        ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
+        if (!blank(run.getUserMessageId())) {
+            ChatMessageEntity existing = sessionDomain.queryValidMessage(run.getTenantId(), run.getUserId(),
+                    run.getSessionId(), run.getUserMessageId());
+            if (existing == null || !SessionDomain.ROLE_PLATFORM.equals(existing.getRole())) {
+                throw new AppException("RUN_PLATFORM_MESSAGE_CONFLICT", "内部恢复运行已绑定的输入消息不合法");
+            }
+            return RunMessageBindingEntity.builder().run(run).message(existing).build();
+        }
+        if (!run.getStatus().executable()) {
+            throw new AppException("RUN_NOT_EXECUTABLE", "运行已取消、被替代或结束");
+        }
         ChatMessageEntity message = sessionDomain.appendPlatformMessage(run.getTenantId(), run.getUserId(),
                 run.getSessionId(), runId, content, traceId);
         if (runRepository.bindUserMessage(run.getTenantId(), run.getUserId(), runId, message.getMessageId(),
@@ -342,6 +417,7 @@ public class RunControlService {
     public ChatMessageEntity completeWithAssistantMessage(String tenantId, String userId, String runId,
                                                            String content, String traceId, String metadata) {
         ChatRunEntity run = lockWithSessionFirst(tenantId, userId, runId);
+        assertSummaryResumeLease(run.getTenantId());
         if (!run.getStatus().executable()) {
             // 取消或引导已抢先落库时，不再保存迟到的助手消息。
             return null;
@@ -399,6 +475,9 @@ public class RunControlService {
         if (run == null || !equals(scope.getSessionId(), run.getSessionId())) {
             throw new AppException("RUN_NOT_FOUND", "运行不存在或无权访问");
         }
+        if (orchestrationQueryService != null) {
+            orchestrationQueryService.assertAcceptsRunMutation(run.getTenantId(), run.getRunId());
+        }
         if (run.getStatus().terminal()) {
             // 取消接口幂等：终态不再重复失效消息或推进上下文版本。
             return run;
@@ -452,7 +531,7 @@ public class RunControlService {
         if (affected == 1) {
             invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         }
-        activeRunRegistry.remove(runId);
+        removeAfterCommit(runId);
         return affected == 1 ? require(run.getTenantId(), run.getUserId(), runId)
                 : require(run.getTenantId(), run.getUserId(), runId);
     }
@@ -462,14 +541,37 @@ public class RunControlService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ChatRunEntity fail(String tenantId, String userId, String runId, String reason) {
-        ChatRunEntity run = require(tenantId, userId, runId);
+        ChatRunEntity run = AgentOrchestrationContextHolder.isSummaryOnly()
+                ? lockWithSessionFirst(tenantId, userId, runId)
+                : require(tenantId, userId, runId);
+        assertSummaryResumeLease(run.getTenantId());
         if (!run.getStatus().terminal()) {
             runRepository.transition(run.getTenantId(), run.getUserId(), runId, run.getStatus(), RunStatus.FAILED,
                     run.getVersion(), reason, null, LocalDateTime.now());
             invalidateSnapshotAfterCommit(run.getTenantId(), run.getUserId(), runId);
         }
-        activeRunRegistry.remove(runId);
+        removeAfterCommit(runId);
         return require(run.getTenantId(), run.getUserId(), runId);
+    }
+
+    /**
+     * 委派前按统一顺序锁定父会话与父运行。调用方随后在同一事务中写 WAIT_ALL 账本，
+     * 从而与发送、取消、引导和删除形成互斥，而不是依赖事前查询。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity lockParentForDelegation(String tenantId, String userId, String parentSessionId,
+                                                 String parentRunId, String parentAgentId) {
+        ChatSessionEntity session = sessionDomain.lockSessionAccess(
+                tenantId, userId, parentSessionId, parentAgentId);
+        ChatRunEntity run = runRepository.lock(session.getTenantId(), session.getUserId(), parentRunId);
+        if (run == null || !equals(run.getSessionId(), session.getSessionId())
+                || !equals(run.getSourceId(), parentAgentId)) {
+            throw new AppException("SUBAGENT_PARENT_SCOPE_INVALID", "子 Agent 委派的父运行与当前会话不匹配");
+        }
+        if (!run.getStatus().executable()) {
+            throw new AppException("SUBAGENT_PARENT_RUN_NOT_EXECUTABLE", "父 Agent 运行已结束，不能继续委派");
+        }
+        return run;
     }
 
     /** 计算运行开始至当前的非负耗时。 */
@@ -629,6 +731,16 @@ public class RunControlService {
             throw new AppException("RUN_SCOPE_MISMATCH", "运行与会话归属不一致");
         }
         return run;
+    }
+
+    /** summary-only 恢复必须在消息事务内持有 resume 行锁，失租 Worker 不得提交终态。 */
+    private void assertSummaryResumeLease(String tenantId) {
+        if (AgentOrchestrationContextHolder.isSummaryOnly()) {
+            if (orchestrationQueryService == null) {
+                throw new AppException("PARENT_RESUME_LEASE_UNAVAILABLE", "主 Agent 恢复租约校验服务不可用");
+            }
+            orchestrationQueryService.assertOwnsResumeLease(tenantId);
+        }
     }
 
     /** 事务提交后再失效快照，避免回滚事务把缓存中的旧事实提前删除。 */

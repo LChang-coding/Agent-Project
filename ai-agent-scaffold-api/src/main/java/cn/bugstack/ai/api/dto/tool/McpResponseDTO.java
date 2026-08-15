@@ -69,4 +69,9 @@ public class McpResponseDTO {
      * 发布状态。
      */
     private String status;
+
+    /**
+     * 当前身份是否可以测试、发布、停用或删除该 MCP。
+     */
+    private Boolean manageable;
 }

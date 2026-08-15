@@ -6,6 +6,7 @@ import cn.bugstack.ai.api.response.Response;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 import cn.bugstack.ai.domain.run.service.RunControlService;
+import cn.bugstack.ai.domain.agent.service.SessionOrchestrationQueryService;
 import cn.bugstack.ai.domain.workflow.service.IntelligentWorkflowRuntimeService;
 import cn.bugstack.ai.domain.workflow.service.WorkflowRunFinalizationService;
 import cn.bugstack.ai.trigger.http.RunControlController;
@@ -34,7 +35,9 @@ public class RunControlControllerTest {
         RunControlService runControlService = mock(RunControlService.class);
         IntelligentWorkflowRuntimeService runtimeService = mock(IntelligentWorkflowRuntimeService.class);
         WorkflowRunFinalizationService finalizationService = mock(WorkflowRunFinalizationService.class);
-        RunControlController controller = new RunControlController(runControlService, runtimeService, finalizationService);
+        SessionOrchestrationQueryService orchestrationQueryService = mock(SessionOrchestrationQueryService.class);
+        RunControlController controller = new RunControlController(runControlService, runtimeService, finalizationService,
+                orchestrationQueryService);
         TenantContextHolder.set(TenantContext.builder().tenantId("tenant-1").userId("user-1").build());
         TraceContext.setTraceId("operation-trace-1");
         ChatRunEntity cancelled = ChatRunEntity.builder()

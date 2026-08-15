@@ -217,6 +217,8 @@ export interface ChatMessage {
   createdAt: string;
   traceId?: string;
   status?: 'sending' | 'streaming' | 'done' | 'error' | 'canceled' | 'superseded';
+  /** 浏览器乐观消息；同一 runId 的服务端消息到达后应被置换。 */
+  localOnly?: boolean;
 }
 
 export interface LocalChatSession {
@@ -661,6 +663,7 @@ export interface SkillDefinition {
   currentVersion?: string;
   publishedVersion?: string;
   status: string;
+  manageable?: boolean;
 }
 
 export interface McpCreateRequest {
@@ -688,6 +691,7 @@ export interface McpDefinition {
   testMessage?: string;
   lastTestTime?: string;
   status: string;
+  manageable?: boolean;
 }
 
 export interface ToolPublishRequest {

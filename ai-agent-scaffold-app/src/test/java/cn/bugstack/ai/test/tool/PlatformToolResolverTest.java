@@ -103,6 +103,25 @@ public class PlatformToolResolverTest {
     }
 
     @Test
+    public void summaryOnlySupervisorCannotCreateOrCancelAnotherBatch() {
+        ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder()
+                .tenantId("tenant").userId("user").runId("run").functionCallId("call")
+                .agentId("supervisor").orchestrationRole("SUPERVISOR")
+                .orchestrationSummaryOnly(true)
+                .allowedSubAgentIds(List.of("research-agent", "planning-agent"))
+                .build();
+
+        List<String> functions = new PlatformToolResolver(false, false, false, true).resolve(supervisor)
+                .stream().map(tool -> tool.getFunctionName()).toList();
+
+        Assert.assertTrue(functions.contains("search_agent_catalog"));
+        Assert.assertTrue(functions.contains("read_subagent_result"));
+        Assert.assertTrue(functions.contains("read_subagent_full_context"));
+        Assert.assertFalse(functions.contains("create_subagent_instances"));
+        Assert.assertFalse(functions.contains("cancel_subagent_instances"));
+    }
+
+    @Test
     public void supervisorToolSchemasAreValidJson() throws Exception {
         ToolInvokeContextEntity supervisor = ToolInvokeContextEntity.builder().runId("run")
                 .orchestrationRole("SUPERVISOR").allowedSubAgentIds(List.of("research")).build();

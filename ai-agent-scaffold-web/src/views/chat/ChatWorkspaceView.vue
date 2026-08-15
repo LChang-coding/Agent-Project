@@ -6,12 +6,13 @@
           <span class="rail-kicker">Sessions</span>
           <div class="rail-actions">
             <button class="rail-manage" type="button" @click="toggleSessionManagement">{{ managingSessions ? '完成' : '管理' }}</button>
-            <button class="rail-new" type="button" :disabled="!canCreateSession" @click="createSession">新建</button>
+            <button class="rail-new" type="button" :disabled="!canCreateSession || conversationInteractionLocked" @click="createSession">新建</button>
           </div>
         </div>
 
         <div v-if="managingSessions" class="session-batch-bar">
-          <label><input type="checkbox" :checked="allVisibleSessionsSelected" @change="toggleAllVisibleSessions">全选</label>
+          <label><input type="checkbox" :checked="allVisibleSessionsSelected" :disabled="deletableVisibleSessions.length === 0" @change="toggleAllVisibleSessions">全选可删除会话</label>
+          <span v-if="lockedVisibleSessionCount" class="session-batch-note">{{ lockedVisibleSessionCount }} 个运行中会话已排除</span>
           <button type="button" :disabled="selectedSessionIds.size === 0 || batchDeletingSessions" @click="batchDeleteSessions">
             {{ batchDeletingSessions ? '删除中…' : `删除 ${selectedSessionIds.size}` }}
           </button>
@@ -24,29 +25,39 @@
             :class="['session-item', { 'session-item--active': session.sessionId === chatStore.sessionId, 'session-item--selecting': managingSessions }]"
           >
             <input v-if="managingSessions" class="session-select" type="checkbox" :checked="selectedSessionIds.has(session.sessionId)"
-                   :aria-label="`选择会话 ${session.title}`" @change="toggleSessionSelection(session.sessionId)" />
+                   :disabled="!sessionDeletable(session.sessionId)"
+                   :title="sessionDeletable(session.sessionId) ? '' : '当前会话正在运行，结束或取消后才能删除'"
+                   :aria-label="sessionDeletable(session.sessionId) ? `选择会话 ${session.title}` : `会话 ${session.title} 正在运行，不可删除`"
+                   @change="toggleSessionSelection(session.sessionId)" />
             <div class="session-primary">
               <button class="session-expand" type="button" :aria-expanded="sessionExpanded(session.sessionId)"
                       :aria-label="`${sessionExpanded(session.sessionId) ? '收起' : '展开'}会话 ${session.title}`"
                       @click="toggleSession(session.sessionId)">{{ sessionExpanded(session.sessionId) ? '⌄' : '›' }}</button>
-              <button class="session-open" type="button" @click="openMainAgent(session.sessionId)">
+              <button class="session-open" type="button" :disabled="sessionSwitchBlocked(session.sessionId)" @click="openMainAgent(session.sessionId)">
                 <strong>{{ session.title }}</strong>
-                <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}</span>
+                <span>{{ session.agentName }} · {{ formatTime(session.updatedAt) }}<em v-if="!sessionDeletable(session.sessionId)"> · 运行中，暂不可删除</em></span>
               </button>
             </div>
-            <button class="session-delete" type="button" :disabled="chatStore.deletingSessionId === session.sessionId"
+            <button class="session-delete" type="button" :disabled="chatStore.deletingSessionId === session.sessionId || currentSessionDeleteBlocked(session.sessionId)"
+                    :title="currentSessionDeleteBlocked(session.sessionId) ? '当前会话正在运行，结束或取消后才能删除' : `删除会话 ${session.title}`"
                     :aria-label="`删除会话 ${session.title}`" @click.stop="deleteSession(session.sessionId, session.title)">
-              {{ chatStore.deletingSessionId === session.sessionId ? '…' : '×' }}
+              {{ chatStore.deletingSessionId === session.sessionId ? '…' : currentSessionDeleteBlocked(session.sessionId) ? '•' : '×' }}
             </button>
-            <div v-if="sessionExpanded(session.sessionId)" class="session-children">
+            <div v-if="sessionExpanded(session.sessionId)" class="session-children" aria-live="polite">
               <button type="button" :class="{ active: session.sessionId === chatStore.sessionId && !selectedTaskId }"
+                      :aria-current="session.sessionId === chatStore.sessionId && !selectedTaskId ? 'page' : undefined"
+                      :disabled="sessionSwitchBlocked(session.sessionId)"
                       @click="openMainAgent(session.sessionId)">
                 <span class="tree-line" /><span class="agent-glyph">M</span><span><strong>主 Agent</strong><small>对话与最终汇总</small></span>
               </button>
               <button v-for="task in sessionTasks(session.sessionId)" :key="task.taskId" type="button"
-                      :class="{ active: selectedTaskId === task.taskId }" @click="openSubagent(session.sessionId, task.taskId)">
-                <span class="tree-line" /><span :class="['agent-glyph', `agent-glyph--${taskStatusTone(task.status)}`]">{{ task.childAgentId.slice(-2) }}</span>
-                <span><strong>{{ agentDisplayName(task.childAgentId) }}</strong><small>{{ taskStatusLabel(task.status, task.callbackStatus) }}</small></span>
+                      :class="{ active: session.sessionId === chatStore.sessionId && selectedTaskId === task.taskId }"
+                      :aria-current="session.sessionId === chatStore.sessionId && selectedTaskId === task.taskId ? 'page' : undefined"
+                      :data-subagent-task-id="task.taskId" data-subagent-trigger="session-tree"
+                      :disabled="sessionSwitchBlocked(session.sessionId)"
+                      @click="openSubagent(session.sessionId, task.taskId)">
+                <span class="tree-line" /><span :class="['agent-glyph', `agent-glyph--${subagentTaskTone(task)}`]">{{ task.childAgentId.slice(-2) }}</span>
+                <span><strong>{{ agentDisplayName(task.childAgentId) }}</strong><small>{{ subagentTaskLabel(task) }}</small></span>
               </button>
               <span v-if="orchestrationStore.loadingSessionIds.includes(session.sessionId)" class="session-child-empty">正在恢复运行状态…</span>
               <span v-else-if="sessionTasks(session.sessionId).length === 0" class="session-child-empty">该会话暂无子 Agent</span>
@@ -58,7 +69,7 @@
         </div>
       </aside>
 
-      <main class="chat-stage" :aria-busy="chatStore.sending || chatStore.cancelling || chatStore.steering || chatStore.loadingMessages || chatStore.loadingEarlierMessages">
+      <main class="chat-stage" :aria-busy="conversationInteractionLocked || chatStore.cancelling || chatStore.steering || chatStore.loadingMessages || chatStore.loadingEarlierMessages">
         <header class="chat-commandbar">
           <div class="chat-title">
             <span class="status-dot" />
@@ -71,14 +82,14 @@
           <div class="runtime-controls">
             <label class="compact-field">
               <span>模式</span>
-              <select v-model="chatStore.activeSourceType" class="select select--compact" :disabled="chatStore.sending" @change="onSourceChanged">
+              <select v-model="chatStore.activeSourceType" class="select select--compact" :disabled="conversationInteractionLocked" @change="onSourceChanged">
                 <option value="agent">Agent 编排</option>
                 <option value="workflow">DAG 工作流</option>
               </select>
             </label>
             <label v-if="chatStore.activeSourceType === 'agent'" class="compact-field compact-field--wide">
-              <span>入口 Agent</span>
-              <select v-model="chatStore.activeAgentId" class="select select--compact" :disabled="chatStore.sending" @change="onAgentChanged">
+              <span>运行 Agent</span>
+              <select v-model="chatStore.activeAgentId" class="select select--compact" :disabled="conversationInteractionLocked" @change="onAgentChanged">
                 <option v-for="agent in chatStore.agents" :key="agent.agentId" :value="agent.agentId">
                   {{ agent.agentName }}
                 </option>
@@ -86,7 +97,7 @@
             </label>
             <label v-else class="compact-field compact-field--wide">
               <span>工作流</span>
-              <select v-model="chatStore.activeWorkflowId" class="select select--compact" :disabled="chatStore.sending" @change="onWorkflowChanged">
+              <select v-model="chatStore.activeWorkflowId" class="select select--compact" :disabled="conversationInteractionLocked" @change="onWorkflowChanged">
                 <option v-for="workflow in chatStore.workflows" :key="workflow.workflowId" :value="workflow.workflowId">
                   {{ workflow.workflowName }} · v{{ workflow.publishedVersion }}
                 </option>
@@ -94,7 +105,7 @@
             </label>
             <label v-if="chatStore.activeSourceType === 'workflow'" class="compact-field">
               <span>模型</span>
-              <select v-model="chatStore.activeModelCode" class="select select--compact" :disabled="chatStore.sending">
+              <select v-model="chatStore.activeModelCode" class="select select--compact" :disabled="conversationInteractionLocked">
                 <option v-for="model in chatStore.models" :key="model.value" :value="model.value">
                   {{ model.label }}
                 </option>
@@ -177,12 +188,14 @@
           </div>
         </div>
 
-        <SubagentTaskDetail v-if="selectedTask" :task="selectedTask" :agent-name="agentDisplayName(selectedTask.childAgentId)"
+        <SubagentTaskDetail v-if="selectedTask" :key="selectedTask.taskId" ref="subagentDetailRef"
+                            :task="selectedTask" :agent-name="agentDisplayName(selectedTask.childAgentId)"
                             :cancelling="orchestrationStore.cancellingTaskId === selectedTask.taskId"
-                            @back="selectedTaskId = ''" @cancel="cancelSelectedTask" />
+                            @back="closeSubagentDetail" @cancel="cancelSelectedTask" />
 
         <div v-else ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
-          <OrchestrationRunCard :snapshot="currentOrchestration" :agents="chatStore.agents" @select-task="selectedTaskId = $event" />
+          <OrchestrationRunCard :snapshot="currentOrchestration" :agents="chatStore.agents" :stopping="stoppingOrchestration"
+                                @select-task="openCurrentSubagent" @stop="stopOrchestration" />
           <div v-if="chatStore.loadingMessages" class="empty-chat" role="status" aria-live="polite">
             <span class="empty-orb">···</span>
             <h2>正在载入最近消息</h2>
@@ -235,14 +248,34 @@
                 >
                   {{ compactTraceId(message.traceId) }}
                 </button>
+                <button
+                  v-if="message.role === 'user' || message.role === 'assistant'"
+                  type="button"
+                  :class="['message-copy', { 'message-copy--copied': copiedMessageId === message.id }]"
+                  :title="messageCopyLabel(message)"
+                  :aria-label="messageCopyLabel(message)"
+                  @click="copyMessageContent(message)"
+                >
+                  <Check v-if="copiedMessageId === message.id" :size="15" :stroke-width="2.2" aria-hidden="true" />
+                  <Copy v-else :size="15" :stroke-width="2.2" aria-hidden="true" />
+                </button>
               </div>
               <WorkflowNodeExecutionPanel
                 v-if="message.role === 'assistant' && message.runId && chatStore.workflowRuns[message.runId]"
                 :run="chatStore.workflowRuns[message.runId]"
               />
               <p>{{ message.content || '...' }}</p>
+              <span
+                v-if="messageCopyErrorId === message.id && messageCopyError"
+                class="message-copy-error" role="status" aria-live="polite"
+              >
+                {{ messageCopyError }}
+              </span>
             </article>
           </div>
+          <span class="sr-only message-copy-announcement" role="status" aria-live="polite">
+            {{ messageCopyAnnouncement }}
+          </span>
 
           <div v-if="!isViewingLatestWindow" class="latest-window-action">
             <button class="button button--soft" type="button" @click="showLatestMessages">返回最新消息</button>
@@ -366,7 +399,7 @@
               v-model="draft"
               class="composer-input"
               aria-label="输入会话消息或运行引导指令"
-              :placeholder="orchestrationLocked ? '子 Agent 正在协作；可继续编辑，完成后发送' : chatStore.sending ? '输入新指令引导当前运行' : '输入消息，Enter 发送，Shift + Enter 换行'"
+              :placeholder="orchestrationControlsLocked ? orchestrationLockHint : chatStore.sending ? '输入新指令引导当前运行' : '输入消息，Enter 发送，Shift + Enter 换行'"
               @compositionstart="onCompositionStart"
               @compositionend="onCompositionEnd"
               @keydown.enter="onComposerEnter"
@@ -374,14 +407,14 @@
 
             <div class="composer-actions">
               <span class="composer-hint">
-                {{ orchestrationLocked ? orchestrationLockHint : chatStore.sending ? '输入新指令后可引导当前运行' : 'Enter 发送 · 输入法候选期间不会误发' }}
+                {{ orchestrationControlsLocked ? orchestrationLockHint : chatStore.sending ? '输入新指令后可引导当前运行' : 'Enter 发送 · 输入法候选期间不会误发' }}
               </span>
               <div class="button-row">
                 <button
                   v-if="chatStore.sending"
                   class="button button--soft"
                   type="button"
-                  :disabled="!draft.trim() || !chatStore.currentRunId || chatStore.steering || chatStore.cancelling"
+                  :disabled="orchestrationControlsLocked || !draft.trim() || !chatStore.currentRunId || chatStore.steering || chatStore.cancelling"
                   @click="steerRun"
                 >
                   {{ chatStore.steering ? '引导中' : '引导' }}
@@ -389,7 +422,7 @@
                 <button
                   :class="['button', chatStore.sending ? 'button--danger' : 'button--primary']"
                   :type="chatStore.sending ? 'button' : 'submit'"
-                  :disabled="orchestrationLocked || chatStore.cancelling || chatStore.steering || (!chatStore.sending && (!draft.trim() || !canCreateSession))"
+                  :disabled="chatStore.cancelling || chatStore.steering || (!chatStore.sending && (orchestrationControlsLocked || !draft.trim() || !canCreateSession))"
                   @click="chatStore.sending ? cancelRun() : undefined"
                 >
                   {{ chatStore.cancelling ? '取消中' : chatStore.sending ? '取消' : '发送' }}
@@ -476,11 +509,24 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
+import { Check, Copy } from '@lucide/vue';
 
 import { createSessionShare } from '@/api/share';
 import OrchestrationRunCard from '@/components/agent/OrchestrationRunCard.vue';
 import SubagentTaskDetail from '@/components/agent/SubagentTaskDetail.vue';
 import WorkflowNodeExecutionPanel from '@/components/chat/WorkflowNodeExecutionPanel.vue';
+import {
+  createLatestRefresh,
+  currentRunTasks,
+  hasVisibleResumeFinalMessage,
+  isConversationInteractionLocked,
+  isCurrentSessionDeleteBlocked,
+  isSessionSwitchBlocked,
+  runWithRetry,
+  shouldDisplayChatMessage,
+  subagentTaskLabel,
+  subagentTaskTone,
+} from '@/domain/chat-orchestration-state';
 import { useAssetStore } from '@/stores/assets';
 import { useChatStore } from '@/stores/chat';
 import { useInsightStore } from '@/stores/insight';
@@ -493,6 +539,9 @@ type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
 interface MessageScrollAnchor {
   messageId: string;
   viewportTop: number;
+}
+interface SubagentTaskDetailHandle {
+  focus: () => void;
 }
 
 const chatStore = useChatStore();
@@ -519,10 +568,18 @@ const firstBindingRef = ref<HTMLInputElement | null>(null);
 const ragPolicyGroupRef = ref<HTMLElement | null>(null);
 const expandedSessionIds = ref<string[]>([]);
 const selectedTaskId = ref('');
+const subagentDetailRef = ref<SubagentTaskDetailHandle | null>(null);
+const lastSubagentTrigger = ref<HTMLElement | null>(null);
 const managingSessions = ref(false);
 const selectedSessionIds = ref(new Set<string>());
 const batchDeletingSessions = ref(false);
+const stoppingOrchestration = ref(false);
+const copiedMessageId = ref('');
+const messageCopyErrorId = ref('');
+const messageCopyError = ref('');
+const messageCopyAnnouncement = ref('');
 let scrollFrame: number | null = null;
+let messageCopyTimer: number | null = null;
 const MESSAGE_WINDOW_SIZE = 100;
 const MESSAGE_WINDOW_STEP = 50;
 const ragModeOptions: Array<{ value: SessionRagMode; label: string }> = [
@@ -557,11 +614,23 @@ const visibleSessions = computed(() => {
     return (session.sourceType || 'agent') === 'agent' && session.agentId === chatStore.activeAgentId;
   });
 });
-const allVisibleSessionsSelected = computed(() => visibleSessions.value.length > 0
-  && visibleSessions.value.every((session) => selectedSessionIds.value.has(session.sessionId)));
 const currentOrchestration = computed(() => orchestrationStore.current(chatStore.sessionId));
 const orchestrationLocked = computed(() => Boolean(currentOrchestration.value?.inputLocked));
-const orchestrationLockHint = computed(() => currentOrchestration.value?.phase === 'WAITING_APPROVAL'
+const orchestrationRecoveryPending = computed(() => Boolean(chatStore.sessionId
+  && !orchestrationStore.initialized(chatStore.sessionId)));
+const orchestrationControlsLocked = computed(() => orchestrationLocked.value || orchestrationRecoveryPending.value);
+const conversationInteractionLocked = computed(() => isConversationInteractionLocked(
+  chatStore.sending,
+  orchestrationControlsLocked.value,
+));
+const deletableVisibleSessions = computed(() => visibleSessions.value
+  .filter((session) => sessionDeletable(session.sessionId)));
+const lockedVisibleSessionCount = computed(() => visibleSessions.value.length - deletableVisibleSessions.value.length);
+const allVisibleSessionsSelected = computed(() => deletableVisibleSessions.value.length > 0
+  && deletableVisibleSessions.value.every((session) => selectedSessionIds.value.has(session.sessionId)));
+const orchestrationLockHint = computed(() => orchestrationRecoveryPending.value
+  ? '正在恢复 Multi-Agent 运行状态；可继续编辑，恢复后发送'
+  : currentOrchestration.value?.phase === 'WAITING_APPROVAL'
   ? '等待工具审批；草稿会保留' : currentOrchestration.value?.phase === 'SUMMARIZING'
     ? '主 Agent 正在汇总；草稿会保留' : '子 Agent 正在协作；草稿会保留');
 const selectedTask = computed(() => orchestrationStore.task(chatStore.sessionId, selectedTaskId.value));
@@ -622,7 +691,11 @@ const boundedWindowStart = computed(() => Math.min(messageWindowStart.value, lat
 const visibleMessages = computed(() => chatStore.messages.slice(
   boundedWindowStart.value,
   boundedWindowStart.value + MESSAGE_WINDOW_SIZE,
-));
+).filter((message) => shouldDisplayChatMessage(
+  message,
+  orchestrationLocked.value,
+  currentOrchestration.value?.currentRunId,
+)));
 const isViewingLatestWindow = computed(() => boundedWindowStart.value === latestWindowStart.value);
 const canShowEarlierMessages = computed(() => boundedWindowStart.value > 0
   || chatStore.hasMoreMessages
@@ -641,10 +714,27 @@ const historyFeedback = computed(() => {
   return chatStore.hasMoreMessages ? '当前仅载入最近一页，可按需向前读取。' : '已到达当前会话起点。';
 });
 const operationStatus = computed(() => {
-  const error = chatStore.errorMessage || assetStore.errorMessage;
+  const error = chatStore.errorMessage || assetStore.errorMessage || orchestrationStore.errorMessage;
   if (chatStore.ragSaving) return { tone: 'working', label: '正在保存RAG设置', detail: '保存完成后，新的运行会使用最新策略。' };
   if (chatStore.cancelling) return { tone: 'warning', label: '正在取消', detail: '等待服务端中止运行并收口上下文。' };
   if (chatStore.steering) return { tone: 'working', label: '正在引导', detail: '新指令已提交，正在切换到后继运行。' };
+  if (error) return { tone: 'error', label: '操作失败', detail: error };
+  if (orchestrationRecoveryPending.value) return {
+    tone: 'working', label: '正在恢复编排状态', detail: '确认当前会话是否有未完成的子 Agent，恢复前暂停发送。',
+  };
+  if (orchestrationLocked.value) {
+    if (currentOrchestration.value?.phase === 'WAITING_APPROVAL') {
+      return { tone: 'warning', label: '等待工具审批', detail: '完成审批后，主 Agent 与子 Agent 会继续执行。' };
+    }
+    if (currentOrchestration.value?.phase === 'SUMMARIZING') {
+      return { tone: 'working', label: '主 Agent 正在统一汇总', detail: '全部子任务已结束，最终答案只会生成一次。' };
+    }
+    return {
+      tone: 'working',
+      label: chatStore.sending ? '主 Agent 与子 Agent 并行执行' : '正在等待子 Agent',
+      detail: '当前仅更新任务状态；全部完成后展示统一汇总。',
+    };
+  }
   if (chatStore.sending) return {
     tone: 'working',
     label: chatStore.ragEnabled ? '正在检索并生成' : '正在生成',
@@ -657,7 +747,6 @@ const operationStatus = computed(() => {
   if (assetStore.uploading) return { tone: 'working', label: '正在上传附件', detail: '文件解析完成后才能选入消息。' };
   if (sharing.value) return { tone: 'working', label: '正在生成分享', detail: '正在生成服务器托管的安全快照链接。' };
   if (chatStore.loadingAgents || chatStore.loadingSessions) return { tone: 'working', label: '正在刷新工作台', detail: '同步运行目标和会话索引。' };
-  if (error) return { tone: 'error', label: '操作失败', detail: error };
   if (shareLink.value) return { tone: 'success', label: '分享已就绪', detail: '链接已生成，可复制后发送给接收者。' };
   if (chatStore.lastSettledRunId && chatStore.messages.length > 0) {
     return { tone: 'success', label: '运行已完成', detail: '消息、上下文和调用记录已收口。' };
@@ -682,24 +771,48 @@ onBeforeUnmount(() => {
   if (scrollFrame !== null) {
     window.cancelAnimationFrame(scrollFrame);
   }
+  if (messageCopyTimer !== null) {
+    window.clearTimeout(messageCopyTimer);
+  }
 });
 
-let orchestrationRefreshRunning = false;
-
-/** 主 Agent 原 SSE 结束后静默拉取可信回调落库的新消息。 */
-async function refreshSupervisorCallbacks() {
-  if (chatStore.activeSourceType !== 'agent'
-      || chatStore.activeAgent?.orchestrationRole !== 'SUPERVISOR'
-      || !chatStore.sessionId || chatStore.sending || chatStore.loadingMessages
-      || orchestrationRefreshRunning) return;
-  orchestrationRefreshRunning = true;
-  try {
-    const lastMessageId = chatStore.messages.at(-1)?.id;
-    await chatStore.reloadSessionMessages(chatStore.sessionId, true);
-    if (lastMessageId !== chatStore.messages.at(-1)?.id) scrollToLatest();
-  } finally {
-    orchestrationRefreshRunning = false;
+let pendingOrchestrationMessageRefresh = false;
+const orchestrationMessageRefresh = createLatestRefresh(async () => {
+  const sessionId = chatStore.sessionId;
+  if (!sessionId) return;
+  const snapshot = currentOrchestration.value;
+  const currentRunStartedAt = snapshot?.runs
+    .find((run) => run.parentRunId === snapshot.currentRunId)?.createdAt;
+  const mustConfirmFinalMessage = Boolean(snapshot
+    && ['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(snapshot.phase));
+  const lastMessageId = chatStore.messages.at(-1)?.id;
+  await runWithRetry(async () => {
+    await chatStore.reloadSessionMessages(sessionId, true);
+    if (mustConfirmFinalMessage
+        && !hasVisibleResumeFinalMessage(chatStore.messages, currentRunStartedAt)) {
+      throw new Error('最终汇总消息尚未出现');
+    }
+  }, {
+    maxAttempts: 5,
+    delayMs: 500,
+  });
+  if (chatStore.sessionId === sessionId && lastMessageId !== chatStore.messages.at(-1)?.id) {
+    scrollToLatest();
   }
+});
+
+/** 运行中先记录刷新意图；原 SSE 收口后再串行追到最新编排版本。 */
+function requestOrchestrationMessageRefresh() {
+  if (!chatStore.sessionId) return;
+  if (chatStore.sending || chatStore.loadingMessages) {
+    pendingOrchestrationMessageRefresh = true;
+    return;
+  }
+  pendingOrchestrationMessageRefresh = false;
+  void orchestrationMessageRefresh.request().catch((error) => {
+    pendingOrchestrationMessageRefresh = true;
+    chatStore.errorMessage = error instanceof Error ? error.message : '最终汇总消息刷新失败';
+  });
 }
 
 watch(
@@ -709,8 +822,14 @@ watch(
       closeManualPanel(false);
       messageWindowStart.value = 0;
       windowFeedback.value = '';
+      copiedMessageId.value = '';
+      messageCopyErrorId.value = '';
+      messageCopyError.value = '';
+      messageCopyAnnouncement.value = '';
+      pendingOrchestrationMessageRefresh = false;
       followingLatest.value = true;
       selectedTaskId.value = '';
+      lastSubagentTrigger.value = null;
     }
     orchestrationStore.connect(sessionId);
     if (sessionId && !expandedSessionIds.value.includes(sessionId)) expandedSessionIds.value.push(sessionId);
@@ -719,15 +838,26 @@ watch(
   { immediate: true },
 );
 
-watch(() => currentOrchestration.value?.version, async (version, previous) => {
-  if (!version || version === previous || !chatStore.sessionId || chatStore.sending || orchestrationRefreshRunning) return;
-  orchestrationRefreshRunning = true;
-  try {
-    const lastMessageId = chatStore.messages.at(-1)?.id;
-    await chatStore.reloadSessionMessages(chatStore.sessionId, true);
-    if (lastMessageId !== chatStore.messages.at(-1)?.id) scrollToLatest();
-  } finally { orchestrationRefreshRunning = false; }
+watch(() => currentOrchestration.value?.version, (version, previous) => {
+  if (!version || version === previous || !chatStore.sessionId) return;
+  pendingOrchestrationMessageRefresh = true;
+  requestOrchestrationMessageRefresh();
 });
+
+watch(
+  () => selectedTask.value ? {
+    taskId: selectedTask.value.taskId,
+    status: selectedTask.value.status,
+    callbackStatus: selectedTask.value.callbackStatus,
+  } : undefined,
+  (current, previous) => {
+    if (!current || previous?.taskId !== current.taskId || !chatStore.sessionId) return;
+    if (previous.status === current.status && previous.callbackStatus === current.callbackStatus) return;
+    if (['SUCCEEDED', 'FAILED', 'CANCELLED', 'ACKED'].includes(current.status)) {
+      void orchestrationStore.loadTask(chatStore.sessionId, current.taskId);
+    }
+  },
+);
 
 watch(
   attachmentScope,
@@ -760,6 +890,14 @@ watch(
   () => chatStore.sending,
   (sending) => {
     if (sending && manualPanelOpen.value) closeManualPanel();
+    if (!sending && pendingOrchestrationMessageRefresh) requestOrchestrationMessageRefresh();
+  },
+);
+
+watch(
+  () => chatStore.loadingMessages,
+  (loading) => {
+    if (!loading && pendingOrchestrationMessageRefresh) requestOrchestrationMessageRefresh();
   },
 );
 
@@ -775,6 +913,7 @@ async function refreshSessionResources(sessionId: string) {
  * 创建新会话；无参数；成功后刷新工具调用并滚动到底部。
  */
 async function createSession() {
+  if (conversationInteractionLocked.value) return;
   followingLatest.value = true;
   messageWindowStart.value = 0;
   windowFeedback.value = '';
@@ -786,6 +925,7 @@ async function createSession() {
  * 切换本地会话；参数是会话 ID；恢复消息并刷新调用记录。
  */
 async function switchSession(sessionId: string) {
+  if (sessionSwitchBlocked(sessionId)) return;
   followingLatest.value = true;
   messageWindowStart.value = 0;
   windowFeedback.value = '';
@@ -795,42 +935,103 @@ async function switchSession(sessionId: string) {
 }
 
 function sessionExpanded(sessionId: string) { return expandedSessionIds.value.includes(sessionId); }
+function sessionSwitchBlocked(sessionId: string) {
+  return isSessionSwitchBlocked(chatStore.sessionId, sessionId, conversationInteractionLocked.value);
+}
+function currentSessionDeleteBlocked(sessionId: string) {
+  const knownOrchestrationLock = Boolean(orchestrationStore.current(sessionId)?.inputLocked);
+  const currentInteractionLock = isCurrentSessionDeleteBlocked(
+    chatStore.sessionId,
+    sessionId,
+    conversationInteractionLocked.value,
+  );
+  return knownOrchestrationLock || currentInteractionLock;
+}
+function sessionDeletable(sessionId: string) { return !currentSessionDeleteBlocked(sessionId); }
 async function toggleSession(sessionId: string) {
   if (sessionExpanded(sessionId)) {
     expandedSessionIds.value = expandedSessionIds.value.filter((id) => id !== sessionId);
     return;
   }
   expandedSessionIds.value.push(sessionId);
-  await orchestrationStore.load(sessionId);
+  if (!orchestrationStore.initialized(sessionId) && orchestrationStore.connectedSessionId !== sessionId) {
+    await orchestrationStore.load(sessionId);
+  }
 }
 function sessionTasks(sessionId: string): SubagentTaskView[] {
-  return orchestrationStore.current(sessionId)?.runs.flatMap((run) => run.tasks) || [];
+  return currentRunTasks(orchestrationStore.current(sessionId));
 }
 async function openMainAgent(sessionId: string) {
+  if (sessionSwitchBlocked(sessionId)) return;
   selectedTaskId.value = '';
+  lastSubagentTrigger.value = null;
   if (chatStore.sessionId !== sessionId) await switchSession(sessionId);
 }
 async function openSubagent(sessionId: string, taskId: string) {
+  if (sessionSwitchBlocked(sessionId)) return;
+  const trigger = document.activeElement;
+  lastSubagentTrigger.value = trigger instanceof HTMLElement ? trigger : null;
   if (chatStore.sessionId !== sessionId) await switchSession(sessionId);
   selectedTaskId.value = taskId;
+  await nextTick();
+  subagentDetailRef.value?.focus();
   await orchestrationStore.loadTask(sessionId, taskId);
 }
-function agentDisplayName(agentId: string) { return chatStore.agents.find((agent) => agent.agentId === agentId)?.agentName || `Agent ${agentId}`; }
-function taskStatusTone(status: string) { return ['READY', 'RUNNING'].includes(status) ? 'active' : status === 'FAILED' ? 'error' : status === 'CANCELLED' ? 'muted' : 'done'; }
-function taskStatusLabel(status: string, callback?: string) {
-  if (status === 'READY') return '等待执行'; if (status === 'RUNNING') return '执行中';
-  if (status === 'FAILED') return '失败'; if (status === 'CANCELLED') return '已取消';
-  return callback === 'DELIVERED' ? '已回调' : '等待汇总';
+async function openCurrentSubagent(taskId: string) {
+  if (!chatStore.sessionId) return;
+  await openSubagent(chatStore.sessionId, taskId);
 }
+async function closeSubagentDetail() {
+  const taskId = selectedTaskId.value;
+  const triggerKind = lastSubagentTrigger.value?.dataset.subagentTrigger;
+  selectedTaskId.value = '';
+  await nextTick();
+  if (lastSubagentTrigger.value?.isConnected) {
+    lastSubagentTrigger.value?.focus();
+  } else {
+    const candidates = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-subagent-task-id]'))
+      .filter((element) => element.dataset.subagentTaskId === taskId);
+    const restoredTrigger = candidates.find((element) => element.dataset.subagentTrigger === triggerKind)
+      || candidates[0];
+    restoredTrigger?.focus();
+  }
+  lastSubagentTrigger.value = null;
+}
+function agentDisplayName(agentId: string) { return chatStore.agents.find((agent) => agent.agentId === agentId)?.agentName || `Agent ${agentId}`; }
 async function cancelSelectedTask() {
   if (!selectedTask.value || !chatStore.sessionId) return;
   await orchestrationStore.cancelTask(chatStore.sessionId, selectedTask.value.taskId);
+}
+
+/** 停止当前 Multi-Agent 协作；主运行存在时取消主运行，WAIT_ALL 阶段逐个取消未完成子任务。 */
+async function stopOrchestration() {
+  if (!chatStore.sessionId || stoppingOrchestration.value) return;
+  const tasks = currentRunTasks(currentOrchestration.value)
+    .filter((task) => ['READY', 'RUNNING'].includes(task.status));
+  if (!tasks.length) return;
+  if (!window.confirm(`确定停止当前 ${tasks.length} 个未完成子任务吗？已产生的结果会保留。`)) return;
+  stoppingOrchestration.value = true;
+  let failed = 0;
+  try {
+    if (chatStore.sending) {
+      await chatStore.cancelActiveRun('用户停止 Multi-Agent 协作');
+    } else {
+      for (const task of tasks) {
+        const cancelled = await orchestrationStore.cancelTask(chatStore.sessionId, task.taskId);
+        if (!cancelled) failed += 1;
+      }
+    }
+    if (failed) chatStore.errorMessage = `${tasks.length - failed} 个子任务已取消，${failed} 个未能取消`;
+  } finally {
+    stoppingOrchestration.value = false;
+  }
 }
 
 /**
  * 删除会话；参数是会话ID和标题；确认后调用服务端软删除。
  */
 async function deleteSession(sessionId: string, title: string) {
+  if (currentSessionDeleteBlocked(sessionId)) return;
   if (!window.confirm(`确定删除会话“${title}”吗？历史审计记录会保留，但会话将不再显示。`)) {
     return;
   }
@@ -847,6 +1048,10 @@ function toggleSessionManagement() {
 }
 
 function toggleSessionSelection(sessionId: string) {
+  if (!sessionDeletable(sessionId)) {
+    chatStore.errorMessage = '运行中的会话不能删除，请先停止运行';
+    return;
+  }
   const next = new Set(selectedSessionIds.value);
   next.has(sessionId) ? next.delete(sessionId) : next.add(sessionId);
   selectedSessionIds.value = next;
@@ -854,23 +1059,29 @@ function toggleSessionSelection(sessionId: string) {
 
 function toggleAllVisibleSessions() {
   selectedSessionIds.value = allVisibleSessionsSelected.value
-    ? new Set() : new Set(visibleSessions.value.map((session) => session.sessionId));
+    ? new Set() : new Set(deletableVisibleSessions.value.map((session) => session.sessionId));
 }
 
 async function batchDeleteSessions() {
-  const selected = chatStore.sessions.filter((session) => selectedSessionIds.value.has(session.sessionId));
+  const lockedSelectedCount = chatStore.sessions.filter((session) => selectedSessionIds.value.has(session.sessionId)
+    && !sessionDeletable(session.sessionId)).length;
+  const selected = chatStore.sessions.filter((session) => selectedSessionIds.value.has(session.sessionId)
+    && sessionDeletable(session.sessionId));
+  if (lockedSelectedCount) chatStore.errorMessage = `${lockedSelectedCount} 个运行中会话已从删除范围排除`;
   if (!selected.length || !window.confirm(`确定删除选中的 ${selected.length} 个会话吗？历史审计记录仍会保留。`)) return;
   batchDeletingSessions.value = true;
-  let failed = 0;
+  const failedIds: string[] = [];
   const ordered = [...selected].sort((left, right) =>
     Number(left.sessionId === chatStore.sessionId) - Number(right.sessionId === chatStore.sessionId));
   for (const session of ordered) {
-    try { await chatStore.deleteSession(session.sessionId); } catch { failed += 1; }
+    try { await chatStore.deleteSession(session.sessionId); } catch { failedIds.push(session.sessionId); }
   }
-  selectedSessionIds.value = new Set();
+  selectedSessionIds.value = new Set(failedIds);
   batchDeletingSessions.value = false;
-  managingSessions.value = false;
-  if (failed) chatStore.errorMessage = `${selected.length - failed} 个会话已删除，${failed} 个处理失败`;
+  managingSessions.value = failedIds.length > 0;
+  if (failedIds.length) {
+    chatStore.errorMessage = `${selected.length - failedIds.length} 个会话已删除，${failedIds.length} 个处理失败；已保留失败项便于重试`;
+  }
 }
 
 /**
@@ -885,6 +1096,7 @@ async function reloadTargets() {
  * 智能体变更处理；无参数；清空当前会话，避免串 Agent。
  */
 async function onAgentChanged() {
+  if (conversationInteractionLocked.value) return;
   await chatStore.selectAgent(chatStore.activeAgentId);
 }
 
@@ -892,6 +1104,7 @@ async function onAgentChanged() {
  * 运行类型变更处理；无参数；切到对应默认目标。
  */
 async function onSourceChanged() {
+  if (conversationInteractionLocked.value) return;
   if (chatStore.activeSourceType === 'workflow') {
     if (!chatStore.activeWorkflowId && chatStore.workflows.length > 0) {
       await chatStore.selectWorkflow(chatStore.workflows[0].workflowId);
@@ -907,6 +1120,7 @@ async function onSourceChanged() {
  * 工作流变更处理；无参数；清空当前会话，避免串工作流。
  */
 async function onWorkflowChanged() {
+  if (conversationInteractionLocked.value) return;
   await chatStore.selectWorkflow(chatStore.activeWorkflowId);
 }
 
@@ -1128,7 +1342,7 @@ function onComposerEnter(event: KeyboardEvent) {
  */
 async function send() {
   const message = draft.value.trim();
-  if (!message || chatStore.sending || orchestrationLocked.value) {
+  if (!message || chatStore.sending || orchestrationControlsLocked.value) {
     return;
   }
   const attachmentIds = [...assetStore.selectedAssetIds];
@@ -1157,6 +1371,7 @@ async function cancelRun() {
  * 引导当前运行；无参数；成功后清空引导输入并跟踪后继流。
  */
 async function steerRun() {
+  if (orchestrationControlsLocked.value) return;
   const instruction = draft.value.trim();
   if (!instruction || chatStore.steering || chatStore.cancelling) {
     return;
@@ -1211,6 +1426,37 @@ async function copyTraceId(traceId: string) {
   } catch {
     chatStore.errorMessage = `浏览器未授权访问剪贴板，请手动复制链路号：${traceId}`;
   }
+}
+
+/** 复制用户或 Agent 消息的原始正文；成功和失败反馈就地展示。 */
+async function copyMessageContent(message: ChatMessage) {
+  messageCopyErrorId.value = '';
+  messageCopyError.value = '';
+  messageCopyAnnouncement.value = '';
+  try {
+    await copyText(message.content);
+    copiedMessageId.value = message.id;
+    await nextTick();
+    messageCopyAnnouncement.value = message.role === 'user' ? '用户消息已复制' : 'Agent 消息已复制';
+    if (messageCopyTimer !== null) window.clearTimeout(messageCopyTimer);
+    messageCopyTimer = window.setTimeout(() => {
+      if (copiedMessageId.value === message.id) {
+        copiedMessageId.value = '';
+        messageCopyAnnouncement.value = '';
+      }
+      messageCopyTimer = null;
+    }, 1200);
+  } catch {
+    copiedMessageId.value = '';
+    messageCopyErrorId.value = message.id;
+    messageCopyError.value = '复制失败，请手动选择消息文本';
+  }
+}
+
+/** 生成复制按钮的工具提示和辅助技术名称。 */
+function messageCopyLabel(message: ChatMessage) {
+  if (copiedMessageId.value === message.id) return '消息已复制';
+  return message.role === 'user' ? '复制用户消息' : '复制 Agent 消息';
 }
 
 /** 紧凑显示链路号；参数是完整链路号；保留首尾便于人工核对。 */
@@ -1587,6 +1833,7 @@ function formatOptionalTokens(value?: number) {
 .session-batch-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); font-size: 12px; }
 .session-batch-bar label { display: flex; align-items: center; gap: 6px; font-weight: 800; }
 .session-batch-bar input,.session-select { width: 16px; height: 16px; accent-color: var(--accent-deep); }
+.session-batch-note { flex: 1; color: var(--warning); font-size: 10px; line-height: 1.35; }
 .session-batch-bar button { border: 0; background: transparent; color: var(--danger); font-weight: 850; cursor: pointer; }
 .session-batch-bar button:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -1620,6 +1867,7 @@ function formatOptionalTokens(value?: number) {
 }
 .session-item--selecting { grid-template-columns: 22px minmax(0, 1fr) auto; }
 .session-select { margin-top: 7px; }
+.session-select:disabled { cursor: not-allowed; opacity: .46; }
 
 .session-primary {
   display: flex;
@@ -1663,6 +1911,7 @@ function formatOptionalTokens(value?: number) {
   background: transparent;
   cursor: pointer;
 }
+.session-delete:disabled { cursor: not-allowed; opacity: .48; }
 
 .session-children {
   grid-column: 1 / -1;
@@ -1728,6 +1977,7 @@ function formatOptionalTokens(value?: number) {
   font-size: 12px;
   line-height: 1.6;
 }
+.session-open em { color: var(--warning); font-style: normal; font-weight: 750; }
 
 .session-empty {
   padding: 12px;
@@ -2172,11 +2422,64 @@ function formatOptionalTokens(value?: number) {
   outline-offset: 1px;
 }
 
+.message-copy {
+  display: inline-grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  color: inherit;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--motion-fast), background var(--motion-fast);
+}
+
+.message:hover .message-copy,
+.message:focus-within .message-copy,
+.message-copy:focus-visible,
+.message-copy--copied {
+  opacity: 1;
+}
+
+.message-copy:hover,
+.message-copy--copied {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.message-copy:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.message-copy-error {
+  display: block;
+  margin-top: 7px;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.message--user .message-copy-error {
+  color: #fffaf0;
+}
+
 .message p {
   margin: 0;
   white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.7;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .message-copy {
+    opacity: 1;
+  }
 }
 
 .mini-badge {

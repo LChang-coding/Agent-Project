@@ -78,7 +78,8 @@
             {{ batchDeleting ? '删除中…' : `批量删除${selectedSkillIds.size ? ` (${selectedSkillIds.size})` : ''}` }}
           </button>
         </div>
-        <span v-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
+        <span v-if="batchFeedback" :class="['batch-feedback', { 'batch-feedback--error': batchFeedbackFailed }]" role="status" aria-live="polite">{{ batchFeedback }}</span>
+        <span v-else-if="toolStore.errorMessage" class="error-text">{{ toolStore.errorMessage }}</span>
       </div>
       <div class="resource-table-scroll" tabindex="0" aria-label="Skill 资源列表，可横向滚动">
       <table class="table resource-table">
@@ -97,7 +98,7 @@
         <tbody>
           <tr v-for="skill in toolStore.skills" :key="skill.skillId">
             <td class="selection-cell" data-label="选择"><input type="checkbox" :checked="selectedSkillIds.has(skill.skillId)"
-                :disabled="skill.status === 'disabled' || batchDeleting" :aria-label="`选择 Skill ${skill.skillName}`" @change="toggleSkillSelection(skill.skillId)" /></td>
+                :disabled="skill.status === 'disabled' || skill.manageable === false || batchDeleting" :aria-label="`选择 Skill ${skill.skillName}`" @change="toggleSkillSelection(skill.skillId)" /></td>
             <td data-label="名称">
               <strong>{{ skill.skillName }}</strong>
               <small>{{ skill.description || '暂无描述' }}</small>
@@ -106,13 +107,13 @@
             <td data-label="范围">{{ visibilityLabel(skill.visibility) }}</td>
             <td data-label="当前版本">{{ skill.currentVersion || '--' }}</td>
             <td data-label="发布版本">{{ skill.publishedVersion || '--' }}</td>
-            <td data-label="状态"><span :class="['badge', statusClass(skill.status)]">{{ statusLabel(skill.status) }}</span></td>
+            <td data-label="状态"><span :class="['badge', statusClass(skill.status)]">{{ statusLabel(skill.status) }}</span><small v-if="skill.manageable === false">只读</small></td>
             <td class="resource-actions-cell" data-label="操作">
               <div class="button-row resource-actions">
-                <button class="button" type="button" :disabled="isSkillPending(skill.skillId)" @click="runSkillAction('publish', skill.skillId, skill.currentVersion)">
+                <button class="button" type="button" :disabled="skill.manageable === false || isSkillPending(skill.skillId)" @click="runSkillAction('publish', skill.skillId, skill.currentVersion)">
                   {{ skillOperationLabel(skill.skillId, 'publish', '发布') }}
                 </button>
-                <button class="button" type="button" :disabled="isSkillPending(skill.skillId)" @click="runSkillAction('disable', skill.skillId)">
+                <button class="button" type="button" :disabled="skill.manageable === false || isSkillPending(skill.skillId)" @click="runSkillAction('disable', skill.skillId)">
                   {{ skillOperationLabel(skill.skillId, 'disable', '禁用') }}
                 </button>
               </div>
@@ -138,6 +139,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 
 import SectionHeader from '@/components/common/SectionHeader.vue';
+import { executeBatchOperation } from '@/domain/tool-governance';
 import { useToolStore } from '@/stores/tools';
 
 const toolStore = useToolStore();
@@ -145,7 +147,10 @@ const selectedFile = ref<File | null>(null);
 const uploadHint = ref('');
 const selectedSkillIds = ref(new Set<string>());
 const batchDeleting = ref(false);
-const selectableSkillIds = computed(() => toolStore.skills.filter((skill) => skill.status !== 'disabled').map((skill) => skill.skillId));
+const batchFeedback = ref('');
+const batchFeedbackFailed = ref(false);
+const selectableSkillIds = computed(() => toolStore.skills
+  .filter((skill) => skill.status !== 'disabled' && skill.manageable !== false).map((skill) => skill.skillId));
 const allSelectableSkillsSelected = computed(() => selectableSkillIds.value.length > 0
   && selectableSkillIds.value.every((skillId) => selectedSkillIds.value.has(skillId)));
 const scopes = [
@@ -198,6 +203,8 @@ async function submitSkill() {
  * 加载 Skill；参数是范围；刷新列表。
  */
 async function loadSkills(scope: string) {
+  selectedSkillIds.value = new Set();
+  batchFeedback.value = '';
   await toolStore.loadSkills(scope);
 }
 
@@ -240,13 +247,16 @@ async function batchDisableSkills() {
   const ids = [...selectedSkillIds.value];
   if (!ids.length || !window.confirm(`确定批量删除选中的 ${ids.length} 个 Skill 吗？版本与调用审计会保留。`)) return;
   batchDeleting.value = true;
-  let failed = 0;
-  for (const id of ids) {
-    try { await toolStore.disableSkill(id); } catch { failed += 1; }
+  batchFeedback.value = '';
+  try {
+    const result = await executeBatchOperation(ids, (id) => toolStore.disableSkill(id));
+    selectedSkillIds.value = new Set(result.failedIds);
+    batchFeedback.value = result.message;
+    batchFeedbackFailed.value = result.failedIds.length > 0;
+    toolStore.errorMessage = result.failedIds.length ? result.message : '';
+  } finally {
+    batchDeleting.value = false;
   }
-  selectedSkillIds.value = new Set();
-  batchDeleting.value = false;
-  if (failed) toolStore.errorMessage = `${ids.length - failed} 个 Skill 已删除，${failed} 个处理失败`;
 }
 
 /**
@@ -362,6 +372,8 @@ function statusClass(value: string) {
 .row-feedback--error {
   color: var(--danger);
 }
+.batch-feedback { color: var(--success); font-size: 12px; font-weight: 700; }
+.batch-feedback--error { color: var(--danger); }
 
 @media (max-width: 768px) {
   .two-cols {

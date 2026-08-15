@@ -12,6 +12,7 @@ interface TextareaPort {
 }
 
 interface DocumentPort {
+  activeElement?: { focus(): void } | null;
   body: { appendChild(node: TextareaPort): unknown };
   createElement(tagName: 'textarea'): TextareaPort;
   execCommand(command: 'copy'): boolean;
@@ -45,6 +46,7 @@ export async function copyText(text: string, overrides: ClipboardEnvironment = {
     throw new Error('COPY_NOT_SUPPORTED');
   }
   const textarea = targetDocument.createElement('textarea');
+  const previousFocus = targetDocument.activeElement;
   textarea.value = text;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
@@ -57,5 +59,12 @@ export async function copyText(text: string, overrides: ClipboardEnvironment = {
     if (!targetDocument.execCommand('copy')) throw new Error('COPY_REJECTED');
   } finally {
     textarea.remove();
+    if (previousFocus && previousFocus !== textarea) {
+      try {
+        previousFocus.focus();
+      } catch {
+        // Copy already succeeded; an element removed concurrently must not turn it into a failure.
+      }
+    }
   }
 }

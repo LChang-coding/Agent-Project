@@ -11,4 +11,5 @@ public class ParentInboxItemPO {
     private String childAgentId;
     private String resultSummary;
     private String taskStatus;
+    private String callbackStatus;
 }

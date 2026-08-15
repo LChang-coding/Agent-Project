@@ -1,5 +1,6 @@
 package cn.bugstack.ai.infrastructure.adapter.repository;
 
+import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
 import cn.bugstack.ai.domain.agent.adapter.repository.ISubagentTaskRepository;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
@@ -8,7 +9,6 @@ import cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO;
 import cn.bugstack.ai.infrastructure.dao.po.SubagentTaskPO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,23 +23,21 @@ import java.util.UUID;
 public class SubagentTaskRepository implements ISubagentTaskRepository {
     private final ISubagentTaskDao dao;
     private final ObjectMapper objectMapper;
+    private final IParentResumeRepository parentResumeRepository;
 
-    public SubagentTaskRepository(ISubagentTaskDao dao, ObjectMapper objectMapper) {
+    public SubagentTaskRepository(ISubagentTaskDao dao, ObjectMapper objectMapper,
+                                  IParentResumeRepository parentResumeRepository) {
         this.dao = dao;
         this.objectMapper = objectMapper;
+        this.parentResumeRepository = parentResumeRepository;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int createBatchAndEnqueue(List<SubagentTaskEntity> tasks) {
         if (tasks == null || tasks.isEmpty()) return 0;
-        int created;
-        try {
-            created = insertTaskAndOutbox(tasks.get(0));
-        } catch (DuplicateKeyException duplicate) {
-            // taskId 由 functionCallId + 序号稳定生成；首任务冲突即表示并发请求已落库。
-            return 0;
-        }
+        if (!parentResumeRepository.tryPrepareWait(tasks.get(0), LocalDateTime.now())) return 0;
+        int created = insertTaskAndOutbox(tasks.get(0));
         for (int index = 1; index < tasks.size(); index++) created += insertTaskAndOutbox(tasks.get(index));
         return created;
     }
@@ -110,6 +108,7 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
                 "SUBAGENT_INSTANCE_CLEANUP", taskId, parentRunId,
                 Map.of("schemaVersion", 1, "taskId", taskId, "tenantId", tenantId,
                         "parentRunId", parentRunId))));
+        if (changed > 0) parentResumeRepository.tryActivate(tenantId, parentRunId, cancelledAt);
         return changed;
     }
 
@@ -169,7 +168,12 @@ public class SubagentTaskRepository implements ISubagentTaskRepository {
             insertResultEvent(tasks.get(0));
             return true;
         }
-        dao.markCallbackDead(tenantId, parentRunId, taskId);
+        if (dao.markCallbackDead(tenantId, parentRunId, taskId) == 1) {
+            dao.insertOutbox(event(tenantId, "SUBAGENT_INSTANCE_CLEANUP", taskId, parentRunId,
+                    Map.of("schemaVersion", 1, "taskId", taskId, "tenantId", tenantId,
+                            "parentRunId", parentRunId)));
+            parentResumeRepository.tryActivate(tenantId, parentRunId, LocalDateTime.now());
+        }
         return false;
     }
 

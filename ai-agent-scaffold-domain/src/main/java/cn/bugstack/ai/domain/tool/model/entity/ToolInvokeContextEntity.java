@@ -103,4 +103,7 @@ public class ToolInvokeContextEntity {
 
     /** 服务端跨回调延续的原始主运行编号。 */
     private String orchestrationRootRunId;
+
+    /** WAIT_ALL 恢复阶段只允许读取既有子任务结果，禁止再次创建或取消子任务。 */
+    private Boolean orchestrationSummaryOnly;
 }

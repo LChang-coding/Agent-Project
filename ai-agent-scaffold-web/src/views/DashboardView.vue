@@ -6,7 +6,7 @@
         <h1>让智能体系统<br />可构建、可运行、可追溯。</h1>
         <p>Agent、工作流、RAG 与工具使用同一租户边界和链路标识，从配置到执行保持一致。</p>
         <div class="dashboard-hero__actions">
-          <RouterLink class="button button--primary" to="/chat">开始一次会话</RouterLink>
+          <RouterLink class="button button--primary" to="/chat">进入 Agent 编排</RouterLink>
           <RouterLink class="button button--dark" to="/workflow">编排工作流</RouterLink>
         </div>
       </div>
@@ -85,7 +85,7 @@ import { useChatStore } from '@/stores/chat';
 const authStore = useAuthStore();
 const chatStore = useChatStore();
 const capabilities = [
-  { status: '已接入', title: 'Agent 与流式会话', desc: '会话持久化、取消、引导与 Trace ID 链路追踪。', path: '/chat' },
+  { status: '已接入', title: '单 / Multi-Agent 编排', desc: '统一承载单 Agent 对话、子 Agent 委派、回调汇总与 Trace 追踪。', path: '/chat' },
   { status: '已接入', title: 'DAG 与智能工作流', desc: '固定图执行与 Agent 动态路由使用统一节点事件。', path: '/workflow' },
   { status: '已接入', title: 'RAG 知识库', desc: '文档摄取、绑定策略、检索实验与会话按需调用。', path: '/rag' },
   { status: '已接入', title: 'MCP 与 Skill 工具层', desc: '外部工具登记、测试、发布与节点白名单控制。', path: '/mcp' },

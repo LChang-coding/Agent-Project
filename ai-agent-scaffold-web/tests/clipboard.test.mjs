@@ -34,6 +34,33 @@ test('HTTP context falls back to a temporary textarea', async () => {
   assert.deepEqual(events, ['append:trace-http', 'focus', 'select', 'copy', 'remove']);
 });
 
+test('HTTP fallback restores focus to the invoking control', async () => {
+  const events = [];
+  const trigger = { focus: () => events.push('restore-trigger') };
+  const textarea = {
+    value: '',
+    style: {},
+    setAttribute: () => {},
+    focus: () => events.push('focus-textarea'),
+    select: () => events.push('select'),
+    remove: () => events.push('remove'),
+  };
+
+  await copyText('message-body', {
+    document: {
+      activeElement: trigger,
+      body: { appendChild: () => events.push('append') },
+      createElement: () => textarea,
+      execCommand: () => {
+        events.push('copy');
+        return true;
+      },
+    },
+  });
+
+  assert.deepEqual(events, ['append', 'focus-textarea', 'select', 'copy', 'remove', 'restore-trigger']);
+});
+
 test('Clipboard API rejection also falls back', async () => {
   let fallbackCalled = false;
   await copyText('trace-denied', {

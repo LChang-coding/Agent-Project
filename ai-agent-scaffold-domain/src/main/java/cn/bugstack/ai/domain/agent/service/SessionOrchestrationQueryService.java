@@ -1,11 +1,15 @@
 package cn.bugstack.ai.domain.agent.service;
 
+import cn.bugstack.ai.domain.agent.adapter.repository.IParentResumeRepository;
 import cn.bugstack.ai.domain.agent.adapter.repository.ISubagentTaskRepository;
 import cn.bugstack.ai.domain.agent.adapter.repository.IToolApprovalRepository;
 import cn.bugstack.ai.domain.agent.model.entity.SessionOrchestrationSnapshotEntity;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.entity.ToolApprovalRequestEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
+import cn.bugstack.ai.domain.run.adapter.repository.IChatRunRepository;
+import cn.bugstack.ai.domain.run.model.ChatRunEntity;
+import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +25,17 @@ import java.util.Map;
 public class SessionOrchestrationQueryService {
     private final ISubagentTaskRepository taskRepository;
     private final IToolApprovalRepository approvalRepository;
+    private final IParentResumeRepository parentResumeRepository;
+    private final IChatRunRepository runRepository;
 
     public SessionOrchestrationQueryService(ISubagentTaskRepository taskRepository,
-                                            IToolApprovalRepository approvalRepository) {
+                                            IToolApprovalRepository approvalRepository,
+                                            IParentResumeRepository parentResumeRepository,
+                                            IChatRunRepository runRepository) {
         this.taskRepository = taskRepository;
         this.approvalRepository = approvalRepository;
+        this.parentResumeRepository = parentResumeRepository;
+        this.runRepository = runRepository;
     }
 
     public SessionOrchestrationSnapshotEntity query(String tenantId, String userId, String sessionId) {
@@ -33,23 +43,35 @@ public class SessionOrchestrationQueryService {
         List<SubagentTaskEntity> tasks = taskRepository.queryBySession(tenantId, userId, sessionId, 100);
         List<ToolApprovalRequestEntity> approvals = approvalRepository
                 .queryPendingBySession(tenantId, userId, sessionId, 100);
+        List<ChatRunEntity> executableRuns = runRepository.queryExecutableBySession(tenantId, userId, sessionId);
 
         Map<String, List<SubagentTaskEntity>> groups = new LinkedHashMap<>();
         tasks.stream().sorted(Comparator.comparing(SubagentTaskEntity::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .forEach(task -> groups.computeIfAbsent(task.getParentRunId(), ignored -> new ArrayList<>()).add(task));
 
-        List<SessionOrchestrationSnapshotEntity.Run> runs = groups.entrySet().stream().map(entry -> run(entry.getKey(), entry.getValue(), approvals)).toList();
+        Map<String, String> resumeStatuses = new LinkedHashMap<>();
+        groups.keySet().forEach(runId -> resumeStatuses.put(runId, parentResumeRepository.queryStatus(tenantId, runId)));
+        List<SessionOrchestrationSnapshotEntity.Run> runs = groups.entrySet().stream()
+                .map(entry -> run(entry.getKey(), entry.getValue(), approvals, resumeStatuses.get(entry.getKey()))).toList();
         String approvalRunId = approvals.isEmpty() ? null : approvals.get(0).getParentRunId();
+        String executableRunId = executableRuns.isEmpty() ? null : executableRuns.get(0).getRunId();
         String currentRunId = approvalRunId != null ? approvalRunId : runs.stream()
                 .filter(value -> activePhase(value.getPhase())).map(SessionOrchestrationSnapshotEntity.Run::getParentRunId)
-                .findFirst().orElse(runs.isEmpty() ? null : runs.get(0).getParentRunId());
-        String phase = currentRunId == null ? "IDLE" : phaseForRun(currentRunId, tasks, approvals);
+                .findFirst().orElse(executableRunId != null ? executableRunId : runs.isEmpty() ? null : runs.get(0).getParentRunId());
+        String phase = currentRunId == null ? "IDLE"
+                : groups.containsKey(currentRunId)
+                ? phaseForRun(currentRunId, tasks, approvals, resumeStatuses.get(currentRunId))
+                : "EXECUTING";
         boolean active = activePhase(phase);
         String versionSource = tasks.stream().map(value -> value.getTaskId() + ':' + value.getStatus() + ':'
                         + safe(value.getCallbackStatus()) + ':' + safe(value.getChildSessionId()) + ':' + safe(value.getCompletedAt()))
                 .reduce("", (a, b) -> a + '|' + b)
                 + approvals.stream().map(value -> value.getApprovalId() + ':' + value.getRevision())
+                .reduce("", (a, b) -> a + '|' + b)
+                + resumeStatuses.entrySet().stream().map(value -> value.getKey() + ':' + safe(value.getValue()))
+                .reduce("", (a, b) -> a + '|' + b)
+                + executableRuns.stream().map(value -> value.getRunId() + ':' + value.getStatus() + ':' + value.getVersion())
                 .reduce("", (a, b) -> a + '|' + b);
         return SessionOrchestrationSnapshotEntity.builder().sessionId(sessionId)
                 .version(Integer.toUnsignedString(versionSource.hashCode(), 36)).active(active).inputLocked(active)
@@ -65,6 +87,32 @@ public class SessionOrchestrationQueryService {
         }
     }
 
+    /** WAIT_ALL 活跃期间拒绝删除等会话级变更，避免父侧屏障失去承载会话。 */
+    public void assertAcceptsSessionMutation(String tenantId, String userId, String sessionId) {
+        assertAcceptsUserMessage(tenantId, userId, sessionId);
+    }
+
+    /** WAIT_ALL 已建立后，父运行不能再被取消或引导，否则会破坏父侧屏障。 */
+    public void assertAcceptsRunMutation(String tenantId, String parentRunId) {
+        requireText(tenantId); requireText(parentRunId);
+        if (parentResumeRepository.isAwaitingSummary(tenantId, parentRunId)) {
+            throw new AppException("SESSION_ORCHESTRATION_ACTIVE", "当前运行正在等待 Multi-Agent 统一汇总，不能取消或引导");
+        }
+    }
+
+    /** 最终消息事务内锁定恢复账本，确保当前 Worker 仍持有未过期 fencing 租约。 */
+    public void assertOwnsResumeLease(String tenantId) {
+        if (!AgentOrchestrationContextHolder.isSummaryOnly()) return;
+        String parentRunId = AgentOrchestrationContextHolder.getRootRunId();
+        String owner = AgentOrchestrationContextHolder.getResumeLeaseOwner();
+        Long fencingToken = AgentOrchestrationContextHolder.getResumeFencingToken();
+        if (parentRunId == null || owner == null || fencingToken == null
+                || !parentResumeRepository.lockOwnedLease(
+                tenantId, parentRunId, owner, fencingToken, LocalDateTime.now())) {
+            throw new AppException("PARENT_RESUME_LEASE_LOST", "主 Agent 恢复租约已失效，本次结果不得提交");
+        }
+    }
+
     public SessionOrchestrationSnapshotEntity.Task queryTask(String tenantId, String userId, String sessionId,
                                                               String parentRunId, String taskId) {
         requireText(tenantId); requireText(userId); requireText(sessionId); requireText(parentRunId); requireText(taskId);
@@ -75,23 +123,35 @@ public class SessionOrchestrationQueryService {
     }
 
     private SessionOrchestrationSnapshotEntity.Run run(String parentRunId, List<SubagentTaskEntity> tasks,
-                                                        List<ToolApprovalRequestEntity> approvals) {
+                                                        List<ToolApprovalRequestEntity> approvals,
+                                                        String resumeStatus) {
         LocalDateTime createdAt = tasks.stream().map(SubagentTaskEntity::getCreatedAt).filter(java.util.Objects::nonNull)
                 .min(LocalDateTime::compareTo).orElse(null);
         LocalDateTime completedAt = tasks.stream().map(SubagentTaskEntity::getCompletedAt).filter(java.util.Objects::nonNull)
                 .max(LocalDateTime::compareTo).orElse(null);
         return SessionOrchestrationSnapshotEntity.Run.builder().parentRunId(parentRunId)
                 .parentAgentId(tasks.isEmpty() ? null : tasks.get(0).getParentAgentId())
-                .phase(phaseForRun(parentRunId, tasks, approvals)).createdAt(createdAt).completedAt(completedAt)
+                .phase(phaseForRun(parentRunId, tasks, approvals, resumeStatus)).createdAt(createdAt).completedAt(completedAt)
                 .tasks(tasks.stream().map(value -> task(value, false)).toList()).build();
     }
 
-    private String phaseForRun(String runId, List<SubagentTaskEntity> tasks, List<ToolApprovalRequestEntity> approvals) {
+    private String phaseForRun(String runId, List<SubagentTaskEntity> tasks,
+                               List<ToolApprovalRequestEntity> approvals, String resumeStatus) {
         if (approvals.stream().anyMatch(value -> runId.equals(value.getParentRunId()))) return "WAITING_APPROVAL";
         List<SubagentTaskEntity> scoped = tasks.stream().filter(value -> runId.equals(value.getParentRunId())).toList();
-        if (scoped.stream().anyMatch(value -> value.getStatus() == SubagentTaskStatus.READY || value.getStatus() == SubagentTaskStatus.RUNNING)) return "EXECUTING";
+        if ("WAITING".equals(resumeStatus)) {
+            return scoped.stream().anyMatch(value -> value.getStatus() == SubagentTaskStatus.READY
+                    || value.getStatus() == SubagentTaskStatus.RUNNING) ? "EXECUTING" : "SUMMARIZING";
+        }
+        if ("PENDING".equals(resumeStatus) || "RUNNING".equals(resumeStatus)
+                || "RETRYING".equals(resumeStatus)) return "SUMMARIZING";
+        if (!"COMPLETED".equals(resumeStatus)
+                && scoped.stream().anyMatch(value -> value.getStatus() == SubagentTaskStatus.READY
+                || value.getStatus() == SubagentTaskStatus.RUNNING)) return "EXECUTING";
         if (!scoped.isEmpty() && scoped.stream().allMatch(value -> value.getStatus() == SubagentTaskStatus.CANCELLED)) return "CANCELLED";
-        if (scoped.stream().anyMatch(value -> value.getStatus().terminal() && !"DELIVERED".equals(value.getCallbackStatus()))) return "SUMMARIZING";
+        if (resumeStatus == null
+                && scoped.stream().anyMatch(value -> value.getStatus().terminal()
+                && !"DELIVERED".equals(value.getCallbackStatus()))) return "SUMMARIZING";
         if (scoped.stream().anyMatch(value -> value.getStatus() == SubagentTaskStatus.FAILED || value.getErrorCode() != null)) return "COMPLETED_WITH_ERRORS";
         return scoped.isEmpty() ? "IDLE" : "COMPLETED";
     }

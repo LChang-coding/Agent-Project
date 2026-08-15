@@ -89,6 +89,10 @@ public interface IChatService {
     /** 在已有会话中处理平台内部恢复输入；输入可审计但不对用户展示。 */
     List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message);
 
+    /** 使用稳定运行编号处理平台内部恢复输入；Kafka 重投时重放既有终态而不重复发布答案。 */
+    List<String> handleInternalMessage(String agentId, String userId, String sessionId, String message,
+                                       String requestedRunId);
+
     /**
      * 同步执行一次完整工作流，只返回收敛后的最终文本。
      *

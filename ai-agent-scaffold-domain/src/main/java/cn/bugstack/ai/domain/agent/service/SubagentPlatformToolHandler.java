@@ -71,6 +71,7 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
     }
 
     private PlatformToolResult delegate(Map<String, Object> input, ToolInvokeContextEntity context, Trusted trusted) {
+        if (trusted.summaryOnly) throw new IllegalArgumentException("SUBAGENT_SUMMARY_ONLY");
         requireKeys(input, Set.of("tasks"), true);
         Object raw = input.get("tasks");
         if (!(raw instanceof List<?> values)) throw new IllegalArgumentException("SUBAGENT_TASKS_INVALID");
@@ -98,6 +99,7 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
     }
 
     private PlatformToolResult cancel(Map<String, Object> input, Trusted trusted) {
+        if (trusted.summaryOnly) throw new IllegalArgumentException("SUBAGENT_SUMMARY_ONLY");
         requireKeys(input, Set.of("taskIds"), true);
         int cancelled = orchestrationService.cancel(trusted.tenantId, trusted.parentRunId,
                 stringList(input.get("taskIds"), 100));
@@ -142,7 +144,8 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
                 required(context.getUserId(), "SUBAGENT_CONTEXT_INVALID"),
                 required(context.getOrchestrationRootRunId(), "SUBAGENT_CONTEXT_INVALID"),
                 required(context.getAgentId(), "SUBAGENT_CONTEXT_INVALID"),
-                context.getAllowedSubAgentIds() == null ? List.of() : List.copyOf(context.getAllowedSubAgentIds()));
+                context.getAllowedSubAgentIds() == null ? List.of() : List.copyOf(context.getAllowedSubAgentIds()),
+                Boolean.TRUE.equals(context.getOrchestrationSummaryOnly()));
     }
 
     private SubagentOrchestrationService.TrustedSupervisor supervisor(ToolInvokeContextEntity context, Trusted value) {
@@ -195,5 +198,5 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
     }
 
     private record Trusted(String tenantId, String userId, String parentRunId, String parentAgentId,
-                           List<String> allowedSubAgentIds) { }
+                           List<String> allowedSubAgentIds, boolean summaryOnly) { }
 }

@@ -5,14 +5,15 @@
         <result column="tenant_id" property="tenantId"/><result column="user_id" property="userId"/>
         <result column="parent_run_id" property="parentRunId"/><result column="parent_session_id" property="parentSessionId"/>
         <result column="parent_agent_id" property="parentAgentId"/><result column="trace_id" property="traceId"/>
-        <result column="status" property="status"/><result column="requested_version" property="requestedVersion"/>
+        <result column="status" property="status"/><result column="parent_ready" property="parentReady"/>
+        <result column="parent_draft" property="parentDraft"/><result column="requested_version" property="requestedVersion"/>
         <result column="processed_version" property="processedVersion"/><result column="inbox_cursor" property="inboxCursor"/>
         <result column="lease_owner" property="leaseOwner"/><result column="fencing_token" property="fencingToken"/>
         <result column="lease_expires_at" property="leaseExpiresAt"/><result column="attempt_count" property="attemptCount"/>
         <result column="next_attempt_at" property="nextAttemptAt"/>
         <result column="recovery_notified_at" property="recoveryNotifiedAt"/>
     </resultMap>
-    <sql id="requestColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,trace_id,status,
+    <sql id="requestColumns">tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,trace_id,status,parent_ready,parent_draft,
         requested_version,processed_version,inbox_cursor,lease_owner,fencing_token,lease_expires_at,attempt_count,
         next_attempt_at,recovery_notified_at</sql>
     <update id="markCallbackRegistered">
@@ -25,17 +26,59 @@
         (tenant_id,parent_run_id,task_id,child_agent_id,result_summary,task_status,created_at)
         VALUES (#{tenantId},#{parentRunId},#{taskId},#{childAgentId},#{resultSummary},#{taskStatus},NOW(3))
     </insert>
-    <insert id="upsertRequest" parameterType="cn.bugstack.ai.infrastructure.dao.po.ParentResumeRequestPO">
-        INSERT INTO agent_parent_resume_request
-        (tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,trace_id,status,requested_version,
+    <insert id="insertWaitOnce" parameterType="cn.bugstack.ai.infrastructure.dao.po.ParentResumeRequestPO">
+        INSERT IGNORE INTO agent_parent_resume_request
+        (tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,trace_id,status,parent_ready,parent_draft,requested_version,
          processed_version,inbox_cursor,fencing_token,attempt_count,next_attempt_at,created_at,updated_at)
-        VALUES (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{traceId},'PENDING',1,
-                0,0,0,0,#{nextAttemptAt},NOW(3),NOW(3))
-        ON DUPLICATE KEY UPDATE requested_version=requested_version+1,
-          status=IF(status='RUNNING','RUNNING','PENDING'), next_attempt_at=VALUES(next_attempt_at),
-          user_id=VALUES(user_id),parent_session_id=VALUES(parent_session_id),parent_agent_id=VALUES(parent_agent_id),
-          trace_id=VALUES(trace_id),updated_at=NOW(3)
+        SELECT #{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{traceId},'WAITING',0,NULL,0,
+               0,0,0,0,#{nextAttemptAt},NOW(3),NOW(3)
+        FROM chat_session session
+        JOIN chat_run run
+          ON run.tenant_id=session.tenant_id AND run.user_id=session.user_id
+         AND run.session_id=session.session_id AND run.run_id=#{parentRunId} AND run.deleted=0
+        WHERE session.tenant_id=#{tenantId} AND session.user_id=#{userId}
+          AND session.session_id=#{parentSessionId} AND session.agent_id=#{parentAgentId} AND session.deleted=0
+          AND run.source_id=#{parentAgentId}
+          AND run.status IN ('running','waiting_compaction','waiting_tool')
+        LIMIT 1
     </insert>
+    <insert id="prepareWait" parameterType="cn.bugstack.ai.infrastructure.dao.po.ParentResumeRequestPO">
+        INSERT INTO agent_parent_resume_request
+        (tenant_id,user_id,parent_run_id,parent_session_id,parent_agent_id,trace_id,status,parent_ready,parent_draft,requested_version,
+         processed_version,inbox_cursor,fencing_token,attempt_count,next_attempt_at,created_at,updated_at)
+        VALUES (#{tenantId},#{userId},#{parentRunId},#{parentSessionId},#{parentAgentId},#{traceId},'WAITING',0,NULL,0,
+                0,0,0,0,#{nextAttemptAt},NOW(3),NOW(3))
+        ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),parent_session_id=VALUES(parent_session_id),
+          parent_agent_id=VALUES(parent_agent_id),trace_id=VALUES(trace_id),updated_at=NOW(3)
+    </insert>
+    <update id="markParentReady">
+        UPDATE agent_parent_resume_request
+        SET parent_ready=1,parent_draft=#{parentDraft},next_attempt_at=#{now},updated_at=#{now}
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status='WAITING'
+          AND parent_ready=0 AND deleted=0
+    </update>
+    <update id="activateIfReady">
+        UPDATE agent_parent_resume_request
+        SET status='PENDING',requested_version=requested_version+1,next_attempt_at=#{now},
+            recovery_notified_at=NULL,updated_at=#{now}
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status='WAITING'
+          AND parent_ready=1 AND deleted=0
+          AND EXISTS (
+            SELECT 1 FROM agent_subagent_task task
+            WHERE task.tenant_id=#{tenantId} AND task.parent_run_id=#{parentRunId} AND task.deleted=0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM agent_subagent_task task
+            WHERE task.tenant_id=#{tenantId} AND task.parent_run_id=#{parentRunId} AND task.deleted=0
+              AND (task.status NOT IN ('SUCCEEDED','FAILED','CANCELLED')
+                OR (task.status&lt;&gt;'CANCELLED' AND task.callback_status NOT IN ('REGISTERED','DEAD')))
+          )
+    </update>
+    <select id="countAwaitingSummary" resultType="int">
+        SELECT COUNT(*) FROM agent_parent_resume_request
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId}
+          AND status IN ('WAITING','PENDING','RUNNING','RETRYING') AND deleted=0
+    </select>
     <insert id="insertOutbox" parameterType="cn.bugstack.ai.infrastructure.dao.po.AgentOrchestrationOutboxPO">
         INSERT INTO agent_orchestration_outbox
         (tenant_id,event_id,event_type,aggregate_id,partition_key,payload,status,attempt_count,max_attempts,
@@ -48,6 +91,17 @@
         SET status='RUNNING',lease_owner=#{workerId},lease_expires_at=#{leaseExpiresAt},
             fencing_token=fencing_token+1,attempt_count=attempt_count+1,recovery_notified_at=NULL
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND deleted=0
+          AND parent_ready=1
+          AND EXISTS (
+            SELECT 1 FROM agent_subagent_task task
+            WHERE task.tenant_id=#{tenantId} AND task.parent_run_id=#{parentRunId} AND task.deleted=0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM agent_subagent_task task
+            WHERE task.tenant_id=#{tenantId} AND task.parent_run_id=#{parentRunId} AND task.deleted=0
+              AND (task.status NOT IN ('SUCCEEDED','FAILED','CANCELLED')
+                OR (task.status&lt;&gt;'CANCELLED' AND task.callback_status NOT IN ('REGISTERED','DEAD')))
+          )
           AND ((status IN ('PENDING','RETRYING') AND next_attempt_at &lt;= #{now})
             OR (status='RUNNING' AND lease_expires_at &lt; #{now}))
     </update>
@@ -56,11 +110,17 @@
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status='RUNNING'
           AND lease_owner=#{workerId} AND deleted=0 LIMIT 1
     </select>
-    <select id="queryInbox" resultType="cn.bugstack.ai.infrastructure.dao.po.ParentInboxItemPO">
-        SELECT id AS sequence,tenant_id AS tenantId,parent_run_id AS parentRunId,task_id AS taskId,
-               child_agent_id AS childAgentId,result_summary AS resultSummary,task_status AS taskStatus
-        FROM agent_parent_inbox WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId}
-          AND id &gt; #{cursor} AND consumed_at IS NULL AND deleted=0 ORDER BY id ASC LIMIT #{limit}
+    <select id="queryAllTerminalResults" resultType="cn.bugstack.ai.infrastructure.dao.po.ParentInboxItemPO">
+        SELECT COALESCE(inbox.id,0) AS sequence,task.tenant_id AS tenantId,task.parent_run_id AS parentRunId,
+               task.task_id AS taskId,task.child_agent_id AS childAgentId,
+               task.result_summary AS resultSummary,task.status AS taskStatus,task.callback_status AS callbackStatus
+        FROM agent_subagent_task task
+        LEFT JOIN agent_parent_inbox inbox
+          ON inbox.tenant_id=task.tenant_id AND inbox.parent_run_id=task.parent_run_id
+          AND inbox.task_id=task.task_id AND inbox.deleted=0
+        WHERE task.tenant_id=#{tenantId} AND task.parent_run_id=#{parentRunId}
+          AND task.status IN ('SUCCEEDED','FAILED','CANCELLED') AND task.deleted=0
+        ORDER BY task.id ASC
     </select>
     <update id="renewLease">
         UPDATE agent_parent_resume_request SET lease_expires_at=#{leaseExpiresAt}
@@ -68,6 +128,13 @@
           AND lease_owner=#{workerId} AND fencing_token=#{fencingToken}
           AND lease_expires_at &gt;= #{now} AND deleted=0
     </update>
+    <select id="lockOwnedLease" resultType="string">
+        SELECT parent_run_id FROM agent_parent_resume_request
+        WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status='RUNNING'
+          AND lease_owner=#{workerId} AND fencing_token=#{fencingToken}
+          AND lease_expires_at &gt;= #{now} AND deleted=0
+        LIMIT 1 FOR UPDATE
+    </select>
     <update id="markInboxConsumed">
         UPDATE agent_parent_inbox SET consumed_at=#{deliveredAt}
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND consumed_at IS NULL AND deleted=0
@@ -77,15 +144,12 @@
         UPDATE agent_subagent_task SET status='ACKED',acknowledged_at=#{deliveredAt},callback_status='DELIVERED',
           callback_delivered_at=#{deliveredAt},callback_owner=NULL,callback_claimed_at=NULL
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND task_id=#{taskId}
-          AND status IN ('SUCCEEDED','FAILED','CANCELLED') AND callback_status='REGISTERED' AND deleted=0
+          AND status IN ('SUCCEEDED','FAILED','CANCELLED')
+          AND callback_status IN ('REGISTERED','DEAD') AND deleted=0
     </update>
     <update id="completeRequest">
         UPDATE agent_parent_resume_request
-        SET status=IF(requested_version=#{requestedVersion} AND NOT EXISTS (
-              SELECT 1 FROM agent_parent_inbox pending
-              WHERE pending.tenant_id=#{tenantId} AND pending.parent_run_id=#{parentRunId}
-                AND pending.id &gt; #{cursor} AND pending.consumed_at IS NULL AND pending.deleted=0
-            ),'COMPLETED','PENDING'),
+        SET status='COMPLETED',
             processed_version=#{requestedVersion},inbox_cursor=GREATEST(inbox_cursor,#{cursor}),
             next_attempt_at=#{deliveredAt},lease_owner=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=#{deliveredAt}
         WHERE tenant_id=#{tenantId} AND parent_run_id=#{parentRunId} AND status='RUNNING'
@@ -104,7 +168,14 @@
     <select id="queryRecoveryCandidates" resultMap="RequestMap">
         SELECT <include refid="requestColumns"/> FROM agent_parent_resume_request
         WHERE deleted=0 AND ((status IN ('PENDING','RETRYING') AND next_attempt_at &lt;= #{now})
-          OR (status='RUNNING' AND lease_expires_at &lt; #{now}))
+          OR (status='RUNNING' AND lease_expires_at &lt; #{now})
+          OR (status='WAITING' AND parent_ready=0 AND EXISTS (
+            SELECT 1 FROM chat_run run
+            WHERE run.tenant_id=agent_parent_resume_request.tenant_id
+              AND run.user_id=agent_parent_resume_request.user_id
+              AND run.run_id=agent_parent_resume_request.parent_run_id
+              AND run.status IN ('completed','failed','cancelled','superseded') AND run.deleted=0
+          )))
           AND (recovery_notified_at IS NULL OR recovery_notified_at &lt; #{staleBefore})
         ORDER BY id ASC LIMIT #{limit}
     </select>
@@ -114,4 +185,10 @@
           AND fencing_token=#{fencingToken} AND deleted=0
           AND (recovery_notified_at IS NULL OR recovery_notified_at &lt; #{staleBefore})
     </update>
+    <select id="lockTerminalParentRun" resultType="string">
+        SELECT status FROM chat_run
+        WHERE tenant_id=#{tenantId} AND user_id=#{userId} AND run_id=#{parentRunId}
+          AND status IN ('completed','failed','cancelled','superseded') AND deleted=0
+        LIMIT 1 FOR UPDATE
+    </select>
 </mapper>

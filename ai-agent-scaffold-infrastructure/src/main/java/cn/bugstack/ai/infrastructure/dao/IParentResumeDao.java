@@ -12,18 +12,27 @@ public interface IParentResumeDao {
     int markCallbackRegistered(@Param("tenantId") String tenantId, @Param("taskId") String taskId,
                                @Param("callbackOwner") String callbackOwner);
     int insertInbox(ParentInboxItemPO item);
-    int upsertRequest(ParentResumeRequestPO request);
+    int insertWaitOnce(ParentResumeRequestPO request);
+    int prepareWait(ParentResumeRequestPO request);
+    int markParentReady(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
+                        @Param("parentDraft") String parentDraft, @Param("now") LocalDateTime now);
+    int activateIfReady(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
+                        @Param("now") LocalDateTime now);
+    int countAwaitingSummary(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId);
     int insertOutbox(AgentOrchestrationOutboxPO event);
     int claim(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
               @Param("workerId") String workerId, @Param("now") LocalDateTime now,
               @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);
     ParentResumeRequestPO queryOwned(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
                                      @Param("workerId") String workerId);
-    List<ParentInboxItemPO> queryInbox(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
-                                      @Param("cursor") long cursor, @Param("limit") int limit);
+    List<ParentInboxItemPO> queryAllTerminalResults(@Param("tenantId") String tenantId,
+                                                    @Param("parentRunId") String parentRunId);
     int renewLease(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
                    @Param("workerId") String workerId, @Param("fencingToken") long fencingToken,
                    @Param("now") LocalDateTime now, @Param("leaseExpiresAt") LocalDateTime leaseExpiresAt);
+    String lockOwnedLease(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
+                          @Param("workerId") String workerId, @Param("fencingToken") long fencingToken,
+                          @Param("now") LocalDateTime now);
     int markInboxConsumed(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
                           @Param("taskIds") List<String> taskIds, @Param("deliveredAt") LocalDateTime deliveredAt);
     int finishTaskDelivery(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
@@ -42,4 +51,6 @@ public interface IParentResumeDao {
     int markRecoveryNotified(@Param("tenantId") String tenantId, @Param("parentRunId") String parentRunId,
                              @Param("status") String status, @Param("fencingToken") long fencingToken,
                              @Param("now") LocalDateTime now, @Param("staleBefore") LocalDateTime staleBefore);
+    String lockTerminalParentRun(@Param("tenantId") String tenantId, @Param("userId") String userId,
+                                 @Param("parentRunId") String parentRunId);
 }

@@ -236,6 +236,7 @@ public class GatewayAdkTool extends BaseTool {
                 .orchestrationRole(defaultString(stringValue(state.get(ToolRuntimeContextKeys.ORCHESTRATION_ROLE)), fallbackContext.getOrchestrationRole()))
                 .allowedSubAgentIds(defaultList(stringList(state.get(ToolRuntimeContextKeys.ALLOWED_SUB_AGENT_IDS)), fallbackContext.getAllowedSubAgentIds()))
                 .orchestrationRootRunId(defaultString(stringValue(state.get(ToolRuntimeContextKeys.ORCHESTRATION_ROOT_RUN_ID)), fallbackContext.getOrchestrationRootRunId()))
+                .orchestrationSummaryOnly(defaultBoolean(booleanValue(state.get(ToolRuntimeContextKeys.ORCHESTRATION_SUMMARY_ONLY)), fallbackContext.getOrchestrationSummaryOnly()))
                 .build();
     }
 
@@ -282,6 +283,7 @@ public class GatewayAdkTool extends BaseTool {
                 .orchestrationRole(fallbackContext.getOrchestrationRole())
                 .allowedSubAgentIds(copyList(fallbackContext.getAllowedSubAgentIds()))
                 .orchestrationRootRunId(fallbackContext.getOrchestrationRootRunId())
+                .orchestrationSummaryOnly(fallbackContext.getOrchestrationSummaryOnly())
                 .build();
     }
 
