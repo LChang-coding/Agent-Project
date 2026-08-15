@@ -75,7 +75,9 @@ public final class ReasoningAwareOpenAiApi extends OpenAiApi {
                 .headers(headers -> headers.addAll(additionalHeaders)).body(body).retrieve().toEntity(JsonNode.class);
         JsonNode normalized = normalize(response.getBody());
         ChatCompletion completion = objectMapper.convertValue(normalized, ChatCompletion.class);
-        return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders()).body(completion);
+        // RestClient#retrieve 已经会把非 2xx 响应转换为异常；这里固定构造成功响应，
+        // 避免 ResponseEntity#getStatusCode 在 Spring 5/6 之间返回类型变化造成二进制不兼容。
+        return ResponseEntity.ok().headers(response.getHeaders()).body(completion);
     }
 
     @Override
