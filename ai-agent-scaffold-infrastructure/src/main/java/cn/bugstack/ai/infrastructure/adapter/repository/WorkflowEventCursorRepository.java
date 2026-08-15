@@ -7,7 +7,7 @@ import cn.bugstack.ai.types.exception.AppException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 以通用游标行锁串行分配 workflow-event-v1 序号。 */
+/** 以通用游标行锁串行分配 Agent/Workflow 共用的 workflow-event-v1 序号。 */
 @Repository
 public class WorkflowEventCursorRepository implements IWorkflowEventCursorRepository {
 
@@ -36,7 +36,7 @@ public class WorkflowEventCursorRepository implements IWorkflowEventCursorReposi
         // 行锁把同一运行的并发事件写入串行化，避免分配重复 sequence。
         WorkflowEventCursorPO cursor = cursorDao.lockCursor(tenantId, userId, runId);
         if (cursor == null) {
-            throw new AppException("WORKFLOW_RUN_NOT_FOUND", "工作流运行不存在或无权访问");
+            throw new AppException("WORKFLOW_RUN_NOT_FOUND", "Agent/Workflow 运行不存在或无权访问");
         }
         if (!traceId.equals(cursor.getTraceId())) {
             throw new AppException("WORKFLOW_TRACE_MISMATCH", "事件 traceId 与运行根链路不一致");

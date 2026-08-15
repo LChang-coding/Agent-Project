@@ -23,14 +23,14 @@ public class WorkflowEventMapperContractTest {
             cursorMapper = new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
         Assert.assertTrue(cursorMapper.contains("FROM chat_run"));
-        Assert.assertTrue(cursorMapper.contains("source_type = 'workflow'"));
+        Assert.assertTrue(cursorMapper.contains("source_type IN ('workflow', 'agent')"));
         Assert.assertTrue(cursorMapper.contains("LIMIT 1 FOR UPDATE"));
         Assert.assertTrue(cursorMapper.contains("next_sequence = next_sequence + 1"));
         Assert.assertTrue(cursorMapper.contains("revision = #{expectedRevision}"));
         Assert.assertFalse(cursorMapper.toUpperCase().contains("SELECT MAX(SEQUENCE)"));
         Assert.assertTrue(cursorMapper.contains("tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}"));
         Assert.assertTrue(eventMapper.contains("INNER JOIN chat_run run"));
-        Assert.assertTrue(eventMapper.contains("run.source_type = 'workflow'"));
+        Assert.assertTrue(eventMapper.contains("run.source_type IN ('workflow', 'agent')"));
         Assert.assertTrue(eventMapper.contains("run.trace_id = event.trace_id"));
         Assert.assertTrue(eventMapper.contains("ORDER BY event.sequence ASC"));
         Assert.assertTrue(eventMapper.contains("event.expires_at &gt; CURRENT_TIMESTAMP(3)"));

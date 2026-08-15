@@ -574,10 +574,23 @@ public class ChatService implements IChatService {
         // 第四层：引导型后继运行要把前序原始问题接上用户的新指令，普通运行原样返回入参。
         String effectiveMessage = steerResumeMessage(run, message);
         // 第五层：打包运行记录和惰性事件流；流未被订阅前不会调用模型。
+        Flowable<Event> stream;
+        try {
+            stream = doHandleMessageStream(agentId, userId, actualSessionId, effectiveMessage,
+                    aiAgentRegisterVO, run, attachmentIds);
+        } catch (RuntimeException startupError) {
+            // 建流阶段已创建 Run，任何后续失败都必须收口，否则会永久占用会话的活跃运行锁。
+            try {
+                runControlService.failWithAssistantMessage(tenantId, userId, run.getRunId(),
+                        errorContent(startupError, ""), run.getTraceId(), safeMessage(startupError));
+            } catch (RuntimeException finalizationError) {
+                startupError.addSuppressed(finalizationError);
+            }
+            throw startupError;
+        }
         return RunStreamEntity.<Event>builder()
                 .run(run)
-                .stream(doHandleMessageStream(agentId, userId, actualSessionId, effectiveMessage, aiAgentRegisterVO,
-                        run, attachmentIds))
+                .stream(stream)
                 .build();
     }
 

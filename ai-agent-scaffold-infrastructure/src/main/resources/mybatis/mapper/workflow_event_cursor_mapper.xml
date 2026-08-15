@@ -14,14 +14,15 @@
         <result column="revision" property="revision"/>
     </resultMap>
 
-    <!-- 游标只能从已持久化的 workflow 类 chat_run 懒创建，不依赖智能运行扩展表。 -->
+    <!-- 游标只能从已持久化的 Agent/Workflow chat_run 懒创建，不依赖智能运行扩展表。 -->
     <insert id="insertFromWorkflowChatRun">
         INSERT IGNORE INTO workflow_run_event_cursor
             (tenant_id, user_id, run_id, trace_id, next_sequence, revision)
         SELECT tenant_id, user_id, run_id, trace_id, 1, 0
         FROM chat_run
         WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND run_id = #{runId}
-          AND source_type = 'workflow' AND trace_id IS NOT NULL AND trace_id &lt;&gt; '' AND deleted = 0
+          AND source_type IN ('workflow', 'agent')
+          AND trace_id IS NOT NULL AND trace_id &lt;&gt; '' AND deleted = 0
     </insert>
 
     <!-- 同一 Run 的序号分配通过游标行锁串行化。 -->

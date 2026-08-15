@@ -97,7 +97,7 @@
         FROM workflow_run_event event
         INNER JOIN chat_run run
                 ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
-               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+               AND run.source_type IN ('workflow', 'agent') AND run.trace_id = event.trace_id AND run.deleted = 0
         WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
           AND event.sequence &gt; #{afterSequence} AND event.deleted = 0
           AND event.expires_at &gt; CURRENT_TIMESTAMP(3)
@@ -110,7 +110,7 @@
         FROM workflow_run_event event
         INNER JOIN chat_run run
                 ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
-               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+               AND run.source_type IN ('workflow', 'agent') AND run.trace_id = event.trace_id AND run.deleted = 0
         WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
           AND event.deleted = 0 AND event.expires_at &gt; CURRENT_TIMESTAMP(3)
     </select>
@@ -122,7 +122,7 @@
         FROM workflow_run_event event
         INNER JOIN chat_run run
                 ON run.tenant_id = event.tenant_id AND run.user_id = event.user_id AND run.run_id = event.run_id
-               AND run.source_type = 'workflow' AND run.trace_id = event.trace_id AND run.deleted = 0
+               AND run.source_type IN ('workflow', 'agent') AND run.trace_id = event.trace_id AND run.deleted = 0
         WHERE event.tenant_id = #{tenantId} AND event.user_id = #{userId} AND event.run_id = #{runId}
           AND event.event_type IN ('WORKFLOW_COMPLETED', 'WORKFLOW_FAILED', 'WORKFLOW_CANCELLED')
           AND event.deleted = 0

@@ -20,7 +20,7 @@ LEFT JOIN intelligent_workflow_run intelligent
       AND intelligent.user_id = run.user_id
       AND intelligent.run_id = run.run_id
       AND intelligent.deleted = 0
-WHERE run.source_type = 'workflow'
+WHERE run.source_type IN ('workflow', 'agent')
   AND run.trace_id IS NOT NULL
   AND run.trace_id <> ''
   AND run.tenant_id IS NOT NULL

@@ -21,7 +21,7 @@ public class WorkflowEventCursorMigrationContractTest {
         Assert.assertTrue(schema.contains("terminal_sequence"));
         Assert.assertFalse(schema.toUpperCase().contains("INSERT INTO"));
         Assert.assertTrue(backfill.contains("FROM chat_run run"));
-        Assert.assertTrue(backfill.contains("run.source_type = 'workflow'"));
+        Assert.assertTrue(backfill.contains("run.source_type IN ('workflow', 'agent')"));
         Assert.assertTrue(backfill.contains("MAX(event.sequence) + 1"));
         Assert.assertTrue(backfill.contains("WORKFLOW_CANCELLED"));
         Assert.assertFalse(backfill.contains("INSERT INTO intelligent_workflow_run"));
