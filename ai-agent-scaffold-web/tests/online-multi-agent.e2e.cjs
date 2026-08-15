@@ -50,7 +50,7 @@ const { chromium } = require('playwright');
 
     await page.locator('.approval-dialog').waitFor({ state: 'visible', timeout: 120000 });
     const approvalText = await page.locator('.approval-dialog').innerText();
-    if (!approvalText.includes('允许 Agent 启动这些任务？') || !approvalText.includes('通用编码 Agent') || !approvalText.includes('通用调查 Agent')) {
+    if (!approvalText.includes('批准创建子 Agent 任务？') || !approvalText.includes('通用编码 Agent') || !approvalText.includes('通用调查 Agent')) {
       throw new Error(`审批弹窗内容不完整: ${approvalText.slice(0, 1000)}`);
     }
     await page.screenshot({ path: '/tmp/lcodeagent-approval.png', fullPage: true });
@@ -79,13 +79,14 @@ const { chromium } = require('playwright');
       return button instanceof HTMLButtonElement && !button.disabled;
     }, null, { timeout: 240000 });
     const activeSession = page.locator('.session-item--active');
-    const activeSessionTitle = await activeSession.locator('.session-open strong').innerText();
+    const activeSessionId = await activeSession.getAttribute('data-session-id');
+    if (!activeSessionId) throw new Error('当前会话缺少稳定识别属性');
     await page.getByRole('button', { name: '管理' }).click();
     await activeSession.locator('.session-select').check();
     page.once('dialog', (dialog) => dialog.accept());
     await page.locator('.session-batch-bar').getByRole('button', { name: /删除 1/ }).click();
-    await page.waitForFunction((title) => !Array.from(document.querySelectorAll('.session-open strong'))
-      .some((element) => element.textContent?.trim() === title), activeSessionTitle, { timeout: 30000 });
+    await page.waitForFunction((sessionId) => !document.querySelector(`[data-session-id="${sessionId}"]`),
+      activeSessionId, { timeout: 30000 });
 
     await page.goto('http://lcodeagent.lcode.top/mcp', { waitUntil: 'domcontentloaded' });
     await page.locator('input[placeholder="例如：订单查询 MCP"]').fill(`E2E batch ${username}`);

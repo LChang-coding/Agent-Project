@@ -22,6 +22,7 @@
           <div
             v-for="session in visibleSessions"
             :key="session.sessionId"
+            :data-session-id="session.sessionId"
             :class="['session-item', { 'session-item--active': session.sessionId === chatStore.sessionId, 'session-item--selecting': managingSessions }]"
           >
             <input v-if="managingSessions" class="session-select" type="checkbox" :checked="selectedSessionIds.has(session.sessionId)"
