@@ -94,10 +94,12 @@ public final class ReasoningAwareOpenAiApi extends OpenAiApi {
                                              ReasoningMode effectiveMode) {
         ObjectNode body = requestBody(request, effectiveMode);
         AtomicBoolean insideTool = new AtomicBoolean(false);
+        StreamingTextDeltaNormalizer deltaNormalizer = new StreamingTextDeltaNormalizer();
         return webClient.post().uri(completionsPath).headers(headers -> headers.addAll(additionalHeaders))
                 .body(Mono.just(body), ObjectNode.class).retrieve().bodyToFlux(String.class)
                 .takeUntil(DONE::equals).filter(value -> !DONE.equals(value))
-                .map(value -> objectMapper.convertValue(normalize(read(value)), ChatCompletionChunk.class))
+                .map(value -> deltaNormalizer.normalize((ObjectNode) read(value)))
+                .map(value -> objectMapper.convertValue(normalize(value), ChatCompletionChunk.class))
                 .map(chunk -> {
                     if (chunkMerger.isStreamingToolFunctionCall(chunk)) insideTool.set(true);
                     return chunk;
