@@ -18,7 +18,7 @@ public class ApplicationReactiveConfigTest {
     public void shouldUseBoundedDefaultAndRespectExplicitOverride() {
         System.clearProperty("rx3.buffer-size");
         Application.configureRxJavaPrefetch();
-        assertEquals("16", System.getProperty("rx3.buffer-size"));
+        assertEquals("4", System.getProperty("rx3.buffer-size"));
 
         System.setProperty("rx3.buffer-size", "8");
         Application.configureRxJavaPrefetch();

@@ -25,7 +25,7 @@ public class Application {
 
     private static final String OBSERVABILITY_SCRIPT = "docs/dev-ops/observability/local/ensure-observability.sh";
     private static final String RXJAVA_BUFFER_SIZE_PROPERTY = "rx3.buffer-size";
-    private static final String RXJAVA_BUFFER_SIZE_DEFAULT = "16";
+    private static final String RXJAVA_BUFFER_SIZE_DEFAULT = "4";
 
     public static void main(String[] args) {
         // Google ADK 1.1 的模型流内部使用默认 flatMap 预取。默认 128 会在高频 SSE 下
