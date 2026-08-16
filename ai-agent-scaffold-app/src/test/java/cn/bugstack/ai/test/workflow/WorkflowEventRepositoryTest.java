@@ -9,8 +9,11 @@ import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.lang.reflect.Method;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -20,6 +23,15 @@ import static org.mockito.Mockito.when;
 
 /** 工作流事件仓储的序号与根 trace 一致性测试。 */
 public class WorkflowEventRepositoryTest {
+
+    @Test
+    public void shouldJoinRunCreationTransactionInsteadOfOpeningRequiresNewConnection() throws Exception {
+        Method method = WorkflowEventWriteTransaction.class.getMethod("appendOnce", WorkflowRunEventEntity.class);
+        Transactional transactional = method.getAnnotation(Transactional.class);
+
+        Assert.assertNotNull(transactional);
+        Assert.assertEquals(Propagation.REQUIRED, transactional.propagation());
+    }
 
     @Test
     public void shouldAppendWithSequenceOwnedByLockedRun() {

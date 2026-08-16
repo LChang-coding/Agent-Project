@@ -168,3 +168,31 @@ test('ReAct 按思考轮次就近归并工具，不把全部思考堆在顶部',
     { thinking: '再校验', tools: ['review-1'] },
   ]);
 });
+
+test('框架先回调连续工具时每个工具保持独立行动回合，后到思考不倒置真实顺序', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'TOOL_CALL_STARTED', { functionCallId: 'search-1', toolCode: 'search' }));
+  state = reduceWorkflowEvent(state, event(2, 'TOOL_CALL_COMPLETED', { functionCallId: 'search-1' }));
+  state = reduceWorkflowEvent(state, event(3, 'TOOL_CALL_STARTED', { functionCallId: 'search-2', toolCode: 'search' }));
+  state = reduceWorkflowEvent(state, event(4, 'TOOL_CALL_COMPLETED', { functionCallId: 'search-2' }));
+  state = reduceWorkflowEvent(state, event(5, 'THINKING_DELTA', { delta: '综合两次检索结果' }));
+
+  assert.deepEqual(state.reactTurns.map((turn) => ({ thinking: turn.thinking, tools: turn.tools.map((tool) => tool.functionCallId) })), [
+    { thinking: '', tools: ['search-1'] },
+    { thinking: '', tools: ['search-2'] },
+    { thinking: '综合两次检索结果', tools: [] },
+  ]);
+});
+
+test('运行失败会停止残留的思考等待、工具和节点执行态', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'AGENT_STARTED'));
+  state = reduceWorkflowEvent(state, event(2, 'TOOL_CALL_STARTED', { functionCallId: 'search-1', toolCode: 'search' }));
+  state = reduceWorkflowEvent(state, event(3, 'WAITING_ALL'));
+  state = reduceWorkflowEvent(state, event(4, 'WORKFLOW_FAILED', { message: '执行失败' }));
+
+  assert.equal(state.status, 'failed');
+  assert.equal(state.waitingAll, false);
+  assert.ok(state.activities.every((activity) => activity.status !== 'running' && activity.status !== 'waiting'));
+  assert.equal(state.reactTurns[0].tools[0].status, 'failed');
+});

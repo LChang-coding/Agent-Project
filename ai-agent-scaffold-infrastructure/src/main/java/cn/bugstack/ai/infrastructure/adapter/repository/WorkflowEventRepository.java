@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventCursorRep
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -19,7 +20,7 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
 
     /** 持久化工作流事件和查询事件流的 DAO。 */
     private final IWorkflowRunEventDao eventDao;
-    /** 将游标分配和事件写入限定在独立短事务。 */
+    /** 将游标分配和事件写入绑定到当前状态迁移事务，无外层事务时使用短事务。 */
     private final WorkflowEventWriteTransaction writeTransaction;
 
     /** 注入事件 DAO 和序号游标仓储。 */
@@ -36,14 +37,19 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
         this(eventDao, new WorkflowEventWriteTransaction(eventDao, cursorRepository));
     }
 
-    /** 死锁只重试有界次数；每次重试都重新开启短事务。 */
+    /**
+     * 死锁只在当前调用没有外层事务时做有界重试，此时每次调用都会重新开启短事务。
+     * 已加入外层事务时，数据库死锁会使整个事务失效，必须向上抛出并由状态迁移整体重试，
+     * 不能在已经 rollback-only 的事务里继续写事件。
+     */
     @Override
     public WorkflowRunEventEntity append(WorkflowRunEventEntity event) {
+        boolean joinedOuterTransaction = TransactionSynchronizationManager.isActualTransactionActive();
         for (int attempt = 1; ; attempt++) {
             try {
                 return writeTransaction.appendOnce(event);
             } catch (DeadlockLoserDataAccessException exception) {
-                if (attempt >= 3) throw exception;
+                if (joinedOuterTransaction || attempt >= 3) throw exception;
                 long delayMillis = (20L << (attempt - 1)) + ThreadLocalRandom.current().nextLong(16L);
                 LockSupport.parkNanos(delayMillis * 1_000_000L);
                 if (Thread.currentThread().isInterrupted()) throw exception;

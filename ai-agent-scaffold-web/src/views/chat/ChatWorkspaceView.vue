@@ -195,8 +195,6 @@
                             @back="closeSubagentDetail" @cancel="cancelSelectedTask" />
 
         <div v-else ref="messageListRef" class="message-list" @scroll.passive="onMessageScroll">
-          <OrchestrationRunCard :snapshot="currentOrchestration" :agents="chatStore.agents" :stopping="stoppingOrchestration"
-                                @select-task="openCurrentSubagent" @stop="stopOrchestration" />
           <div v-if="chatStore.loadingMessages" class="empty-chat" role="status" aria-live="polite">
             <span class="empty-orb">···</span>
             <h2>正在载入最近消息</h2>
@@ -226,9 +224,8 @@
           </div>
 
           <div class="message-stack">
+            <template v-for="message in visibleMessages" :key="message.id">
             <article
-              v-for="message in visibleMessages"
-              :key="message.id"
               :data-message-id="message.id"
               :class="['message', `message--${message.role}`, { 'message--streaming': message.status === 'streaming' }]"
             >
@@ -273,7 +270,23 @@
                 {{ messageCopyError }}
               </span>
             </article>
+            <article
+              v-if="standaloneExecutionRuns[message.id]"
+              class="message message--assistant message--execution"
+              :data-main-agent-run-id="standaloneExecutionRuns[message.id].runId"
+              aria-live="polite"
+            >
+              <div class="message__meta">
+                <span>主 Agent</span>
+                <span>运行过程</span>
+              </div>
+              <WorkflowNodeExecutionPanel :run="standaloneExecutionRuns[message.id]" />
+              <p>{{ mainAgentProgressText(standaloneExecutionRuns[message.id]) }}</p>
+            </article>
+            </template>
           </div>
+          <OrchestrationRunCard v-if="currentOrchestration?.active" :snapshot="currentOrchestration" :agents="chatStore.agents" :stopping="stoppingOrchestration"
+                                @select-task="openCurrentSubagent" @stop="stopOrchestration" />
           <span class="sr-only message-copy-announcement" role="status" aria-live="polite">
             {{ messageCopyAnnouncement }}
           </span>
@@ -534,6 +547,7 @@ import { useInsightStore } from '@/stores/insight';
 import { useOrchestrationStore } from '@/stores/orchestration';
 import { useToolStore } from '@/stores/tools';
 import type { ArtifactAsset, ChatMessage, RagInvocationMode, SessionRagMode, SubagentTaskView } from '@/types/api';
+import type { WorkflowRunViewState } from '@/types/intelligent-workflow';
 import { copyText } from '@/utils/clipboard';
 
 type InsightTab = 'context' | 'tokens' | 'tools' | 'calls' | 'assets';
@@ -697,6 +711,16 @@ const visibleMessages = computed(() => chatStore.messages.slice(
   orchestrationLocked.value,
   currentOrchestration.value?.currentRunId,
 )));
+const standaloneExecutionRuns = computed<Record<string, WorkflowRunViewState>>(() => {
+  const visibleAssistantRunIds = new Set(visibleMessages.value
+    .filter((message) => message.role === 'assistant' && message.runId)
+    .map((message) => message.runId));
+  return Object.fromEntries(visibleMessages.value.flatMap((message) => {
+    if (message.role !== 'user' || !message.runId || visibleAssistantRunIds.has(message.runId)) return [];
+    const run = chatStore.workflowRuns[message.runId];
+    return run ? [[message.id, run] as const] : [];
+  }));
+});
 const isViewingLatestWindow = computed(() => boundedWindowStart.value === latestWindowStart.value);
 const canShowEarlierMessages = computed(() => boundedWindowStart.value > 0
   || chatStore.hasMoreMessages
@@ -1607,6 +1631,15 @@ function roleLabel(role: ChatMessage['role']) {
     system: '系统',
   };
   return labels[role];
+}
+
+/** 将持久化运行状态转换为主 Agent 的即时状态说明，不伪造模型正文。 */
+function mainAgentProgressText(run: WorkflowRunViewState) {
+  if (run.waitingAll) return '子任务已委派，主 Agent 正在等待全部回调；期间仍可查看上方真实思考与工具事件。';
+  if (run.status === 'failed') return '主 Agent 运行失败，可展开运行过程查看失败步骤与 Trace ID。';
+  if (run.status === 'cancelled') return '主 Agent 运行已取消。';
+  if (run.status === 'completed') return '主 Agent 已完成本轮运行，最终回答见下方消息。';
+  return run.finalAnswer ? '主 Agent 正在生成回答。' : '主 Agent 正在分析并执行任务。';
 }
 
 /**

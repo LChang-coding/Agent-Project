@@ -15,10 +15,10 @@
       </ol>
       <ol v-if="run.reactTurns.length" class="react-timeline" aria-label="Agent 思考与工具调用时间线">
         <li v-for="(turn, index) in run.reactTurns" :key="turn.id" class="react-turn">
-          <details v-if="turn.thinking" class="thinking-block" :open="run.status === 'running' && index === run.reactTurns.length - 1">
+          <details v-if="turn.thinking" :class="['thinking-block', { 'thinking-block--active': isThinkingActive(turn, index) }]" :open="isThinkingActive(turn, index)">
             <summary>
-              <span class="thinking-wave" aria-hidden="true"><i /><i /><i /></span>
-              <strong>{{ run.status === 'running' && index === run.reactTurns.length - 1 ? '正在思考' : `思考 ${index + 1}` }}</strong>
+              <span :class="['thinking-wave', { 'thinking-wave--active': isThinkingActive(turn, index) }]" aria-hidden="true"><i /><i /><i /></span>
+              <strong>{{ isThinkingActive(turn, index) ? '正在思考' : `思考 ${index + 1}` }}</strong>
               <small>{{ turn.thinking.length }} 字</small>
             </summary>
             <pre>{{ turn.thinking }}</pre>
@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { WorkflowRunViewState } from '@/types/intelligent-workflow';
+import type { AgentReactTurnView, WorkflowRunViewState } from '@/types/intelligent-workflow';
 import { copyText } from '@/utils/clipboard';
 const props = defineProps<{ run: WorkflowRunViewState }>();
 const statusLabel = computed(() => props.run.waitingAll ? '等待子 Agent 回调' : ({ running: 'Agent 正在工作', completed: '运行已完成', failed: '运行失败', cancelled: '运行已取消' }[props.run.status]));
@@ -71,6 +71,9 @@ function nodeStatus(status: string) { return ({ running: '执行中', completed:
 function toolStatus(status: string) { return ({ running: '调用中', completed: '已完成', failed: '失败' } as Record<string, string>)[status] || status; }
 function activityStatus(status: string) { return ({ running: '进行中', completed: '完成', failed: '失败', waiting: '等待中' } as Record<string, string>)[status] || status; }
 function routeLabel(category?: string) { return category === 'FAILURE' ? '技术失败路由' : category === 'DEFAULT' ? '默认兜底' : '工具裁决'; }
+function isThinkingActive(turn: AgentReactTurnView, index: number) {
+  return props.run.status === 'running' && index === props.run.reactTurns.length - 1 && turn.tools.length === 0;
+}
 async function copyTrace() { await copyText(props.run.traceId); }
 </script>
 
@@ -79,11 +82,11 @@ async function copyTrace() { await copyText(props.run.traceId); }
 .execution-panel>summary{display:flex;align-items:center;min-height:42px;padding:0 12px;gap:9px;cursor:pointer;list-style:none}.execution-panel>summary::-webkit-details-marker{display:none}.execution-panel>summary>span:last-child{margin-left:auto;color:var(--muted);font:11px ui-monospace,SFMono-Regular,Menlo,monospace}
 .execution-orb{width:8px;height:8px;flex:none;border-radius:50%;background:var(--success)}.execution-orb--running{background:var(--accent-deep);box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 28%,transparent);animation:soft-pulse 1.6s ease-out infinite}.execution-orb--failed,.execution-orb--cancelled{background:var(--danger)}
 .execution-body{display:grid;gap:8px;padding:0 10px 10px}.thinking-block{overflow:hidden;border:1px solid color-mix(in srgb,var(--ink) 9%,transparent);border-radius:9px;background:rgb(255 255 255/.58)}.thinking-block>summary{display:flex;align-items:center;min-height:36px;padding:0 10px;gap:8px;cursor:pointer;list-style:none}.thinking-block>summary small{margin-left:auto;color:var(--muted)}.thinking-block pre{max-height:220px;margin:0;padding:2px 12px 12px;overflow:auto;color:#59605a;white-space:pre-wrap;word-break:break-word;font:12px/1.72 ui-monospace,SFMono-Regular,Menlo,monospace}
-.thinking-wave{display:flex;align-items:flex-end;width:17px;height:13px;gap:2px}.thinking-wave i{width:3px;height:5px;border-radius:2px;background:var(--accent-deep);animation:wave 1s ease-in-out infinite}.thinking-wave i:nth-child(2){height:10px;animation-delay:.12s}.thinking-wave i:nth-child(3){height:7px;animation-delay:.24s}
+.thinking-wave{display:flex;align-items:flex-end;width:17px;height:13px;gap:2px}.thinking-wave i{width:3px;height:5px;border-radius:2px;background:var(--accent-deep);opacity:.66}.thinking-wave i:nth-child(2){height:10px}.thinking-wave i:nth-child(3){height:7px}.thinking-wave--active i{animation:wave 1s ease-in-out infinite}.thinking-wave--active i:nth-child(2){animation-delay:.12s}.thinking-wave--active i:nth-child(3){animation-delay:.24s}
 .react-timeline{display:grid;margin:0;padding:0;gap:8px;list-style:none}.react-turn{display:grid;gap:6px;padding-left:10px;border-left:2px solid color-mix(in srgb,var(--accent) 28%,var(--line))}.react-tool{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;padding:9px 10px;gap:9px;border-radius:8px;background:rgb(255 255 255/.64)}.react-tool small{display:block;margin-top:3px;color:var(--muted)}.react-tool em{color:var(--muted);font-size:11px;font-style:normal}.react-tool--running .activity-mark{border-color:var(--accent-deep);border-top-color:transparent;animation:spin .8s linear infinite}.react-tool--completed .activity-mark{border-color:var(--success);background:var(--success)}.react-tool--failed .activity-mark{border-color:var(--danger);background:var(--danger)}
 .activity-list,.node-list{display:grid;margin:0;padding:0;gap:6px;list-style:none}.activity-list li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;padding:9px 10px;gap:9px;border-radius:8px;background:rgb(255 255 255/.54)}.activity-mark{width:9px;height:9px;margin-top:3px;border:2px solid var(--line-strong);border-radius:50%}.activity--running .activity-mark{border-color:var(--accent-deep);border-top-color:transparent;animation:spin .8s linear infinite}.activity--completed .activity-mark{border-color:var(--success);background:var(--success)}.activity--failed .activity-mark{border-color:var(--danger);background:var(--danger)}.activity--waiting .activity-mark{border-color:var(--warning);background:var(--warning)}.activity-list strong,.activity-list small{display:block}.activity-list small{margin-top:3px;color:var(--muted)}.activity-list em{color:var(--muted);font-size:11px;font-style:normal}
 .node-list>li{padding:10px;border-radius:9px;background:rgb(255 255 255/.54)}.node-list header,.node-list footer{display:flex;align-items:center;gap:8px}.node-list header em{margin-left:auto;font-size:11px;font-style:normal}.node-list pre{max-height:180px;margin:8px 0;overflow:auto;white-space:pre-wrap;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}.node-list footer{justify-content:space-between;color:var(--muted);font-size:11px}.node-mark{width:10px;height:10px;border:2px solid var(--line-strong);border-radius:50%}.node-mark--active{border-color:var(--accent-deep);border-top-color:transparent;animation:spin .8s linear infinite}
 .node-tools{margin:8px 0;border:1px solid var(--line);border-radius:8px}.node-tools>summary{padding:7px 9px;font-size:11px}.node-tool{display:grid;grid-template-columns:1fr auto;padding:7px 9px;gap:3px 8px;border-top:1px solid var(--line);font-size:11px}.node-tool small{grid-column:1/-1;color:var(--muted)}.node-tool--failed{border-left:3px solid var(--danger)}.route-repair{color:var(--warning);font-size:11px}.route--failure{color:var(--danger);font-weight:700}.route--default{color:var(--warning)}
 .execution-error{margin:0;padding:8px 10px;color:var(--danger);border-radius:8px;background:var(--danger-soft)}.execution-trace{display:flex;align-items:center;min-width:0;padding:7px 2px 0;gap:8px;color:var(--muted)}.execution-trace code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.execution-trace button{margin-left:auto;flex:none;border:0;background:none;color:var(--accent-deep);cursor:pointer}
-@keyframes spin{to{transform:rotate(360deg)}}@keyframes wave{0%,100%{transform:scaleY(.55);opacity:.55}50%{transform:scaleY(1);opacity:1}}@keyframes soft-pulse{70%{box-shadow:0 0 0 7px transparent}}@media(prefers-reduced-motion:reduce){.execution-orb--running,.activity--running .activity-mark,.node-mark--active,.thinking-wave i{animation:none}}@media(max-width:640px){.execution-panel>summary>span:last-child{display:none}.activity-list li{grid-template-columns:auto minmax(0,1fr)}.activity-list em{grid-column:2}.thinking-block pre{max-height:180px}}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes wave{0%,100%{transform:scaleY(.55);opacity:.55}50%{transform:scaleY(1);opacity:1}}@keyframes soft-pulse{70%{box-shadow:0 0 0 7px transparent}}@media(prefers-reduced-motion:reduce){.execution-orb--running,.activity--running .activity-mark,.node-mark--active,.thinking-wave--active i{animation:none}}@media(max-width:640px){.execution-panel>summary>span:last-child{display:none}.activity-list li{grid-template-columns:auto minmax(0,1fr)}.activity-list em{grid-column:2}.thinking-block pre{max-height:180px}}
 </style>

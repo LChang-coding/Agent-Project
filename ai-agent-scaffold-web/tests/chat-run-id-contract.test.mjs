@@ -78,6 +78,10 @@ test('WAIT_ALL 期间只展示编排状态且不留下空的主 Agent 草稿气�
   assert.ok(orchestrationBranch >= 0 && ordinarySendingBranch > orchestrationBranch);
   assert.match(chatWorkspaceSource, /label: chatStore\.sending \? '主 Agent 与子 Agent 并行执行' : '正在等待子 Agent'/);
   assert.match(chatWorkspaceSource, /最终答案只会生成一次/);
+  assert.match(chatWorkspaceSource, /standaloneExecutionRuns\[message\.id\]/);
+  assert.match(chatWorkspaceSource, /data-main-agent-run-id/);
+  assert.match(chatWorkspaceSource, /主 Agent<\/span>\s*<span>运行过程/);
+  assert.match(chatWorkspaceSource, /子任务已委派，主 Agent 正在等待全部回调/);
 });
 
 test('WAIT_ALL 锁定同时作用于按钮与 handler，不能通过引导或会话操作绕过', () => {

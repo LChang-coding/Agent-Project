@@ -120,7 +120,7 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     case 'TOOL_CALL_STARTED': {
       const functionCallId = requiredText(payload.functionCallId, 'TOOL_CALL_STARTED 缺少 functionCallId');
       if (!node) {
-        currentReactTurn(next, event).tools.push({
+        toolReactTurn(next, event).tools.push({
           functionCallId,
           toolCode: text(payload.toolCode),
           displayName: text(payload.displayName) || text(payload.toolCode) || '工具调用',
@@ -188,15 +188,20 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     case 'WORKFLOW_COMPLETED':
       next.status = 'completed';
       next.waitingAll = false;
-      next.activities = next.activities.map((activity) => activity.status === 'running'
+      next.activities = next.activities.map((activity) => ['running', 'waiting'].includes(activity.status)
         ? { ...activity, status: 'completed', finishedAt: event.occurredAt } : activity);
+      settleOpenTools(next, 'completed', event.occurredAt);
       break;
     case 'WORKFLOW_FAILED':
       next.status = 'failed';
+      next.waitingAll = false;
       next.errorMessage = text(payload.message) || text(payload.errorCode) || '工作流执行失败';
+      settleOpenExecution(next, 'failed', event.occurredAt);
       break;
     case 'WORKFLOW_CANCELLED':
       next.status = 'cancelled';
+      next.waitingAll = false;
+      settleOpenExecution(next, 'cancelled', event.occurredAt);
       break;
     default:
       break;
@@ -246,6 +251,41 @@ function currentReactTurn(state: WorkflowRunViewState, event: WorkflowRunEvent, 
     state.reactTurns.push(turn);
   }
   return turn;
+}
+
+/**
+ * 模型框架可能先回调工具开始、稍后才交付该轮 reasoning Event。连续工具不能因此被挤进同一块：
+ * 有尚未配工具的思考时就近挂载，否则每次工具开始都创建独立行动回合，严格保留真实事件顺序。
+ */
+function toolReactTurn(state: WorkflowRunViewState, event: WorkflowRunEvent) {
+  const last = state.reactTurns.at(-1);
+  if (last && last.thinking && last.tools.length === 0) return last;
+  return currentReactTurn(state, event, true);
+}
+
+function settleOpenTools(state: WorkflowRunViewState, status: 'completed' | 'failed', finishedAt: string) {
+  for (const call of state.reactTurns.flatMap((turn) => turn.tools)) {
+    if (call.status === 'running') {
+      call.status = status;
+      call.finishedAt = finishedAt;
+      call.success = status === 'completed';
+    }
+  }
+  for (const call of state.nodes.flatMap((node) => node.toolCalls)) {
+    if (call.status === 'running') {
+      call.status = status;
+      call.finishedAt = finishedAt;
+      call.success = status === 'completed';
+    }
+  }
+}
+
+function settleOpenExecution(state: WorkflowRunViewState, terminal: 'failed' | 'cancelled', finishedAt: string) {
+  state.activities = state.activities.map((activity) => ['running', 'waiting'].includes(activity.status)
+    ? { ...activity, status: 'failed', finishedAt } : activity);
+  state.nodes = state.nodes.map((node) => node.status === 'running'
+    ? { ...node, status: terminal, finishedAt } : node);
+  settleOpenTools(state, 'failed', finishedAt);
 }
 
 function applyToolResult(call: WorkflowToolCallView,
