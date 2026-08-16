@@ -32,8 +32,8 @@ public class BoundedInMemorySessionServiceTest {
             service.appendEvent(session, event).blockingGet();
         }
 
-        assertEquals(256, session.events().size());
+        assertEquals(64, session.events().size());
         assertSame(appended.get(0), session.events().get(0));
-        assertSame(appended.get(399), session.events().get(255));
+        assertSame(appended.get(399), session.events().get(63));
     }
 }

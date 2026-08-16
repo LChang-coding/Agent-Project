@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentMap;
  * 非 partial 事件，ADK 默认会把整个快照永久追加到 Session，长思考时会形成平方级堆占用。
  */
 public final class BoundedInMemorySessionService implements BaseSessionService {
-    static final int MAX_EVENTS_PER_INVOCATION = 256;
+    static final int MAX_EVENTS_PER_INVOCATION = 64;
     private final InMemorySessionService delegate = new InMemorySessionService();
 
     @Override

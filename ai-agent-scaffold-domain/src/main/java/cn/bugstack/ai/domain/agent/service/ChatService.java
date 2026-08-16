@@ -1684,7 +1684,11 @@ public class ChatService implements IChatService {
      * 否则可能丢失最终正文；工具执行在 ADK 上游完成，工具时间线由 Tool Gateway 独立持久化。
      */
     private Flowable<Event> stabilizeModelEventStream(Flowable<Event> events) {
-        return events.onBackpressureLatest().sample(200, TimeUnit.MILLISECONDS, true);
+        return events.onBackpressureLatest()
+                .sample(200, TimeUnit.MILLISECONDS, true)
+                // sample 按时钟推送，下游正在持久化上一个事件时可能暂时没有 demand。
+                // 此处再做一次 latest 保护，避免时钟事件抛 MissingBackpressureException。
+                .onBackpressureLatest();
     }
 
     /**
