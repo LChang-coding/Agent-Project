@@ -1,6 +1,9 @@
 package cn.bugstack.ai;
 
 import cn.bugstack.ai.domain.agent.service.armory.matter.mcp.server.MyTestMcpService;
+import cn.bugstack.ai.types.exception.AppException;
+import io.reactivex.rxjava3.exceptions.UndeliverableException;
+import io.reactivex.rxjava3.plugins.RxJavaPlugins;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Configurable;
@@ -31,6 +34,7 @@ public class Application {
         // Google ADK 1.1 的模型流内部使用默认 flatMap 预取。默认 128 会在高频 SSE 下
         // 形成 128×128 的 Event 等待队列；必须在 Flowable 首次加载前收紧全局预取窗口。
         configureRxJavaPrefetch();
+        configureRxJavaErrorHandler();
         startLocalObservability();
         SpringApplication.run(Application.class, args);
     }
@@ -38,6 +42,25 @@ public class Application {
     static void configureRxJavaPrefetch() {
         System.setProperty(RXJAVA_BUFFER_SIZE_PROPERTY,
                 System.getProperty(RXJAVA_BUFFER_SIZE_PROPERTY, RXJAVA_BUFFER_SIZE_DEFAULT));
+    }
+
+    /**
+     * 已取消的 SSE 下游无法再接收上游竞态异常。这类错误只表示流已结束，
+     * 不应以线程级异常污染告警；其他未投递错误仍交给 JVM 默认处理器。
+     */
+    static void configureRxJavaErrorHandler() {
+        RxJavaPlugins.setErrorHandler(error -> {
+            if (isExpectedCancelledStreamError(error)) return;
+            Thread current = Thread.currentThread();
+            current.getUncaughtExceptionHandler().uncaughtException(current, error);
+        });
+    }
+
+    static boolean isExpectedCancelledStreamError(Throwable error) {
+        if (!(error instanceof UndeliverableException) || error.getCause() == null) return false;
+        Throwable cause = error.getCause();
+        return cause instanceof AppException appException
+                && "RUN_NOT_EXECUTABLE".equals(appException.getCode());
     }
 
     private static void startLocalObservability() {

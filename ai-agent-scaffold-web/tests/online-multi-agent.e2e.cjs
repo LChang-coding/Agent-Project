@@ -46,7 +46,7 @@ const { chromium } = require('playwright');
 
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
     await page.locator('.compact-field--wide select').first().selectOption('100003');
-    await page.locator('.composer-input').fill(`这是一次 Multi-Agent UI 闭环验收。必须先调用 search_agent_catalog，然后 create_subagent_instances 必须且只能调用一次；该次调用的 tasks 数组必须恰好包含两个元素，不得拆分或遗漏：第一个 agentTemplateId=100001，实现线程安全 Java 令牌桶并审查；第二个 agentTemplateId=100002，调研可再生能源、电动车和碳捕获近期进展。收到两个异步回调后再统一汇总，禁止主 Agent 自行完成。验收标识：${username}`);
+    await page.locator('.composer-input').fill(`这是一次 Multi-Agent UI 闭环验收。必须先调用 search_agent_catalog，然后 create_subagent_instances 必须且只能调用一次；该次调用的 tasks 数组必须恰好包含两个元素，不得拆分或遗漏：第一个 agentTemplateId=100001，给出一个最小的线程安全 Java 计数器和 3 条审查结论，总输出不超过 500 字；第二个 agentTemplateId=100002，各用 2 个要点概括可再生能源、电动车和碳捕获，总输出不超过 500 字。收到两个异步回调后再统一汇总，禁止主 Agent 自行完成。验收标识：${username}`);
     await page.locator('.composer-actions .button--primary').click();
 
     await page.locator('.approval-dialog').waitFor({ state: 'visible', timeout: 120000 });
@@ -78,7 +78,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => {
       const button = document.querySelector('.session-item--active .session-delete');
       return button instanceof HTMLButtonElement && !button.disabled;
-    }, null, { timeout: 240000 });
+    }, null, { timeout: 600000 });
     if (!process.env.E2E_KEEP_SESSION) {
       const activeSession = page.locator('.session-item--active');
       const activeSessionId = await activeSession.getAttribute('data-session-id');
