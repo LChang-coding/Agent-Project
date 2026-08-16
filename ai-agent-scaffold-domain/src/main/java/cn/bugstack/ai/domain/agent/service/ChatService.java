@@ -1140,6 +1140,8 @@ public class ChatService implements IChatService {
         StringBuilder thinkingContent = new StringBuilder();
         // 完成、异常和取消可能竞争，只允许一个分支写助手终态。
         AtomicBoolean assistantSaved = new AtomicBoolean(false);
+        // 消息终态与事件终态分别保护：SSE 断开与上游错误可能同时回调。
+        AtomicBoolean terminalEventPublished = new AtomicBoolean(false);
         // 子任务一旦创建，当前流只继续内部累计，不再把主 Agent 草稿当作最终答案下发。
         AtomicBoolean suppressParentOutput = new AtomicBoolean(false);
         // Lambda 需要一个有效不变的引用，所以把最新运行状态另存一份。
@@ -1168,16 +1170,21 @@ public class ChatService implements IChatService {
                         boolean deferred = completeRunWithAssistantOnce(assistantSaved, tenantId, userId,
                                 activeRun.getRunId(), assistantContent.toString(), traceId);
                         if (deferred) suppressParentOutput.set(true);
-                        publishAgentTerminal(activeRun, deferred, null, null);
+                        publishAgentTerminalOnce(terminalEventPublished, activeRun, deferred, null, null);
                     }
                 })
                 .doOnError(throwable -> {
                     // 取消不写错误消息；真实异常写入可审计终态。
-                    if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())) {
+                    // 若断开回调已将父运行收为 WAIT_ALL 草稿，上游随后的
+                    // RUN_NOT_EXECUTABLE 只是取消竞态，不得再把父事件账本改成 WORKFLOW_FAILED。
+                    if (!runControlService.cancelled(tenantId, userId, activeRun.getRunId())
+                            && !assistantSaved.get()) {
                         // 同样用一次性开关保护，并把已生成的片段一起留下便于定位失败点。
-                        if (failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId, activeRun.getRunId(), traceId,
-                                throwable, assistantContent.toString())) suppressParentOutput.set(true);
-                        publishAgentTerminal(activeRun, false, throwable, null);
+                        boolean deferred = failRunWithAssistantErrorOnce(assistantSaved, tenantId, userId,
+                                activeRun.getRunId(), traceId, throwable, assistantContent.toString());
+                        if (deferred) suppressParentOutput.set(true);
+                        publishAgentTerminalOnce(terminalEventPublished, activeRun, deferred,
+                                deferred ? null : throwable, null);
                     }
                 })
                 .doOnCancel(() -> {
@@ -1187,7 +1194,8 @@ public class ChatService implements IChatService {
                                 activeRun.getRunId(), assistantContent.toString());
                         if (deferred) suppressParentOutput.set(true);
                         else runControlService.cancel(tenantId, userId, activeRun.getRunId(), "流式连接已中断");
-                        publishAgentTerminal(activeRun, deferred, null, deferred ? null : "cancelled");
+                        publishAgentTerminalOnce(terminalEventPublished, activeRun, deferred, null,
+                                deferred ? null : "cancelled");
                     }
                 })
                 .doFinally(() -> {
@@ -2683,6 +2691,14 @@ public class ChatService implements IChatService {
         }
         publishAgentEvent(run, "FINAL_ANSWER_COMPLETED", Map.of());
         publishAgentEvent(run, "WORKFLOW_COMPLETED", Map.of("sourceType", "agent"));
+    }
+
+    /** SSE 完成、断开与异常回调竞争时，同一运行只发布一种终态事件。 */
+    private void publishAgentTerminalOnce(AtomicBoolean published, ChatRunEntity run, boolean deferred,
+                                          Throwable error, String explicitStatus) {
+        if (published.compareAndSet(false, true)) {
+            publishAgentTerminal(run, deferred, error, explicitStatus);
+        }
     }
 
     private void publishAgentEvent(ChatRunEntity run, String eventType, Map<String, ?> payload) {

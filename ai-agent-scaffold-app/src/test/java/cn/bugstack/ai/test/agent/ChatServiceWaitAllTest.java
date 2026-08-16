@@ -8,6 +8,7 @@ import cn.bugstack.ai.domain.rag.service.RagInvocationEvidenceStore;
 import cn.bugstack.ai.domain.run.model.ChatRunEntity;
 import cn.bugstack.ai.domain.run.model.RunStatus;
 import cn.bugstack.ai.domain.run.service.RunControlService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -118,6 +120,24 @@ public class ChatServiceWaitAllTest {
         verify(fixture.finalization).isAwaitingSummary("tenant-1", "run-1");
         verify(fixture.finalization).completeAsDraftIfWaiting(
                 "tenant-1", "user-1", "run-1", "断开前草稿");
+    }
+
+    @Test
+    public void shouldPublishOnlyWaitingWhenDisconnectRacesWithUpstreamError() {
+        Fixture fixture = fixture();
+        WorkflowEventStreamService eventStream = mock(WorkflowEventStreamService.class);
+        ReflectionTestUtils.setField(fixture.service, "workflowEventStreamService", eventStream);
+        ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant-1").userId("user-1")
+                .runId("run-1").traceId("trace-1").build();
+        AtomicBoolean published = new AtomicBoolean(false);
+
+        ReflectionTestUtils.invokeMethod(fixture.service, "publishAgentTerminalOnce",
+                published, run, true, null, null);
+        ReflectionTestUtils.invokeMethod(fixture.service, "publishAgentTerminalOnce",
+                published, run, false, new AppException("RUN_NOT_EXECUTABLE", "运行已结束"), null);
+
+        verify(eventStream, times(1)).publish(eq("tenant-1"), eq("user-1"), eq("run-1"),
+                eq("trace-1"), eq("WAITING_ALL"), eq(null), eq(null), anyString());
     }
 
     private Fixture fixture() {
