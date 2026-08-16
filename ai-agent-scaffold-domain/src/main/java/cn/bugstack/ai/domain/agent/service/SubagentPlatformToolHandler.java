@@ -80,7 +80,7 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
             if (!(value instanceof Map<?, ?> map) || !Set.of("agentId", "instruction").equals(map.keySet())) {
                 throw new IllegalArgumentException("SUBAGENT_TASK_INVALID");
             }
-            requests.add(new SubagentOrchestrationService.TaskRequest(mapText(map, "agentId"),
+            requests.add(new SubagentOrchestrationService.TaskRequest(mapAgentId(map, "agentId"),
                     mapText(map, "instruction")));
         }
         List<SubagentTaskEntity> tasks = orchestrationService.delegate(supervisor(context, trusted),
@@ -181,6 +181,16 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
         Object value = input.get(key);
         if (!(value instanceof String text) || text.isBlank()) throw new IllegalArgumentException("SUBAGENT_TASK_INVALID");
         return text;
+    }
+
+    /** JSON 模型偶尔会把纯数字 Agent ID 序列化为 number，在授权校验前做无损归一化。 */
+    private String mapAgentId(Map<?, ?> input, String key) {
+        Object value = input.get(key);
+        if (value instanceof String text && !text.isBlank()) return text;
+        if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
+            return String.valueOf(value);
+        }
+        throw new IllegalArgumentException("SUBAGENT_TASK_INVALID");
     }
 
     private List<String> stringList(Object value, int maxItems) {

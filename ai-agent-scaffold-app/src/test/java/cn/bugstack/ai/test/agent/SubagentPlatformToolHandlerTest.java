@@ -81,6 +81,25 @@ public class SubagentPlatformToolHandlerTest {
     }
 
     @Test
+    public void shouldNormalizeNumericAgentIdsProducedByJsonModels() {
+        SubagentOrchestrationService orchestration = Mockito.mock(SubagentOrchestrationService.class);
+        SubagentTaskEntity created = SubagentTaskEntity.builder().taskId("task-1").childAgentId("100001")
+                .status(SubagentTaskStatus.READY).build();
+        Mockito.when(orchestration.delegate(Mockito.any(), Mockito.eq("call-1"), Mockito.anyList()))
+                .thenReturn(List.of(created));
+        PlatformToolRegistry registry = new PlatformToolRegistry();
+        new SubagentPlatformToolHandler(registry, Mockito.mock(AgentCatalogService.class), orchestration);
+        ToolInvokeContextEntity context = context(); context.setRunId("run-1"); context.setFunctionCallId("call-1");
+
+        PlatformToolResult result = registry.dispatch(tool("create_subagent_instances"), Map.of("tasks",
+                List.of(Map.of("agentId", 100001, "instruction", "research"))), context);
+
+        Assert.assertTrue(result.success());
+        Mockito.verify(orchestration).delegate(Mockito.any(), Mockito.eq("call-1"),
+                Mockito.argThat(requests -> requests.size() == 1 && "100001".equals(requests.get(0).agentId())));
+    }
+
+    @Test
     public void shouldRejectInputOutsideOriginalSchema() {
         SubagentOrchestrationService orchestration = Mockito.mock(SubagentOrchestrationService.class);
         PlatformToolRegistry registry = new PlatformToolRegistry();

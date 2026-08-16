@@ -46,7 +46,7 @@ const { chromium } = require('playwright');
 
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
     await page.locator('.compact-field--wide select').first().selectOption('100003');
-    await page.locator('.composer-input').fill(`这是一次 Multi-Agent UI 闭环验收。必须先调用 search_agent_catalog，再只调用一次 create_subagent_instances，同时创建两个任务：交给 100001 实现线程安全 Java 令牌桶并审查；交给 100002 调研可再生能源、电动车和碳捕获近期进展。收到异步回调后再统一汇总，禁止主 Agent 自行完成。验收标识：${username}`);
+    await page.locator('.composer-input').fill(`这是一次 Multi-Agent UI 闭环验收。必须先调用 search_agent_catalog，然后 create_subagent_instances 必须且只能调用一次；该次调用的 tasks 数组必须恰好包含两个元素，不得拆分或遗漏：第一个 agentTemplateId=100001，实现线程安全 Java 令牌桶并审查；第二个 agentTemplateId=100002，调研可再生能源、电动车和碳捕获近期进展。收到两个异步回调后再统一汇总，禁止主 Agent 自行完成。验收标识：${username}`);
     await page.locator('.composer-actions .button--primary').click();
 
     await page.locator('.approval-dialog').waitFor({ state: 'visible', timeout: 120000 });
