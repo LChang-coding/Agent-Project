@@ -30,6 +30,9 @@ const { chromium } = require('playwright');
     await page.waitForTimeout(700);
 
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
+    const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+    await guide.waitFor({ timeout: 5000 });
+    await guide.getByRole('button', { name: '进入工作台' }).click();
     await page.locator('.compact-field--wide select').first().selectOption('100003');
     await page.locator('.composer-input').fill(`只调用一次 search_agent_catalog 检索 coding 模板，返回工具原始结果，不创建子 Agent。验收标识：${username}`);
     await page.locator('.composer-actions .button--primary').click();

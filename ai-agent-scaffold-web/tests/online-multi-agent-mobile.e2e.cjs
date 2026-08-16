@@ -20,9 +20,11 @@ const { chromium } = require('playwright');
     await page.locator('#password').fill(password);
     await page.getByRole('button', { name: '进入工作台' }).click();
     await page.waitForURL('**/dashboard', { timeout: 30000 });
-    await page.evaluate(() => localStorage.setItem('ai-agent-scaffold-mode-guide-seen-v1', '1'));
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Agent 编排工作台' }).waitFor();
+    const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+    await guide.waitFor({ timeout: 5000 });
+    await guide.getByRole('button', { name: '进入工作台' }).click();
     await page.locator('.compact-field--wide select').first().selectOption('100003');
     await page.waitForTimeout(800);
 

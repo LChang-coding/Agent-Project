@@ -21,6 +21,9 @@ const { chromium } = require('playwright');
     await page.getByRole('button', { name: '进入工作台' }).click();
     await page.waitForURL('**/dashboard', { timeout: 30000 });
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
+    const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+    await guide.waitFor({ timeout: 5000 });
+    await guide.getByRole('button', { name: '进入工作台' }).click();
     await page.locator('.compact-field--wide select').first().selectOption('100003');
 
     await page.waitForFunction(() => document.querySelectorAll('.session-item').length >= 2, null, { timeout: 30000 });

@@ -130,6 +130,16 @@ async function verifyDesktop(browser) {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Agent 编排工作台' }).waitFor();
+  const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+  await guide.waitFor();
+  await guide.getByText('WAIT_ALL').waitFor();
+  await guide.getByText('智能路由', { exact: true }).waitFor();
+  await page.screenshot({ path: '/tmp/agent-mode-guide-desktop.png', fullPage: true });
+  await guide.getByRole('button', { name: '进入工作台' }).click();
+  await page.getByRole('link', { name: '总览', exact: true }).click();
+  await page.getByRole('link', { name: 'Agent 编排', exact: true }).click();
+  await guide.waitFor();
+  await guide.getByRole('button', { name: '进入工作台' }).click();
   await page.locator('.run-card').waitFor();
   await page.waitForFunction(() => document.querySelectorAll('.session-children button').length === 3);
   assert.equal(await page.locator('.composer-actions button').last().isDisabled(), true, 'WAIT_ALL 应锁定发送');
@@ -163,9 +173,12 @@ async function verifyMobile(browser) {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${baseUrl}/chat`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Agent 编排工作台' }).waitFor();
+  const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+  await guide.waitFor();
+  await page.screenshot({ path: '/tmp/agent-mode-guide-mobile.png', fullPage: true });
+  await guide.getByRole('button', { name: '进入工作台' }).click();
   await page.locator('[data-subagent-task-id="task-code-001"][data-subagent-trigger="session-tree"]').click();
   await page.locator('.task-detail').waitFor();
-  await page.getByText('当前协议不提供子 Agent Token 级输出。').waitFor();
   const geometry = await page.evaluate(() => ({
     viewport: innerWidth,
     documentWidth: document.documentElement.scrollWidth,

@@ -88,11 +88,11 @@
                 <span class="engine-shuttle" aria-hidden="true"><i /><i /></span>
                 <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'agent'"
                         :disabled="sourceSwitching" data-source-mode="agent" @click="switchSource('agent')">
-                  <i aria-hidden="true" />Agent
+                  <i aria-hidden="true" />主 Agent 调度模式
                 </button>
                 <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'workflow'"
                         :disabled="sourceSwitching" data-source-mode="workflow" @click="switchSource('workflow')">
-                  <i aria-hidden="true" />DAG
+                  <i aria-hidden="true" />DAG / 智能工作流
                 </button>
               </div>
             </div>
@@ -532,40 +532,49 @@
               <div><span>RUNTIME PRIMER</span><h2 id="mode-guide-title">选择你的运行引擎</h2></div>
               <button type="button" aria-label="关闭运行引擎说明" @click="closeModeGuide">×</button>
             </header>
-            <p id="mode-guide-description">两种模式共享工具、RAG 与观测能力，区别在于任务由谁决定下一步。</p>
+            <p id="mode-guide-description">两种模式共享工具、RAG 与观测能力：一端由主 Agent 拆解、委派并等待回调，另一端由 DAG 与受控智能路由共同决定运行路径。</p>
             <div class="mode-guide__grid">
               <article class="mode-card mode-card--supervisor">
-                <div><span>01 / SUPERVISOR</span><h3>主 Agent 编排</h3><p>主 Agent 理解目标，自主拆解、并行委派子 Agent，等待回调后统一汇总。</p></div>
-                <div class="topology topology--supervisor" aria-label="主 Agent 向三个子 Agent 委派任务的流图">
-                  <svg viewBox="0 0 340 190" aria-hidden="true">
-                    <path d="M170 50 C170 82 58 74 58 126" /><path d="M170 50 L170 126" /><path d="M170 50 C170 82 282 74 282 126" />
-                    <path class="topology-flow topology-flow--a" d="M170 50 C170 82 58 74 58 126" />
-                    <path class="topology-flow topology-flow--b" d="M170 50 L170 126" />
-                    <path class="topology-flow topology-flow--c" d="M170 50 C170 82 282 74 282 126" />
+                <div><span>01 / SUPERVISOR</span><h3>主 Agent 调度模式</h3><p>主 Agent 拆解目标，并行委派多个子 Agent；子任务独立回调，全部收口后唤醒主 Agent 统一汇总。</p></div>
+                <div class="topology topology--supervisor" aria-label="主 Agent 委派四个子 Agent，子 Agent 回调后恢复主 Agent 汇总的闭环流图">
+                  <svg viewBox="0 0 400 250" aria-hidden="true">
+                    <path d="M200 43 C200 77 44 66 44 116 M200 43 C200 76 148 73 148 116 M200 43 C200 76 252 73 252 116 M200 43 C200 77 356 66 356 116" />
+                    <path d="M44 150 C44 190 200 174 200 210 M148 150 C148 183 200 180 200 210 M252 150 C252 183 200 180 200 210 M356 150 C356 190 200 174 200 210" />
+                    <path class="topology-flow topology-flow--a" d="M200 43 C200 77 44 66 44 116 M44 150 C44 190 200 174 200 210" />
+                    <path class="topology-flow topology-flow--b" d="M200 43 C200 76 148 73 148 116 M148 150 C148 183 200 180 200 210" />
+                    <path class="topology-flow topology-flow--c" d="M200 43 C200 76 252 73 252 116 M252 150 C252 183 200 180 200 210" />
+                    <path class="topology-flow topology-flow--d" d="M200 43 C200 77 356 66 356 116 M356 150 C356 190 200 174 200 210" />
                   </svg>
                   <div class="topology-node topology-node--crown"><b>♛</b><span>主 Agent</span></div>
-                  <div class="topology-node topology-node--child topology-node--left"><b>01</b><span>调查</span></div>
-                  <div class="topology-node topology-node--child topology-node--center"><b>02</b><span>编码</span></div>
-                  <div class="topology-node topology-node--child topology-node--right"><b>03</b><span>审查</span></div>
+                  <span class="topology-caption topology-caption--dispatch">并行委派</span>
+                  <div class="topology-node topology-node--child topology-node--one"><b>01</b><span>调查</span></div>
+                  <div class="topology-node topology-node--child topology-node--two"><b>02</b><span>编码</span></div>
+                  <div class="topology-node topology-node--child topology-node--three"><b>03</b><span>审查</span></div>
+                  <div class="topology-node topology-node--child topology-node--four"><b>04</b><span>验证</span></div>
+                  <span class="topology-caption topology-caption--callback">异步回调</span>
+                  <div class="topology-node topology-node--resume"><b>WAIT_ALL</b><span>恢复主 Agent · 统一汇总</span></div>
                 </div>
                 <button type="button" :class="{ active: chatStore.activeSourceType === 'agent' }" @click="chooseGuideMode('agent')">
                   {{ chatStore.activeSourceType === 'agent' ? '当前引擎' : '启用主 Agent' }}
                 </button>
               </article>
               <article class="mode-card mode-card--dag">
-                <div><span>02 / DETERMINISTIC</span><h3>DAG 工作流</h3><p>节点与合法路径预先发布，任务沿树杈并发推进，结果在汇聚节点稳定收口。</p></div>
-                <div class="topology topology--dag" aria-label="DAG 工作流由根节点分叉并汇聚的流图">
-                  <svg viewBox="0 0 340 190" aria-hidden="true">
-                    <path d="M170 34 L170 68 M170 68 C170 88 88 80 88 108 M170 68 C170 88 252 80 252 108 M88 136 C88 160 170 146 170 170 M252 136 C252 160 170 146 170 170" />
-                    <path class="topology-flow topology-flow--a" d="M170 34 L170 68 C170 88 88 80 88 108" />
-                    <path class="topology-flow topology-flow--b" d="M170 34 L170 68 C170 88 252 80 252 108" />
-                    <path class="topology-flow topology-flow--c" d="M88 136 C88 160 170 146 170 170 M252 136 C252 160 170 146 170 170" />
+                <div><span>02 / DAG + ROUTER</span><h3>DAG / 智能工作流模式</h3><p>固定 DAG 负责稳定并发与汇聚，智能路由节点根据中间结果从已发布的合法路径中选择下一站。</p></div>
+                <div class="topology topology--dag" aria-label="DAG 固定树杈与受控智能路由共同推进并在汇聚节点收口的流图">
+                  <svg viewBox="0 0 400 250" aria-hidden="true">
+                    <path d="M200 30 L200 63 M200 93 C200 119 55 104 55 145 M200 93 L200 145 M200 93 C200 119 345 104 345 145 M55 176 C55 214 200 193 200 226 M200 176 L200 226 M345 176 C345 214 200 193 200 226" />
+                    <path class="topology-route" d="M200 93 C258 105 286 120 345 145" />
+                    <path class="topology-flow topology-flow--a" d="M200 30 L200 63 C200 103 55 100 55 145 M55 176 C55 214 200 193 200 226" />
+                    <path class="topology-flow topology-flow--b" d="M200 30 L200 63 L200 145 L200 226" />
+                    <path class="topology-flow topology-flow--c" d="M200 30 L200 63 C200 103 345 100 345 145 M345 176 C345 214 200 193 200 226" />
                   </svg>
-                  <div class="dag-chip dag-chip--root">START</div><div class="dag-chip dag-chip--left">NODE A</div>
-                  <div class="dag-chip dag-chip--right">NODE B</div><div class="dag-chip dag-chip--end">MERGE</div>
+                  <div class="dag-chip dag-chip--root">START</div><div class="dag-chip dag-chip--router">智能路由</div>
+                  <span class="topology-caption topology-caption--legal">仅选择合法路径</span>
+                  <div class="dag-chip dag-chip--left">固定节点 A</div><div class="dag-chip dag-chip--center">路由 Agent</div>
+                  <div class="dag-chip dag-chip--right">工具 / RAG</div><div class="dag-chip dag-chip--end">MERGE</div>
                 </div>
                 <button type="button" :class="{ active: chatStore.activeSourceType === 'workflow' }" @click="chooseGuideMode('workflow')">
-                  {{ chatStore.activeSourceType === 'workflow' ? '当前引擎' : '启用 DAG' }}
+                  {{ chatStore.activeSourceType === 'workflow' ? '当前引擎' : '启用 DAG / 智能工作流' }}
                 </button>
               </article>
             </div>
@@ -657,7 +666,6 @@ let scrollFrame: number | null = null;
 let messageCopyTimer: number | null = null;
 const MESSAGE_WINDOW_SIZE = 100;
 const MESSAGE_WINDOW_STEP = 50;
-const MODE_GUIDE_SEEN_KEY = 'ai-agent-scaffold-mode-guide-seen-v1';
 const ragModeOptions: Array<{ value: SessionRagMode; label: string }> = [
   { value: 'OFF', label: '关闭' },
   { value: 'AUTO', label: '自动' },
@@ -847,10 +855,10 @@ const ragStateTone = computed(() => {
 
 onMounted(async () => {
   assetStore.setSelectionScope(attachmentScope.value);
+  await openModeGuide();
   await chatStore.loadAgents();
   await toolStore.loadCatalog();
   scrollToLatest(true);
-  if (localStorage.getItem(MODE_GUIDE_SEEN_KEY) !== '1') await openModeGuide();
 });
 
 onBeforeUnmount(() => {
@@ -1224,7 +1232,6 @@ async function openModeGuide() {
 
 function closeModeGuide() {
   modeGuideOpen.value = false;
-  localStorage.setItem(MODE_GUIDE_SEEN_KEY, '1');
 }
 
 async function chooseGuideMode(sourceType: 'agent' | 'workflow') {
@@ -2383,7 +2390,7 @@ function formatOptionalTokens(value?: number) {
 
 .engine-mode {
   display: grid;
-  min-width: 190px;
+  min-width: 320px;
   gap: 3px;
 }
 
@@ -2440,8 +2447,8 @@ function formatOptionalTokens(value?: number) {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font: 800 11px/1 Archivo, sans-serif;
-  letter-spacing: .08em;
+  font: 800 10px/1 Archivo, sans-serif;
+  letter-spacing: .025em;
   cursor: pointer;
   transition: color 180ms ease, text-shadow 180ms ease;
 }
@@ -2519,7 +2526,7 @@ function formatOptionalTokens(value?: number) {
 }
 
 .mode-guide {
-  width: min(960px, 100%);
+  width: min(1120px, 100%);
   max-height: min(820px, calc(100dvh - 40px));
   overflow: auto;
   padding: 24px;
@@ -2552,7 +2559,7 @@ function formatOptionalTokens(value?: number) {
 
 .mode-card {
   display: grid;
-  grid-template-rows: auto minmax(190px, 1fr) auto;
+  grid-template-rows: auto minmax(250px, 1fr) auto;
   min-width: 0;
   padding: 18px;
   overflow: hidden;
@@ -2568,12 +2575,14 @@ function formatOptionalTokens(value?: number) {
 .mode-card > button:hover { border-color: var(--accent-deep); color: var(--accent-deep); }
 .mode-card > button.active { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--surface)); color: var(--success); }
 
-.topology { position: relative; min-height: 190px; margin: 8px 0 13px; overflow: hidden; }
+.topology { position: relative; min-height: 250px; margin: 8px 0 13px; overflow: hidden; }
 .topology svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .topology svg path { fill: none; stroke: color-mix(in srgb, var(--ink) 24%, transparent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .topology svg .topology-flow { stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 5 58; animation: topology-current 2.6s linear infinite; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 65%, transparent)); }
 .topology svg .topology-flow--b { animation-delay: -.75s; stroke: #b88336; }
 .topology svg .topology-flow--c { animation-delay: -1.5s; stroke: #49725d; }
+.topology svg .topology-flow--d { animation-delay: -2.1s; stroke: #8f513a; }
+.topology svg .topology-route { stroke: #a76430; stroke-width: 1.8; stroke-dasharray: 3 5; filter: drop-shadow(0 0 3px rgb(167 100 48 / .28)); }
 
 .topology-node,
 .dag-chip {
@@ -2586,18 +2595,27 @@ function formatOptionalTokens(value?: number) {
   box-shadow: 0 6px 16px rgb(37 35 28 / .12), inset 0 1px 0 rgb(255 255 255 / .9);
 }
 
-.topology-node { width: 68px; min-height: 47px; border-radius: 12px; transform: translate(-50%, -50%); }
+.topology-node { width: 66px; min-height: 44px; border-radius: 11px; transform: translate(-50%, -50%); }
 .topology-node b { color: var(--accent-deep); font-size: 13px; }
 .topology-node span { color: var(--muted); font-size: 9px; font-weight: 850; }
-.topology-node--crown { left: 50%; top: 25%; width: 86px; min-height: 58px; border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: #f4dfc4; }
+.topology-node--crown { left: 50%; top: 17%; width: 88px; min-height: 58px; border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: #f4dfc4; }
 .topology-node--crown b { font-size: 22px; line-height: 1; }
-.topology-node--child { top: 73%; }
-.topology-node--left { left: 17%; }.topology-node--center { left: 50%; }.topology-node--right { left: 83%; }
+.topology-node--child { top: 55%; }
+.topology-node--one { left: 11%; }.topology-node--two { left: 37%; }.topology-node--three { left: 63%; }.topology-node--four { left: 89%; }
+.topology-node--resume { left: 50%; top: 88%; width: 148px; min-height: 47px; border-color: color-mix(in srgb, #49725d 55%, var(--line)); background: color-mix(in srgb, var(--surface) 84%, #dfeade); }
+.topology-node--resume b { color: #315845; font-size: 10px; letter-spacing: .08em; }
+.topology-node--resume span { font-size: 8px; }
 
-.dag-chip { min-width: 64px; min-height: 28px; padding: 0 8px; border-radius: 7px; color: var(--muted); font: 850 9px/1 Archivo, sans-serif; letter-spacing: .08em; transform: translate(-50%, -50%); }
-.dag-chip--root { left: 50%; top: 16%; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-deep); }
-.dag-chip--left { left: 26%; top: 64%; }.dag-chip--right { left: 74%; top: 64%; }
-.dag-chip--end { left: 50%; top: 91%; border-color: color-mix(in srgb, #49725d 52%, var(--line)); color: #315845; }
+.topology-caption { position: absolute; z-index: 3; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--muted); font-size: 7px; font-weight: 850; letter-spacing: .08em; }
+.topology-caption--dispatch { left: 51%; top: 31%; }
+.topology-caption--callback { left: 51%; top: 70%; color: #315845; }
+.topology-caption--legal { left: 56%; top: 37%; color: #8d4d2f; }
+
+.dag-chip { min-width: 70px; min-height: 29px; padding: 0 8px; border-radius: 7px; color: var(--muted); font: 850 8px/1 Archivo, sans-serif; letter-spacing: .06em; transform: translate(-50%, -50%); }
+.dag-chip--root { left: 50%; top: 12%; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-deep); }
+.dag-chip--router { left: 50%; top: 32%; min-width: 82px; border-color: color-mix(in srgb, #a76430 60%, var(--line)); background: #f3dfc8; color: #8d4d2f; transform: translate(-50%, -50%) rotate(0deg); }
+.dag-chip--left { left: 14%; top: 64%; }.dag-chip--center { left: 50%; top: 64%; }.dag-chip--right { left: 86%; top: 64%; }
+.dag-chip--end { left: 50%; top: 92%; border-color: color-mix(in srgb, #49725d 52%, var(--line)); color: #315845; }
 
 .mode-guide > footer { margin-top: 17px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 

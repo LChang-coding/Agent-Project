@@ -197,12 +197,17 @@ test('总览与会话工作台使用兼容单 Agent 和 Multi-Agent 的统一入
   assert.doesNotMatch(`${dashboardSource}\n${chatWorkspaceSource}`, /单一智能体/);
 });
 
-test('会话工作台提供可访问的双节点引擎拨杆与首次模式导览', () => {
+test('会话工作台提供可访问的双节点引擎拨杆与每次进入导览', () => {
   const source = readFileSync(new URL('../src/views/chat/ChatWorkspaceView.vue', import.meta.url), 'utf8');
   assert.match(source, /role="radiogroup" aria-label="运行引擎"/);
   assert.match(source, /data-source-mode="agent"/);
   assert.match(source, /data-source-mode="workflow"/);
-  assert.match(source, /ai-agent-scaffold-mode-guide-seen-v1/);
+  assert.match(source, /onMounted\(async \(\) =>[^]*await openModeGuide\(\)/);
+  assert.doesNotMatch(source, /MODE_GUIDE_SEEN_KEY|mode-guide-seen/);
+  assert.match(source, /主 Agent 调度模式/);
+  assert.match(source, /DAG \/ 智能工作流/);
+  assert.match(source, /WAIT_ALL/);
+  assert.match(source, /智能路由/);
   assert.match(source, /topology--supervisor/);
   assert.match(source, /topology--dag/);
   assert.match(source, /prefers-reduced-motion: reduce/);

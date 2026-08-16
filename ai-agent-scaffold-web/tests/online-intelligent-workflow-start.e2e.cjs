@@ -27,7 +27,6 @@ const { chromium } = require('playwright');
     await page.locator('#password').fill(password);
     await page.getByRole('button', { name: '进入工作台' }).click();
     await page.waitForURL('**/dashboard', { timeout: 30000 });
-    await page.evaluate(() => localStorage.setItem('ai-agent-scaffold-mode-guide-seen-v1', '1'));
     await page.goto('http://lcodeagent.lcode.top/workflow', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: '工作流编排' }).waitFor();
     await page.locator('.create-box input[placeholder="工作流名称"]').fill(workflowName);
@@ -57,11 +56,18 @@ const { chromium } = require('playwright');
     await page.goto('http://lcodeagent.lcode.top/chat', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Agent 编排工作台' }).waitFor();
     await targetsLoaded;
+    const guide = page.getByRole('dialog', { name: '选择你的运行引擎' });
+    await guide.waitFor({ timeout: 5000 }).catch(() => {});
+    if (await guide.isVisible()) await guide.getByRole('button', { name: '进入工作台' }).click();
 
     const agentMode = page.locator('[data-source-mode="agent"]');
     const workflowMode = page.locator('[data-source-mode="workflow"]');
     if (await workflowMode.getAttribute('aria-checked') === 'true') {
       await agentMode.click();
+      await page.waitForFunction(() => {
+        const button = document.querySelector('[data-source-mode="workflow"]');
+        return button instanceof HTMLButtonElement && !button.disabled;
+      });
     }
     const defaultDetailLoaded = page.waitForResponse((response) => response.request().method() === 'GET'
       && /\/api\/v1\/workflows\/workflow_[^/?]+(?:\?.*)?$/.test(response.url()), { timeout: 30000 });
