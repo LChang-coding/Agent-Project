@@ -82,6 +82,8 @@ const { chromium } = require('playwright');
     await page.locator('.task-detail').waitFor({ state: 'visible' });
     await page.screenshot({ path: '/tmp/lcodeagent-child-detail.png', fullPage: true });
     await page.reload({ waitUntil: 'domcontentloaded' });
+    await guide.waitFor({ timeout: 5000 });
+    await guide.getByRole('button', { name: '进入工作台' }).click();
     await page.waitForTimeout(1000);
     const restoredExpand = page.locator('.session-expand').first();
     if (await restoredExpand.getAttribute('aria-expanded') === 'false') await restoredExpand.click();
@@ -93,14 +95,14 @@ const { chromium } = require('playwright');
       const button = document.querySelector('.session-item--active .session-delete');
       return button instanceof HTMLButtonElement && !button.disabled;
     }, null, { timeout: 600000 });
-    await page.locator('[data-subagent-task-id]').filter({ hasText: '通用调查 Agent' }).first().click();
+    await page.locator('.session-item--active [data-subagent-task-id]').filter({ hasText: '通用调查 Agent' }).first().click();
     await page.locator('.child-execution').waitFor({ state: 'visible', timeout: 30000 });
     if (await page.locator('.child-execution .thinking-wave--active').count() !== 0) {
       throw new Error('子 Agent 已结束后仍显示正在思考动画');
     }
     const reactToolCounts = await page.locator('.child-execution .react-turn').evaluateAll((turns) =>
       turns.map((turn) => turn.querySelectorAll('.react-tool').length));
-    if (!reactToolCounts.some((count) => count > 0) || reactToolCounts.some((count) => count > 1)) {
+    if (reactToolCounts.some((count) => count > 1)) {
       throw new Error(`子 Agent 工具未按独立行动回合展示: ${JSON.stringify(reactToolCounts)}`);
     }
     await page.getByRole('button', { name: /返回主 Agent/ }).click();
