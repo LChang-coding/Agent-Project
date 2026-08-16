@@ -124,11 +124,12 @@ public class RunControlController {
             // 身份只取服务端认证上下文，运行归属和可取消状态由领域服务原子校验。
             ChatRunEntity run = runControlService.cancel(TenantContextHolder.getTenantId(),
                     TenantContextHolder.getUserId(), runId, request == null ? null : request.getReason());
-            // 普通 DAG 即使尚未进入后台线程，也必须在取消响应前拥有唯一取消终态事件。
-            workflowRunFinalizationService.reconcileCancellation(run);
-            // 智能工作流还要额外收口：把仍在执行的节点标为已取消，并补发取消事件，
-             // 否则前端事件流会停在最后一个节点上一直转圈。
-            intelligentWorkflowRuntimeService.reconcileCancellation(run);
+            // 智能工作流由专用收口器同时取消节点并发布终态；普通 DAG 才走通用终态收口。
+            // 两者不能同时发布 WORKFLOW_CANCELLED，否则幂等冲突会把当前事务标记为 rollback-only。
+            boolean intelligentRun = intelligentWorkflowRuntimeService.reconcileCancellation(run);
+            if (!intelligentRun) {
+                workflowRunFinalizationService.reconcileCancellation(run);
+            }
             // 取消成功，把新的运行状态和上下文版本返回；前端据此停止加载动画并刷新这一轮的消息。
             return Response.<RunControlResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())

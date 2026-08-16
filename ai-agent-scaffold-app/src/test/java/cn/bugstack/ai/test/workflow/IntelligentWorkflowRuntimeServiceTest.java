@@ -124,8 +124,8 @@ public class IntelligentWorkflowRuntimeServiceTest {
         ChatRunEntity run = ChatRunEntity.builder().tenantId("tenant_1").userId("user_1").sessionId("session_1")
                 .runId("run_1").traceId("trace_root_1234").status(RunStatus.CANCELLED).build();
 
-        service.reconcileCancellation(run);
-        service.reconcileCancellation(run);
+        Assert.assertTrue(service.reconcileCancellation(run));
+        Assert.assertTrue(service.reconcileCancellation(run));
 
         Assert.assertEquals("CANCELLED", runs.value.get().getStatus());
         verify(audit).cancelRunningNodes(eq("tenant_1"), eq("run_1"), any());

@@ -566,12 +566,15 @@ public class IntelligentWorkflowRuntimeService {
                                          RuntimeException failure) {
     }
 
-    /** 取消请求成功后同步收口智能扩展状态；可重复调用，终态 Run 不重复写事件。 */
+    /** 取消请求成功后同步收口智能扩展状态；返回是否属于智能工作流。 */
     @Transactional(rollbackFor = Exception.class)
-    public void reconcileCancellation(ChatRunEntity run) {
+    public boolean reconcileCancellation(ChatRunEntity run) {
         LocalDateTime finishedAt = LocalDateTime.now();
         // 取消与后台节点推进会竞争 revision；以非终态条件更新作为唯一线性化点，避免旧 revision 误报失败。
-        if (intelligentRunRepository.cancelActive(run.getTenantId(), run.getUserId(), run.getRunId(), finishedAt) == 0) return;
+        if (intelligentRunRepository.cancelActive(run.getTenantId(), run.getUserId(), run.getRunId(), finishedAt) == 0) {
+            // 已被后台收口的智能运行仍属于专用链路，不能再交给通用收口器重复发终态事件。
+            return intelligentRunRepository.query(run.getTenantId(), run.getUserId(), run.getRunId()) != null;
+        }
         IntelligentWorkflowRunEntity state = intelligentRunRepository.query(run.getTenantId(), run.getUserId(), run.getRunId());
         if (state == null) throw new AppException("WORKFLOW_RUN_NOT_FOUND", "取消后无法读取智能工作流运行");
         int cancelledNodes = executionAuditRepository.cancelRunningNodes(run.getTenantId(), run.getRunId(), finishedAt);
@@ -583,6 +586,7 @@ public class IntelligentWorkflowRuntimeService {
         }
         publish(run, "WORKFLOW_CANCELLED", null, state.getCurrentNodeId(),
                 Map.of("executedSteps", state.getExecutedSteps(), "cancelledNodes", cancelledNodes));
+        return true;
     }
 
     /** 以 revision 乐观锁更新智能运行状态，并对短暂并发冲突最多重试三次。 */
