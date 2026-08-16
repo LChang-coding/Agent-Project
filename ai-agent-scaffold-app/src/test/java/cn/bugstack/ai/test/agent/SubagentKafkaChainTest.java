@@ -197,6 +197,33 @@ public class SubagentKafkaChainTest {
     }
 
     @Test
+    public void shouldCloseResumeLedgerWhenRootEventStreamIsAlreadyTerminal() throws Exception {
+        IParentResumeRepository resumeRepository = Mockito.mock(IParentResumeRepository.class);
+        IChatService chatService = Mockito.mock(IChatService.class);
+        WorkflowEventStreamService eventStream = Mockito.mock(WorkflowEventStreamService.class);
+        ParentResumeBatchEntity batch = ParentResumeBatchEntity.builder().tenantId("tenant-1")
+                .parentRunId("parent-run-1").parentSessionId("session-1").parentAgentId("parent-1")
+                .userId("user-1").traceId("trace-1").fencingToken(9L).requestedVersion(2L)
+                .items(List.of(new ParentResumeBatchEntity.InboxItem(
+                        11L, "task-1", "child-1", "summary one", "SUCCEEDED")))
+                .build();
+        Mockito.when(resumeRepository.claim(Mockito.eq("tenant-1"), Mockito.eq("parent-run-1"),
+                Mockito.anyString(), Mockito.any(LocalDateTime.class), Mockito.eq(Duration.ofSeconds(60)),
+                Mockito.eq(20))).thenReturn(batch);
+        Mockito.when(eventStream.hasTerminalEvent("tenant-1", "user-1", "parent-run-1")).thenReturn(true);
+        Mockito.when(resumeRepository.complete(Mockito.same(batch), Mockito.anyString(), Mockito.eq(9L),
+                Mockito.any(LocalDateTime.class))).thenReturn(1);
+
+        new ParentAgentResumeConsumer(new ObjectMapper(), resumeRepository, chatService, eventStream).consume(event());
+
+        Mockito.verify(resumeRepository).complete(Mockito.same(batch), Mockito.anyString(), Mockito.eq(9L),
+                Mockito.any(LocalDateTime.class));
+        Mockito.verifyNoInteractions(chatService);
+        Mockito.verify(eventStream, Mockito.never()).publish(Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), Mockito.any(), Mockito.anyString());
+    }
+
+    @Test
     public void shouldRetryWithoutAckWhenResumeProducesOnlyBlankOutput() throws Exception {
         IParentResumeRepository resumeRepository = Mockito.mock(IParentResumeRepository.class);
         IChatService chatService = Mockito.mock(IChatService.class);

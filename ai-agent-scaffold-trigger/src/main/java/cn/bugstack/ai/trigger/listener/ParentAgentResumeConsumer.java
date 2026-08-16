@@ -76,6 +76,17 @@ public class ParentAgentResumeConsumer {
         ScheduledFuture<?> leaseHeartbeat = heartbeat.scheduleAtFixedRate(
                 () -> renew(batch), 20, 20, TimeUnit.SECONDS);
         try {
+            // 历史版本可能已把根事件账本误收为终态。终态账本不可再追加
+            // PARENT_RESUME_STARTED，继续重试只会制造 Outbox 风暴；此时幂等收口恢复账本。
+            if (eventStreamService != null && eventStreamService.hasTerminalEvent(
+                    batch.getTenantId(), batch.getUserId(), batch.getParentRunId())) {
+                if (repository.complete(batch, workerId, batch.getFencingToken(), LocalDateTime.now()) != 1) {
+                    throw new IllegalStateException("PARENT_RESUME_FENCE_CONFLICT");
+                }
+                log.warn("主 Agent 根事件账本已终态，已停止重复恢复 tenantId:{} parentRunId:{}",
+                        tenantId, parentRunId);
+                return;
+            }
             publishParentResumeStarted(batch);
             String finalAnswer = "";
             if (batch.getItems() != null && !batch.getItems().isEmpty()) {
