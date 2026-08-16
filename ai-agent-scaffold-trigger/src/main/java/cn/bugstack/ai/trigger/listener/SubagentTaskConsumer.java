@@ -69,7 +69,9 @@ public class SubagentTaskConsumer {
                     task.setChildSessionId(childSessionId);
                 }
                 cache(() -> cache.putInstance(task, CACHE_TTL), "put-instance", task);
-                List<String> output = chatService.handleMessage(task.getChildAgentId(), task.getUserId(),
+                // Kafka worker has no browser downstream. Use the internal entry so ADK does not
+                // retain an unconsumed token stream while several child Agents run concurrently.
+                List<String> output = chatService.handleInternalMessage(task.getChildAgentId(), task.getUserId(),
                         childSessionId, task.getInstruction());
                 String result = finalOutput(output);
                 String fullContext = fullContext(output);
