@@ -1,89 +1,397 @@
-26-05-04.13:42:48.229 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
-26-05-04.13:42:48.236 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
-
-Found multiple occurrences of org.json.JSONObject on the class path:
-
-	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
-	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
-
-You may wish to exclude one of them to ensure predictable runtime behavior
-
-26-05-04.13:42:48.246 [main            ] INFO  AiAgentAutoConfigTest  - Starting AiAgentAutoConfigTest using Java 17.0.18 with PID 66017 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
-26-05-04.13:42:48.246 [main            ] INFO  AiAgentAutoConfigTest  - The following 1 profile is active: "dev"
-26-05-04.13:42:48.639 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-05-04.13:42:48.711 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:48.795 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:48.799 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:49.176 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-05-04.13:42:49.177 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-05-04.13:42:49.243 [main            ] INFO  AiAgentAutoConfigTest  - Started AiAgentAutoConfigTest in 1.19 seconds (process running for 1.709)
-26-05-04.13:42:49.318 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"单一智能体","agentId":"100003","agentName":"单一智能体"},"appName":"testAgent03","module":{"agents":[{"description":"java学习项目计划","instruction":"通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。\n","name":"onlyAgent"}],"aiApi":{"apiKey":"sk-NBIwgojtZjR5ibSE79A8C04c7aFc45E8853eBd9c97C4F7B9","baseUrl":"https://apis.itedus.cn","completionsPath":"v1/chat/completions","embeddingsPath":"v1/embeddings"},"chatModel":{"model":"gpt-4.1","toolMcpList":[{"sse":{"baseUri":"http://appbuilder.baidu.com/v2/ai_search/mcp/","name":"baidu-search","requestTimeout":500000,"sseEndpoint":"sse?api_key=bce-v3/ALTAK-vsAOH4RJl5YPlUh6uKLBS/a65ecfe9728af559e7b133801abcdafef9a77bae"}},{"local":{"name":"myToolCallbackProvider"}}]},"runner":{"agentName":"onlyAgent","pluginNameList":["myTestPlugin","myLogPlugin"]}}}]
-26-05-04.13:42:49.318 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
-26-05-04.13:42:49.380 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
-26-05-04.13:42:49.870 [HttpClient-3-Worker-2] INFO  LifecycleInitializer   - Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=AIsearch, title=null, version=1.4.1] and Instructions null
-26-05-04.13:42:49.991 [main            ] INFO  SSEToolMcpCreateService - tool sse mcp initialize InitializeResult[protocolVersion=2024-11-05, capabilities=ServerCapabilities[completions=null, experimental={}, logging=null, prompts=PromptCapabilities[listChanged=false], resources=ResourceCapabilities[subscribe=false, listChanged=false], tools=ToolCapabilities[listChanged=false]], serverInfo=Implementation[name=AIsearch, title=null, version=1.4.1], instructions=null, meta=null]
-26-05-04.13:42:50.175 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize myToolCallbackProvider
-26-05-04.13:42:50.187 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
-26-05-04.13:42:50.210 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
-26-05-04.13:42:50.210 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
-26-05-04.13:42:50.214 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
-26-05-04.13:42:50.548 [main            ] WARN  Content                - There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
-26-05-04.13:42:50.548 [main            ] INFO  MyTestPlugin           - 用户输入信息:请描述这张图片的主要内容，并说明图中物品的可能用途。
-26-05-04.13:42:50.548 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🚀 USER MESSAGE RECEIVED
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-c46d30ca-f736-420b-a57f-c584c417cb77
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Session ID: f464adc5-a294-4eee-a646-4bb53d1f3cd4
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User ID: xiaofuge
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    App Name: testAgent03
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Root Agent: onlyAgent
-26-05-04.13:42:50.549 [main            ] INFO  LoggingPlugin          - [logging_plugin]    User Content: text: '请描述这张图片的主要内容，并说明图中物品的可能用途。'
-other_part
-26-05-04.13:42:50.551 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🏃 INVOCATION STARTING
-26-05-04.13:42:50.552 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-c46d30ca-f736-420b-a57f-c584c417cb77
-26-05-04.13:42:50.552 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Starting Agent: onlyAgent
-26-05-04.13:42:50.553 [main            ] INFO  MyTestPlugin           - 智能体名称:onlyAgent
-26-05-04.13:42:50.553 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT STARTING
-26-05-04.13:42:50.553 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
-26-05-04.13:42:50.553 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-c46d30ca-f736-420b-a57f-c584c417cb77
-26-05-04.13:42:50.564 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM REQUEST
-26-05-04.13:42:50.564 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Model: openai
-26-05-04.13:42:50.564 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
-26-05-04.13:42:50.564 [main            ] INFO  LoggingPlugin          - [logging_plugin]    System Instruction: '通过百度检索java编程实战项目，并根据检索内容，针对初学用户给出学习计划。
-
-
-You are an agent. Your internal name is "onlyAgent". The description about you is "java学习项目计划".'
-26-05-04.13:42:57.611 [main            ] INFO  SpringAIObservabilityHandler - Request completed successfully: model=openai, type=chat, duration=7043ms, tokens=490
-26-05-04.13:42:57.612 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🧠 LLM RESPONSE
-26-05-04.13:42:57.612 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent: onlyAgent
-26-05-04.13:42:57.612 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这是一张卡通风格的小狗图片。图片中的小狗表情有些疑惑或惊讶，整体造型简洁、可爱，采用了夸张的五官和圆润的线条。
-
-**图中物品的可能用途：**
-- 用于儿童绘本、启蒙教材等教育类内容的插图；
-- 作为表情包、贴纸，丰富社交聊天的趣味性；
-- 用于宠物相关产品的包装设计或宣传材料；
-- 游戏、动画中的角色形象素材；
-- 设计成卡片、徽章、挂件等文创产品。
-
-这类形象通常用于加强视觉表达的亲和力和趣味...'
-26-05-04.13:42:57.612 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Partial: false
-26-05-04.13:42:57.612 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Turn Complete: true
-26-05-04.13:42:57.628 [main            ] INFO  LoggingPlugin          - [logging_plugin] 📢 EVENT YIELDED
-26-05-04.13:42:57.628 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Event ID: a806040c-f7e5-44ee-a6c5-af148595b144
-26-05-04.13:42:57.628 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Author: onlyAgent
-26-05-04.13:42:57.628 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Content: text: '这是一张卡通风格的小狗图片。图片中的小狗表情有些疑惑或惊讶，整体造型简洁、可爱，采用了夸张的五官和圆润的线条。
-
-**图中物品的可能用途：**
-- 用于儿童绘本、启蒙教材等教育类内容的插图；
-- 作为表情包、贴纸，丰富社交聊天的趣味性；
-- 用于宠物相关产品的包装设计或宣传材料；
-- 游戏、动画中的角色形象素材；
-- 设计成卡片、徽章、挂件等文创产品。
-
-这类形象通常用于加强视觉表达的亲和力和趣味...'
-26-05-04.13:42:57.628 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Response: true
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin] 🤖 AGENT COMPLETED
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Agent Name: onlyAgent
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-c46d30ca-f736-420b-a57f-c584c417cb77
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin] ✅ INVOCATION COMPLETED
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Invocation ID: e-c46d30ca-f736-420b-a57f-c584c417cb77
-26-05-04.13:42:57.629 [main            ] INFO  LoggingPlugin          - [logging_plugin]    Final Agent: onlyAgent
-26-05-04.13:42:57.630 [main            ] INFO  AiAgentAutoConfigTest  - 测试结果:["这是一张卡通风格的小狗图片。图片中的小狗表情有些疑惑或惊讶，整体造型简洁、可爱，采用了夸张的五官和圆润的线条。\n\n**图中物品的可能用途：**\n- 用于儿童绘本、启蒙教材等教育类内容的插图；\n- 作为表情包、贴纸，丰富社交聊天的趣味性；\n- 用于宠物相关产品的包装设计或宣传材料；\n- 游戏、动画中的角色形象素材；\n- 设计成卡片、徽章、挂件等文创产品。\n\n这类形象通常用于加强视觉表达的亲和力和趣味性。"]
+26-08-16.04:55:37.534 [background-preinit] INFO  Version                traceId= tenantId= userId= HV000001: Hibernate Validator 8.0.2.Final
+26-08-16.04:55:37.552 [main            ] INFO  ApiTest                traceId= tenantId= userId= Starting ApiTest using Java 17.0.18 with PID 46538 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-08-16.04:55:37.553 [main            ] INFO  ApiTest                traceId= tenantId= userId= The following 1 profile is active: "dev"
+26-08-16.04:55:37.637 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-templates-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.04:55:37.637 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.04:55:38.150 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Multiple Spring Data modules found, entering strict repository configuration mode
+26-08-16.04:55:38.151 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+26-08-16.04:55:38.196 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Finished Spring Data repository scanning in 37 ms. Found 0 Redis repository interfaces.
+26-08-16.04:55:38.306 [main            ] INFO  GenericScope           traceId= tenantId= userId= BeanFactory id=740cf7b0-620a-3aa4-98ef-6e7846f24c44
+26-08-16.04:55:39.259 [main            ] INFO  InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer traceId= tenantId= userId= Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+26-08-16.04:55:39.700 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.04:55:39.737 [main            ] INFO  AbstractLogin          traceId= tenantId= userId= Successfully logged in.
+26-08-16.04:55:39.800 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.04:55:39.800 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.04:55:39.800 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786827339800
+26-08-16.04:55:39.803 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.04:55:39.810 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.04:55:39.810 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.04:55:39.810 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786827339810
+26-08-16.04:55:39.810 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.04:55:39.817 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.04:55:39.817 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.04:55:39.817 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786827339817
+26-08-16.04:55:39.817 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.04:55:39.823 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.04:55:39.823 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.04:55:39.823 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786827339823
+26-08-16.04:55:39.830 [main            ] INFO  ApiTest                traceId= tenantId= userId= Started ApiTest in 7.224 seconds (process running for 8.536)
+26-08-16.04:55:39.831 [main            ] INFO  AiAgentAutoConfig      traceId= tenantId= userId= Ai Agent 智能体装配开始 count:4
+26-08-16.04:55:39.832 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.04:55:39.839 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Starting...
+26-08-16.04:55:39.909 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.04:55:39.914 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.04:55:39.938 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.04:55:39.938 [main            ] INFO  SequentialAgentNode    traceId= tenantId= userId= Ai Agent 装配操作 - SequentialAgentNode
+26-08-16.04:55:39.938 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.04:55:39.938 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.04:55:39.944 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100001
+26-08-16.04:55:39.944 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.04:55:39.945 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.04:55:39.945 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.04:55:39.946 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.04:55:39.946 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.04:55:39.946 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100002
+26-08-16.04:55:39.946 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.04:55:39.947 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.04:55:39.947 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.04:55:39.947 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.04:55:39.947 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.04:55:39.948 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100004
+26-08-16.04:55:39.948 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.04:55:39.948 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.04:55:39.948 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.04:55:39.948 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.04:55:39.949 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.04:55:39.949 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100003
+26-08-16.04:55:39.954 [main            ] INFO  NacosContextRefresher  traceId= tenantId= userId= [Nacos Config] Listening config: dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP
+26-08-16.04:55:39.963 [main            ] INFO  ApiTest                traceId= tenantId= userId= 测试完成
+26-08-16.04:55:41.040 [main            ] INFO  AnnotationConfigContextLoaderUtils traceId= tenantId= userId= Could not detect default configuration classes for test class [cn.bugstack.ai.test.agent.ChatServiceTest]: ChatServiceTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+26-08-16.04:55:41.055 [main            ] INFO  SpringBootTestContextBootstrapper traceId= tenantId= userId= Found @SpringBootConfiguration cn.bugstack.ai.Application for test class cn.bugstack.ai.test.agent.ChatServiceTest
+26-08-16.04:55:42.359 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:1 memoryVersion:0 injectedTokens:79 trimmed:false
+26-08-16.04:55:42.360 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:1 memoryVersion:0 injectedTokens:0 trimmed:true
+26-08-16.04:55:42.361 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:3 memoryVersion:1 injectedTokens:124 trimmed:false
+26-08-16.04:55:42.362 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文压缩任务已创建 tenantId:tenant_1 userId:user_1 sessionId:session_1 taskId:task_1 range:1-3 uncoveredTokens:20
+26-08-16.04:55:42.745 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:5 memoryVersion:0 injectedTokens:111 trimmed:false
+26-08-16.04:55:42.797 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文压缩任务完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 taskId:task_1 memoryVersion:1 coveredTo:2 tokens:49
+26-08-16.04:55:42.797 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:2 memoryVersion:1 injectedTokens:124 trimmed:false
+26-08-16.04:55:43.086 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions assigned: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.04:55:43.359 [scheduling-1    ] INFO  HikariPool             traceId= tenantId= userId= AiAgentHikariPool - Added connection com.mysql.cj.jdbc.ConnectionImpl@9f2c63e
+26-08-16.04:55:43.361 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Start completed.
+26-08-16.04:55:43.790 [scheduling-1    ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.04:55:43.801 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.04:55:43.801 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.04:55:43.801 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786827343801
+26-08-16.04:55:46.677 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: partitions assigned: [context.compaction.request.v1-0, context.compaction.request.v1-1, context.compaction.request.v1-2, context.compaction.request.v1-3, context.compaction.request.v1-4, context.compaction.request.v1-5]
+26-08-16.04:55:46.677 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions assigned: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.04:55:46.677 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions assigned: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.04:55:47.807 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:3 memoryVersion:2 injectedTokens:85 trimmed:false
+26-08-16.04:55:47.861 [main            ] INFO  AnnotationConfigContextLoaderUtils traceId= tenantId= userId= Could not detect default configuration classes for test class [cn.bugstack.ai.test.app.AiAgentAutoConfigTest]: AiAgentAutoConfigTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+26-08-16.04:55:47.876 [main            ] INFO  SpringBootTestContextBootstrapper traceId= tenantId= userId= Found @SpringBootConfiguration cn.bugstack.ai.Application for test class cn.bugstack.ai.test.app.AiAgentAutoConfigTest
+26-08-16.04:55:48.321 [scheduling-1    ] INFO  ContextCompactionRecoveryJob traceId= tenantId= userId= 上下文整理任务补发扫描完成 count:21
+26-08-16.04:55:48.638 [main            ] INFO  RunControlService      traceId= tenantId= userId= 会话运行已取消 tenantId:tenant-1 userId:user-1 sessionId:session-1 runId:run-1 revision:2
+26-08-16.04:55:48.768 [main            ] INFO  RunControlService      traceId= tenantId= userId= 会话运行已取消 tenantId:tenant-1 userId:user-1 sessionId:session-1 runId:run-1 revision:8
+26-08-16.04:55:48.819 [main            ] INFO  ContextCompactionRecoveryJob traceId=ab7bcd54-6a85-4a07-948b-100a2fd83cef tenantId= userId= 上下文整理任务补发扫描完成 count:2
+26-08-16.04:55:49.219 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.04:55:49.223 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.225 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.227 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.231 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=503 wallMs=1
+26-08-16.04:55:49.233 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.234 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.235 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.240 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.242 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.246 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=200 wallMs=1
+26-08-16.04:55:49.764 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=400 wallMs=1
+26-08-16.04:55:49.766 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.04:55:49.769 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.04:55:49.783 [main            ] INFO  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=200 wallMs=2
+26-08-16.04:55:50.376 [main            ] INFO  MockServletContext     traceId= tenantId= userId= Initializing Spring TestDispatcherServlet ''
+26-08-16.04:55:50.376 [main            ] INFO  TestDispatcherServlet  traceId= tenantId= userId= Initializing Servlet ''
+26-08-16.04:55:50.376 [main            ] INFO  TestDispatcherServlet  traceId= tenantId= userId= Completed initialization in 0 ms
+26-08-16.04:55:50.455 [boundedElastic-1] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server starting.
+26-08-16.04:55:50.461 [boundedElastic-1] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server started
+26-08-16.04:55:50.605 [pool-25-thread-1] INFO  LifecycleInitializer   traceId= tenantId= userId= Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental=null, logging=null, prompts=null, resources=null, tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=fake-stdio-mcp, title=null, version=1.0.0] and Instructions null
+26-08-16.04:55:50.613 [boundedElastic-2] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server starting.
+26-08-16.04:55:50.616 [boundedElastic-2] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server started
+26-08-16.04:55:50.749 [pool-31-thread-1] INFO  LifecycleInitializer   traceId= tenantId= userId= Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental=null, logging=null, prompts=null, resources=null, tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=fake-stdio-mcp, title=null, version=1.0.0] and Instructions null
+26-08-16.04:56:00.616 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  ConversationMemoryService traceId=c452e728-e8af-47ff-adb8-c5b1ef6805d5 tenantId=tenant_7093e163-42dd-4a12-a17a-9e7094979127 userId=user_c39abae8-44a8-424d-a4e5-958ec4f5f60d 上下文压缩任务完成 tenantId:tenant_7093e163-42dd-4a12-a17a-9e7094979127 userId:user_c39abae8-44a8-424d-a4e5-958ec4f5f60d sessionId:b1a8ac5a-2e2e-499e-a7d7-10712b67f5ef taskId:ctx_task_0590a0a5-8e59-3a48-93d7-63709866d1fa memoryVersion:1 coveredTo:5 tokens:579
+26-08-16.04:56:01.012 [SpringApplicationShutdownHook] INFO  NacosGracefulShutdownDelegate traceId= tenantId= userId= Nacos client graceful shutdown has been executed successfully. Graceful shutdown wait time is 10000
+26-08-16.04:56:01.019 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions revoked: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.04:56:01.019 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions revoked: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.04:56:01.019 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions revoked: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.04:56:01.278 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.04:56:01.278 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.04:56:01.278 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.04:56:01.278 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.04:56:01.283 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-retry-1000-2 unregistered
+26-08-16.04:56:01.284 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: Consumer stopped
+26-08-16.04:56:01.408 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.04:56:01.408 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.04:56:01.408 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.04:56:01.408 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.04:56:01.409 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-dlt-1 unregistered
+26-08-16.04:56:01.409 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: Consumer stopped
+26-08-16.04:56:01.423 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.04:56:01.423 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.04:56:01.423 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.04:56:01.423 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.04:56:01.424 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-rag-ingest-3 unregistered
+26-08-16.04:56:01.424 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: Consumer stopped
+26-08-16.04:56:11.274 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  ConversationMemoryService traceId=b6323297-3088-4592-ae08-11299d007261 tenantId=tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId=user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c 上下文压缩任务完成 tenantId:tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId:user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c sessionId:24a0074c-9836-4e88-bcfc-8698a3cd59b5 taskId:ctx_task_8e0709c4-d053-32c9-8c04-6cb3b193b35d memoryVersion:1 coveredTo:1 tokens:200
+26-08-16.04:56:21.490 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  ConversationMemoryService traceId=b6323297-3088-4592-ae08-11299d007261 tenantId=tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId=user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c 上下文压缩任务完成 tenantId:tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId:user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c sessionId:512fbcb5-a2c2-4b7e-a698-f3d73db930da taskId:ctx_task_a65062f1-c8bc-318d-96a9-96cea7b05e70 memoryVersion:1 coveredTo:1 tokens:160
+26-08-16.04:56:21.575 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: partitions revoked: [context.compaction.request.v1-0, context.compaction.request.v1-1, context.compaction.request.v1-2, context.compaction.request.v1-3, context.compaction.request.v1-4, context.compaction.request.v1-5]
+26-08-16.04:56:21.737 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.04:56:21.737 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.04:56:21.737 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.04:56:21.737 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.04:56:21.741 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-4 unregistered
+26-08-16.04:56:21.742 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: Consumer stopped
+26-08-16.04:56:21.752 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.04:56:21.752 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.04:56:21.752 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.04:56:21.752 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.04:56:21.752 [SpringApplicationShutdownHook] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.producer for ai-agent-scaffold-app-producer-1 unregistered
+26-08-16.04:56:21.766 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown initiated...
+26-08-16.04:56:22.074 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown completed.
+26-08-16.06:52:00.337 [background-preinit] INFO  Version                traceId= tenantId= userId= HV000001: Hibernate Validator 8.0.2.Final
+26-08-16.06:52:00.358 [main            ] INFO  ChatServiceTest        traceId= tenantId= userId= Starting ChatServiceTest using Java 17.0.18 with PID 2754 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-08-16.06:52:00.359 [main            ] INFO  ChatServiceTest        traceId= tenantId= userId= The following 1 profile is active: "dev"
+26-08-16.06:52:00.465 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-templates-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.06:52:00.465 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.06:52:00.986 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Multiple Spring Data modules found, entering strict repository configuration mode
+26-08-16.06:52:00.987 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+26-08-16.06:52:01.022 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Finished Spring Data repository scanning in 25 ms. Found 0 Redis repository interfaces.
+26-08-16.06:52:01.154 [main            ] INFO  GenericScope           traceId= tenantId= userId= BeanFactory id=740cf7b0-620a-3aa4-98ef-6e7846f24c44
+26-08-16.06:52:02.298 [main            ] INFO  InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer traceId= tenantId= userId= Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+26-08-16.06:52:02.882 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.06:52:02.917 [main            ] INFO  AbstractLogin          traceId= tenantId= userId= Successfully logged in.
+26-08-16.06:52:02.961 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.06:52:02.962 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.06:52:02.962 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786834322961
+26-08-16.06:52:02.965 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.06:52:02.970 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.06:52:02.970 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.06:52:02.970 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786834322970
+26-08-16.06:52:02.971 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.06:52:02.976 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.06:52:02.976 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.06:52:02.976 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786834322976
+26-08-16.06:52:02.977 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.06:52:02.982 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.06:52:02.982 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.06:52:02.982 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786834322982
+26-08-16.06:52:02.992 [main            ] INFO  ChatServiceTest        traceId= tenantId= userId= Started ChatServiceTest in 6.735 seconds (process running for 8.127)
+26-08-16.06:52:02.995 [main            ] INFO  AiAgentAutoConfig      traceId= tenantId= userId= Ai Agent 智能体装配开始 count:4
+26-08-16.06:52:02.996 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.06:52:03.001 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Starting...
+26-08-16.06:52:03.090 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.06:52:03.090 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.06:52:03.096 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.06:52:03.126 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.06:52:03.126 [main            ] INFO  SequentialAgentNode    traceId= tenantId= userId= Ai Agent 装配操作 - SequentialAgentNode
+26-08-16.06:52:03.126 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.06:52:03.126 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.06:52:03.133 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100001
+26-08-16.06:52:03.133 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.06:52:03.136 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.06:52:03.136 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.06:52:03.136 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.06:52:03.136 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.06:52:03.136 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.06:52:03.136 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100002
+26-08-16.06:52:03.136 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.06:52:03.138 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.06:52:03.138 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.06:52:03.138 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.06:52:03.138 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.06:52:03.138 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.06:52:03.139 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100004
+26-08-16.06:52:03.139 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.06:52:03.141 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.06:52:03.142 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.06:52:03.142 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.06:52:03.142 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.06:52:03.142 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.06:52:03.142 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100003
+26-08-16.06:52:03.147 [main            ] INFO  NacosContextRefresher  traceId= tenantId= userId= [Nacos Config] Listening config: dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP
+26-08-16.06:52:06.827 [scheduling-1    ] INFO  HikariPool             traceId= tenantId= userId= AiAgentHikariPool - Added connection com.mysql.cj.jdbc.ConnectionImpl@3ab8f5fd
+26-08-16.06:52:06.829 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Start completed.
+26-08-16.06:52:07.335 [scheduling-1    ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.06:52:07.348 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.06:52:07.348 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.06:52:07.348 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786834327348
+26-08-16.06:52:07.919 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions assigned: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.06:52:08.544 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: partitions assigned: [context.compaction.request.v1-0, context.compaction.request.v1-1, context.compaction.request.v1-2, context.compaction.request.v1-3, context.compaction.request.v1-4, context.compaction.request.v1-5]
+26-08-16.06:52:08.607 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions assigned: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.06:52:08.609 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions assigned: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.06:52:10.362 [scheduling-1    ] INFO  ContextCompactionRecoveryJob traceId= tenantId= userId= 上下文整理任务补发扫描完成 count:18
+26-08-16.06:52:14.751 [SpringApplicationShutdownHook] INFO  NacosGracefulShutdownDelegate traceId= tenantId= userId= Nacos client graceful shutdown has been executed successfully. Graceful shutdown wait time is 10000
+26-08-16.06:52:14.758 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions revoked: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.06:52:14.758 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions revoked: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.06:52:14.758 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions revoked: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.06:52:14.893 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.06:52:14.893 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.06:52:14.893 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.06:52:14.893 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-retry-1000-2 unregistered
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: Consumer stopped
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.06:52:14.898 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.06:52:14.907 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-rag-ingest-3 unregistered
+26-08-16.06:52:14.907 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: Consumer stopped
+26-08-16.06:52:14.907 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-dlt-1 unregistered
+26-08-16.06:52:14.907 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: Consumer stopped
+26-08-16.06:52:44.768 [SpringApplicationShutdownHook] INFO  DefaultLifecycleProcessor traceId= tenantId= userId= Shutdown phase 2147483547 ends with 1 bean still running after timeout of 30000ms: [org.springframework.kafka.config.internalKafkaListenerEndpointRegistry]
+26-08-16.06:52:44.781 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.06:52:44.781 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.06:52:44.782 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.06:52:44.782 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.06:52:44.782 [SpringApplicationShutdownHook] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.producer for ai-agent-scaffold-app-producer-1 unregistered
+26-08-16.06:52:44.797 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown initiated...
+26-08-16.06:52:44.973 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown completed.
+26-08-16.08:24:40.954 [background-preinit] INFO  Version                traceId= tenantId= userId= HV000001: Hibernate Validator 8.0.2.Final
+26-08-16.08:24:40.968 [main            ] INFO  ApiTest                traceId= tenantId= userId= Starting ApiTest using Java 17.0.18 with PID 46062 (started by codeliu in /Users/codeliu/项目根据地/ai脚手架/Agent-Project/ai-agent-scaffold-app)
+26-08-16.08:24:40.968 [main            ] INFO  ApiTest                traceId= tenantId= userId= The following 1 profile is active: "dev"
+26-08-16.08:24:41.052 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-templates-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.08:24:41.052 [main            ] INFO  NacosConfigDataLoader  traceId= tenantId= userId= [Nacos Config] Load config[dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP] success
+26-08-16.08:24:41.540 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Multiple Spring Data modules found, entering strict repository configuration mode
+26-08-16.08:24:41.540 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+26-08-16.08:24:41.579 [main            ] INFO  RepositoryConfigurationDelegate traceId= tenantId= userId= Finished Spring Data repository scanning in 30 ms. Found 0 Redis repository interfaces.
+26-08-16.08:24:41.689 [main            ] INFO  GenericScope           traceId= tenantId= userId= BeanFactory id=63647295-ebf0-36c1-a898-b6e0777d5fff
+26-08-16.08:24:42.627 [main            ] INFO  InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer traceId= tenantId= userId= Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+26-08-16.08:24:43.075 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.08:24:43.104 [main            ] INFO  AbstractLogin          traceId= tenantId= userId= Successfully logged in.
+26-08-16.08:24:43.141 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.08:24:43.142 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.08:24:43.142 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786839883141
+26-08-16.08:24:43.145 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.08:24:43.152 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.08:24:43.152 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.08:24:43.152 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786839883152
+26-08-16.08:24:43.153 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.08:24:43.158 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.08:24:43.158 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.08:24:43.158 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786839883158
+26-08-16.08:24:43.159 [main            ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.08:24:43.163 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.08:24:43.163 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.08:24:43.163 [main            ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786839883163
+26-08-16.08:24:43.170 [main            ] INFO  ApiTest                traceId= tenantId= userId= Started ApiTest in 6.865 seconds (process running for 8.345)
+26-08-16.08:24:43.171 [main            ] INFO  AiAgentAutoConfig      traceId= tenantId= userId= Ai Agent 智能体装配开始 count:4
+26-08-16.08:24:43.173 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.08:24:43.181 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Starting...
+26-08-16.08:24:43.230 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.08:24:43.230 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.08:24:43.234 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.08:24:43.255 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.08:24:43.255 [main            ] INFO  SequentialAgentNode    traceId= tenantId= userId= Ai Agent 装配操作 - SequentialAgentNode
+26-08-16.08:24:43.256 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.08:24:43.256 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.08:24:43.260 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100001
+26-08-16.08:24:43.261 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.08:24:43.263 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.08:24:43.263 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.08:24:43.263 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.08:24:43.263 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.08:24:43.263 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.08:24:43.264 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100002
+26-08-16.08:24:43.264 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.08:24:43.265 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.08:24:43.265 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.08:24:43.265 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.08:24:43.265 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.08:24:43.265 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.08:24:43.266 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100004
+26-08-16.08:24:43.266 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 装配操作 - AiApiNode
+26-08-16.08:24:43.268 [main            ] INFO  AiApiNode              traceId= tenantId= userId= Ai Agent 思考适配器已装配 provider:deepseek mode:MEDIUM model:deepseek-v4-flash
+26-08-16.08:24:43.268 [main            ] INFO  ChatModelNode          traceId= tenantId= userId= Ai Agent 装配操作 - ChatModelNode
+26-08-16.08:24:43.268 [main            ] INFO  AgentNode              traceId= tenantId= userId= Ai Agent 装配操作 - AgentNode
+26-08-16.08:24:43.268 [main            ] INFO  AgentWorkflowNode      traceId= tenantId= userId= Ai Agent 装配操作 - AgentWorkflowNode
+26-08-16.08:24:43.268 [main            ] INFO  RunnerNode             traceId= tenantId= userId= Ai Agent 装配操作 - RunnerNode
+26-08-16.08:24:43.268 [main            ] INFO  AbstractArmorySupport  traceId= tenantId= userId= 成功注册Bean: 100003
+26-08-16.08:24:43.273 [main            ] INFO  NacosContextRefresher  traceId= tenantId= userId= [Nacos Config] Listening config: dataId=ai-agent-scaffold-app-dev.yml, group=DEFAULT_GROUP
+26-08-16.08:24:43.284 [main            ] INFO  ApiTest                traceId= tenantId= userId= 测试完成
+26-08-16.08:24:44.344 [main            ] INFO  AnnotationConfigContextLoaderUtils traceId= tenantId= userId= Could not detect default configuration classes for test class [cn.bugstack.ai.test.agent.ChatServiceTest]: ChatServiceTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+26-08-16.08:24:44.362 [main            ] INFO  SpringBootTestContextBootstrapper traceId= tenantId= userId= Found @SpringBootConfiguration cn.bugstack.ai.Application for test class cn.bugstack.ai.test.agent.ChatServiceTest
+26-08-16.08:24:45.657 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:1 memoryVersion:0 injectedTokens:79 trimmed:false
+26-08-16.08:24:45.657 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:1 memoryVersion:0 injectedTokens:0 trimmed:true
+26-08-16.08:24:45.658 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:3 memoryVersion:1 injectedTokens:124 trimmed:false
+26-08-16.08:24:45.659 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文压缩任务已创建 tenantId:tenant_1 userId:user_1 sessionId:session_1 taskId:task_1 range:1-3 uncoveredTokens:20
+26-08-16.08:24:46.027 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:5 memoryVersion:0 injectedTokens:111 trimmed:false
+26-08-16.08:24:46.071 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文压缩任务完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 taskId:task_1 memoryVersion:1 coveredTo:2 tokens:49
+26-08-16.08:24:46.071 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:2 memoryVersion:1 injectedTokens:124 trimmed:false
+26-08-16.08:24:47.321 [scheduling-1    ] INFO  HikariPool             traceId= tenantId= userId= AiAgentHikariPool - Added connection com.mysql.cj.jdbc.ConnectionImpl@5121c2da
+26-08-16.08:24:47.324 [scheduling-1    ] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Start completed.
+26-08-16.08:24:47.843 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions assigned: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.08:24:47.998 [scheduling-1    ] INFO  KafkaMetricsCollector  traceId= tenantId= userId= initializing Kafka metrics collector
+26-08-16.08:24:48.009 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka version: 3.8.1
+26-08-16.08:24:48.009 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka commitId: 70d6ff42debf7e17
+26-08-16.08:24:48.009 [scheduling-1    ] INFO  AppInfoParser          traceId= tenantId= userId= Kafka startTimeMs: 1786839888009
+26-08-16.08:24:49.590 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions assigned: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.08:24:49.624 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions assigned: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.08:24:49.665 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: partitions assigned: [context.compaction.request.v1-0, context.compaction.request.v1-1, context.compaction.request.v1-2, context.compaction.request.v1-3, context.compaction.request.v1-4, context.compaction.request.v1-5]
+26-08-16.08:24:50.791 [scheduling-1    ] INFO  ContextCompactionRecoveryJob traceId= tenantId= userId= 上下文整理任务补发扫描完成 count:18
+26-08-16.08:24:51.077 [main            ] INFO  ConversationMemoryService traceId= tenantId= userId= 上下文组装完成 tenantId:tenant_1 userId:user_1 sessionId:session_1 visibleThrough:3 memoryVersion:2 injectedTokens:85 trimmed:false
+26-08-16.08:24:51.146 [main            ] INFO  AnnotationConfigContextLoaderUtils traceId= tenantId= userId= Could not detect default configuration classes for test class [cn.bugstack.ai.test.app.AiAgentAutoConfigTest]: AiAgentAutoConfigTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+26-08-16.08:24:51.163 [main            ] INFO  SpringBootTestContextBootstrapper traceId= tenantId= userId= Found @SpringBootConfiguration cn.bugstack.ai.Application for test class cn.bugstack.ai.test.app.AiAgentAutoConfigTest
+26-08-16.08:24:51.915 [main            ] INFO  RunControlService      traceId= tenantId= userId= 会话运行已取消 tenantId:tenant-1 userId:user-1 sessionId:session-1 runId:run-1 revision:2
+26-08-16.08:24:52.054 [main            ] INFO  RunControlService      traceId= tenantId= userId= 会话运行已取消 tenantId:tenant-1 userId:user-1 sessionId:session-1 runId:run-1 revision:8
+26-08-16.08:24:52.104 [main            ] INFO  ContextCompactionRecoveryJob traceId=3fabc946-bc4e-4955-b168-c0b1221458f1 tenantId= userId= 上下文整理任务补发扫描完成 count:2
+26-08-16.08:24:52.514 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:52.519 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.08:24:52.520 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.08:24:52.523 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:52.527 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=503 wallMs=1
+26-08-16.08:24:52.531 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:52.534 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:52.535 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.08:24:52.540 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:52.543 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=0
+26-08-16.08:24:52.547 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=200 wallMs=1
+26-08-16.08:24:53.061 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=400 wallMs=1
+26-08-16.08:24:53.063 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:53.066 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=response status=200 wallMs=1
+26-08-16.08:24:53.080 [main            ] INFO  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=2 outcome=response status=200 wallMs=2
+26-08-16.08:24:53.664 [main            ] INFO  MockServletContext     traceId= tenantId= userId= Initializing Spring TestDispatcherServlet ''
+26-08-16.08:24:53.664 [main            ] INFO  TestDispatcherServlet  traceId= tenantId= userId= Initializing Servlet ''
+26-08-16.08:24:53.664 [main            ] INFO  TestDispatcherServlet  traceId= tenantId= userId= Completed initialization in 0 ms
+26-08-16.08:24:53.747 [boundedElastic-1] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server starting.
+26-08-16.08:24:53.753 [boundedElastic-1] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server started
+26-08-16.08:24:53.893 [pool-25-thread-1] INFO  LifecycleInitializer   traceId= tenantId= userId= Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental=null, logging=null, prompts=null, resources=null, tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=fake-stdio-mcp, title=null, version=1.0.0] and Instructions null
+26-08-16.08:24:53.902 [boundedElastic-2] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server starting.
+26-08-16.08:24:53.905 [boundedElastic-2] INFO  StdioClientTransport   traceId= tenantId= userId= MCP server started
+26-08-16.08:24:54.042 [pool-31-thread-1] INFO  LifecycleInitializer   traceId= tenantId= userId= Server response with Protocol: 2024-11-05, Capabilities: ServerCapabilities[completions=null, experimental=null, logging=null, prompts=null, resources=null, tools=ToolCapabilities[listChanged=false]], Info: Implementation[name=fake-stdio-mcp, title=null, version=1.0.0] and Instructions null
+26-08-16.08:25:04.310 [SpringApplicationShutdownHook] INFO  NacosGracefulShutdownDelegate traceId= tenantId= userId= Nacos client graceful shutdown has been executed successfully. Graceful shutdown wait time is 10000
+26-08-16.08:25:04.312 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: partitions revoked: [rag.ingest.request.v1-0, rag.ingest.request.v1-1]
+26-08-16.08:25:04.312 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: partitions revoked: [context.compaction.request.v1-retry-1000-0, context.compaction.request.v1-retry-1000-1, context.compaction.request.v1-retry-1000-2, context.compaction.request.v1-retry-1000-3, context.compaction.request.v1-retry-1000-4, context.compaction.request.v1-retry-1000-5]
+26-08-16.08:25:04.312 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: partitions revoked: [context.compaction.request.v1-dlt-0, context.compaction.request.v1-dlt-1, context.compaction.request.v1-dlt-2, context.compaction.request.v1-dlt-3, context.compaction.request.v1-dlt-4, context.compaction.request.v1-dlt-5]
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.08:25:04.990 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.08:25:04.993 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.08:25:04.994 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.08:25:04.994 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.08:25:04.994 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.08:25:04.998 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-rag-ingest-3 unregistered
+26-08-16.08:25:04.998 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-retry-1000-2 unregistered
+26-08-16.08:25:04.999 [org.springframework.kafka.KafkaListenerEndpointContainer#5-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-rag-ingest: Consumer stopped
+26-08-16.08:25:04.999 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-dlt-1 unregistered
+26-08-16.08:25:04.999 [org.springframework.kafka.KafkaListenerEndpointContainer#0-dlt-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-dlt: Consumer stopped
+26-08-16.08:25:04.999 [org.springframework.kafka.KafkaListenerEndpointContainer#0-retry-1000-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction-retry-1000: Consumer stopped
+26-08-16.08:25:05.534 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: partitions revoked: [context.compaction.request.v1-0, context.compaction.request.v1-1, context.compaction.request.v1-2, context.compaction.request.v1-3, context.compaction.request.v1-4, context.compaction.request.v1-5]
+26-08-16.08:25:05.728 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.08:25:05.728 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.08:25:05.729 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.08:25:05.729 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.08:25:05.731 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.consumer for consumer-ai-agent-context-compaction-4 unregistered
+26-08-16.08:25:05.731 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] INFO  KafkaMessageListenerContainer traceId= tenantId= userId= ai-agent-context-compaction: Consumer stopped
+26-08-16.08:25:05.743 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics scheduler closed
+26-08-16.08:25:05.743 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.metrics.JmxReporter
+26-08-16.08:25:05.743 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Closing reporter org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter
+26-08-16.08:25:05.743 [SpringApplicationShutdownHook] INFO  Metrics                traceId= tenantId= userId= Metrics reporters closed
+26-08-16.08:25:05.743 [SpringApplicationShutdownHook] INFO  AppInfoParser          traceId= tenantId= userId= App info kafka.producer for ai-agent-scaffold-app-producer-1 unregistered
+26-08-16.08:25:05.755 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown initiated...
+26-08-16.08:25:05.856 [SpringApplicationShutdownHook] INFO  HikariDataSource       traceId= tenantId= userId= AiAgentHikariPool - Shutdown completed.

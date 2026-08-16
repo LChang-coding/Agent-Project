@@ -1,0 +1,264 @@
+<mxfile host="Electron">
+  <diagram id="document-ir" name="Page-1">
+    <mxGraphModel dx="2709" dy="1380" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3300" pageHeight="1900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=30;fontStyle=1;align=left;fontColor=#1F2937;" value="12. 将 PDF、DOCX 和 Markdown 转成统一文档结构" vertex="1">
+          <mxGeometry height="50" width="2100" x="80" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sub" parent="1" style="text;html=1;fontSize=16;fontColor=#4B5563;align=left;" value="从文件上传、可靠任务登记，到格式化解析、质量检查和可恢复产物保存" vertex="1">
+          <mxGeometry height="30" width="1800" x="80" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" parent="1" style="rounded=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;" value="" vertex="1">
+          <mxGeometry height="250" width="3060" x="70" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="l1" style="opacity=0;" value="" vertex="1">
+          <mxGeometry height="1" width="1" x="1" y="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;" value="① 上传、去重与可靠登记" vertex="1">
+          <mxGeometry height="30" width="400" x="100" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="upload" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="上传 PDF / DOCX / Markdown" vertex="1">
+          <mxGeometry height="90" width="330" x="130" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="hash" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=15;" value="计算 SHA-256&lt;br&gt;检查是否为重复文件" vertex="1">
+          <mxGeometry height="130" width="240" x="590" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="minio" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="写入 MinIO&lt;br&gt;保存原始文件" vertex="1">
+          <mxGeometry height="110" width="300" x="960" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="tx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="同一个 MySQL 事务内保存&lt;br&gt;Document · Version · Task · Outbox" vertex="1">
+          <mxGeometry height="110" width="430" x="1410" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="commit" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=15;" value="事务提交成功？" vertex="1">
+          <mxGeometry height="130" width="240" x="1980" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="registered" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="任务已可靠登记&lt;br&gt;后续可再次扫描并继续处理" vertex="1">
+          <mxGeometry height="110" width="380" x="2400" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="rollback" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=15;" value="回滚，不发布任务通知" vertex="1">
+          <mxGeometry height="80" width="240" x="2840" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="upload" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="hash">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="hash" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="minio" value="未重复">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="minio" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="tx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="tx" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="commit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="commit" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="registered" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="commit" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="rollback" value="否">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2100" y="180" />
+              <mxPoint x="2960" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l2" parent="1" style="rounded=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;" value="" vertex="1">
+          <mxGeometry height="260" width="3060" x="70" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="l2" style="opacity=0;" value="" vertex="1">
+          <mxGeometry height="1" width="1" x="1" y="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;" value="② Kafka 通知与数据库扫描共同唤醒 Worker" vertex="1">
+          <mxGeometry height="30" width="600" x="100" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="outbox" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=15;" value="Outbox 发布 Kafka 消息" vertex="1">
+          <mxGeometry height="90" width="340" x="190" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="scan" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=15;" value="MySQL 定时扫描&lt;br&gt;查找等待或超时任务" vertex="1">
+          <mxGeometry height="50" width="340" x="190" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="worker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="Worker 抢占任务所有权&lt;br&gt;只有持有者可以继续处理" vertex="1">
+          <mxGeometry height="100" width="420" x="800" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="ack" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="Kafka 消息 ACK&lt;br&gt;通知丢失时仍可由扫描补上" vertex="1">
+          <mxGeometry height="100" width="400" x="1450" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="load" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="从 MinIO 读取原始文件&lt;br&gt;进入对应格式解析器" vertex="1">
+          <mxGeometry height="100" width="410" x="2130" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatch" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=15;" value="按扩展名与媒体类型&lt;br&gt;选择解析流程" vertex="1">
+          <mxGeometry height="140" width="240" x="2750" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="registered" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="outbox">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2590" y="360" />
+              <mxPoint x="360" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="outbox" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="worker">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="scan" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="worker">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="worker" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="ack">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="ack" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="load">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="load" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="dispatch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" parent="1" style="rounded=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;" value="" vertex="1">
+          <mxGeometry height="330" width="3060" x="70" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="l3" style="opacity=0;" value="" vertex="1">
+          <mxGeometry height="1" width="1" x="1" y="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;" value="③ 各格式独立解析，统一保留结构信息" vertex="1">
+          <mxGeometry height="30" width="600" x="100" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="md" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="Markdown&lt;br&gt;CommonMark AST&lt;br&gt;识别标题、段落、表格与代码块" vertex="1">
+          <mxGeometry height="130" width="420" x="140" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="docx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="DOCX&lt;br&gt;Apache POI 本地解析&lt;br&gt;保留标题、表格与内容顺序" vertex="1">
+          <mxGeometry height="130" width="420" x="680" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="fallback" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=15;" value="DOCX 本地解析失败&lt;br&gt;改用 Docling" vertex="1">
+          <mxGeometry height="90" width="350" x="1220" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="pdf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;" value="PDF&lt;br&gt;Docling 解析&lt;br&gt;provenance 提供页码、坐标和顺序" vertex="1">
+          <mxGeometry height="130" width="430" x="1690" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="docretry" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=15;" value="Docling 网络错误或 5xx：重试 1 次&lt;br&gt;超时、4xx、响应无效：内部不重试" vertex="1">
+          <mxGeometry height="130" width="450" x="2250" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="unify" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=15;" value="映射为统一 Block 列表" vertex="1">
+          <mxGeometry height="90" width="260" x="2810" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="dispatch" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="md">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2870" y="700" />
+              <mxPoint x="350" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="dispatch" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="docx">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="890" y="630" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="docx" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="fallback" value="失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="dispatch" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="pdf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2870" y="650" />
+              <mxPoint x="1905" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="fallback" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="docretry">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1395" y="770" />
+              <mxPoint x="2475" y="770" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="pdf" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="docretry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="docretry" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="unify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="md" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="unify">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="950" />
+              <mxPoint x="2940" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="l4" parent="1" style="rounded=1;fillColor=#FFFFFF;strokeColor=#CBD5E1;" value="" vertex="1">
+          <mxGeometry height="300" width="3060" x="70" y="1060" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="l4" style="opacity=0;" value="" vertex="1">
+          <mxGeometry height="1" width="1" x="1" y="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;" value="④ 生成 Document IR、检查质量并保存可恢复产物" vertex="1">
+          <mxGeometry height="30" width="700" x="100" y="1080" as="geometry" />
+        </mxCell>
+        <mxCell id="ir" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="Document IR&lt;br&gt;统一 blocks、tables、source range&lt;br&gt;标题层级、页码与 readingOrder" vertex="1">
+          <mxGeometry height="130" width="420" x="150" y="1160" as="geometry" />
+        </mxCell>
+        <mxCell id="quality" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=15;" value="质量检查通过？" vertex="1">
+          <mxGeometry height="140" width="230" x="760" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="review" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=15;" value="按原因处理&lt;br&gt;解析失败 / OCR 重试 / 人工复核 / 拒绝入库" vertex="1">
+          <mxGeometry height="130" width="430" x="1150" y="1150" as="geometry" />
+        </mxCell>
+        <mxCell id="artifacts" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=15;" value="保存解析产物&lt;br&gt;原始 parser output · Document IR&lt;br&gt;规范化 Markdown · quality report" vertex="1">
+          <mxGeometry height="150" width="480" x="1780" y="1140" as="geometry" />
+        </mxCell>
+        <mxCell id="next" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=15;" value="为后续父子切块与索引&lt;br&gt;提供稳定、可追溯的输入" vertex="1">
+          <mxGeometry height="110" width="430" x="2530" y="1160" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="unify" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="ir">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2940" y="970" />
+              <mxPoint x="360" y="970" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="ir" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="quality">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="quality" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="review" value="否">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="quality" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;labelBackgroundColor=#FFFFFF;" target="artifacts" value="是">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="875" y="1320" />
+              <mxPoint x="2020" y="1320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="artifacts" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;" target="next">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l5" parent="1" style="rounded=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;" value="" vertex="1">
+          <mxGeometry height="190" width="3060" x="70" y="1390" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="l5" style="opacity=0;" value="" vertex="1">
+          <mxGeometry height="1" width="1" x="1" y="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h5" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=left;" value="⑤ 代码能证明的边界" vertex="1">
+          <mxGeometry height="30" width="400" x="100" y="1410" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=#F3F4F6;strokeColor=#6B7280;fontSize=15;" value="DOCX 没有经过受控渲染器时&lt;br&gt;无法可靠给出原文页码" vertex="1">
+          <mxGeometry height="90" width="600" x="250" y="1470" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=#F3F4F6;strokeColor=#6B7280;fontSize=15;" value="复杂 PDF 的阅读顺序与坐标准确度&lt;br&gt;取决于 Docling 返回的 provenance" vertex="1">
+          <mxGeometry height="90" width="680" x="1050" y="1470" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;fillColor=#F3F4F6;strokeColor=#6B7280;fontSize=15;" value="统一结构保留的是解析器可识别的信息&lt;br&gt;不是对原始版式的无损复制" vertex="1">
+          <mxGeometry height="90" width="700" x="1950" y="1470" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="text;html=1;fontSize=14;fontColor=#4B5563;align=left;" value="图例：蓝=服务处理　绿=持久化结果　黄=判断/限制　橙=调度/外部解析　红=失败处理　虚线灰=能力边界" vertex="1">
+          <mxGeometry height="30" width="1600" x="100" y="1610" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

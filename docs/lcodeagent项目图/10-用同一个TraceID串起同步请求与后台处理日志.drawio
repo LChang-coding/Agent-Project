@@ -1,0 +1,263 @@
+<mxfile host="Electron">
+  <diagram id="trace-id-propagation" name="用同一个TraceID串起同步请求与后台处理日志">
+    <mxGraphModel dx="2917" dy="1486" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3200" pageHeight="2100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1F2937;" value="10. 用同一个 Trace ID 串起同步请求与后台处理日志" vertex="1">
+          <mxGeometry height="40" width="2100" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4B5563;" value="本图范围：HTTP 入口生成或接收 Trace ID → 保存到 Run、消息、工具、RAG 和工作流事件 → 显式带入线程池与 Kafka → 响应返回并清理线程数据。这里是项目级业务编号，不是完整 OpenTelemetry Trace。" vertex="1">
+          <mxGeometry height="30" width="2950" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F4F8FF;strokeColor=#6C8EBF;strokeWidth=2;" value="① HTTP 入口确定本次请求的 Trace ID" vertex="1">
+          <mxGeometry height="370" width="3100" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" parent="phase1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="客户端发起 HTTP 请求&#xa;可选请求头 X-Trace-Id" vertex="1">
+          <mxGeometry height="90" width="260" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="TraceIdFilter 读取请求头" vertex="1">
+          <mxGeometry height="80" width="240" x="340" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" parent="phase1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="编号安全吗？&#xa;1~64 位，只允许字母、数字&#xa;点、下划线、冒号和短横线" vertex="1">
+          <mxGeometry height="110" width="260" x="640" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="合法：沿用调用方编号" vertex="1">
+          <mxGeometry height="75" width="230" x="960" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="缺失、过长或含不安全字符&#xa;服务端生成 UUID" vertex="1">
+          <mxGeometry height="80" width="270" x="960" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="把最终编号放入 TraceContext 和 MDC&#xa;当前线程日志自动带上 traceId" vertex="1">
+          <mxGeometry height="100" width="310" x="1290" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="同时写入 request attribute&#xa;统一异常处理仍能找到同一编号" vertex="1">
+          <mxGeometry height="90" width="290" x="1660" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="响应头提前写回 X-Trace-Id&#xa;并允许浏览器跨域读取" vertex="1">
+          <mxGeometry height="90" width="290" x="2010" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="认证过滤器继续把 tenantId、userId&#xa;放入同一个日志上下文" vertex="1">
+          <mxGeometry height="90" width="310" x="2360" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a10" parent="phase1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="Controller 和领域服务开始处理&#xa;同步日志都使用该编号" vertex="1">
+          <mxGeometry height="90" width="290" x="2730" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FAF7FF;strokeColor=#9673A6;strokeWidth=2;" value="② 运行记录、模型、工具、RAG 和工作流事件继续保存同一编号" vertex="1">
+          <mxGeometry height="430" width="3100" x="40" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="创建 Chat Run / 智能工作流运行&#xa;保存 chat_run.trace_id" vertex="1">
+          <mxGeometry height="95" width="280" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="用户消息和助手消息&#xa;沿用 Run 的编号&#xa;保存 chat_message.trace_id" vertex="1">
+          <mxGeometry height="105" width="290" x="360" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="ChatService 把 Trace ID&#xa;放入 ADK 只读运行状态" vertex="1">
+          <mxGeometry height="95" width="270" x="700" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="模型调用日志插件&#xa;从线程和运行状态记录同一编号" vertex="1">
+          <mxGeometry height="95" width="280" x="1020" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b5" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="Agent 调用工具&#xa;GatewayAdkTool 从服务端状态恢复 Trace ID&#xa;模型参数不能修改它" vertex="1">
+          <mxGeometry height="115" width="320" x="1350" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b6" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="Tool Gateway 的开始、成功、失败审计&#xa;以及工作流工具事件保存该编号" vertex="1">
+          <mxGeometry height="105" width="320" x="1720" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b7" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="Agent 调用 RAG&#xa;检索请求、阶段审计、最终引用记录&#xa;继续使用同一编号" vertex="1">
+          <mxGeometry height="115" width="320" x="2090" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b8" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="工作流节点开始、结束、路径选择&#xa;和最终事件都使用 Run 中的根编号" vertex="1">
+          <mxGeometry height="105" width="320" x="2460" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b9" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="运行根编号与查看请求编号分开&#xa;SSE 订阅 / 状态查询有自己的 operationTraceId&#xa;但返回数据仍带 Run 的 traceId" vertex="1">
+          <mxGeometry height="105" width="430" x="1350" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="b10" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="即使文件日志已经滚动&#xa;Run、消息、工具、RAG 和工作流事件中&#xa;仍保存可用于关联的业务编号" vertex="1">
+          <mxGeometry height="105" width="420" x="2240" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FFF9F2;strokeColor=#D79B00;strokeWidth=2;" value="③ 切换线程池或 Kafka 时显式带入，并在结束后清理" vertex="1">
+          <mxGeometry height="450" width="3100" x="40" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="业务提交线程池任务" vertex="1">
+          <mxGeometry height="80" width="230" x="30" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="提交前复制当前 traceId&#xa;tenantId 和 userId" vertex="1">
+          <mxGeometry height="90" width="260" x="310" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="工作线程开始时放入自己的上下文&#xa;智能工作流明确使用 Run 根 traceId" vertex="1">
+          <mxGeometry height="100" width="310" x="620" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="后台步骤继续记录日志" vertex="1">
+          <mxGeometry height="80" width="240" x="980" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="任务结束恢复线程原有内容&#xa;防止线程复用时串到下一位用户" vertex="1">
+          <mxGeometry height="100" width="300" x="1270" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="业务通过 Kafka 延后处理" vertex="1">
+          <mxGeometry height="80" width="250" x="1640" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="c7" parent="phase3" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="生产者把 Trace ID 保存到任务记录&#xa;并写入 Kafka 消息" vertex="1">
+          <mxGeometry height="100" width="290" x="1940" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c8" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="消费者从可信任务字段恢复&#xa;Trace ID 和租户身份&#xa;再回查 MySQL 执行真实业务" vertex="1">
+          <mxGeometry height="110" width="310" x="2280" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c9" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="消费结束清理 TraceContext&#xa;TenantContext 和 MDC&#xa;避免 Kafka 线程处理下一条时串线" vertex="1">
+          <mxGeometry height="110" width="330" x="2640" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c10" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="能力边界&#xa;只有 TraceableThreadPoolExecutor 或显式包装的任务会自动复制&#xa;新建原生线程、第三方回调和新消费者仍需主动接入" vertex="1">
+          <mxGeometry height="110" width="520" x="900" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="c11" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="Kafka 消费线程不会继承 HTTP ThreadLocal&#xa;必须依靠消息和数据库任务字段恢复" vertex="1">
+          <mxGeometry height="100" width="430" x="2130" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F3FCF8;strokeColor=#67C9A3;strokeWidth=2;" value="④ 请求结束、用户查询日志与当前边界" vertex="1">
+          <mxGeometry height="550" width="3100" x="40" y="1450" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="普通 JSON 响应体自动补充 traceId&#xa;统一错误响应也从 request attribute 读取" vertex="1">
+          <mxGeometry height="105" width="330" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="记录 HTTP 状态和耗时&#xa;响应头继续返回 X-Trace-Id" vertex="1">
+          <mxGeometry height="95" width="290" x="420" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="清理当前 HTTP 线程的&#xa;Trace ID、租户和用户信息" vertex="1">
+          <mxGeometry height="95" width="290" x="770" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="phase4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="用户拿响应中的编号&#xa;查询这次业务过程的日志" vertex="1">
+          <mxGeometry height="95" width="290" x="1120" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="日志中 traceId 是正文结构化字段&#xa;不是 Loki 高基数标签&#xa;可按字段查询，避免大量标签组合" vertex="1">
+          <mxGeometry height="115" width="330" x="1470" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="准确能力名称&#xa;这是项目级业务 Trace ID 透传&#xa;没有 spanId、父子关系或 W3C traceparent" vertex="1">
+          <mxGeometry height="115" width="350" x="1860" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="d7" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="日志完整性边界&#xa;异步文件日志队列满时可能丢日志&#xa;数据库业务记录仍保留，但 Loki 不保证每一步永远齐全" vertex="1">
+          <mxGeometry height="125" width="380" x="2270" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="d8" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="部署边界&#xa;本地代码能证明采集配置和查询字段&#xa;远端 Loki 保留、Grafana 数据源和在线状态需部署环境验证" vertex="1">
+          <mxGeometry height="125" width="360" x="2700" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="phase4" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9CA3AF;verticalAlign=top;fontStyle=1;fontSize=13;container=1;pointerEvents=0;" value="图例" vertex="1">
+          <mxGeometry height="170" width="800" x="1910" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1" parent="legend" style="rounded=1;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="服务 / 入口" vertex="1">
+          <mxGeometry height="35" width="130" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2" parent="legend" style="rounded=1;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=12;" value="上下文传播" vertex="1">
+          <mxGeometry height="35" width="130" x="170" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3" parent="legend" style="rounded=1;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="判断 / 边界" vertex="1">
+          <mxGeometry height="35" width="130" x="320" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4" parent="legend" style="rounded=1;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="持久化 / 成功" vertex="1">
+          <mxGeometry height="35" width="150" x="470" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg5" parent="legend" style="rounded=1;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="清理 / 风险" vertex="1">
+          <mxGeometry height="35" width="150" x="100" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="lg6" parent="legend" style="rounded=1;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="虚线：实现或部署边界" vertex="1">
+          <mxGeometry height="35" width="280" x="290" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="a4" value="合法">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="a5" value="重新生成">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="a8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="a9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="a10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2915" y="390" />
+              <mxPoint x="210.08" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="b1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="b2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="b3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="b4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="b5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="b6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="b7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="b8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2660.08" y="900" />
+              <mxPoint x="185" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="c1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="c2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="c4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="c7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="c8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e29" edge="1" parent="1" source="d3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

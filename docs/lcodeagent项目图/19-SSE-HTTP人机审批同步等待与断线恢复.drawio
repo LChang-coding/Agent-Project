@@ -1,0 +1,371 @@
+<mxfile host="Electron" agent="Codex">
+  <diagram id="flow-19" name="Page-1">
+    <mxGraphModel dx="926" dy="696" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1882" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=28;fontStyle=1;fontColor=#1f2937;" value="19. SSE + HTTP 人机审批、同步等待与断线恢复" vertex="1">
+          <mxGeometry height="42" width="2260" x="34" y="18" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#5f6b7a;" value="SSE 只负责服务端推送，HTTP 只负责提交决定，MySQL 保存权威状态；原工具调用同步轮询，断线、半成功、超时和实例宕机都有恢复路径。" vertex="1">
+          <mxGeometry height="34" width="2280" x="36" y="62" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_1" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#f5f9ff;strokeColor=#6c8ebf;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="① 审批落库后，原工具同步等待；前端建立 SSE 通知通道" vertex="1">
+          <mxGeometry height="302" width="2352" x="24" y="108" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n1" parent="phase_1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;审批请求 PENDING&lt;/b&gt;&lt;br&gt;approvalId + functionCallId + expiresAt 已持久化" vertex="1">
+          <mxGeometry height="92" width="250" x="24" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n2" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;awaitDecision 长轮询&lt;/b&gt;&lt;br&gt;每 1 秒检查 Run、revision 和审批状态" vertex="1">
+          <mxGeometry height="76" width="250" x="314" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n3" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;GET /tool-approvals/stream&lt;/b&gt;&lt;br&gt;Bearer Token + afterSequence=cursor" vertex="1">
+          <mxGeometry height="76" width="250" x="604" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n4" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;认证与租户隔离&lt;/b&gt;&lt;br&gt;只订阅当前 tenantId + userId 的审批" vertex="1">
+          <mxGeometry height="76" width="250" x="894" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n5" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;STREAM_METADATA&lt;/b&gt;&lt;br&gt;返回 schemaVersion 与当前 cursor" vertex="1">
+          <mxGeometry height="76" width="240" x="1184" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n6" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;推送 tool_approval&lt;/b&gt;&lt;br&gt;参数、建议、倒计时、Trace ID、revision" vertex="1">
+          <mxGeometry height="76" width="270" x="1464" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n7" parent="phase_1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;审批弹窗&lt;/b&gt;&lt;br&gt;批准 / 修改后批准 / 拒绝 / 重新规划" vertex="1">
+          <mxGeometry height="92" width="270" x="1774" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n8" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=12;align=center;verticalAlign=middle;spacing=8;dashed=1;arcSize=10;" value="&lt;b&gt;SSE heartbeat&lt;/b&gt;&lt;br&gt;每 15 秒维持连接并暴露 cursor" vertex="1">
+          <mxGeometry height="76" width="250" x="2074" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e1" edge="1" parent="phase_1" source="p1_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e2" edge="1" parent="phase_1" source="p1_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n3" value="通知">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="526" y="132" />
+              <mxPoint x="526" y="132" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p1_e3" edge="1" parent="phase_1" source="p1_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e4" edge="1" parent="phase_1" source="p1_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e5" edge="1" parent="phase_1" source="p1_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e6" edge="1" parent="phase_1" source="p1_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e7" edge="1" parent="phase_1" source="p1_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#666666;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p1_n8" value="空闲时">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1906" y="82" />
+              <mxPoint x="1906" y="82" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e7" edge="1" parent="phase_1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" value="运行取消">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1044" y="112" />
+            </Array>
+            <mxPoint x="564" y="112" as="sourcePoint" />
+            <mxPoint x="1044.0400000000002" y="1430" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="phase_2" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fbf7fd;strokeColor=#9673a6;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="② SSE 断线、页面刷新和发送失败都通过 cursor + 快照恢复" vertex="1">
+          <mxGeometry height="310" width="2352" x="24" y="434" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n1" parent="phase_2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;连接为何中断？&lt;/b&gt;&lt;br&gt;网络切换 / 网关超时 / 实例重启 / send 失败" vertex="1">
+          <mxGeometry height="112" width="220" x="48" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n2" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;关闭旧 SseEmitter&lt;/b&gt;&lt;br&gt;释放订阅、心跳和连接资源" vertex="1">
+          <mxGeometry height="76" width="240" x="322" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n3" parent="phase_2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;保留 lastCursor&lt;/b&gt;&lt;br&gt;只在前端成功处理事件后推进" vertex="1">
+          <mxGeometry height="92" width="240" x="612" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n4" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Backoff 重连&lt;/b&gt;&lt;br&gt;正常 500ms；异常从 2s 起退避" vertex="1">
+          <mxGeometry height="76" width="240" x="902" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n5" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;携带 afterSequence 重连&lt;/b&gt;&lt;br&gt;服务端补发 cursor 之后的 PENDING 事件" vertex="1">
+          <mxGeometry height="76" width="270" x="1192" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n6" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Pending Snapshot&lt;/b&gt;&lt;br&gt;页面刷新时并行查询全部待审批记录" vertex="1">
+          <mxGeometry height="76" width="260" x="1512" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n7" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;approvalId 去重合并&lt;/b&gt;&lt;br&gt;SSE 增量 + 待审批快照恢复 UI" vertex="1">
+          <mxGeometry height="76" width="260" x="1822" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n8" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=12;align=center;verticalAlign=middle;spacing=8;dashed=1;arcSize=10;" value="&lt;b&gt;MySQL 状态不受影响&lt;/b&gt;&lt;br&gt;SSE 断线不等于批准、拒绝或丢失" vertex="1">
+          <mxGeometry height="76" width="210" x="2122" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e1" edge="1" parent="phase_2" source="p2_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e2" edge="1" parent="phase_2" source="p2_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e3" edge="1" parent="phase_2" source="p2_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e4" edge="1" parent="phase_2" source="p2_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e5" edge="1" parent="phase_2" source="p2_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e6" edge="1" parent="phase_2" source="p2_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e7" edge="1" parent="phase_2" source="p2_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#666666;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p2_n8" value="确认">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_3" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fffaf0;strokeColor=#d79b00;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="③ 用户通过单点 HTTP 提交决定，网络半成功通过 decisionRequestId 幂等" vertex="1">
+          <mxGeometry height="330" width="2352" x="24" y="768" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n1" parent="phase_3" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;用户选择 Decision&lt;/b&gt;&lt;br&gt;APPROVE / CHANGES / REJECT / REPLAN" vertex="1">
+          <mxGeometry height="76" width="250" x="24" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n2" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;POST /{approvalId}/decision&lt;/b&gt;&lt;br&gt;decisionRequestId + expectedRevision + 参数" vertex="1">
+          <mxGeometry height="76" width="270" x="314" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n3" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;决策可信校验&lt;/b&gt;&lt;br&gt;归属、PENDING、未过期、revision、JSON Schema" vertex="1">
+          <mxGeometry height="76" width="280" x="624" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n4" parent="phase_3" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;条件更新审批&lt;/b&gt;&lt;br&gt;status=DECIDED，revision + 1" vertex="1">
+          <mxGeometry height="92" width="260" x="944" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n5" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;返回最终决定&lt;/b&gt;&lt;br&gt;accepted + finalDecision + revision" vertex="1">
+          <mxGeometry height="76" width="240" x="1244" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n6" parent="phase_3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;HTTP 响应丢失？&lt;/b&gt;&lt;br&gt;请求可能已提交，前端不能直接判失败" vertex="1">
+          <mxGeometry height="110" width="220" x="1524" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n7" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;相同 decisionRequestId 重试&lt;/b&gt;&lt;br&gt;已处理则重放第一次结果" vertex="1">
+          <mxGeometry height="76" width="260" x="1784" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n8" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;不同页面已决定&lt;/b&gt;&lt;br&gt;查询最终状态并显示处理人和时间" vertex="1">
+          <mxGeometry height="76" width="240" x="2084" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n9" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;修改参数不合法&lt;/b&gt;&lt;br&gt;拒绝写入，保留审批弹窗供用户修正" vertex="1">
+          <mxGeometry height="76" width="280" x="624" y="208" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e1" edge="1" parent="phase_3" source="p3_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e2" edge="1" parent="phase_3" source="p3_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e3" edge="1" parent="phase_3" source="p3_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n4" value="合法">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e4" edge="1" parent="phase_3" source="p3_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p3_n9" value="不合法">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e5" edge="1" parent="phase_3" source="p3_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e6" edge="1" parent="phase_3" source="p3_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e7" edge="1" parent="phase_3" source="p3_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n7" value="丢失或超时">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e8" edge="1" parent="phase_3" source="p3_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p3_n8" value="版本冲突">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1916" y="92" />
+              <mxPoint x="1916" y="92" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="phase_4" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#f5fff9;strokeColor=#3bbf8a;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="④ 原工具线程感知决定，沿用原 functionCallId 继续或终止" vertex="1">
+          <mxGeometry height="330" width="2352" x="24" y="1122" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n1" parent="phase_4" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;轮询读到 DECIDED&lt;/b&gt;&lt;br&gt;再次校验 Run 未取消、revision 有效" vertex="1">
+          <mxGeometry height="92" width="250" x="24" y="104" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n2" parent="phase_4" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;最终 Decision&lt;/b&gt;&lt;br&gt;批准 / 修改后批准 / 拒绝 / 重规划" vertex="1">
+          <mxGeometry height="116" width="210" x="324" y="92" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n3" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;APPROVE&lt;/b&gt;&lt;br&gt;effectiveInput=originalInput" vertex="1">
+          <mxGeometry height="76" width="220" x="594" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n4" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;APPROVE_WITH_CHANGES&lt;/b&gt;&lt;br&gt;effectiveInput=amendedInput，再验 Schema" vertex="1">
+          <mxGeometry height="76" width="260" x="854" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n5" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;REJECT&lt;/b&gt;&lt;br&gt;不执行工具，返回审批拒绝" vertex="1">
+          <mxGeometry height="76" width="220" x="594" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n6" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;REPLAN&lt;/b&gt;&lt;br&gt;把审批意见交给 Agent 重新规划" vertex="1">
+          <mxGeometry height="76" width="260" x="854" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n7" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Tool Dispatch Claim&lt;/b&gt;&lt;br&gt;runId + functionCallId 领取唯一执行权" vertex="1">
+          <mxGeometry height="76" width="270" x="1204" y="52" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n8" parent="phase_4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;恢复原工具调用&lt;/b&gt;&lt;br&gt;首次执行；重复调用则重放持久化结果" vertex="1">
+          <mxGeometry height="92" width="300" x="1524" y="44" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n9" parent="phase_4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;本次工具不执行&lt;/b&gt;&lt;br&gt;拒绝结果或重规划意见返回 Agent" vertex="1">
+          <mxGeometry height="92" width="300" x="1204" y="194" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n10" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=12;align=center;verticalAlign=middle;spacing=8;dashed=1;arcSize=10;" value="&lt;b&gt;批准后仍需运行门禁&lt;/b&gt;&lt;br&gt;审批不能绕过取消、上下文版本和幂等检查" vertex="1">
+          <mxGeometry height="104" width="420" x="1884" y="82" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e1" edge="1" parent="phase_4" source="p4_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e2" edge="1" parent="phase_4" source="p4_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n3" value="批准">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e3" edge="1" parent="phase_4" source="p4_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n4" value="修改后批准">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="694" y="150" />
+              <mxPoint x="694" y="108" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p4_e4" edge="1" parent="phase_4" source="p4_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n5" value="拒绝">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e5" edge="1" parent="phase_4" source="p4_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n6" value="重规划">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="694" y="150" />
+              <mxPoint x="694" y="228" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p4_e6" edge="1" parent="phase_4" source="p4_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e7" edge="1" parent="phase_4" source="p4_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e8" edge="1" parent="phase_4" source="p4_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e9" edge="1" parent="phase_4" source="p4_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e10" edge="1" parent="phase_4" source="p4_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n9" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e11" edge="1" parent="phase_4" source="p4_n8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#666666;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p4_n10" value="持续约束">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_5" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fff7f7;strokeColor=#b85450;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="⑤ 超时、取消和等待实例宕机由持久化状态与恢复租约闭环" vertex="1">
+          <mxGeometry height="330" width="2352" x="24" y="1476" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n1" parent="phase_5" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;expiresAt 到期&lt;/b&gt;&lt;br&gt;用户始终未操作" vertex="1">
+          <mxGeometry height="112" width="190" x="6" y="114" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n2" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Timeout Scanner&lt;/b&gt;&lt;br&gt;多实例扫描，使用 Lease 领取过期审批" vertex="1">
+          <mxGeometry height="76" width="260" x="264" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n3" parent="phase_5" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;写入默认决定&lt;/b&gt;&lt;br&gt;DECIDED + TIMEOUT_DEFAULT + revision+1" vertex="1">
+          <mxGeometry height="92" width="280" x="574" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n4" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Run 被用户取消&lt;/b&gt;&lt;br&gt;审批改为 CANCELLED，迟到批准不可执行" vertex="1">
+          <mxGeometry height="76" width="260" x="914" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n5" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;等待 Worker 宕机&lt;/b&gt;&lt;br&gt;Java 线程消失，审批和 Run 状态仍在" vertex="1">
+          <mxGeometry height="76" width="260" x="1234" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n6" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Approval Recovery Worker&lt;/b&gt;&lt;br&gt;领取恢复租约，读取已决定但未终结调用" vertex="1">
+          <mxGeometry height="76" width="290" x="1543" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n7" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;按 functionCallId 恢复&lt;/b&gt;&lt;br&gt;先过幂等、取消和上下文版本门禁" vertex="1">
+          <mxGeometry height="76" width="280" x="1884" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n8" parent="phase_5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;审批链路终态&lt;/b&gt;&lt;br&gt;执行成功 / 拒绝 / 重规划 / 取消 / 超时" vertex="1">
+          <mxGeometry height="96" width="130" x="2204" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e1" edge="1" parent="phase_5" source="p5_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;entryX=0.145;entryY=1;entryDx=0;entryDy=-4.35;entryPerimeter=0;" target="p5_n3" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="230.04" y="170" />
+              <mxPoint x="230.04" y="184" />
+              <mxPoint x="614.6" y="184" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p5_e3" edge="1" parent="phase_5" source="p5_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;" target="p5_n6" value="唤醒">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="524.04" y="94" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p5_e4" edge="1" parent="phase_5" source="p5_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e5" edge="1" parent="phase_5" source="p5_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e6" edge="1" parent="phase_5" source="p5_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cross_e1" edge="1" parent="1" source="p1_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p2_n1" value="断线分支">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1933" y="400" />
+              <mxPoint x="182" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e2" edge="1" parent="1" source="p1_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n1" value="用户决定">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1933" y="360" />
+              <mxPoint x="173" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e3" edge="1" parent="1" source="p2_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n1" value="恢复交互">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="230" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e4" edge="1" parent="1" source="p3_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n1" value="数据库状态变化">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="173" y="910" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e5" edge="1" parent="1" source="p1_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n1" value="同步感知">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="463" y="290" />
+              <mxPoint x="200" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e6" edge="1" parent="1" source="p1_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n1" value="等待超时">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="463" y="350" />
+              <mxPoint x="143" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e8" edge="1" parent="1" source="p1_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p5_n5" value="实例故障">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1388" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

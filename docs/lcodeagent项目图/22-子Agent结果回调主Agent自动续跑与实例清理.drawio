@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Codex">
   <diagram id="flow-22" name="Page-1">
-    <mxGraphModel dx="1606" dy="830" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1970" math="0" shadow="0">
+    <mxGraphModel dx="1587" dy="812" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1970" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -21,6 +21,9 @@
         </mxCell>
         <mxCell id="p1_n3" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Kafka Key=parentRunId&lt;/b&gt;&lt;br&gt;同一主运行结果保持分区内有序" vertex="1">
           <mxGeometry height="76" width="260" x="634" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="6GVS2nBrwciyuqVW6X3N-1" edge="1" parent="phase_1" source="p1_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="p1_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="p1_n4" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Result Callback Consumer&lt;/b&gt;&lt;br&gt;校验 schemaVersion、tenant、run、task" vertex="1">
           <mxGeometry height="76" width="270" x="934" y="72" as="geometry" />

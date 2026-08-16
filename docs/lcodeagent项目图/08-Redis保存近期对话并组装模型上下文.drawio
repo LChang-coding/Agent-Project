@@ -1,0 +1,259 @@
+<mxfile host="Electron">
+  <diagram id="redis-context-assembly" name="Redis保存近期对话并组装模型上下文">
+    <mxGraphModel dx="2709" dy="1380" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3200" pageHeight="2050" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1F2937;" value="8. Redis 保存近期对话并组装模型上下文" vertex="1">
+          <mxGeometry height="40" width="1800" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4B5563;" value="本图范围：消息先落 MySQL → Redis ZSet 缓存近期消息 → 下次调用模型时读取摘要和消息 → 缓存不完整就回到 MySQL → 按各类额度和总窗口组装完整背景信息。" vertex="1">
+          <mxGeometry height="30" width="2800" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F4F8FF;strokeColor=#6C8EBF;strokeWidth=2;" value="① 消息先保存到 MySQL，再更新 Redis 近期消息" vertex="1">
+          <mxGeometry height="370" width="3100" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" parent="phase1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="用户消息或助手回答&#xa;先写入 MySQL 完整历史" vertex="1">
+          <mxGeometry height="90" width="260" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" parent="phase1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="为消息分配会话内递增 sequenceNo&#xa;用它恢复真实对话顺序" vertex="1">
+          <mxGeometry height="90" width="280" x="340" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" parent="phase1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="追加到 Redis ZSet&#xa;ctx:recent:{tenant}:{user}:{session}&#xa;score = sequenceNo" vertex="1">
+          <mxGeometry height="110" width="300" x="680" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="同一 sequenceNo 再写入&#xa;先删除旧 JSON，再保存新 JSON&#xa;避免同一位置出现两份消息" vertex="1">
+          <mxGeometry height="100" width="300" x="1040" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="只保留最近 100 条&#xa;开发配置下 30 分钟无访问自动过期&#xa;防止长期会话无限占用 Redis" vertex="1">
+          <mxGeometry height="100" width="310" x="1400" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" parent="phase1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="Redis 写入成功？" vertex="1">
+          <mxGeometry height="100" width="210" x="1770" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="成功：近期读取可直接使用缓存" vertex="1">
+          <mxGeometry height="80" width="280" x="2040" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="失败：只记录日志&#xa;MySQL 原始消息仍然完整&#xa;下一次读取时可以重新建立缓存" vertex="1">
+          <mxGeometry height="95" width="290" x="2040" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" parent="phase1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="核心原则&#xa;MySQL 保存完整历史&#xa;Redis 只负责加快读取" vertex="1">
+          <mxGeometry height="100" width="280" x="2430" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a10" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="不同租户、用户和会话使用不同 Key&#xa;缓存数据不能跨范围混用" vertex="1">
+          <mxGeometry height="90" width="280" x="2770" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FAF7FF;strokeColor=#9673A6;strokeWidth=2;" value="② 下次模型调用：先读摘要，再读取它尚未覆盖的近期消息" vertex="1">
+          <mxGeometry height="430" width="3100" x="40" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="准备调用模型&#xa;确认 Context Manager 已开启&#xa;确定本次可见消息最大 sequence" vertex="1">
+          <mxGeometry height="105" width="300" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" parent="phase2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="计算本轮总额度&#xa;模型窗口 - 回答预留 8192&#xa;- 计数误差余量 2048" vertex="1">
+          <mxGeometry height="115" width="270" x="390" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="读取当前长期摘要&#xa;先查 ctx:snapshot:{tenant}:{user}:{session}" vertex="1">
+          <mxGeometry height="105" width="300" x="720" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" parent="phase2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="摘要缓存命中？" vertex="1">
+          <mxGeometry height="105" width="210" x="1080" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b5" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="未命中或读取失败&#xa;从 MySQL 读取当前有效摘要&#xa;成功后重新写入 Redis" vertex="1">
+          <mxGeometry height="95" width="280" x="1060" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="b6" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="从摘要 coveredToSequence + 1 开始&#xa;只查询本次调用可见且仍有效的消息&#xa;取消或被新要求替代的旧消息不会进入" vertex="1">
+          <mxGeometry height="115" width="340" x="1360" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b7" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="从 Redis ZSet 读取所需序号区间" vertex="1">
+          <mxGeometry height="90" width="280" x="1760" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b8" parent="phase2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="缓存是否连续覆盖&#xa;请求起点到终点？" vertex="1">
+          <mxGeometry height="110" width="240" x="2100" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b9" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="缺开头、结尾或中间任一序号&#xa;放弃这次缓存结果&#xa;从 MySQL 读取完整区间并回填 Redis" vertex="1">
+          <mxGeometry height="100" width="300" x="2080" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="b10" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="连续完整：按 sequenceNo&#xa;得到稳定顺序的近期消息" vertex="1">
+          <mxGeometry height="90" width="270" x="2400" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b11" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="cacheHit 只表示长期摘要是否直接命中 Redis&#xa;近期消息缓存只是加速，不代表完整历史" vertex="1">
+          <mxGeometry height="105" width="340" x="2730" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FFF9F2;strokeColor=#D79B00;strokeWidth=2;" value="③ 按消息边界和内容类型额度选择完整背景" vertex="1">
+          <mxGeometry height="420" width="3100" x="40" y="970" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="从最新消息向前选择&#xa;连续且完整的消息&#xa;近期对话单独最多 8192 Token" vertex="1">
+          <mxGeometry height="105" width="300" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" parent="phase3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="加入下一条会超出额度？" vertex="1">
+          <mxGeometry height="105" width="240" x="390" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="在消息边界停止&#xa;不把一条消息截成半段&#xa;最新一条再长也至少完整保留" vertex="1">
+          <mxGeometry height="105" width="290" x="690" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=12;" value="把五类内容分别包装成候选&#xa;长期摘要 / 最近对话 / 上游节点输出&#xa;附件 / 按需 RAG 结果" vertex="1">
+          <mxGeometry height="115" width="340" x="1040" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="按优先级依次选择&#xa;摘要 → 最近对话 → 上游输出 → 附件 → RAG" vertex="1">
+          <mxGeometry height="105" width="310" x="1440" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" parent="phase3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="每一类先遵守自己的额度&#xa;全部内容还要共同遵守本轮总额度" vertex="1">
+          <mxGeometry height="115" width="290" x="1810" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c7" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="某段完整内容放不下&#xa;整段不加入，不截断附件或引用证据&#xa;并记录裁剪原因" vertex="1">
+          <mxGeometry height="115" width="310" x="2160" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c8" parent="phase3" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="生成最终背景信息&#xa;记录各类实际 Token、消息范围&#xa;以及是否发生裁剪" vertex="1">
+          <mxGeometry height="105" width="300" x="2530" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F3FCF8;strokeColor=#67C9A3;strokeWidth=2;" value="④ 交给 Agent，并保留缓存与部署边界" vertex="1">
+          <mxGeometry height="520" width="3100" x="40" y="1420" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;fontStyle=1;" value="ChatService 把最终背景信息&#xa;连同当前用户问题交给 Agent" vertex="1">
+          <mxGeometry height="100" width="300" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="phase4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;fontStyle=1;" value="模型获得：长期摘要 + 最近有效对话&#xa;+ 上游输出 + 附件 + 按需检索资料&#xa;总量不超过当前模型窗口" vertex="1">
+          <mxGeometry height="115" width="350" x="390" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="Redis 丢失、过期或暂时不可用&#xa;不会导致对话永久丢失&#xa;只会多一次 MySQL 回查" vertex="1">
+          <mxGeometry height="105" width="310" x="800" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="取消或追加新要求后&#xa;已失效的旧回答不会再次进入模型上下文" vertex="1">
+          <mxGeometry height="95" width="300" x="1170" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="部署边界&#xa;主配置默认关闭 Context Manager&#xa;只有明确开启后这条 Redis 记忆链路才生效" vertex="1">
+          <mxGeometry height="115" width="350" x="1530" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="能力边界&#xa;最近消息最多缓存 100 条&#xa;读取区间不完整时必须整段回到 MySQL" vertex="1">
+          <mxGeometry height="115" width="340" x="1940" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="phase4" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9CA3AF;verticalAlign=top;fontStyle=1;fontSize=13;container=1;pointerEvents=0;" value="图例" vertex="1">
+          <mxGeometry height="220" width="700" x="2320" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1" parent="legend" style="rounded=1;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="缓存 / 服务" vertex="1">
+          <mxGeometry height="35" width="130" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2" parent="legend" style="rounded=1;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=12;" value="Agent / 内容" vertex="1">
+          <mxGeometry height="35" width="130" x="170" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3" parent="legend" style="rounded=1;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="判断 / 预算" vertex="1">
+          <mxGeometry height="35" width="130" x="320" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4" parent="legend" style="rounded=1;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="数据库 / 成功" vertex="1">
+          <mxGeometry height="35" width="150" x="470" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lg5" parent="legend" style="rounded=1;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="失败 / 回退" vertex="1">
+          <mxGeometry height="35" width="150" x="100" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="lg6" parent="legend" style="rounded=1;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="虚线：部署或能力边界" vertex="1">
+          <mxGeometry height="35" width="280" x="290" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="a7" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="a8" value="失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="a9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2610" y="370" />
+              <mxPoint x="220" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="b1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="b2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="b3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="b4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="b5" value="未命中">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="b4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="b6" value="摘要可用">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="b5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="b6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="b7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="b8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="b10" value="完整">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="b8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="b9" value="不完整">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="b9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="b10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2575" y="870" />
+              <mxPoint x="220" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="c1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="c2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="c3" value="达到边界">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="c4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="c5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="c7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e29" edge="1" parent="1" source="c8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2720" y="1230" />
+              <mxPoint x="220" y="1230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e30" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

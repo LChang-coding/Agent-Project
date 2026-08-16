@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="Electron" modified="2026-08-14T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="global-overview" name="数据库领域总览">
+    <mxGraphModel dx="3400" dy="990" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3400" pageHeight="990" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="LCodeWorkflowAgent 数据库领域全景" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=30;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="44" y="20" width="3312" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="先看领域职责和主链路；完整字段请打开对应领域文件并切换到后续详情页。" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=15;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="46" y="68" width="3308" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="mainline" value="&lt;div style='text-align:center;line-height:1.6'&gt;&lt;b style='font-size:19px'&gt;全局主线&lt;/b&gt;&lt;br&gt;tenant/user → session/run → Agent 或 Workflow 执行 → Tool/RAG/Subagent → message/event/result → 审计与恢复&lt;br&gt;MySQL 保存权威状态；Kafka 负责事件唤醒；Redis 只做近期缓存和快速索引。&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontSize=15;align=center;verticalAlign=middle;spacing=14;dashed=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="120" width="3290" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_0" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;租户、用户与 Agent 工具配置&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;管理平台身份边界、租户成员关系、Agent 租户覆盖，以及 Skill/MCP 的发布版本。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;身份链：tenant → tenant_user → user_account → user_secret&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;tenant、user_account、tenant_user、user_secret、skill_definition、skill_version、mcp_server_config、mcp_config_version、agent_tenant_override&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="55" y="290" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_1" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;会话、运行、记忆、资产与用量&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;保存一次对话从会话创建、单轮运行、消息输出到记忆压缩、资产引用和用量审计的完整事实。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;运行主链：chat_session → chat_run → chat_message&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;chat_session、chat_message、chat_run、artifact_asset、model_usage、conversation_memory_snapshot、context_compaction_task、chat_session_share、chat_session_import&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="885" y="290" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_2" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;RAG 知识库、摄取、检索与评测&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;保存知识库文档版本、切片索引、可靠摄取、在线检索引用以及离线评测的全过程。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;数据链：rag_knowledge_base → rag_document → rag_document_version → rag_chunk&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;rag_knowledge_base、rag_document、rag_document_version、rag_chunk、rag_ingest_task、rag_outbox、rag_retrieval_profile、rag_agent_binding、chat_session_rag_binding_selection、rag_retrieval_record、rag_retrieval_citation、rag_knowledge_base_delete_task、rag_benchmark_dataset、rag_benchmark_run、rag_benchmark_document_result、rag_benchmark_query_result、rag_benchmark_aggregate、rag_benchmark_failure_case&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1715" y="290" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_3" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;工作流定义、运行、路由与事件&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;冻结可视化工作流版本，记录节点执行、路由意图、权威裁决、外部调用、恢复任务和可重放事件。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;定义链：agent_workflow → agent_workflow_version&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;agent_workflow、agent_workflow_version、intelligent_workflow_run、workflow_node_execution、workflow_route_intent、workflow_route_decision、workflow_run_event、workflow_run_event_cursor、workflow_execution_task、workflow_invocation、workflow_outbox&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2545" y="290" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_4" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;定时调度、执行与故障恢复&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;把用户 Cron 配置收敛为可领取的调度任务，并为每个计划触发点生成幂等执行记录。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;配置链：agent_schedule_config → agent_schedule_task&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;agent_schedule_config、agent_schedule_task、agent_schedule_execution&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="470" y="590" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_5" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;工具权限、审批与调用审计&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;决定 Agent 工具是否允许执行、是否必须等待用户审批，并保证批准后恢复原 functionCallId。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;权限链：agent_tool_permission → ALLOW / DENY / REQUIRE_APPROVAL&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;agent_tool_permission、agent_tool_approval_request、tool_call_log&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="590" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="domain_6" value="&lt;div style='text-align:left;line-height:1.5'&gt;&lt;b style='font-size:19px'&gt;多 Agent 编排、回调与清理&lt;/b&gt;&lt;br&gt;&lt;b&gt;职责：&lt;/b&gt;让主 Agent 动态创建临时子 Agent，可靠分发任务、回调摘要、单飞续跑并在业务 ACK 后清理实例。&lt;br&gt;&lt;b&gt;主链：&lt;/b&gt;创建链：主 chat_run → agent_subagent_task + agent_orchestration_outbox → Kafka&lt;hr&gt;&lt;b&gt;包含表：&lt;/b&gt;&lt;br&gt;agent_subagent_task、agent_parent_inbox、agent_parent_resume_request、agent_orchestration_outbox&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d4f4ee;strokeColor=#3bbf8a;fontSize=14;align=left;verticalAlign=top;spacing=16;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="2130" y="590" width="780" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime-note" value="&lt;b&gt;特别说明：&lt;/b&gt;Agent 基础定义来自 Runtime/YAML 注册表，因此没有独立 agent_definition 表；数据库中的 agent_id 是对运行时注册 Agent 的业务引用。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6b7280;fontSize=15;align=left;verticalAlign=middle;spacing=14;dashed=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="890" width="2440" height="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,321 @@
+<mxfile host="Electron">
+  <diagram id="conversation-compaction" name="将较早对话整理成长期摘要">
+    <mxGraphModel dx="2917" dy="1486" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3200" pageHeight="2500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1F2937;" value="9. 将较早对话整理成长期摘要" vertex="1">
+          <mxGeometry height="40" width="1700" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4B5563;" value="本图范围：达到阈值后登记摘要任务 → Kafka 通知后台处理 → 多次核对避免旧结果覆盖新对话 → 短事务启用新摘要 → Redis 更新 → 工具执行前的紧急整理和有限重试。" vertex="1">
+          <mxGeometry height="30" width="2850" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F4F8FF;strokeColor=#6C8EBF;strokeWidth=2;" value="① 助手回答保存后，判断是否需要整理较早历史" vertex="1">
+          <mxGeometry height="390" width="3100" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" parent="phase1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="助手回答先保存到 MySQL" vertex="1">
+          <mxGeometry height="85" width="250" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" parent="phase1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="读取当前长期摘要&#xa;已经覆盖到的消息序号" vertex="1">
+          <mxGeometry height="95" width="260" x="330" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="统计尚未整理的有效消息 Token&#xa;直到本次助手回答" vertex="1">
+          <mxGeometry height="95" width="280" x="640" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" parent="phase1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="达到 12000 Token？" vertex="1">
+          <mxGeometry height="105" width="220" x="970" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=13;" value="未达到：本轮不创建任务&#xa;继续保留原始历史" vertex="1">
+          <mxGeometry height="80" width="240" x="960" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="达到：从最新消息向前&#xa;保留约 4096 Token 原文&#xa;较早连续区间进入本次整理" vertex="1">
+          <mxGeometry height="105" width="300" x="1250" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="对消息编号、有效状态、正文和附件&#xa;计算 SHA-256&#xa;用于发现整理期间输入是否变化" vertex="1">
+          <mxGeometry height="105" width="320" x="1610" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=12;" value="根据会话、消息范围、摘要版本&#xa;上下文版本、内容摘要和策略版本&#xa;生成稳定任务键" vertex="1">
+          <mxGeometry height="105" width="320" x="1990" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" parent="phase1" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="先在 MySQL 创建 PENDING 任务&#xa;相同任务键再次创建时返回原任务&#xa;不重复生成摘要" vertex="1">
+          <mxGeometry height="115" width="330" x="2370" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="a10" parent="phase1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="任务先保存，通知后发送&#xa;MySQL 保存最终处理状态" vertex="1">
+          <mxGeometry height="95" width="270" x="2760" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FFF9F2;strokeColor=#D79B00;strokeWidth=2;" value="② Kafka 只负责通知；发送失败时由数据库任务继续兜底" vertex="1">
+          <mxGeometry height="360" width="3100" x="40" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="b1" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=12;" value="向 context.compaction.request.v1&#xa;发送任务编号和 Trace 信息&#xa;分区键 tenantId:sessionId" vertex="1">
+          <mxGeometry height="105" width="300" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" parent="phase2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="等待 Kafka 确认&#xa;默认最多 3000ms" vertex="1">
+          <mxGeometry height="105" width="220" x="390" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="确认成功：消费者会尽快收到通知" vertex="1">
+          <mxGeometry height="80" width="280" x="670" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="b4" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="失败 / 超时 / 中断：明确报错&#xa;但不推翻已经保存成功的助手回答&#xa;MySQL 任务仍保留" vertex="1">
+          <mxGeometry height="100" width="310" x="670" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="b5" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="同一会话再次产生回答时&#xa;顺手重新通知该会话未完成任务" vertex="1">
+          <mxGeometry height="100" width="290" x="1050" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b6" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="全局定时扫描&#xa;查找等待处理、等待再次尝试&#xa;和处理超时的任务" vertex="1">
+          <mxGeometry height="100" width="290" x="1400" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="b7" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="逐条重新发送通知&#xa;某一条失败不会阻止同批其他任务" vertex="1">
+          <mxGeometry height="90" width="290" x="1750" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="b8" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="部署边界&#xa;Kafka 开发配置默认关闭&#xa;部署时需显式开启 listener、主 topic、重试 topic 和 DLT" vertex="1">
+          <mxGeometry height="115" width="380" x="2120" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="b9" parent="phase2" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="Kafka 是加速通知通道&#xa;不是任务是否完成的判断来源" vertex="1">
+          <mxGeometry height="100" width="330" x="2600" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FAF7FF;strokeColor=#9673A6;strokeWidth=2;" value="③ 消费者领取任务，生成摘要前后都重新核对输入" vertex="1">
+          <mxGeometry height="470" width="3100" x="40" y="920" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="消费者从消息恢复&#xa;租户、用户和原始 Trace ID" vertex="1">
+          <mxGeometry height="95" width="270" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" parent="phase3" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="用 MySQL 条件更新领取任务&#xa;成功后 attemptCount + 1&#xa;取得 60 秒执行期限和本次执行编号" vertex="1">
+          <mxGeometry height="115" width="320" x="350" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" parent="phase3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="领取成功？" vertex="1">
+          <mxGeometry height="105" width="200" x="730" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=13;" value="否：任务已完成、取消&#xa;或被其他实例处理&#xa;本次通知直接结束" vertex="1">
+          <mxGeometry height="95" width="230" x="720" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="重新读取当前摘要、上下文版本&#xa;待整理消息和附件&#xa;并重新计算内容摘要" vertex="1">
+          <mxGeometry height="115" width="310" x="990" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" parent="phase3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="与任务创建时保存的版本和 SHA-256 一致？" vertex="1">
+          <mxGeometry height="115" width="290" x="1360" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c7" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;" value="另一任务已覆盖：直接完成&#xa;消息失效或内容变化：拒绝旧输入&#xa;不调用摘要模型" vertex="1">
+          <mxGeometry height="100" width="310" x="1350" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="c8" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="根据会话 Agent 找到模型&#xa;输入旧摘要、待整理消息、附件&#xa;和明确 JSON 输出格式" vertex="1">
+          <mxGeometry height="115" width="310" x="1710" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c9" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=12;" value="模型返回结构化内容&#xa;conversationSummary / decisions&#xa;constraints / openItems / keyEntities" vertex="1">
+          <mxGeometry height="115" width="310" x="2080" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="c10" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="服务端校验字段&#xa;消息起止范围由服务端填写&#xa;不采用模型自报的范围" vertex="1">
+          <mxGeometry height="105" width="280" x="2450" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="c11" parent="phase3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="模型请求结束后再次核对&#xa;任务状态 / 上下文版本 / 本次执行编号&#xa;旧执行者不能提交迟到结果" vertex="1">
+          <mxGeometry height="125" width="270" x="2790" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F3FCF8;strokeColor=#67C9A3;strokeWidth=2;" value="④ 用短事务启用新摘要，提交成功后再更新 Redis" vertex="1">
+          <mxGeometry height="390" width="3100" x="40" y="1420" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="进入短数据库事务&#xa;耗时的模型请求已经在事务外完成" vertex="1">
+          <mxGeometry height="95" width="290" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="phase4" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="锁定会话并最后一次确认&#xa;消息、附件和上下文版本没有变化" vertex="1">
+          <mxGeometry height="105" width="300" x="370" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="phase4" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="保存新摘要&#xa;旧摘要改为不再使用" vertex="1">
+          <mxGeometry height="95" width="250" x="720" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="phase4" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="任务改为 SUCCEEDED&#xa;会话 contextRevision + 1" vertex="1">
+          <mxGeometry height="95" width="260" x="1020" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="phase4" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="事务全部成功提交？" vertex="1">
+          <mxGeometry height="105" width="220" x="1330" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="失败：整组数据库修改回滚&#xa;不会出现摘要已换但任务未完成" vertex="1">
+          <mxGeometry height="90" width="270" x="1320" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="d7" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="提交成功后更新 Redis 摘要&#xa;删除已经进入摘要的近期消息" vertex="1">
+          <mxGeometry height="105" width="300" x="1610" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d8" parent="phase4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="后续模型上下文变为&#xa;新长期摘要 + 尚未覆盖的近期消息" vertex="1">
+          <mxGeometry height="105" width="310" x="1970" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="d9" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="Redis 更新失败不影响 MySQL 新摘要&#xa;下次读取时会从 MySQL 恢复缓存" vertex="1">
+          <mxGeometry height="95" width="310" x="2340" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="phase5" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FFF7F7;strokeColor=#B85450;strokeWidth=2;" value="⑤ 失败重试、工具执行前紧急整理与能力边界" vertex="1">
+          <mxGeometry height="560" width="3100" x="40" y="1840" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" parent="phase5" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="后台处理失败&#xa;先把稳定错误原因写回 MySQL" vertex="1">
+          <mxGeometry height="95" width="280" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" parent="phase5" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="尝试次数少于 3？" vertex="1">
+          <mxGeometry height="105" width="220" x="370" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="是：状态改为 RETRYING&#xa;重试主题延迟 1000ms 再通知" vertex="1">
+          <mxGeometry height="85" width="290" x="650" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="否：状态改为 DEAD&#xa;或进入 DLT 后保留错误供排查" vertex="1">
+          <mxGeometry height="85" width="290" x="650" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="模型已经决定调用工具&#xa;真正执行前发现历史超过阈值" vertex="1">
+          <mxGeometry height="100" width="300" x="1020" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" parent="phase5" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="当前线程创建或找到同范围任务&#xa;自己领取成功就立即整理&#xa;否则最多等待另一执行者 5 秒" vertex="1">
+          <mxGeometry height="120" width="320" x="1380" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="f7" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=12;" value="新摘要成功启用&#xa;contextRevision 已变化&#xa;旧背景生成的工具参数不得继续执行" vertex="1">
+          <mxGeometry height="105" width="310" x="1760" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="f8" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="要求 Agent 基于新背景&#xa;重新判断是否调用工具以及使用什么参数" vertex="1">
+          <mxGeometry height="95" width="310" x="2130" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f9" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="等待超时或整理失败&#xa;工具不在旧背景下继续执行&#xa;当前调用明确失败" vertex="1">
+          <mxGeometry height="100" width="310" x="1760" y="185" as="geometry" />
+        </mxCell>
+        <mxCell id="f10" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=12;" value="能力边界&#xa;同步整理只发生在真正执行工具之前&#xa;普通模型调用前不会主动同步整理" vertex="1">
+          <mxGeometry height="110" width="390" x="2510" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f11" parent="phase5" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="等待间隔从 50ms 逐步增加&#xa;最大 1000ms，避免持续高频查库" vertex="1">
+          <mxGeometry height="85" width="320" x="1380" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="a5" value="否">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="a6" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="a8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="a9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="a9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2575" y="450" />
+              <mxPoint x="220.08" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="b1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="b2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="b3" value="确认">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="b2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="b4" value="失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="b3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="205" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="b4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b6">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1230.08" y="735.08" />
+              <mxPoint x="1230.08" y="730" />
+              <mxPoint x="1585" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="b6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="b7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="c1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="c2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="c4" value="否">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="c3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="c5" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="c5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="c7" value="不一致">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" edge="1" parent="1" source="c6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="c8" value="一致">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" edge="1" parent="1" source="c8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e24" edge="1" parent="1" source="c9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="c10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="c11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="c11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d1" value="仍有效">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2965" y="1320" />
+              <mxPoint x="215" y="1320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e29" edge="1" parent="1" source="d3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e30" edge="1" parent="1" source="d4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e31" edge="1" parent="1" source="d5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d7" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e32" edge="1" parent="1" source="d5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="d6" value="失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e33" edge="1" parent="1" source="d7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e34" edge="1" parent="1" source="f1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="f2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e35" edge="1" parent="1" source="f2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="f3" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e36" edge="1" parent="1" source="f2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="f4" value="否">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e37" edge="1" parent="1" source="f5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="f6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e38" edge="1" parent="1" source="f6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="f7" value="整理成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e39" edge="1" parent="1" source="f7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="f8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e40" edge="1" parent="1" source="f6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="f9" value="超时 / 失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

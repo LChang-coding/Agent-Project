@@ -1,0 +1,367 @@
+<mxfile host="Electron" agent="Codex">
+  <diagram id="flow-21" name="Page-1">
+    <mxGraphModel dx="1147" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1894" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=28;fontStyle=1;fontColor=#1f2937;" value="21. 子 Agent 执行、心跳租约与 Worker 故障接管" vertex="1">
+          <mxGeometry height="42" width="2260" x="34" y="18" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#5f6b7a;" value="Kafka Worker 回查 MySQL 领取任务；Heartbeat 证明存活，Lease 定义所有权期限，Fencing Token 阻止过期 Worker 写入。" vertex="1">
+          <mxGeometry height="34" width="2280" x="36" y="62" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_1" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#f5f9ff;strokeColor=#6c8ebf;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="① Kafka 消费先校验协议，再以 MySQL Task Claim 领取唯一执行权" vertex="1">
+          <mxGeometry height="310" width="2352" x="24" y="108" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n1" parent="phase_1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;agent.subagent.task.v1&lt;/b&gt;&lt;br&gt;Consumer Group 按 Partition 并行投递" vertex="1">
+          <mxGeometry height="92" width="260" x="24" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n2" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;解析任务事件&lt;/b&gt;&lt;br&gt;schemaVersion + tenantId + taskId + traceId" vertex="1">
+          <mxGeometry height="76" width="250" x="324" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n3" parent="phase_1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;协议是否合法？&lt;/b&gt;&lt;br&gt;非法消息不可阻塞正常 Partition" vertex="1">
+          <mxGeometry height="112" width="210" x="614" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n4" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Task DLT&lt;/b&gt;&lt;br&gt;保存原 Payload、Offset、Trace 与错误原因" vertex="1">
+          <mxGeometry height="76" width="260" x="864" y="194" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n5" parent="phase_1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;回查任务账本&lt;/b&gt;&lt;br&gt;Kafka 只负责唤醒，MySQL 是权威状态" vertex="1">
+          <mxGeometry height="92" width="270" x="864" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n6" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;原子 Task Claim&lt;/b&gt;&lt;br&gt;READY 或租约过期 RUNNING 才可领取" vertex="1">
+          <mxGeometry height="76" width="270" x="1174" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n7" parent="phase_1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;领取成功？&lt;/b&gt;&lt;br&gt;CAS 更新 owner、lease、token、attempt" vertex="1">
+          <mxGeometry height="112" width="210" x="1484" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n8" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;幂等跳过&lt;/b&gt;&lt;br&gt;已被领取 / 已终结 / 已取消，提交 Offset" vertex="1">
+          <mxGeometry height="76" width="260" x="1734" y="194" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n9" parent="phase_1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;任务进入 RUNNING&lt;/b&gt;&lt;br&gt;leaseOwner=workerId，fencingToken + 1" vertex="1">
+          <mxGeometry height="92" width="270" x="1734" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_n10" parent="phase_1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;基础设施临时异常&lt;/b&gt;&lt;br&gt;进入 Retry Topic，退避后重试" vertex="1">
+          <mxGeometry height="76" width="270" x="2044" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e1" edge="1" parent="phase_1" source="p1_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e2" edge="1" parent="phase_1" source="p1_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e3" edge="1" parent="phase_1" source="p1_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n5" value="合法">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e4" edge="1" parent="phase_1" source="p1_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n4" value="非法">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="994" y="162" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p1_e5" edge="1" parent="phase_1" source="p1_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e6" edge="1" parent="phase_1" source="p1_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e7" edge="1" parent="phase_1" source="p1_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n9" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1_e8" edge="1" parent="phase_1" source="p1_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p1_n8" value="失败">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1864" y="162" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p1_e9" edge="1" parent="phase_1" source="p1_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p1_n10" value="临时异常">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1826" y="82" />
+              <mxPoint x="1826" y="82" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="phase_2" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fbf7fd;strokeColor=#9673a6;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="② 创建临时会话并启动 Heartbeat，Redis 只做可降级加速" vertex="1">
+          <mxGeometry height="320" width="2352" x="24" y="442" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n1" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;绑定 Tenant / Trace&lt;/b&gt;&lt;br&gt;恢复租户、用户和完整链路标识" vertex="1">
+          <mxGeometry height="76" width="240" x="24" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n2" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;创建或复用 childSessionId&lt;/b&gt;&lt;br&gt;使用 workerId + fencingToken 条件绑定" vertex="1">
+          <mxGeometry height="76" width="270" x="304" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n3" parent="phase_2" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;Redis Instance Cache&lt;/b&gt;&lt;br&gt;task / childAgent / session / token + TTL" vertex="1">
+          <mxGeometry height="92" width="270" x="614" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n4" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Lease Heartbeat&lt;/b&gt;&lt;br&gt;每 20 秒把 MySQL Lease 延长到 60 秒" vertex="1">
+          <mxGeometry height="76" width="270" x="924" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n5" parent="phase_2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;续租成功？&lt;/b&gt;&lt;br&gt;owner、token、状态和原租约必须有效" vertex="1">
+          <mxGeometry height="112" width="210" x="1234" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n6" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;ChatService.handleMessage&lt;/b&gt;&lt;br&gt;子 Agent 独立 Session + Run 执行" vertex="1">
+          <mxGeometry height="76" width="270" x="1484" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n7" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;模型 / MCP / Skill / RAG&lt;/b&gt;&lt;br&gt;子 Agent 按自身配置完成任务" vertex="1">
+          <mxGeometry height="76" width="260" x="1794" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n8" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Lease Uncertain&lt;/b&gt;&lt;br&gt;连续续租失败则停止新增副作用并尝试取消" vertex="1">
+          <mxGeometry height="76" width="280" x="1234" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n9" parent="phase_2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Redis 写入失败&lt;/b&gt;&lt;br&gt;记录降级；MySQL 租约仍决定执行权" vertex="1">
+          <mxGeometry height="76" width="270" x="614" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_n10" parent="phase_2" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;获得子 Agent 输出&lt;/b&gt;&lt;br&gt;进入结果提取与任务终态提交" vertex="1">
+          <mxGeometry height="92" width="230" x="2094" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e1" edge="1" parent="phase_2" source="p2_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e2" edge="1" parent="phase_2" source="p2_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e3" edge="1" parent="phase_2" source="p2_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e4" edge="1" parent="phase_2" source="p2_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e5" edge="1" parent="phase_2" source="p2_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n6" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e6" edge="1" parent="phase_2" source="p2_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n8" value="连续失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e7" edge="1" parent="phase_2" source="p2_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p2_n9" value="缓存异常">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e8" edge="1" parent="phase_2" source="p2_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p2_e9" edge="1" parent="phase_2" source="p2_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n10" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_3" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fffaf0;strokeColor=#d79b00;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="③ 成功、失败和取消都形成终态；任务结果与 Result Outbox 原子提交" vertex="1">
+          <mxGeometry height="370" width="2352" x="24" y="786" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n1" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;提取最终输出&lt;/b&gt;&lt;br&gt;finalOutput + fullContext" vertex="1">
+          <mxGeometry height="76" width="220" x="24" y="124" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n2" parent="phase_3" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;执行结果是什么？&lt;/b&gt;&lt;br&gt;成功 / 失败 / 取消" vertex="1">
+          <mxGeometry height="116" width="210" x="284" y="104" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n3" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;SUCCEEDED&lt;/b&gt;&lt;br&gt;生成不超过约定长度的 resultSummary" vertex="1">
+          <mxGeometry height="76" width="250" x="544" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n4" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;FAILED&lt;/b&gt;&lt;br&gt;记录 errorCode 和可判断的失败摘要" vertex="1">
+          <mxGeometry height="76" width="250" x="544" y="144" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n5" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;CANCELLED&lt;/b&gt;&lt;br&gt;停止继续执行并进入回调与清理" vertex="1">
+          <mxGeometry height="76" width="250" x="544" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n6" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;完成 Fence 校验&lt;/b&gt;&lt;br&gt;RUNNING + owner + token + lease 未过期" vertex="1">
+          <mxGeometry height="76" width="270" x="864" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n7" parent="phase_3" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;任务完成事务&lt;/b&gt;&lt;br&gt;更新终态 + 清 Lease + 写 Result Outbox" vertex="1">
+          <mxGeometry height="92" width="280" x="1204" y="116" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n8" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;提交 Kafka Offset&lt;/b&gt;&lt;br&gt;数据库事务成功后才确认 Task 消息" vertex="1">
+          <mxGeometry height="76" width="270" x="1544" y="124" as="geometry" />
+        </mxCell>
+        <mxCell id="EJcZOOzLCilv-cEpZ9qm-1" edge="1" parent="phase_3" source="p3_n9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="p3_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n9" parent="phase_3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Fence 校验失败&lt;/b&gt;&lt;br&gt;旧 Worker 结果拒绝写入" vertex="1">
+          <mxGeometry height="76" width="270" x="864" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_n10" parent="phase_3" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;SUBAGENT_RESULT_READY&lt;/b&gt;&lt;br&gt;Kafka 只发送轻量定位信息，结果保留 MySQL" vertex="1">
+          <mxGeometry height="96" width="420" x="1874" y="116" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e1" edge="1" parent="phase_3" source="p3_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e2" edge="1" parent="phase_3" source="p3_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n3" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e3" edge="1" parent="phase_3" source="p3_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n4" value="异常">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e4" edge="1" parent="phase_3" source="p3_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n5" value="取消">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="389.05" y="234.05" />
+              <mxPoint x="669.05" y="234.05" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p3_e5" edge="1" parent="phase_3" source="p3_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e6" edge="1" parent="phase_3" source="p3_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e7" edge="1" parent="phase_3" source="p3_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n6" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1046" y="264.05" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p3_e8" edge="1" parent="phase_3" source="p3_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n7" value="有效">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e9" edge="1" parent="phase_3" source="p3_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n9" value="失效">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e10" edge="1" parent="phase_3" source="p3_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n8" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p3_e11" edge="1" parent="phase_3" source="p3_n8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n10" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_4" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#f5fff9;strokeColor=#3bbf8a;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="④ Worker 宕机后 Lease 到期，恢复扫描重建事件，新 Token 隔离旧 Worker" vertex="1">
+          <mxGeometry height="330" width="2352" x="24" y="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n1" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Worker-1 执行中&lt;/b&gt;&lt;br&gt;owner=W1，fencingToken=1" vertex="1">
+          <mxGeometry height="76" width="230" x="24" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n2" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Worker-1 宕机&lt;/b&gt;&lt;br&gt;Heartbeat 停止" vertex="1">
+          <mxGeometry height="76" width="220" x="294" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n3" parent="phase_4" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=center;verticalAlign=middle;spacing=6;" value="&lt;b&gt;60 秒 Lease 到期&lt;/b&gt;&lt;br&gt;MySQL 判定原所有权失效" vertex="1">
+          <mxGeometry height="112" width="210" x="554" y="54" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n4" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Recovery Scanner&lt;/b&gt;&lt;br&gt;每 10 秒扫描过期 RUNNING" vertex="1">
+          <mxGeometry height="76" width="250" x="804" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n5" parent="phase_4" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;size=15;" value="&lt;b&gt;CAS 重置 READY&lt;/b&gt;&lt;br&gt;匹配旧 token + 旧 lease，清除 owner" vertex="1">
+          <mxGeometry height="92" width="260" x="1094" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n6" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;重建 TASK_READY Outbox&lt;/b&gt;&lt;br&gt;重新投递 Kafka 唤醒" vertex="1">
+          <mxGeometry height="76" width="260" x="1394" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n7" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Worker-2 接管&lt;/b&gt;&lt;br&gt;领取成功，fencingToken=2" vertex="1">
+          <mxGeometry height="76" width="240" x="1694" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n8" parent="phase_4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Worker-1 恢复并写入&lt;/b&gt;&lt;br&gt;携带旧 token=1" vertex="1">
+          <mxGeometry height="76" width="240" x="1974" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_n9" parent="phase_4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;数据库拒绝旧结果&lt;/b&gt;&lt;br&gt;token 不匹配，不能覆盖新 Worker" vertex="1">
+          <mxGeometry height="92" width="300" x="1974" y="202" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e1" edge="1" parent="phase_4" source="p4_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e2" edge="1" parent="phase_4" source="p4_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e3" edge="1" parent="phase_4" source="p4_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e4" edge="1" parent="phase_4" source="p4_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e5" edge="1" parent="phase_4" source="p4_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e6" edge="1" parent="phase_4" source="p4_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e7" edge="1" parent="phase_4" source="p4_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p4_n8" value="旧实例迟到">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p4_e8" edge="1" parent="phase_4" source="p4_n8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p4_n9" value="Fence 拒绝">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="phase_5" parent="1" style="swimlane;horizontal=1;startSize=36;fillColor=#fff7f7;strokeColor=#b85450;fontSize=16;fontStyle=1;fontColor=#1f2937;whiteSpace=wrap;html=1;collapsible=0;swimlaneLine=1;container=1;rounded=0;" value="⑤ 重复投递、Offset 失败与外部副作用由多层幂等收口" vertex="1">
+          <mxGeometry height="284" width="2352" x="24" y="1534" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n1" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Task 消息重复&lt;/b&gt;&lt;br&gt;相同 taskId 再次到达" vertex="1">
+          <mxGeometry height="76" width="240" x="64" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n2" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;Task Claim 去重&lt;/b&gt;&lt;br&gt;终态或他人持有则直接确认" vertex="1">
+          <mxGeometry height="76" width="250" x="344" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n3" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;完成后 Offset 提交失败&lt;/b&gt;&lt;br&gt;Kafka 再投递，但任务已经终态" vertex="1">
+          <mxGeometry height="76" width="270" x="674" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n4" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;工具调用幂等键&lt;/b&gt;&lt;br&gt;taskId + childRunId + functionCallId" vertex="1">
+          <mxGeometry height="76" width="280" x="1014" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n5" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;spacing=8;arcSize=12;" value="&lt;b&gt;外部结果重放&lt;/b&gt;&lt;br&gt;接管重试不重复产生高风险副作用" vertex="1">
+          <mxGeometry height="76" width="280" x="1354" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n6" parent="phase_5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=12;align=center;verticalAlign=middle;spacing=8;dashed=1;arcSize=10;" value="&lt;b&gt;可观测与告警&lt;/b&gt;&lt;br&gt;leaseLoss / retry / DLT / lag / attempt" vertex="1">
+          <mxGeometry height="76" width="280" x="1694" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_n7" parent="phase_5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;spacing=8;" value="&lt;b&gt;交给 2.22&lt;/b&gt;&lt;br&gt;任意终态结果触发主 Agent 回调" vertex="1">
+          <mxGeometry height="92" width="280" x="2034" y="64" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e1" edge="1" parent="phase_5" source="p5_n1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e2" edge="1" parent="phase_5" source="p5_n3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n2" value="重投">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e3" edge="1" parent="phase_5" source="p5_n2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n4" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="806" y="86" />
+              <mxPoint x="806" y="86" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="p5_e4" edge="1" parent="phase_5" source="p5_n4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e5" edge="1" parent="phase_5" source="p5_n5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p5_e6" edge="1" parent="phase_5" source="p5_n6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.4;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n7" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="cross_e1" edge="1" parent="1" source="p1_n9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p2_n1" value="持有租约后执行">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1893" y="280" />
+              <mxPoint x="168" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e2" edge="1" parent="1" source="p2_n10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p3_n1" value="形成结果">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2233" y="730" />
+              <mxPoint x="158" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e3" edge="1" parent="1" source="p1_n9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#b85450;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p4_n1" value="宕机分支">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1893" y="400" />
+              <mxPoint x="163" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e4" edge="1" parent="1" source="p3_n7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#4d4d4d;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=0;" target="p5_n7" value="Result Outbox 已落库">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2198.05" y="930" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cross_e5" edge="1" parent="1" source="p3_n8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#d79b00;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;dashed=1;" target="p5_n3" value="提交异常">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1703.05" y="1000.05" />
+              <mxPoint x="833.05" y="1000.05" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

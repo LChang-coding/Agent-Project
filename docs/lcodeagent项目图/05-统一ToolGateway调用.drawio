@@ -1,0 +1,241 @@
+<mxfile host="Electron">
+  <diagram id="tool-gateway" name="统一ToolGateway调用">
+    <mxGraphModel dx="2528" dy="1288" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3200" pageHeight="2300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1F2937;" value="5. 统一 Tool Gateway 调用" vertex="1">
+          <mxGeometry height="40" width="1800" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4B5563;" value="Skill、MCP 和平台工具统一经过可信上下文、运行门禁、唯一执行权、类型分发、审计与事件记录。" vertex="1">
+          <mxGeometry height="30" width="2500" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F4F8FF;strokeColor=#6C8EBF;strokeWidth=2;" value="① 模型提交业务参数，服务端还原可信调用上下文" vertex="1">
+          <mxGeometry height="430" width="3100" x="40" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" parent="phase1" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="模型从本轮清单选择函数&#xa;只提交工具业务参数" vertex="1">
+          <mxGeometry height="100" width="270" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="GatewayAdkTool 复制业务参数&#xa;不修改 ADK 持有的原始对象" vertex="1">
+          <mxGeometry height="90" width="280" x="350" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="从 ADK 运行状态重建可信字段&#xa;租户、用户、会话、run、节点执行编号、&#xa;上下文版本、functionCallId、traceId" vertex="1">
+          <mxGeometry height="130" width="350" x="680" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;fontStyle=1;" value="ToolExecutionGuardPlugin&#xa;执行前读取数据库运行状态" vertex="1">
+          <mxGeometry height="100" width="300" x="1080" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" parent="phase1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="运行仍有效且上下文版本一致？&#xa;未取消、未结束、未被新运行替代&#xa;上下文尚未生成新摘要" vertex="1">
+          <mxGeometry height="140" width="320" x="1430" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="否：返回阻断结果&#xa;工具不执行；上下文已变化时&#xa;让模型读取新上下文后重新判断" vertex="1">
+          <mxGeometry height="100" width="280" x="1450" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="是：放行到 ToolGateway&#xa;模型参数不能覆盖身份字段" vertex="1">
+          <mxGeometry height="90" width="280" x="1810" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s8" parent="phase1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="第一道门禁用于尽早阻断&#xa;真正领取执行权时还会再次锁库检查" vertex="1">
+          <mxGeometry height="100" width="390" x="2200" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FAF7FF;strokeColor=#9673A6;strokeWidth=2;" value="② 网关再次校验，并用稳定调用键领取唯一执行权" vertex="1">
+          <mxGeometry height="500" width="3100" x="40" y="570" as="geometry" />
+        </mxCell>
+        <mxCell id="g1" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="ToolGateway 检查&#xa;工具标识和可信身份完整" vertex="1">
+          <mxGeometry height="100" width="270" x="30" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="ToolDispatchAuthorizationService&#xa;锁定运行记录&#xa;再次检查状态、上下文版本和节点范围" vertex="1">
+          <mxGeometry height="130" width="340" x="350" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;" value="计算稳定调用键&#xa;tenantId + userId + runId&#xa;+ functionCallId + toolId" vertex="1">
+          <mxGeometry height="110" width="290" x="740" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="g4" parent="phase2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="插入 STARTED 工具调用审计&#xa;唯一键是否首次成功？" vertex="1">
+          <mxGeometry height="130" width="280" x="1080" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="g5" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="是：获得唯一执行权&#xa;保存 TOOL_CALL_STARTED 事件" vertex="1">
+          <mxGeometry height="110" width="300" x="1420" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="g6" parent="phase2" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=13;" value="否：读取第一次调用记录" vertex="1">
+          <mxGeometry height="80" width="280" x="1080" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="g7" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="原记录 SUCCESS / FAILED&#xa;返回第一次结果或失败原因&#xa;不再次执行外部工具" vertex="1">
+          <mxGeometry height="110" width="310" x="1420" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="g8" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="原记录仍为 STARTED&#xa;返回“结果暂时无法确认”&#xa;无法证明未执行，因此不冒险重试" vertex="1">
+          <mxGeometry height="110" width="320" x="1780" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="g9" parent="phase2" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="实现缺口&#xa;缺少 runId 或 functionCallId 时调用键退化为随机值&#xa;只能审计，不能阻止重复执行" vertex="1">
+          <mxGeometry height="130" width="470" x="1840" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#FFF9F2;strokeColor=#D79B00;strokeWidth=2;" value="③ 按工具类型统一分发，不自动重试外部副作用" vertex="1">
+          <mxGeometry height="470" width="3100" x="40" y="1100" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=13;fontStyle=1;" value="ToolGateway 按 type 分发&#xa;任选一个分支执行后统一返回" vertex="1">
+          <mxGeometry height="90" width="260" x="30" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="SKILL&#xa;从 MinIO 读取已发布 ZIP&#xa;检查包大小和条目数量后提取 SKILL.md" vertex="1">
+          <mxGeometry height="140" width="320" x="350" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="拼接 Skill 名称、版本、当前任务和说明&#xa;只把说明交给模型，不执行包内代码" vertex="1">
+          <mxGeometry height="120" width="340" x="730" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontSize=13;" value="MCP SSE / stdio&#xa;解析远程工具名和参数&#xa;建立协议连接并调用远程工具" vertex="1">
+          <mxGeometry height="140" width="310" x="1130" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="MCP HTTP 兼容通道&#xa;参数编码为 JSON POST，15 秒超时&#xa;按 HTTP 状态判断成功或失败" vertex="1">
+          <mxGeometry height="140" width="320" x="1500" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="PLATFORM&#xa;按函数名交给 RAG 或路由处理器&#xa;在应用内部完成处理" vertex="1">
+          <mxGeometry height="120" width="300" x="1880" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="d7" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="副作用边界&#xa;MCP 网络异常后网关不自动重发&#xa;模型若再次尝试必须产生新的函数调用" vertex="1">
+          <mxGeometry height="130" width="400" x="2300" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="d8" parent="phase3" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=13;" value="HTTP 是普通 JSON POST 兼容适配&#xa;不是标准 MCP 协议调用" vertex="1">
+          <mxGeometry height="80" width="320" x="1500" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4" parent="1" style="swimlane;startSize=36;container=1;pointerEvents=0;rounded=1;arcSize=6;html=1;fontSize=17;fontStyle=1;fillColor=#F3FCF8;strokeColor=#67C9A3;strokeWidth=2;" value="④ 统一写入成功或失败结果，并返回模型继续推理" vertex="1">
+          <mxGeometry height="500" width="3100" x="40" y="1600" as="geometry" />
+        </mxCell>
+        <mxCell id="o1" parent="phase4" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="工具执行成功？" vertex="1">
+          <mxGeometry height="120" width="220" x="30" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="o2" parent="phase4" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="是：审计写入 SUCCESS&#xa;保存结构化结果和总耗时&#xa;发布 TOOL_CALL_COMPLETED" vertex="1">
+          <mxGeometry height="140" width="320" x="310" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="o3" parent="phase4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;fontStyle=1;" value="返回 {success: true, result: ...}&#xa;模型继续推理" vertex="1">
+          <mxGeometry height="110" width="300" x="690" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="o4" parent="phase4" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="否：尽力把审计更新为 FAILED&#xa;保存裁剪后的错误原因&#xa;发布 TOOL_CALL_FAILED" vertex="1">
+          <mxGeometry height="130" width="320" x="310" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="o5" parent="phase4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;fontStyle=1;" value="返回 {success: false, error: ...}&#xa;模型可换参数、换工具或直接回答" vertex="1">
+          <mxGeometry height="110" width="330" x="690" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="o6" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=13;" value="智能工作流事件范围&#xa;存在 workflowId + nodeExecutionId 时&#xa;开始、成功和失败事件进入统一事件表" vertex="1">
+          <mxGeometry height="130" width="350" x="1100" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="o7" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="实现缺口&#xa;外部工具成功但最终审计写入失败时&#xa;记录可能长期停在 STARTED，尚无自动核对流程" vertex="1">
+          <mxGeometry height="140" width="430" x="1560" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="o8" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;" value="语义缺口&#xa;TOOL_CALL_FAILED 事件固定 retryable=false&#xa;但模型仍可用新的函数调用再次尝试" vertex="1">
+          <mxGeometry height="130" width="400" x="2050" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="o9" parent="phase4" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=13;" value="外部边界&#xa;MinIO、远程 MCP 和模型服务的内部可靠性&#xa;不由本仓库保证" vertex="1">
+          <mxGeometry height="110" width="380" x="2510" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="s4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="s5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="s6" value="否">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="s5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="s7" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="s7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#9673A6;" target="g1" value="进入网关">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1990" y="490" />
+              <mxPoint x="280" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="g1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="g2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="g3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="g4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="g4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="g5" value="首次">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="g4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="g6" value="重复">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="g6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="g7" value="已有终态">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="g6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="g8" value="仍在执行">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1260" y="950" />
+              <mxPoint x="1980" y="950" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="g5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#D79B00;" target="d1" value="唯一执行权">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1810" y="695.07" />
+              <mxPoint x="1810" y="990" />
+              <mxPoint x="200" y="990" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d2" value="SKILL">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="d3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d4" value="MCP SSE / stdio">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="1380" />
+              <mxPoint x="1280" y="1380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e19" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d5" value="MCP HTTP">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="1080" />
+              <mxPoint x="1660" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="d6" value="PLATFORM">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="1480" />
+              <mxPoint x="2030" y="1480" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e21" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#67C9A3;" target="o1" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="50" y="1250" />
+              <mxPoint x="50" y="1660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e25" edge="1" parent="1" source="o1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;" target="o2" value="成功">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e26" edge="1" parent="1" source="o1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;labelBackgroundColor=#FFFFFF;strokeColor=#B85450;" target="o4" value="失败">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e27" edge="1" parent="1" source="o2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;" target="o3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e28" edge="1" parent="1" source="o4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;" target="o5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

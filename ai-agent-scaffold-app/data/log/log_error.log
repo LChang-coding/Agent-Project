@@ -1,4 +1,4 @@
-26-05-04.13:42:48.236 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer - 
+26-08-16.04:55:37.542 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer traceId= tenantId= userId= 
 
 Found multiple occurrences of org.json.JSONObject on the class path:
 
@@ -7,10 +7,511 @@ Found multiple occurrences of org.json.JSONObject on the class path:
 
 You may wish to exclude one of them to ensure predictable runtime behavior
 
-26-05-04.13:42:48.639 [main            ] WARN  ClassPathMapperScanner - No MyBatis mapper was found in '[cn.bugstack.ai]' package. Please check your configuration.
-26-05-04.13:42:48.711 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:48.795 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:48.799 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-26-05-04.13:42:49.176 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
-26-05-04.13:42:49.177 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
-26-05-04.13:42:50.548 [main            ] WARN  Content                - There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
+26-08-16.04:55:38.377 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.461 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.463 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration' of type [org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.463 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.464 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'loadBalancerClientsDefaultsMappingsProvider' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration$$Lambda$1043/0x000000e801a624e8] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.464 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'defaultsBindHandlerAdvisor' of type [org.springframework.cloud.commons.config.DefaultsBindHandlerAdvisor] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:38.467 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.04:55:39.256 [main            ] WARN  UserDetailsServiceAutoConfiguration traceId= tenantId= userId= 
+
+Using generated security password: a04e2d77-b3a6-40f6-b13a-53f4ffd9de76
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+26-08-16.04:55:39.571 [main            ] WARN  SyncMcpSamplingProvider traceId= tenantId= userId= No sampling methods found
+26-08-16.04:55:39.571 [main            ] WARN  SyncMcpElicitationProvider traceId= tenantId= userId= No elicitation methods found
+26-08-16.04:55:47.912 [main            ] WARN  Content                traceId= tenantId= userId= There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
+26-08-16.04:55:47.984 [main            ] WARN  RagIngestWorker        traceId=f1c845c0-c5fe-476e-8569-689df73488b5 tenantId= userId= RAG失败结果或清理未提交，等待其他Worker接手 tenantId:tenant-a jobId:delete-a code:RAG_DATABASE_UNAVAILABLE
+26-08-16.04:55:48.817 [main            ] WARN  ContextCompactionRecoveryJob traceId=ab7bcd54-6a85-4a07-948b-100a2fd83cef tenantId= userId= 上下文整理任务补发失败 taskId:task-1
+java.lang.IllegalStateException: send failed
+	at cn.bugstack.ai.trigger.job.ContextCompactionRecoveryJob.republishRecoverableTasks(ContextCompactionRecoveryJob.java:51)
+	at cn.bugstack.ai.test.context.ContextCompactionRecoveryJobTest.shouldContinueBatchWhenOneRepublishFails(ContextCompactionRecoveryJobTest.java:34)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.04:55:48.993 [main            ] WARN  ParentAgentResumeConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 主 Agent 恢复会话已删除，已收口恢复账本 tenantId:tenant-1 parentRunId:parent-run-1
+26-08-16.04:55:49.012 [main            ] WARN  SubagentResultCallbackConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis Parent Inbox 写入失败，按 MySQL 权威账本继续 tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.addInbox(SubagentResultCallbackConsumer.java:89)
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.consume(SubagentResultCallbackConsumer.java:65)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldRegisterResumeWithoutRunningParentInKafkaResultConsumer(SubagentKafkaChainTest.java:139)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.04:55:49.014 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 子 Agent 任务执行失败 tenantId:tenant-1 taskId:task-1 childAgentId:child-1 errorType:IllegalStateException
+26-08-16.04:55:49.014 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis 缓存降级 operation:put-instance tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.lambda$consume$2(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.cache(SubagentTaskConsumer.java:108)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.consume(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldExecuteClaimedTaskAndCompleteWithFence(SubagentKafkaChainTest.java:66)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.04:55:49.015 [main            ] ERROR SubagentResultCallbackConsumer traceId= tenantId= userId= 子 Agent 结果回调进入 DLT tenantId:tenant-1 parentRunId:parent-run-1 taskId:task-1 requeued:true
+26-08-16.04:55:49.230 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=0
+26-08-16.04:55:49.241 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docx_parser_fallback outcome=docling errorCode=RAG_DOCX_PARSE_FAILED
+26-08-16.04:55:49.245 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=0
+26-08-16.04:55:49.350 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=timeout wallMs=102
+26-08-16.04:55:49.774 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=1
+26-08-16.04:55:49.775 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=2 outcome=io_failure errorType=IOException wallMs=2
+26-08-16.04:55:49.782 [main            ] WARN  DoclingDocumentParserAdapter traceId=563fd389-eccf-4b9c-aac7-743a01e31fc0 tenantId= userId= event=rag_docling_http attempt=1 outcome=io_failure errorType=IOException wallMs=1
+26-08-16.04:55:50.157 [main            ] WARN  RagOutboxPublisher     traceId= tenantId= userId= RAG Outbox ACK后栅栏已失效 eventId:event-1
+26-08-16.04:55:50.729 [ForkJoinPool.commonPool-worker-1] WARN  StdioClientTransport   traceId= tenantId= userId= Process terminated with code 143
+26-08-16.04:55:50.869 [ForkJoinPool.commonPool-worker-1] WARN  StdioClientTransport   traceId= tenantId= userId= Process terminated with code 143
+26-08-16.04:55:50.954 [schedule-dispatch-worker-1] WARN  ScheduleDispatcher     traceId= tenantId= userId= 定时任务执行失败 taskId:task-1 attempt:1 terminal:false
+java.lang.InterruptedException: null
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1048)
+	at java.base/java.util.concurrent.CountDownLatch.await(CountDownLatch.java:230)
+	at cn.bugstack.ai.test.schedule.ScheduleDispatcherTest$2.execute(ScheduleDispatcherTest.java:154)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.executeWithIdentity(ScheduleDispatcher.java:247)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.dispatch(ScheduleDispatcher.java:216)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.lambda$submitWave$2(ScheduleDispatcher.java:149)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+26-08-16.04:55:51.002 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Start destroying ThreadPool
+26-08-16.04:55:51.002 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Start destroying common HttpClient
+26-08-16.04:55:51.002 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Destruction of the end
+26-08-16.04:55:51.002 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Start destroying Publisher
+26-08-16.04:55:51.002 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Destruction of the end
+26-08-16.04:55:51.002 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Destruction of the end
+26-08-16.06:52:00.348 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer traceId= tenantId= userId= 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
+	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+26-08-16.06:52:01.231 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.317 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.320 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration' of type [org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.321 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.322 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'loadBalancerClientsDefaultsMappingsProvider' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration$$Lambda$1086/0x0000007801a2a6f8] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.322 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'defaultsBindHandlerAdvisor' of type [org.springframework.cloud.commons.config.DefaultsBindHandlerAdvisor] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:01.326 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.06:52:02.294 [main            ] WARN  UserDetailsServiceAutoConfiguration traceId= tenantId= userId= 
+
+Using generated security password: 29378c0d-c911-4eea-8f14-3024268fadd4
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+26-08-16.06:52:02.737 [main            ] WARN  SyncMcpSamplingProvider traceId= tenantId= userId= No sampling methods found
+26-08-16.06:52:02.738 [main            ] WARN  SyncMcpElicitationProvider traceId= tenantId= userId= No elicitation methods found
+26-08-16.06:52:04.492 [main            ] WARN  ParentAgentResumeConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 主 Agent 恢复会话已删除，已收口恢复账本 tenantId:tenant-1 parentRunId:parent-run-1
+26-08-16.06:52:04.509 [main            ] WARN  SubagentResultCallbackConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis Parent Inbox 写入失败，按 MySQL 权威账本继续 tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.addInbox(SubagentResultCallbackConsumer.java:89)
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.consume(SubagentResultCallbackConsumer.java:65)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldRegisterResumeWithoutRunningParentInKafkaResultConsumer(SubagentKafkaChainTest.java:139)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.06:52:04.512 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 子 Agent 任务执行失败 tenantId:tenant-1 taskId:task-1 childAgentId:child-1 errorType:IllegalStateException
+26-08-16.06:52:04.513 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis 缓存降级 operation:put-instance tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.lambda$consume$2(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.cache(SubagentTaskConsumer.java:108)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.consume(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldExecuteClaimedTaskAndCompleteWithFence(SubagentKafkaChainTest.java:66)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.06:52:04.514 [main            ] ERROR SubagentResultCallbackConsumer traceId= tenantId= userId= 子 Agent 结果回调进入 DLT tenantId:tenant-1 parentRunId:parent-run-1 taskId:task-1 requeued:true
+26-08-16.06:52:04.741 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Start destroying ThreadPool
+26-08-16.06:52:04.741 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Start destroying common HttpClient
+26-08-16.06:52:04.741 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Destruction of the end
+26-08-16.06:52:04.741 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Start destroying Publisher
+26-08-16.06:52:04.741 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Destruction of the end
+26-08-16.06:52:04.741 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Destruction of the end
+26-08-16.06:52:38.444 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] WARN  RetryUtils             traceId=f2bf7f2a-73e7-49a2-8ac7-7ce035eebca9 tenantId=tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId=user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c Retry error. Retry count:1
+java.lang.NoSuchMethodError: 'org.springframework.http.HttpStatus org.springframework.http.ResponseEntity.getStatusCode()'
+	at cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningAwareOpenAiApi.sync(ReasoningAwareOpenAiApi.java:78)
+	at cn.bugstack.ai.domain.agent.service.armory.matter.model.reasoning.ReasoningAwareOpenAiApi.chatCompletionEntity(ReasoningAwareOpenAiApi.java:63)
+	at org.springframework.ai.openai.OpenAiChatModel.lambda$internalCall$1(OpenAiChatModel.java:200)
+	at org.springframework.retry.support.RetryTemplate.doExecute(RetryTemplate.java:357)
+	at org.springframework.retry.support.RetryTemplate.execute(RetryTemplate.java:230)
+	at org.springframework.ai.openai.OpenAiChatModel.lambda$internalCall$3(OpenAiChatModel.java:200)
+	at io.micrometer.observation.Observation.observe(Observation.java:564)
+	at org.springframework.ai.openai.OpenAiChatModel.internalCall(OpenAiChatModel.java:197)
+	at org.springframework.ai.openai.OpenAiChatModel.call(OpenAiChatModel.java:182)
+	at cn.bugstack.ai.infrastructure.context.SpringAiContextCompressionPort.compress(SpringAiContextCompressionPort.java:28)
+	at cn.bugstack.ai.domain.context.service.ConversationMemoryService.compactTask(ConversationMemoryService.java:396)
+	at cn.bugstack.ai.trigger.listener.ContextCompactionConsumer.consume(ContextCompactionConsumer.java:86)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.messaging.handler.invocation.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:169)
+	at org.springframework.kafka.listener.adapter.KotlinAwareInvocableHandlerMethod.doInvoke(KotlinAwareInvocableHandlerMethod.java:45)
+	at org.springframework.messaging.handler.invocation.InvocableHandlerMethod.invoke(InvocableHandlerMethod.java:119)
+	at org.springframework.kafka.listener.adapter.HandlerAdapter.invoke(HandlerAdapter.java:78)
+	at org.springframework.kafka.listener.adapter.MessagingMessageListenerAdapter.invokeHandler(MessagingMessageListenerAdapter.java:474)
+	at org.springframework.kafka.listener.adapter.MessagingMessageListenerAdapter.invoke(MessagingMessageListenerAdapter.java:421)
+	at org.springframework.kafka.listener.adapter.RecordMessagingMessageListenerAdapter.onMessage(RecordMessagingMessageListenerAdapter.java:85)
+	at org.springframework.kafka.listener.adapter.RecordMessagingMessageListenerAdapter.onMessage(RecordMessagingMessageListenerAdapter.java:50)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.invokeDelegateOnMessage(KafkaBackoffAwareMessageListenerAdapter.java:106)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.onMessage(KafkaBackoffAwareMessageListenerAdapter.java:97)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.onMessage(KafkaBackoffAwareMessageListenerAdapter.java:49)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeOnMessage(KafkaMessageListenerContainer.java:2889)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeOnMessage(KafkaMessageListenerContainer.java:2867)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeRecordListener(KafkaMessageListenerContainer.java:2779)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeWithRecords(KafkaMessageListenerContainer.java:2616)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeRecordListener(KafkaMessageListenerContainer.java:2505)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeListener(KafkaMessageListenerContainer.java:2151)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeIfHaveRecords(KafkaMessageListenerContainer.java:1527)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.pollAndInvoke(KafkaMessageListenerContainer.java:1465)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.run(KafkaMessageListenerContainer.java:1334)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+26-08-16.08:24:40.959 [main            ] WARN  DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer traceId= tenantId= userId= 
+
+Found multiple occurrences of org.json.JSONObject on the class path:
+
+	jar:file:/Users/codeliu/.m2/repository/org/json/json/20240303/json-20240303.jar!/org/json/JSONObject.class
+	jar:file:/Users/codeliu/.m2/repository/com/vaadin/external/google/android-json/0.0.20131108.vaadin1/android-json-0.0.20131108.vaadin1.jar!/org/json/JSONObject.class
+
+You may wish to exclude one of them to ensure predictable runtime behavior
+
+26-08-16.08:24:41.758 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.820 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.822 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration' of type [org.springframework.cloud.commons.config.CommonsConfigAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.823 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.823 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'loadBalancerClientsDefaultsMappingsProvider' of type [org.springframework.cloud.client.loadbalancer.LoadBalancerDefaultMappingsProviderAutoConfiguration$$Lambda$1043/0x0000007001a65610] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.823 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'defaultsBindHandlerAdvisor' of type [org.springframework.cloud.commons.config.DefaultsBindHandlerAdvisor] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:41.828 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker traceId= tenantId= userId= Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-08-16.08:24:42.624 [main            ] WARN  UserDetailsServiceAutoConfiguration traceId= tenantId= userId= 
+
+Using generated security password: 10997dfb-be16-49e5-a76d-1f2d65f9a377
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+26-08-16.08:24:42.942 [main            ] WARN  SyncMcpSamplingProvider traceId= tenantId= userId= No sampling methods found
+26-08-16.08:24:42.943 [main            ] WARN  SyncMcpElicitationProvider traceId= tenantId= userId= No elicitation methods found
+26-08-16.08:24:51.189 [main            ] WARN  Content                traceId= tenantId= userId= There are non-text parts inlineData in the content, returning concatenation of all text parts. Please refer to the non text parts for a full response from model.
+26-08-16.08:24:51.258 [main            ] WARN  RagIngestWorker        traceId=94eddd43-908b-4479-b0aa-45b841fac63a tenantId= userId= RAG失败结果或清理未提交，等待其他Worker接手 tenantId:tenant-a jobId:delete-a code:RAG_DATABASE_UNAVAILABLE
+26-08-16.08:24:52.102 [main            ] WARN  ContextCompactionRecoveryJob traceId=3fabc946-bc4e-4955-b168-c0b1221458f1 tenantId= userId= 上下文整理任务补发失败 taskId:task-1
+java.lang.IllegalStateException: send failed
+	at cn.bugstack.ai.trigger.job.ContextCompactionRecoveryJob.republishRecoverableTasks(ContextCompactionRecoveryJob.java:51)
+	at cn.bugstack.ai.test.context.ContextCompactionRecoveryJobTest.shouldContinueBatchWhenOneRepublishFails(ContextCompactionRecoveryJobTest.java:34)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.08:24:52.278 [main            ] WARN  ParentAgentResumeConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 主 Agent 恢复会话已删除，已收口恢复账本 tenantId:tenant-1 parentRunId:parent-run-1
+26-08-16.08:24:52.299 [main            ] WARN  SubagentResultCallbackConsumer traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis Parent Inbox 写入失败，按 MySQL 权威账本继续 tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.addInbox(SubagentResultCallbackConsumer.java:89)
+	at cn.bugstack.ai.trigger.listener.SubagentResultCallbackConsumer.consume(SubagentResultCallbackConsumer.java:65)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldRegisterResumeWithoutRunningParentInKafkaResultConsumer(SubagentKafkaChainTest.java:140)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.08:24:52.301 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 子 Agent 任务执行失败 tenantId:tenant-1 taskId:task-1 childAgentId:child-1 errorType:IllegalStateException
+26-08-16.08:24:52.301 [main            ] WARN  SubagentTaskConsumer   traceId=trace-1 tenantId=tenant-1 userId=user-1 Redis 缓存降级 operation:put-instance tenantId:tenant-1 taskId:task-1
+java.lang.IllegalStateException: redis down
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.lambda$consume$2(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.cache(SubagentTaskConsumer.java:108)
+	at cn.bugstack.ai.trigger.listener.SubagentTaskConsumer.consume(SubagentTaskConsumer.java:71)
+	at cn.bugstack.ai.test.agent.SubagentKafkaChainTest.shouldExecuteClaimedTaskAndCompleteWithFence(SubagentKafkaChainTest.java:67)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4TestSet.execute(JUnit4TestSet.java:59)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.executeTestSet(AbstractDirectoryTestSuite.java:120)
+	at org.apache.maven.surefire.suite.AbstractDirectoryTestSuite.execute(AbstractDirectoryTestSuite.java:103)
+	at org.apache.maven.surefire.Surefire.run(Surefire.java:169)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.apache.maven.surefire.booter.SurefireBooter.runSuitesInProcess(SurefireBooter.java:350)
+	at org.apache.maven.surefire.booter.SurefireBooter.main(SurefireBooter.java:1021)
+26-08-16.08:24:52.302 [main            ] ERROR SubagentResultCallbackConsumer traceId= tenantId= userId= 子 Agent 结果回调进入 DLT tenantId:tenant-1 parentRunId:parent-run-1 taskId:task-1 requeued:true
+26-08-16.08:24:52.526 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=0
+26-08-16.08:24:52.542 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docx_parser_fallback outcome=docling errorCode=RAG_DOCX_PARSE_FAILED
+26-08-16.08:24:52.546 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=0
+26-08-16.08:24:52.651 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=timeout wallMs=101
+26-08-16.08:24:53.071 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=server_error status=503 wallMs=1
+26-08-16.08:24:53.072 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=2 outcome=io_failure errorType=IOException wallMs=2
+26-08-16.08:24:53.079 [main            ] WARN  DoclingDocumentParserAdapter traceId=155848e1-8806-4eec-aebc-382e77de2b53 tenantId= userId= event=rag_docling_http attempt=1 outcome=io_failure errorType=IOException wallMs=1
+26-08-16.08:24:53.444 [main            ] WARN  RagOutboxPublisher     traceId= tenantId= userId= RAG Outbox ACK后栅栏已失效 eventId:event-1
+26-08-16.08:24:54.012 [ForkJoinPool.commonPool-worker-1] WARN  StdioClientTransport   traceId= tenantId= userId= Process terminated with code 143
+26-08-16.08:24:54.159 [ForkJoinPool.commonPool-worker-1] WARN  StdioClientTransport   traceId= tenantId= userId= Process terminated with code 143
+26-08-16.08:24:54.255 [schedule-dispatch-worker-1] WARN  ScheduleDispatcher     traceId= tenantId= userId= 定时任务执行失败 taskId:task-1 attempt:1 terminal:false
+java.lang.InterruptedException: null
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireSharedInterruptibly(AbstractQueuedSynchronizer.java:1048)
+	at java.base/java.util.concurrent.CountDownLatch.await(CountDownLatch.java:230)
+	at cn.bugstack.ai.test.schedule.ScheduleDispatcherTest$2.execute(ScheduleDispatcherTest.java:154)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.executeWithIdentity(ScheduleDispatcher.java:247)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.dispatch(ScheduleDispatcher.java:216)
+	at cn.bugstack.ai.domain.schedule.service.ScheduleDispatcher.lambda$submitWave$2(ScheduleDispatcher.java:149)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+26-08-16.08:24:54.304 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Start destroying common HttpClient
+26-08-16.08:24:54.304 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Start destroying Publisher
+26-08-16.08:24:54.304 [Thread-9        ] WARN  NotifyCenter           traceId= tenantId= userId= [NotifyCenter] Destruction of the end
+26-08-16.08:24:54.304 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Start destroying ThreadPool
+26-08-16.08:24:54.304 [Thread-1        ] WARN  ThreadPoolManager      traceId= tenantId= userId= [ThreadPoolManager] Destruction of the end
+26-08-16.08:24:54.306 [Thread-7        ] WARN  HttpClientBeanHolder   traceId= tenantId= userId= [HttpClientBeanHolder] Destruction of the end
+26-08-16.08:25:04.220 [org.springframework.kafka.KafkaListenerEndpointContainer#0-0-C-1] WARN  ContextCompactionConsumer traceId=f2bf7f2a-73e7-49a2-8ac7-7ce035eebca9 tenantId=tenant_2b120d32-d220-4eec-b4b4-f2aad7988c8c userId=user_d09d9cc0-1c88-49a1-9bb9-a08a5330345c 上下文压缩任务待重试 taskId:ctx_task_15ba5130-57dd-32d6-adeb-b64539074819 attempts:2
+java.lang.IllegalStateException: 上下文压缩结果 JSON 校验失败
+	at cn.bugstack.ai.domain.context.service.ConversationMemoryService.normalizeSummaryJson(ConversationMemoryService.java:853)
+	at cn.bugstack.ai.domain.context.service.ConversationMemoryService.compactTask(Unknown Source)
+	at cn.bugstack.ai.trigger.listener.ContextCompactionConsumer.consume(ContextCompactionConsumer.java:86)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.springframework.messaging.handler.invocation.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:169)
+	at org.springframework.kafka.listener.adapter.KotlinAwareInvocableHandlerMethod.doInvoke(KotlinAwareInvocableHandlerMethod.java:45)
+	at org.springframework.messaging.handler.invocation.InvocableHandlerMethod.invoke(InvocableHandlerMethod.java:119)
+	at org.springframework.kafka.listener.adapter.HandlerAdapter.invoke(HandlerAdapter.java:78)
+	at org.springframework.kafka.listener.adapter.MessagingMessageListenerAdapter.invokeHandler(MessagingMessageListenerAdapter.java:474)
+	at org.springframework.kafka.listener.adapter.MessagingMessageListenerAdapter.invoke(MessagingMessageListenerAdapter.java:421)
+	at org.springframework.kafka.listener.adapter.RecordMessagingMessageListenerAdapter.onMessage(RecordMessagingMessageListenerAdapter.java:85)
+	at org.springframework.kafka.listener.adapter.RecordMessagingMessageListenerAdapter.onMessage(RecordMessagingMessageListenerAdapter.java:50)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.invokeDelegateOnMessage(KafkaBackoffAwareMessageListenerAdapter.java:106)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.onMessage(KafkaBackoffAwareMessageListenerAdapter.java:97)
+	at org.springframework.kafka.listener.adapter.KafkaBackoffAwareMessageListenerAdapter.onMessage(KafkaBackoffAwareMessageListenerAdapter.java:49)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeOnMessage(KafkaMessageListenerContainer.java:2889)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeOnMessage(KafkaMessageListenerContainer.java:2867)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeRecordListener(KafkaMessageListenerContainer.java:2779)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.doInvokeWithRecords(KafkaMessageListenerContainer.java:2616)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeRecordListener(KafkaMessageListenerContainer.java:2505)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeListener(KafkaMessageListenerContainer.java:2151)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.invokeIfHaveRecords(KafkaMessageListenerContainer.java:1527)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.pollAndInvoke(KafkaMessageListenerContainer.java:1465)
+	at org.springframework.kafka.listener.KafkaMessageListenerContainer$ListenerConsumer.run(KafkaMessageListenerContainer.java:1334)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1804)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: com.fasterxml.jackson.core.JsonParseException: Unexpected character ('' (code 57344 / 0xe000)): expected a valid value (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 1]
+	at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2660)
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportUnexpectedChar(ParserMinimalBase.java:741)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser._handleOddValue(ReaderBasedJsonParser.java:2054)
+	at com.fasterxml.jackson.core.json.ReaderBasedJsonParser.nextToken(ReaderBasedJsonParser.java:780)
+	at com.fasterxml.jackson.databind.ObjectMapper._readTreeAndClose(ObjectMapper.java:4946)
+	at com.fasterxml.jackson.databind.ObjectMapper.readTree(ObjectMapper.java:3281)
+	at cn.bugstack.ai.domain.context.service.ConversationMemoryService.normalizeSummaryJson(ConversationMemoryService.java:836)
+	... 28 common frames omitted
