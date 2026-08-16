@@ -24,10 +24,20 @@ import java.util.concurrent.TimeUnit;
 public class Application {
 
     private static final String OBSERVABILITY_SCRIPT = "docs/dev-ops/observability/local/ensure-observability.sh";
+    private static final String RXJAVA_BUFFER_SIZE_PROPERTY = "rx3.buffer-size";
+    private static final String RXJAVA_BUFFER_SIZE_DEFAULT = "16";
 
     public static void main(String[] args) {
+        // Google ADK 1.1 的模型流内部使用默认 flatMap 预取。默认 128 会在高频 SSE 下
+        // 形成 128×128 的 Event 等待队列；必须在 Flowable 首次加载前收紧全局预取窗口。
+        configureRxJavaPrefetch();
         startLocalObservability();
         SpringApplication.run(Application.class, args);
+    }
+
+    static void configureRxJavaPrefetch() {
+        System.setProperty(RXJAVA_BUFFER_SIZE_PROPERTY,
+                System.getProperty(RXJAVA_BUFFER_SIZE_PROPERTY, RXJAVA_BUFFER_SIZE_DEFAULT));
     }
 
     private static void startLocalObservability() {
