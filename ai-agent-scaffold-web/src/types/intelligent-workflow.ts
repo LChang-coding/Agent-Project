@@ -5,6 +5,7 @@ export type WorkflowEventType =
   | 'AGENT_STARTED'
   | 'THINKING_DELTA'
   | 'ANSWER_DELTA'
+  | 'PARENT_RESUME_STARTED'
   | 'WAITING_ALL'
   | 'APPROVAL_REQUIRED'
   | 'APPROVAL_RESOLVED'
@@ -132,10 +133,18 @@ export interface WorkflowRunViewState {
   seenEventIds: string[];
   nodes: WorkflowNodeExecutionView[];
   thinking: string;
+  reactTurns: AgentReactTurnView[];
   waitingAll: boolean;
   activities: AgentRunActivityView[];
   finalAnswer: string;
   errorMessage: string;
+}
+
+export interface AgentReactTurnView {
+  id: string;
+  thinking: string;
+  tools: WorkflowToolCallView[];
+  startedAt: string;
 }
 
 export interface AgentRunActivityView {

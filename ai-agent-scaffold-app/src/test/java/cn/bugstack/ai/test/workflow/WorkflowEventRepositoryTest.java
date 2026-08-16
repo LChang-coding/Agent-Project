@@ -3,7 +3,9 @@ package cn.bugstack.ai.test.workflow;
 import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventCursorRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRunEventEntity;
 import cn.bugstack.ai.infrastructure.adapter.repository.WorkflowEventRepository;
+import cn.bugstack.ai.infrastructure.adapter.repository.WorkflowEventWriteTransaction;
 import cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -13,6 +15,7 @@ import java.time.LocalDateTime;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /** 工作流事件仓储的序号与根 trace 一致性测试。 */
@@ -45,6 +48,20 @@ public class WorkflowEventRepositoryTest {
         new WorkflowEventRepository(dao, cursor).append(event("trace_root"));
 
         verify(cursor).allocate("tenant_1", "user_1", "run_1", "trace_root", "NODE_STARTED");
+    }
+
+    @Test
+    public void shouldRetryDeadlockTwiceAndThenPersist() {
+        IWorkflowRunEventDao dao = mock(IWorkflowRunEventDao.class);
+        WorkflowEventWriteTransaction writer = mock(WorkflowEventWriteTransaction.class);
+        WorkflowRunEventEntity event = event("trace_root");
+        when(writer.appendOnce(event))
+                .thenThrow(new DeadlockLoserDataAccessException("deadlock-1", null))
+                .thenThrow(new DeadlockLoserDataAccessException("deadlock-2", null))
+                .thenReturn(event);
+
+        Assert.assertSame(event, new WorkflowEventRepository(dao, writer).append(event));
+        verify(writer, times(3)).appendOnce(event);
     }
 
     private WorkflowRunEventEntity event(String traceId) {

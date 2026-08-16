@@ -5,7 +5,7 @@
         <span class="eyebrow">MULTI-AGENT RUN</span>
         <h2>{{ phaseLabel(snapshot.phase) }}</h2>
       </div>
-      <span :class="['phase-pill', `phase-pill--${tone(snapshot.phase)}`]">{{ completedCount }}/{{ taskCount }} 完成</span>
+      <span :class="['phase-pill', `phase-pill--${tone(snapshot.phase)}`]">成功 {{ successCount }} · 失败 {{ failedCount }} · 进行 {{ runningCount }}</span>
     </header>
     <div class="run-track" aria-hidden="true"><span :style="{ width: `${progress}%` }" /></div>
     <div class="task-grid">
@@ -13,12 +13,12 @@
               :data-subagent-task-id="task.taskId" data-subagent-trigger="run-card"
               @click="$emit('select-task', task.taskId)">
         <span :class="['task-dot', `task-dot--${subagentTaskTone(task)}`]" />
-        <span><strong>{{ agentName(task.childAgentId) }}</strong><small>{{ subagentTaskLabel(task) }}</small></span>
+        <span><strong>{{ agentName(task.childAgentId) }}</strong><small>{{ subagentTaskLabel(task) }} · {{ taskElapsed(task) }}</small></span>
         <span aria-hidden="true">↗</span>
       </button>
     </div>
     <footer v-if="snapshot.inputLocked">
-      <span>当前会话暂时锁定发送；各子任务状态与回调结果独立更新，点击子 Agent 可查看思考与工具时间线。</span>
+      <span>{{ progressHint }}</span>
       <button v-if="cancellableCount" type="button" :disabled="stopping" @click="$emit('stop')">
         {{ stopping ? '停止中…' : `停止 ${cancellableCount} 个子任务` }}
       </button>
@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { AiAgentConfig, SessionOrchestrationPhase, SessionOrchestrationSnapshot } from '@/types/api';
 import { subagentTaskLabel, subagentTaskTone } from '@/domain/chat-orchestration-state';
 
@@ -37,8 +37,27 @@ const currentRun = computed(() => props.snapshot?.runs.find((run) => run.parentR
 const currentTasks = computed(() => currentRun.value?.tasks || []);
 const taskCount = computed(() => currentTasks.value.length);
 const completedCount = computed(() => currentTasks.value.filter((task) => ['ACKED', 'SUCCEEDED', 'FAILED', 'CANCELLED'].includes(task.status)).length);
+const successCount = computed(() => currentTasks.value.filter((task) => ['ACKED', 'SUCCEEDED'].includes(task.status) && !task.errorCode).length);
+const failedCount = computed(() => currentTasks.value.filter((task) => task.status === 'FAILED' || Boolean(task.errorCode)).length);
+const runningCount = computed(() => currentTasks.value.filter((task) => ['READY', 'RUNNING'].includes(task.status)).length);
 const cancellableCount = computed(() => currentTasks.value.filter((task) => ['READY', 'RUNNING'].includes(task.status)).length);
 const progress = computed(() => taskCount.value ? Math.round((completedCount.value / taskCount.value) * 100) : 0);
+const now = ref(Date.now());
+let timer: number | undefined;
+onMounted(() => { timer = window.setInterval(() => { now.value = Date.now(); }, 1000); });
+onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
+const progressHint = computed(() => props.snapshot?.phase === 'SUMMARIZING'
+  ? '子 Agent 已全部回调，主 Agent 正在恢复并生成唯一汇总。'
+  : failedCount.value > 0
+    ? `${failedCount.value} 个子任务失败已回调，仍在等待 ${runningCount.value} 个子任务。`
+    : `各子任务状态与回调结果独立更新，仍在等待 ${runningCount.value} 个子任务；点击子 Agent 可查看思考与工具时间线，其他会话可继续使用。`);
+function taskElapsed(task: { createdAt?: string; completedAt?: string }) {
+  const start = Date.parse(task.createdAt || '');
+  if (!Number.isFinite(start)) return '计时中';
+  const end = task.completedAt ? Date.parse(task.completedAt) : now.value;
+  const seconds = Math.max(0, Math.floor((end - start) / 1000));
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 function agentName(id: string) { return props.agents.find((agent) => agent.agentId === id)?.agentName || `Agent ${id}`; }
 function phaseLabel(phase: SessionOrchestrationPhase) {
   return ({ WAITING_APPROVAL: '等待你的确认', EXECUTING: '子 Agent 正在协作', SUMMARIZING: '主 Agent 正在汇总', COMPLETED: '协作已完成', COMPLETED_WITH_ERRORS: '协作已完成，部分失败', CANCELLED: '协作已取消', IDLE: '暂无运行' })[phase];

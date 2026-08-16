@@ -74,6 +74,35 @@ public class WorkflowEventStreamServiceTest {
     }
 
     @Test
+    public void shouldReleaseStreamAfterWaitAllBoundary() {
+        IWorkflowEventRepository events = mock(IWorkflowEventRepository.class);
+        when(events.queryOldestSequence("tenant_1", "user_1", "run_1")).thenReturn(1L);
+        when(events.queryAfter("tenant_1", "user_1", "run_1", 0L, 1000)).thenReturn(List.of(
+                event(1L, "AGENT_STARTED"), event(2L, "WAITING_ALL"), event(3L, "THINKING_DELTA")));
+
+        TestSubscriber<WorkflowRunEventEntity> subscriber = new WorkflowEventStreamService(
+                events, mock(IIntelligentWorkflowRunRepository.class), workflowChatRuns())
+                .stream("tenant_1", "user_1", "run_1", 0L).test();
+
+        subscriber.assertComplete().assertNoErrors().assertValueCount(2);
+        subscriber.assertValueAt(1, value -> "WAITING_ALL".equals(value.getEventType()));
+    }
+
+    @Test
+    public void shouldReplayPastWaitAllWhenRunIsAlreadyTerminal() {
+        IWorkflowEventRepository events = mock(IWorkflowEventRepository.class);
+        when(events.queryOldestSequence("tenant_1", "user_1", "run_1")).thenReturn(1L);
+        when(events.queryTerminal("tenant_1", "user_1", "run_1")).thenReturn(event(4L, "WORKFLOW_COMPLETED"));
+        when(events.queryAfter("tenant_1", "user_1", "run_1", 0L, 1000)).thenReturn(List.of(
+                event(1L, "AGENT_STARTED"), event(2L, "WAITING_ALL"),
+                event(3L, "ANSWER_DELTA"), event(4L, "WORKFLOW_COMPLETED")));
+
+        new WorkflowEventStreamService(events, mock(IIntelligentWorkflowRunRepository.class), workflowChatRuns())
+                .stream("tenant_1", "user_1", "run_1", 0L).test()
+                .assertComplete().assertNoErrors().assertValueCount(4);
+    }
+
+    @Test
     public void shouldCompleteAfterLiveTerminalEvent() {
         IWorkflowEventRepository events = mock(IWorkflowEventRepository.class);
         IIntelligentWorkflowRunRepository runs = mock(IIntelligentWorkflowRunRepository.class);

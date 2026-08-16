@@ -7,6 +7,7 @@ import cn.bugstack.ai.domain.tool.model.entity.ToolInvokeContextEntity;
 import cn.bugstack.ai.domain.run.service.RunControlService;
 import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,7 +71,11 @@ public class ToolApprovalService {
             throw error("TOOL_APPROVAL_AMENDED_INPUT_REQUIRED");
         }
         if (repository.decide(tenantId, userId, approvalId, normalized, safe(comment), amendedInput,
-                userId, expectedRevision, LocalDateTime.now()) != 1) throw error("TOOL_APPROVAL_CONFLICT");
+                userId, expectedRevision, LocalDateTime.now()) == 1) return;
+        ToolApprovalRequestEntity current = repository.query(tenantId, userId, approvalId);
+        // 客户端在响应丢失后可以安全重放同一决策；不同决策仍拒绝覆盖。
+        if (current != null && "DECIDED".equals(current.getStatus()) && normalized.equals(current.getDecision())) return;
+        throw error("TOOL_APPROVAL_CONFLICT");
     }
 
     /** 当前工具调用同步等待数据库中的审批决定；不保存 Java continuation。 */
@@ -110,6 +115,12 @@ public class ToolApprovalService {
         try {
             eventStreamService.publish(context.getTenantId(), context.getUserId(), context.getRunId(),
                     context.getTraceId(), eventType, null, null, objectMapper.writeValueAsString(payload));
+            String rootRunId = context.getOrchestrationRootRunId();
+            if (AgentOrchestrationContextHolder.isSummaryOnly()
+                    && text(rootRunId) && !rootRunId.equals(context.getRunId())) {
+                eventStreamService.publish(context.getTenantId(), context.getUserId(), rootRunId,
+                        context.getTraceId(), eventType, null, null, objectMapper.writeValueAsString(payload));
+            }
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("TOOL_APPROVAL_EVENT_SERIALIZE_FAILED", exception);
         }

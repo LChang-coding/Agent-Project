@@ -15,6 +15,7 @@ import cn.bugstack.ai.domain.tool.service.mcp.McpProtocolClientSupport;
 import cn.bugstack.ai.domain.tool.service.support.SkillPackageReader;
 import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.observability.AiLog;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -432,6 +433,13 @@ public class ToolGateway {
         if (!blank(context.getNodeExecutionId())) payload.put("nodeExecutionId", context.getNodeExecutionId());
         workflowEventStreamService.publish(context.getTenantId(), context.getUserId(), context.getRunId(),
                 context.getTraceId(), eventType, context.getNodeExecutionId(), null, toJson(payload));
+        String rootRunId = context.getOrchestrationRootRunId();
+        if (AgentOrchestrationContextHolder.isSummaryOnly()
+                && !blank(rootRunId) && !rootRunId.equals(context.getRunId())) {
+            payload.put("sourceRunId", context.getRunId());
+            workflowEventStreamService.publish(context.getTenantId(), context.getUserId(), rootRunId,
+                    context.getTraceId(), eventType, context.getNodeExecutionId(), null, toJson(payload));
+        }
     }
 
     /** 构造成功事件审计负载，不把模型展示正文混入结构化字段。 */

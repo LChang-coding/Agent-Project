@@ -110,7 +110,7 @@ public class ToolGatewayPlatformTest {
     }
 
     @Test
-    public void doesNotPublishToolEventsOutsideWorkflowNode() {
+    public void publishesToolEventsForAgentRunsOutsideWorkflowNodes() {
         ToolDispatchAuthorizationService authorization = mock(ToolDispatchAuthorizationService.class);
         WorkflowEventStreamService events = mock(WorkflowEventStreamService.class);
         PlatformToolRegistry registry = new PlatformToolRegistry();
@@ -122,7 +122,8 @@ public class ToolGatewayPlatformTest {
                 .tenantId("tenant").userId("user").runId("run").functionCallId("call")
                 .traceId("trace-root").build());
 
-        verifyNoInteractions(events);
+        verify(events, times(2)).publish(eq("tenant"), eq("user"), eq("run"),
+                eq("trace-root"), anyString(), isNull(), isNull(), anyString());
     }
 
     @Test

@@ -15,6 +15,7 @@ import cn.bugstack.ai.trigger.listener.SubagentTaskConsumer;
 import cn.bugstack.ai.trigger.listener.ParentAgentResumeConsumer;
 import cn.bugstack.ai.trigger.listener.SubagentInstanceCleanupConsumer;
 import cn.bugstack.ai.domain.session.service.SessionLifecycleService;
+import cn.bugstack.ai.domain.workflow.service.WorkflowEventStreamService;
 import cn.bugstack.ai.types.context.AgentOrchestrationContextHolder;
 import cn.bugstack.ai.types.context.TenantContextHolder;
 import cn.bugstack.ai.types.enums.ResponseCode;
@@ -166,7 +167,8 @@ public class SubagentKafkaChainTest {
                 Mockito.eq("session-1"), Mockito.anyString(), Mockito.anyString()))
                 .thenReturn(List.of("唯一最终汇总"));
 
-        new ParentAgentResumeConsumer(new ObjectMapper(), resumeRepository, chatService).consume(event());
+        WorkflowEventStreamService eventStream = Mockito.mock(WorkflowEventStreamService.class);
+        new ParentAgentResumeConsumer(new ObjectMapper(), resumeRepository, chatService, eventStream).consume(event());
 
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> resumeRunId = ArgumentCaptor.forClass(String.class);
@@ -184,6 +186,14 @@ public class SubagentKafkaChainTest {
                 Mockito.eq("session-1"), Mockito.anyString());
         Mockito.verify(resumeRepository).complete(Mockito.same(batch), Mockito.anyString(), Mockito.eq(9L),
                 Mockito.any(LocalDateTime.class));
+        ArgumentCaptor<String> eventTypes = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(eventStream, Mockito.times(3)).publish(Mockito.eq("tenant-1"), Mockito.eq("user-1"),
+                Mockito.eq("parent-run-1"), Mockito.eq("trace-1"), eventTypes.capture(),
+                Mockito.isNull(), Mockito.isNull(), payloads.capture());
+        Assert.assertEquals(List.of("PARENT_RESUME_STARTED", "FINAL_ANSWER_COMPLETED", "WORKFLOW_COMPLETED"),
+                eventTypes.getAllValues());
+        Assert.assertTrue(payloads.getAllValues().get(1).contains("唯一最终汇总"));
     }
 
     @Test

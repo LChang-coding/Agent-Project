@@ -206,7 +206,7 @@ export const useChatStore = defineStore('chat', {
      * 切换智能体；参数是智能体 ID；会清空当前会话草稿。
      */
     async selectAgent(agentId: string) {
-      await this.cancelActiveRun('切换智能体');
+      this.detachActiveRequest();
       this.activeSourceType = 'agent';
       this.activeAgentId = agentId;
       this.sessionId = '';
@@ -221,7 +221,7 @@ export const useChatStore = defineStore('chat', {
      * 切换工作流；参数是工作流 ID；会清空当前会话草稿。
      */
     async selectWorkflow(workflowId: string) {
-      await this.cancelActiveRun('切换工作流');
+      this.detachActiveRequest();
       this.activeSourceType = 'workflow';
       this.activeWorkflowId = workflowId;
       const detail = await queryWorkflowDetail(workflowId);
@@ -242,7 +242,7 @@ export const useChatStore = defineStore('chat', {
      * 新建聊天会话；参数可指定智能体；返回新会话 ID。
      */
     async createSession(agentId?: string) {
-      await this.cancelActiveRun('新建会话');
+      this.detachActiveRequest();
       const auth = useAuthStore();
       const result = await createChatSession(this.buildChatPayload(auth.userId, '', agentId));
       this.sessionId = result.sessionId;
@@ -263,7 +263,7 @@ export const useChatStore = defineStore('chat', {
       if (sessionId === this.sessionId) {
         return;
       }
-      await this.cancelActiveRun('切换会话');
+      this.detachActiveRequest();
       abortHistoryWorkflowStreams();
       const session = this.sessions.find((item) => item.sessionId === sessionId);
       if (!session) {
@@ -295,6 +295,21 @@ export const useChatStore = defineStore('chat', {
       this.lastTraceId = '';
       this.resetMessageHistoryState(false);
       await Promise.all([this.reloadSessionMessages(sessionId), this.loadRagSetting(sessionId)]);
+    },
+
+    /** 离开当前会话时只断开本页订阅，不取消服务端运行；其他会话可继续发送。 */
+    detachActiveRequest() {
+      const request = activeRequest;
+      if (!request) return;
+      // 保留原文本 SSE：服务端把客户端断开视为取消上游，这里只让旧回调失去 UI 写权。
+      historyWorkflowControllers.get(request.runId)?.abort();
+      request.typewriter?.cancel();
+      request.streamSettled = true;
+      activeRequest = null;
+      this.sending = false;
+      this.cancelling = false;
+      this.steering = false;
+      this.currentRunId = '';
     },
 
     /**
@@ -366,7 +381,8 @@ export const useChatStore = defineStore('chat', {
         historyWorkflowControllers.set(runId, controller);
         try {
           let attempts = 0;
-          while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running') {
+          while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running'
+            && !this.workflowRuns[runId]?.waitingAll) {
             try {
               await streamWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
                 signal: controller.signal,
@@ -884,13 +900,15 @@ export const useChatStore = defineStore('chat', {
     },
 
     /** 普通 Agent 的文本 SSE 与可恢复运行事件并行连接，思考和工具进度不再等待最终正文。 */
-    async connectAgentRunEvents(sessionId: string, runId: string, traceId: string) {
+    async connectAgentRunEvents(sessionId: string, runId: string, traceId: string, resumeFromWait = false) {
       const controller = new AbortController();
       historyWorkflowControllers.get(runId)?.abort();
       historyWorkflowControllers.set(runId, controller);
       let attempts = 0;
+      let firstConnection = true;
       try {
-        while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running') {
+        while (this.sessionId === sessionId && this.workflowRuns[runId]?.status === 'running'
+          && (!this.workflowRuns[runId]?.waitingAll || (resumeFromWait && firstConnection))) {
           try {
             await streamWorkflow(runId, traceId, this.workflowRuns[runId].lastSequence, {
               signal: controller.signal,
@@ -899,6 +917,7 @@ export const useChatStore = defineStore('chat', {
                 if (current) this.workflowRuns[runId] = reduceWorkflowEvent(current, event);
               },
             });
+            firstConnection = false;
             attempts = 0;
           } catch (error) {
             if (controller.signal.aborted || this.sessionId !== sessionId || ++attempts > 3) throw error;
@@ -910,6 +929,13 @@ export const useChatStore = defineStore('chat', {
       } finally {
         if (historyWorkflowControllers.get(runId) === controller) historyWorkflowControllers.delete(runId);
       }
+    },
+
+    /** WAIT_ALL 收到全部回调后，从原父 Run 游标续读主 Agent 汇总过程。 */
+    resumeParentRunEvents(sessionId: string, runId: string) {
+      const state = this.workflowRuns[runId];
+      if (!sessionId || !state || state.status !== 'running' || !state.waitingAll) return;
+      void this.connectAgentRunEvents(sessionId, runId, state.traceId, true);
     },
 
     /**

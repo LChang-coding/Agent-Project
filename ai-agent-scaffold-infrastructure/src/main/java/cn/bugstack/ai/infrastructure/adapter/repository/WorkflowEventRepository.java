@@ -1,15 +1,17 @@
 package cn.bugstack.ai.infrastructure.adapter.repository;
 
 import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventRepository;
-import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventCursorRepository;
 import cn.bugstack.ai.domain.workflow.model.entity.WorkflowRunEventEntity;
 import cn.bugstack.ai.infrastructure.dao.IWorkflowRunEventDao;
 import cn.bugstack.ai.infrastructure.dao.po.WorkflowRunEventPO;
-import cn.bugstack.ai.types.exception.AppException;
+import cn.bugstack.ai.domain.workflow.adapter.repository.IWorkflowEventCursorRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.LockSupport;
 
 /** 使用通用 workflow 游标分配序号并持久化事件。 */
 @Repository
@@ -17,27 +19,36 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
 
     /** 持久化工作流事件和查询事件流的 DAO。 */
     private final IWorkflowRunEventDao eventDao;
-    /** 为同一运行分配严格递增事件序号的仓储。 */
-    private final IWorkflowEventCursorRepository cursorRepository;
+    /** 将游标分配和事件写入限定在独立短事务。 */
+    private final WorkflowEventWriteTransaction writeTransaction;
 
     /** 注入事件 DAO 和序号游标仓储。 */
+    @Autowired
     public WorkflowEventRepository(IWorkflowRunEventDao eventDao,
-                                   IWorkflowEventCursorRepository cursorRepository) {
+                                   WorkflowEventWriteTransaction writeTransaction) {
         this.eventDao = eventDao;
-        this.cursorRepository = cursorRepository;
+        this.writeTransaction = writeTransaction;
     }
 
-    /** 分配序号并在同一事务中写入事件，任一步失败都会回滚。 */
+    /** 保留轻量单元测试构造方式。 */
+    public WorkflowEventRepository(IWorkflowRunEventDao eventDao,
+                                   IWorkflowEventCursorRepository cursorRepository) {
+        this(eventDao, new WorkflowEventWriteTransaction(eventDao, cursorRepository));
+    }
+
+    /** 死锁只重试有界次数；每次重试都重新开启短事务。 */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public WorkflowRunEventEntity append(WorkflowRunEventEntity event) {
-        long sequence = cursorRepository.allocate(event.getTenantId(), event.getUserId(),
-                event.getRunId(), event.getTraceId(), event.getEventType());
-        event.setSequence(sequence);
-        if (eventDao.insert(toPO(event)) != 1) {
-            throw new AppException("WORKFLOW_EVENT_WRITE_FAILED", "工作流事件写入失败");
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return writeTransaction.appendOnce(event);
+            } catch (DeadlockLoserDataAccessException exception) {
+                if (attempt >= 3) throw exception;
+                long delayMillis = (20L << (attempt - 1)) + ThreadLocalRandom.current().nextLong(16L);
+                LockSupport.parkNanos(delayMillis * 1_000_000L);
+                if (Thread.currentThread().isInterrupted()) throw exception;
+            }
         }
-        return event;
     }
 
     /**
@@ -63,17 +74,6 @@ public class WorkflowEventRepository implements IWorkflowEventRepository {
     public WorkflowRunEventEntity queryTerminal(String tenantId, String userId, String runId) {
         WorkflowRunEventPO terminal = eventDao.queryTerminal(tenantId, userId, runId);
         return terminal == null ? null : toEntity(terminal);
-    }
-
-    /** 将领域事件的顺序、节点和载荷信息复制到持久化对象。 */
-    private WorkflowRunEventPO toPO(WorkflowRunEventEntity event) {
-        WorkflowRunEventPO po = new WorkflowRunEventPO();
-        po.setTenantId(event.getTenantId()); po.setUserId(event.getUserId()); po.setRunId(event.getRunId());
-        po.setEventId(event.getEventId()); po.setSequence(event.getSequence()); po.setSchemaVersion(event.getSchemaVersion());
-        po.setEventType(event.getEventType()); po.setNodeExecutionId(event.getNodeExecutionId()); po.setNodeId(event.getNodeId());
-        po.setPayloadJson(event.getPayloadJson()); po.setTraceId(event.getTraceId()); po.setOccurredAt(event.getOccurredAt());
-        po.setExpiresAt(event.getExpiresAt());
-        return po;
     }
 
     /** 将持久化事件恢复为对外重放使用的领域事件。 */

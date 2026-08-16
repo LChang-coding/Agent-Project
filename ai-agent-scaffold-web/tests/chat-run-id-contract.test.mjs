@@ -32,6 +32,16 @@ test('SSE heartbeat 不会被当成模型正文', () => {
   assert.ok(heartbeatBranch >= 0 && heartbeatBranch < chunkBranch);
 });
 
+test('切换会话只失效旧 UI 回调，不取消服务端运行', () => {
+  const detachStart = chatStoreSource.indexOf('    detachActiveRequest() {');
+  const detachEnd = chatStoreSource.indexOf('\n    },', detachStart);
+  const detachBody = chatStoreSource.slice(detachStart, detachEnd);
+  assert.match(detachBody, /activeRequest = null/);
+  assert.match(detachBody, /this\.sending = false/);
+  assert.doesNotMatch(detachBody, /request\.controller\.abort\(\)/);
+  assert.doesNotMatch(chatStoreSource, /cancelActiveRun\('切换会话'\)/);
+});
+
 test('用户与 Agent 消息均提供可访问的正文复制操作', () => {
   assert.match(chatWorkspaceSource, /v-if="message\.role === 'user' \|\| message\.role === 'assistant'"/);
   assert.match(chatWorkspaceSource, /:class="\['message-copy', \{ 'message-copy--copied': copiedMessageId === message\.id \}\]"/);

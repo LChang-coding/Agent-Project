@@ -6,7 +6,7 @@
           <span class="rail-kicker">Sessions</span>
           <div class="rail-actions">
             <button class="rail-manage" type="button" @click="toggleSessionManagement">{{ managingSessions ? '完成' : '管理' }}</button>
-            <button class="rail-new" type="button" :disabled="!canCreateSession || conversationInteractionLocked" @click="createSession">新建</button>
+            <button class="rail-new" type="button" :disabled="!canCreateSession" @click="createSession">新建</button>
           </div>
         </div>
 
@@ -83,14 +83,14 @@
           <div class="runtime-controls">
             <label class="compact-field">
               <span>模式</span>
-              <select v-model="chatStore.activeSourceType" class="select select--compact" :disabled="conversationInteractionLocked" @change="onSourceChanged">
+              <select v-model="chatStore.activeSourceType" class="select select--compact" @change="onSourceChanged">
                 <option value="agent">Agent 编排</option>
                 <option value="workflow">DAG 工作流</option>
               </select>
             </label>
             <label v-if="chatStore.activeSourceType === 'agent'" class="compact-field compact-field--wide">
               <span>运行 Agent</span>
-              <select v-model="chatStore.activeAgentId" class="select select--compact" :disabled="conversationInteractionLocked" @change="onAgentChanged">
+              <select v-model="chatStore.activeAgentId" class="select select--compact" @change="onAgentChanged">
                 <option v-for="agent in chatStore.agents" :key="agent.agentId" :value="agent.agentId">
                   {{ agent.agentName }}
                 </option>
@@ -98,7 +98,7 @@
             </label>
             <label v-else class="compact-field compact-field--wide">
               <span>工作流</span>
-              <select v-model="chatStore.activeWorkflowId" class="select select--compact" :disabled="conversationInteractionLocked" @change="onWorkflowChanged">
+              <select v-model="chatStore.activeWorkflowId" class="select select--compact" @change="onWorkflowChanged">
                 <option v-for="workflow in chatStore.workflows" :key="workflow.workflowId" :value="workflow.workflowId">
                   {{ workflow.workflowName }} · v{{ workflow.publishedVersion }}
                 </option>
@@ -841,6 +841,9 @@ watch(
 
 watch(() => currentOrchestration.value?.version, (version, previous) => {
   if (!version || version === previous || !chatStore.sessionId) return;
+  if (currentOrchestration.value?.phase === 'SUMMARIZING' && currentOrchestration.value.currentRunId) {
+    chatStore.resumeParentRunEvents(chatStore.sessionId, currentOrchestration.value.currentRunId);
+  }
   pendingOrchestrationMessageRefresh = true;
   requestOrchestrationMessageRefresh();
 });
@@ -1097,7 +1100,6 @@ async function reloadTargets() {
  * 智能体变更处理；无参数；清空当前会话，避免串 Agent。
  */
 async function onAgentChanged() {
-  if (conversationInteractionLocked.value) return;
   await chatStore.selectAgent(chatStore.activeAgentId);
 }
 
@@ -1105,7 +1107,6 @@ async function onAgentChanged() {
  * 运行类型变更处理；无参数；切到对应默认目标。
  */
 async function onSourceChanged() {
-  if (conversationInteractionLocked.value) return;
   if (chatStore.activeSourceType === 'workflow') {
     if (!chatStore.activeWorkflowId && chatStore.workflows.length > 0) {
       await chatStore.selectWorkflow(chatStore.workflows[0].workflowId);
@@ -1121,7 +1122,6 @@ async function onSourceChanged() {
  * 工作流变更处理；无参数；清空当前会话，避免串工作流。
  */
 async function onWorkflowChanged() {
-  if (conversationInteractionLocked.value) return;
   await chatStore.selectWorkflow(chatStore.activeWorkflowId);
 }
 

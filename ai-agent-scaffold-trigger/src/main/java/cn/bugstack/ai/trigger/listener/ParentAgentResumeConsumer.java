@@ -76,6 +76,7 @@ public class ParentAgentResumeConsumer {
         ScheduledFuture<?> leaseHeartbeat = heartbeat.scheduleAtFixedRate(
                 () -> renew(batch), 20, 20, TimeUnit.SECONDS);
         try {
+            publishParentResumeStarted(batch);
             String finalAnswer = "";
             if (batch.getItems() != null && !batch.getItems().isEmpty()) {
                 List<String> outputs = chatService.handleInternalMessage(batch.getParentAgentId(), batch.getUserId(),
@@ -112,16 +113,24 @@ public class ParentAgentResumeConsumer {
         if (eventStreamService == null) return;
         if (eventStreamService.hasTerminalEvent(batch.getTenantId(), batch.getUserId(), batch.getParentRunId())) return;
         try {
-            if (finalAnswer != null && !finalAnswer.isBlank()) {
-                eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
-                        batch.getTraceId(), "ANSWER_DELTA", null, null,
-                        objectMapper.writeValueAsString(Map.of("delta", finalAnswer)));
-            }
             eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
-                    batch.getTraceId(), "FINAL_ANSWER_COMPLETED", null, null, "{}");
+                    batch.getTraceId(), "FINAL_ANSWER_COMPLETED", null, null,
+                    objectMapper.writeValueAsString(Map.of("content", finalAnswer == null ? "" : finalAnswer)));
             eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
                     batch.getTraceId(), "WORKFLOW_COMPLETED", null, null,
                     "{\"sourceType\":\"agent\",\"resumed\":true}");
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("PARENT_RESUME_EVENT_SERIALIZE_FAILED", exception);
+        }
+    }
+
+    private void publishParentResumeStarted(ParentResumeBatchEntity batch) {
+        if (eventStreamService == null) return;
+        try {
+            eventStreamService.publish(batch.getTenantId(), batch.getUserId(), batch.getParentRunId(),
+                    batch.getTraceId(), "PARENT_RESUME_STARTED", null, null,
+                    objectMapper.writeValueAsString(Map.of("resumeRunId", resumeRunId(batch),
+                            "message", "子 Agent 已全部回调，主 Agent 正在生成统一答复")));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("PARENT_RESUME_EVENT_SERIALIZE_FAILED", exception);
         }

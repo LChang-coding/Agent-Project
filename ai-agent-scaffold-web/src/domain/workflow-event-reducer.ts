@@ -2,6 +2,7 @@ import type {
   WorkflowNodeExecutionView,
   WorkflowRunEvent,
   WorkflowRunViewState,
+  WorkflowToolCallView,
 } from '@/types/intelligent-workflow';
 import { WORKFLOW_EVENT_SCHEMA } from '@/types/intelligent-workflow';
 
@@ -16,6 +17,7 @@ export function createWorkflowRunState(runId: string, traceId: string): Workflow
     seenEventIds: [],
     nodes: [],
     thinking: '',
+    reactTurns: [],
     waitingAll: false,
     activities: [],
     finalAnswer: '',
@@ -37,6 +39,7 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     lastSequence: event.sequence,
     seenEventIds: [...state.seenEventIds, event.eventId],
     nodes: state.nodes.map((node) => ({ ...node, toolCalls: node.toolCalls.map((call) => ({ ...call })) })),
+    reactTurns: state.reactTurns.map((turn) => ({ ...turn, tools: turn.tools.map((call) => ({ ...call })) })),
     activities: state.activities.map((activity) => ({ ...activity })),
   };
   const payload = parsePayload(event.payloadJson);
@@ -44,10 +47,15 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
 
   switch (event.eventType) {
     case 'AGENT_STARTED':
-      next.activities.push({ id: event.eventId, type: 'agent', label: 'Agent 开始分析', status: 'running', startedAt: event.occurredAt });
+      next.activities.push({ id: event.eventId, type: 'agent', label: text(payload.label) || 'Agent 开始分析', status: 'running', startedAt: event.occurredAt });
       break;
     case 'THINKING_DELTA':
-      next.thinking += text(payload.delta);
+      appendThinking(next, event, text(payload.delta));
+      break;
+    case 'PARENT_RESUME_STARTED':
+      next.waitingAll = false;
+      next.activities.push({ id: event.eventId, type: 'agent', label: '主 Agent 已恢复，正在汇总', status: 'running',
+        detail: text(payload.message), startedAt: event.occurredAt });
       break;
     case 'ANSWER_DELTA':
       next.finalAnswer += text(payload.delta);
@@ -112,8 +120,13 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     case 'TOOL_CALL_STARTED': {
       const functionCallId = requiredText(payload.functionCallId, 'TOOL_CALL_STARTED 缺少 functionCallId');
       if (!node) {
-        next.activities.push({ id: functionCallId, type: 'tool',
-          label: text(payload.displayName) || text(payload.toolCode) || '工具调用', status: 'running', startedAt: event.occurredAt });
+        currentReactTurn(next, event).tools.push({
+          functionCallId,
+          toolCode: text(payload.toolCode),
+          displayName: text(payload.displayName) || text(payload.toolCode) || '工具调用',
+          status: 'running',
+          startedAt: event.occurredAt,
+        });
         break;
       }
       const owner = requireNode(node, event);
@@ -130,30 +143,16 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
     case 'TOOL_CALL_FAILED': {
       const functionCallId = requiredText(payload.functionCallId, `${event.eventType} 缺少 functionCallId`);
       if (!node) {
-        const activity = next.activities.find((candidate) => candidate.id === functionCallId);
-        if (!activity) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
-        activity.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
-        activity.finishedAt = event.occurredAt;
-        activity.detail = optionalText(payload.reason) || optionalText(payload.errorCode);
-        activity.costMs = number(payload.costMs, undefined);
+        const call = next.reactTurns.flatMap((turn) => turn.tools)
+          .find((candidate) => candidate.functionCallId === functionCallId);
+        if (!call) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
+        applyToolResult(call, event, payload);
         break;
       }
       const owner = requireNode(node, event);
       const call = owner.toolCalls.find((candidate) => candidate.functionCallId === functionCallId);
       if (!call) throw new Error(`${event.eventType} 找不到对应的 TOOL_CALL_STARTED`);
-      call.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
-      call.finishedAt = event.occurredAt;
-      call.success = boolean(payload.success, event.eventType === 'TOOL_CALL_COMPLETED');
-      assignOptional(call, 'costMs', number(payload.costMs, undefined));
-      assignOptional(call, 'retrievalId', optionalText(payload.retrievalId));
-      assignOptional(call, 'hits', number(payload.hits, undefined));
-      assignOptional(call, 'citations', number(payload.citations, undefined));
-      assignOptional(call, 'tokens', number(payload.tokens, undefined));
-      assignOptional(call, 'degraded', optionalBoolean(payload.degraded));
-      assignOptional(call, 'routeKey', optionalText(payload.routeKey));
-      assignOptional(call, 'reason', optionalText(payload.reason));
-      assignOptional(call, 'errorCode', optionalText(payload.errorCode));
-      assignOptional(call, 'retryable', optionalBoolean(payload.retryable));
+      applyToolResult(call, event, payload);
       break;
     }
     case 'ROUTE_REPAIR_STARTED':
@@ -231,6 +230,39 @@ function findNode(nodes: WorkflowNodeExecutionView[], executionId: string) {
 function requireNode(node: WorkflowNodeExecutionView | undefined, event: WorkflowRunEvent) {
   if (!node) throw new Error(`${event.eventType} 找不到对应的 NODE_STARTED`);
   return node;
+}
+
+function appendThinking(state: WorkflowRunViewState, event: WorkflowRunEvent, delta: string) {
+  state.thinking += delta;
+  const last = state.reactTurns.at(-1);
+  const turn = !last || last.tools.length > 0 ? currentReactTurn(state, event, true) : last;
+  turn.thinking += delta;
+}
+
+function currentReactTurn(state: WorkflowRunViewState, event: WorkflowRunEvent, forceNew = false) {
+  let turn = forceNew ? undefined : state.reactTurns.at(-1);
+  if (!turn) {
+    turn = { id: `react-${event.eventId}`, thinking: '', tools: [], startedAt: event.occurredAt };
+    state.reactTurns.push(turn);
+  }
+  return turn;
+}
+
+function applyToolResult(call: WorkflowToolCallView,
+                         event: WorkflowRunEvent, payload: EventPayload) {
+  call.status = event.eventType === 'TOOL_CALL_COMPLETED' ? 'completed' : 'failed';
+  call.finishedAt = event.occurredAt;
+  call.success = boolean(payload.success, event.eventType === 'TOOL_CALL_COMPLETED');
+  assignOptional(call, 'costMs', number(payload.costMs, undefined));
+  assignOptional(call, 'retrievalId', optionalText(payload.retrievalId));
+  assignOptional(call, 'hits', number(payload.hits, undefined));
+  assignOptional(call, 'citations', number(payload.citations, undefined));
+  assignOptional(call, 'tokens', number(payload.tokens, undefined));
+  assignOptional(call, 'degraded', optionalBoolean(payload.degraded));
+  assignOptional(call, 'routeKey', optionalText(payload.routeKey));
+  assignOptional(call, 'reason', optionalText(payload.reason));
+  assignOptional(call, 'errorCode', optionalText(payload.errorCode));
+  assignOptional(call, 'retryable', optionalBoolean(payload.retryable));
 }
 
 function text(value: unknown) {

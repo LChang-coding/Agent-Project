@@ -63,6 +63,20 @@ public class ToolApprovalServiceTest {
     }
 
     @Test
+    public void shouldAcceptReplayOfSameApprovalDecision() {
+        IToolApprovalRepository repository = Mockito.mock(IToolApprovalRepository.class);
+        Mockito.when(repository.decide(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyString(), Mockito.any(), Mockito.any(), Mockito.any(), Mockito.anyLong(), Mockito.any()))
+                .thenReturn(0);
+        Mockito.when(repository.query("tenant-1", "user-1", "approval-1")).thenReturn(
+                ToolApprovalRequestEntity.builder().approvalId("approval-1").status("DECIDED")
+                        .decision("APPROVE").build());
+        ToolApprovalService service = new ToolApprovalService(repository, Mockito.mock(RunControlService.class));
+
+        service.decide("tenant-1", "user-1", "approval-1", "APPROVE", "", null, 0L);
+    }
+
+    @Test
     public void shouldPersistTimeoutDecisionBeforeContinuingWaiter() {
         IToolApprovalRepository repository = Mockito.mock(IToolApprovalRepository.class);
         RunControlService runControlService = Mockito.mock(RunControlService.class);

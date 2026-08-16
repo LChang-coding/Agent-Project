@@ -163,6 +163,8 @@ let controller: AbortController | undefined;
 let reconnectTimer: number | undefined;
 let clockTimer: number | undefined;
 let feedbackTimer: number | undefined;
+let mounted = false;
+const decidedApprovalIds = new Set<string>();
 
 const current = computed(() => pending.value[activeIndex.value]);
 const tasks = computed<Array<Record<string, unknown>>>(() => Array.isArray(current.value?.requestedInput?.tasks)
@@ -176,12 +178,14 @@ const countdown = computed(() => {
 });
 
 onMounted(async () => {
+  mounted = true;
   try { agents.value = await queryAgentConfigs(); } catch { agents.value = []; }
   connect();
   clockTimer = window.setInterval(() => { now.value = Date.now(); expireItems(); }, 1000);
 });
 
 onBeforeUnmount(() => {
+  mounted = false;
   controller?.abort();
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (clockTimer) clearInterval(clockTimer);
@@ -191,21 +195,33 @@ onBeforeUnmount(() => {
 watch(current, (value) => { if (value) resetDraft(value); });
 
 async function connect() {
+  if (!mounted || controller && !controller.signal.aborted) return;
   controller = new AbortController();
+  const currentController = controller;
   try {
-    await streamToolApprovals(cursor, controller.signal, (item) => {
+    await streamToolApprovals(cursor, currentController.signal, (item) => {
       cursor = Math.max(cursor, item.sequence);
+      if (decidedApprovalIds.has(item.approvalId)) return;
       const index = pending.value.findIndex((value) => value.approvalId === item.approvalId);
       if (index >= 0) pending.value[index] = item; else pending.value.push(item);
       if (pending.value.length === 1) { resetDraft(item); show(); }
     });
-    if (!controller.signal.aborted) reconnectTimer = window.setTimeout(connect, 500);
+    if (!currentController.signal.aborted && mounted) reconnectTimer = window.setTimeout(connect, 500);
   } catch (error) {
-    if (!controller.signal.aborted) {
+    if (!currentController.signal.aborted && mounted) {
       errorMessage.value = error instanceof Error ? error.message : '审批事件流已断开';
       reconnectTimer = window.setTimeout(connect, 2000);
     }
+  } finally {
+    if (controller === currentController) controller = undefined;
   }
+}
+
+function pauseApprovalStream() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = undefined;
+  controller?.abort();
+  controller = undefined;
 }
 
 function resetDraft(item: ToolApprovalRequest) {
@@ -260,13 +276,17 @@ function requestReplan() {
 function reject() { void submit(current.value!, 'REJECT'); }
 
 async function submit(item: ToolApprovalRequest, decision: ToolApprovalDecision) {
+  if (submitting.value) return;
   errorMessage.value = '';
   submitting.value = true;
+  // 先释放长连接，避免 HTTP/1 同域连接槽被 SSE 占满后审批 POST 一直排队。
+  pauseApprovalStream();
   try {
     const amendedInput = decision === 'APPROVE_WITH_CHANGES' ? JSON.parse(draft.amendedInput) : undefined;
     await decideToolApproval(item.approvalId, {
       decision, comment: draft.comment, amendedInput, expectedRevision: item.revision,
     });
+    decidedApprovalIds.add(item.approvalId);
     pending.value = pending.value.filter((value) => value.approvalId !== item.approvalId);
     activeIndex.value = Math.min(activeIndex.value, Math.max(0, pending.value.length - 1));
     showFeedback(decisionLabel(decision));
@@ -275,6 +295,7 @@ async function submit(item: ToolApprovalRequest, decision: ToolApprovalDecision)
     errorMessage.value = error instanceof Error ? error.message : '审批提交失败';
   } finally {
     submitting.value = false;
+    if (mounted) void connect();
   }
 }
 

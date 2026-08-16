@@ -111,6 +111,7 @@ public class WorkflowEventStreamService {
             throw new AppException("WORKFLOW_EVENT_HISTORY_EXPIRED", "请求的事件历史已过保留期，请读取最终快照");
         }
         AtomicLong cursor = new AtomicLong(safeAfter);
+        boolean terminalAlreadyPersisted = eventRepository.queryTerminal(tenantId, userId, runId) != null;
         String streamKey = key(tenantId, runId);
         Flowable<Long> periodic = Flowable.interval(DATABASE_TAIL_INTERVAL_MILLIS,
                 DATABASE_TAIL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
@@ -122,8 +123,9 @@ public class WorkflowEventStreamService {
                 .filter(event -> run.getTraceId().equals(event.getTraceId()))
                 .filter(event -> event.getSequence() != null && event.getSequence() > cursor.get())
                 .doOnNext(event -> cursor.set(event.getSequence()))
-                // 终态事件本身必须交付；交付后由服务端正常结束 SSE，释放订阅和浏览器连接。
-                .takeUntil((Predicate<WorkflowRunEventEntity>) event -> terminal(event.getEventType()));
+                // 终态或 WAIT_ALL 暂停边界本身必须交付；随后释放 SSE 连接，恢复阶段再按游标续读。
+                .takeUntil((Predicate<WorkflowRunEventEntity>) event -> terminal(event.getEventType())
+                        || (!terminalAlreadyPersisted && "WAITING_ALL".equals(event.getEventType())));
     }
 
     /**

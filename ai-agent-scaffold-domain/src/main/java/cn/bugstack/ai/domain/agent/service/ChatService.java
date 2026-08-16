@@ -2650,6 +2650,20 @@ public class ChatService implements IChatService {
         if (workflowEventStreamService == null || run == null || run.getTraceId() == null) return;
         workflowEventStreamService.publish(run.getTenantId(), run.getUserId(), run.getRunId(), run.getTraceId(),
                 eventType, nodeExecutionId, null, jsonPayload(payload));
+        String rootRunId = AgentOrchestrationContextHolder.getRootRunId();
+        if (!AgentOrchestrationContextHolder.isSummaryOnly() || rootRunId == null
+                || rootRunId.isBlank() || rootRunId.equals(run.getRunId()) || !resumeVisibleEvent(eventType)) return;
+        Map<String, Object> mirrored = new LinkedHashMap<>();
+        if (payload != null) mirrored.putAll(payload);
+        mirrored.put("sourceRunId", run.getRunId());
+        if ("AGENT_STARTED".equals(eventType)) mirrored.put("label", "主 Agent 正在汇总子任务结果");
+        workflowEventStreamService.publish(run.getTenantId(), run.getUserId(), rootRunId, run.getTraceId(),
+                eventType, nodeExecutionId, null, jsonPayload(mirrored));
+    }
+
+    private boolean resumeVisibleEvent(String eventType) {
+        return "AGENT_STARTED".equals(eventType) || "THINKING_DELTA".equals(eventType)
+                || "ANSWER_DELTA".equals(eventType);
     }
 
     /** 将普通 DAG 事件写入统一账本；序号和根 Trace 由事件服务校验。 */

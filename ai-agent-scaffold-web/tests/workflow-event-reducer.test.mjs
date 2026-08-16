@@ -147,8 +147,24 @@ test('Agent 思考、工具、授权和 WAIT_ALL 按原运行事件恢复', () =
 
   assert.equal(state.thinking, '先确认时间范围');
   assert.equal(state.finalAnswer, '统一汇总');
-  assert.equal(state.activities.find((item) => item.id === 'call_1').status, 'completed');
+  assert.equal(state.reactTurns[0].thinking, '先确认时间范围');
+  assert.equal(state.reactTurns[0].tools[0].functionCallId, 'call_1');
+  assert.equal(state.reactTurns[0].tools[0].status, 'completed');
   assert.equal(state.activities.find((item) => item.id === 'approval_1').status, 'completed');
   assert.equal(state.waitingAll, false);
   assert.equal(state.status, 'completed');
+});
+
+test('ReAct 按思考轮次就近归并工具，不把全部思考堆在顶部', () => {
+  let state = createWorkflowRunState(runId, traceId);
+  state = reduceWorkflowEvent(state, event(1, 'THINKING_DELTA', { delta: '先搜索' }));
+  state = reduceWorkflowEvent(state, event(2, 'TOOL_CALL_STARTED', { functionCallId: 'search-1', toolCode: 'search' }));
+  state = reduceWorkflowEvent(state, event(3, 'TOOL_CALL_COMPLETED', { functionCallId: 'search-1' }));
+  state = reduceWorkflowEvent(state, event(4, 'THINKING_DELTA', { delta: '再校验' }));
+  state = reduceWorkflowEvent(state, event(5, 'TOOL_CALL_STARTED', { functionCallId: 'review-1', toolCode: 'review' }));
+
+  assert.deepEqual(state.reactTurns.map((turn) => ({ thinking: turn.thinking, tools: turn.tools.map((tool) => tool.functionCallId) })), [
+    { thinking: '先搜索', tools: ['search-1'] },
+    { thinking: '再校验', tools: ['review-1'] },
+  ]);
 });

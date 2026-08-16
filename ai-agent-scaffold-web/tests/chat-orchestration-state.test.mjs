@@ -60,10 +60,10 @@ test('authoritative reload preserves an unrelated optimistic run still in flight
   assert.deepEqual(merged.map((item) => item.id), ['local-other', 'msg-user']);
 });
 
-test('conversation lock protects mutation paths but still allows opening the current session', () => {
+test('会话锁仅保护当前会话写入和删除，不阻断切换到其他会话', () => {
   assert.equal(isConversationInteractionLocked(true, false), true);
   assert.equal(isConversationInteractionLocked(false, true), true);
-  assert.equal(isSessionSwitchBlocked('session-a', 'session-b', true), true);
+  assert.equal(isSessionSwitchBlocked('session-a', 'session-b', true), false);
   assert.equal(isSessionSwitchBlocked('session-a', 'session-a', true), false);
   assert.equal(isCurrentSessionDeleteBlocked('session-a', 'session-a', true), true);
   assert.equal(isCurrentSessionDeleteBlocked('session-b', 'session-a', true), false);

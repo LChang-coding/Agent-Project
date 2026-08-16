@@ -37,7 +37,8 @@ export function isConversationInteractionLocked(sending: boolean, orchestrationL
 }
 
 export function isSessionSwitchBlocked(currentSessionId: string, targetSessionId: string, locked: boolean) {
-  return locked && Boolean(currentSessionId) && targetSessionId !== currentSessionId;
+  // 运行锁只限制当前会话内的第二次发送，不应阻断用户切换到其他会话。
+  return false;
 }
 
 export function isCurrentSessionDeleteBlocked(currentSessionId: string, targetSessionId: string, locked: boolean) {
