@@ -57,6 +57,17 @@ const { chromium } = require('playwright');
       throw new Error(`跨会话运行隔离失败: ${JSON.stringify({ firstPayload, secondPayload })}`);
     }
     if (errors.length) throw new Error(`online errors: ${errors.join(', ')}`);
+
+    // 验收完成后显式取消两条测试运行，避免浏览器携带活跃 SSE 退出。
+    if (await page.getByRole('button', { name: '取消' }).isVisible()) {
+      await page.getByRole('button', { name: '取消' }).click();
+      await page.getByRole('button', { name: '发送' }).waitFor({ state: 'visible', timeout: 30000 });
+    }
+    await page.locator(`[data-session-id="${firstSessionId}"] .session-open`).click();
+    if (await page.getByRole('button', { name: '取消' }).isVisible()) {
+      await page.getByRole('button', { name: '取消' }).click();
+      await page.getByRole('button', { name: '发送' }).waitFor({ state: 'visible', timeout: 30000 });
+    }
     console.log(JSON.stringify({ ok: true, username, firstSessionId, secondSessionId, errors }, null, 2));
   } finally {
     await browser.close();

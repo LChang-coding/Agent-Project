@@ -26,13 +26,19 @@ const { chromium } = require('playwright');
     await page.waitForTimeout(800);
 
     let childCount = 0;
-    const sessionCount = await page.locator('.session-item').count();
+    const targetSessionId = process.env.E2E_SESSION_ID || '';
+    const candidates = targetSessionId
+      ? page.locator(`[data-session-id="${targetSessionId}"]`)
+      : page.locator('.session-item');
+    const sessionCount = await candidates.count();
     for (let index = 0; index < sessionCount && childCount < 2; index += 1) {
-      const candidate = page.locator('.session-item').nth(index);
+      const candidate = candidates.nth(index);
       await candidate.locator('.session-open').click();
       const expand = candidate.locator('.session-expand');
       if (await expand.getAttribute('aria-expanded') === 'false') await expand.click();
-      await page.waitForTimeout(500);
+      await page.waitForFunction((sessionId) => document.querySelector(`[data-session-id="${sessionId}"]`)
+        ?.querySelectorAll('.session-children button').length >= 2,
+      await candidate.getAttribute('data-session-id'), { timeout: 10000 }).catch(() => undefined);
       childCount = await candidate.locator('.session-children button').count();
     }
     if (childCount < 2) throw new Error('移动端未找到可打开的真实子 Agent 任务');
