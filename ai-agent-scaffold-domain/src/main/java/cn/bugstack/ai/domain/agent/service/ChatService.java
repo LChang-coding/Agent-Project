@@ -1193,13 +1193,15 @@ public class ChatService implements IChatService {
                     deleteInvocationSessionSafely(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
                 });
         if (!supervisor) return response;
-        // Supervisor 首轮整轮缓冲：未委派时结束后一次下发，已委派时正文全部留作隐藏草稿。
+        // Supervisor 首轮只保留最后一个正文快照：未委派时结束后下发，已委派时全部留作隐藏草稿。
+        // 不能使用 toList 缓冲每个 SSE Event：兼容模型会返回累计快照，长思考会形成平方级堆占用。
         return response
                 .onErrorResumeNext(throwable -> suppressParentOutput.get()
                         ? Flowable.empty() : Flowable.error(throwable))
-                .toList()
-                .flatMapPublisher(events -> suppressParentOutput.get()
-                        ? Flowable.empty() : Flowable.fromIterable(events));
+                .filter(event -> !AgentEventContent.snapshot(event).answer().isBlank())
+                .lastElement()
+                .flatMapPublisher(event -> suppressParentOutput.get()
+                        ? Flowable.empty() : Flowable.just(event));
     }
 
     /**
