@@ -1021,8 +1021,12 @@ public class ChatService implements IChatService {
         // 把用户这句话包成模型输入。
         Content userMsg = Content.fromParts(Part.fromText(message));
         // 第四层：message 在此进入 ADK Agent；插件从 state 读取上下文、RAG 与工具身份。
+        // Kafka 后台子 Agent/主恢复不需要 token 级下行。ADK 1.1 的 SSE 多层 flatMap
+        // 会在无浏览器反压时累积海量 Event；此处用单次响应保留工具轮次与最终思考。
+        RunConfig.StreamingMode streamingMode = platformInput
+                ? RunConfig.StreamingMode.NONE : RunConfig.StreamingMode.SSE;
         Flowable<Event> events = stabilizeModelEventStream(runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder()
-                        .streamingMode(RunConfig.StreamingMode.SSE).build(),
+                        .streamingMode(streamingMode).build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
