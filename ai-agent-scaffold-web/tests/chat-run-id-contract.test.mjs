@@ -208,6 +208,8 @@ test('会话工作台提供可访问的双节点引擎拨杆与每次进入导�
   assert.match(source, /DAG \/ 智能工作流/);
   assert.match(source, /WAIT_ALL/);
   assert.match(source, /智能路由/);
+  assert.match(source, /:disabled="sourceSwitching \|\| !workspaceReady"/);
+  assert.match(source, /if \(!workspaceReady\.value \|\| sourceSwitching\.value/);
   assert.match(source, /topology--supervisor/);
   assert.match(source, /topology--dag/);
   assert.match(source, /prefers-reduced-motion: reduce/);

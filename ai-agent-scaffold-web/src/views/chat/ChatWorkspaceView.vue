@@ -87,11 +87,11 @@
                    role="radiogroup" aria-label="运行引擎">
                 <span class="engine-shuttle" aria-hidden="true"><i /><i /></span>
                 <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'agent'"
-                        :disabled="sourceSwitching" data-source-mode="agent" @click="switchSource('agent')">
+                        :disabled="sourceSwitching || !workspaceReady" data-source-mode="agent" @click="switchSource('agent')">
                   <i aria-hidden="true" />主 Agent 调度模式
                 </button>
                 <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'workflow'"
-                        :disabled="sourceSwitching" data-source-mode="workflow" @click="switchSource('workflow')">
+                        :disabled="sourceSwitching || !workspaceReady" data-source-mode="workflow" @click="switchSource('workflow')">
                   <i aria-hidden="true" />DAG / 智能工作流
                 </button>
               </div>
@@ -554,8 +554,8 @@
                   <span class="topology-caption topology-caption--callback">异步回调</span>
                   <div class="topology-node topology-node--resume"><b>WAIT_ALL</b><span>恢复主 Agent · 统一汇总</span></div>
                 </div>
-                <button type="button" :class="{ active: chatStore.activeSourceType === 'agent' }" @click="chooseGuideMode('agent')">
-                  {{ chatStore.activeSourceType === 'agent' ? '当前引擎' : '启用主 Agent' }}
+                <button type="button" :disabled="!workspaceReady" :class="{ active: chatStore.activeSourceType === 'agent' }" @click="chooseGuideMode('agent')">
+                  {{ !workspaceReady ? '正在初始化引擎…' : chatStore.activeSourceType === 'agent' ? '当前引擎' : '启用主 Agent' }}
                 </button>
               </article>
               <article class="mode-card mode-card--dag">
@@ -573,8 +573,8 @@
                   <div class="dag-chip dag-chip--left">固定节点 A</div><div class="dag-chip dag-chip--center">路由 Agent</div>
                   <div class="dag-chip dag-chip--right">工具 / RAG</div><div class="dag-chip dag-chip--end">MERGE</div>
                 </div>
-                <button type="button" :class="{ active: chatStore.activeSourceType === 'workflow' }" @click="chooseGuideMode('workflow')">
-                  {{ chatStore.activeSourceType === 'workflow' ? '当前引擎' : '启用 DAG / 智能工作流' }}
+                <button type="button" :disabled="!workspaceReady" :class="{ active: chatStore.activeSourceType === 'workflow' }" @click="chooseGuideMode('workflow')">
+                  {{ !workspaceReady ? '正在初始化引擎…' : chatStore.activeSourceType === 'workflow' ? '当前引擎' : '启用 DAG / 智能工作流' }}
                 </button>
               </article>
             </div>
@@ -656,6 +656,7 @@ const selectedSessionIds = ref(new Set<string>());
 const batchDeletingSessions = ref(false);
 const stoppingOrchestration = ref(false);
 const sourceSwitching = ref(false);
+const workspaceReady = ref(false);
 const modeGuideOpen = ref(false);
 const modeGuideDialogRef = ref<HTMLElement | null>(null);
 const copiedMessageId = ref('');
@@ -856,9 +857,13 @@ const ragStateTone = computed(() => {
 onMounted(async () => {
   assetStore.setSelectionScope(attachmentScope.value);
   await openModeGuide();
-  await chatStore.loadAgents();
-  await toolStore.loadCatalog();
-  scrollToLatest(true);
+  try {
+    await chatStore.loadAgents();
+    await toolStore.loadCatalog();
+    scrollToLatest(true);
+  } finally {
+    workspaceReady.value = true;
+  }
 });
 
 onBeforeUnmount(() => {
@@ -1214,7 +1219,7 @@ async function onSourceChanged() {
 
 /** 双节点引擎拨杆切换；保留其他会话的服务端运行，只切换当前工作台目标。 */
 async function switchSource(sourceType: 'agent' | 'workflow') {
-  if (sourceSwitching.value || chatStore.activeSourceType === sourceType) return;
+  if (!workspaceReady.value || sourceSwitching.value || chatStore.activeSourceType === sourceType) return;
   sourceSwitching.value = true;
   chatStore.activeSourceType = sourceType;
   try {
@@ -2574,6 +2579,7 @@ function formatOptionalTokens(value?: number) {
 .mode-card > button { min-height: 38px; border: 1px solid var(--line-strong); border-radius: 9px; background: transparent; color: var(--ink); font-weight: 850; cursor: pointer; }
 .mode-card > button:hover { border-color: var(--accent-deep); color: var(--accent-deep); }
 .mode-card > button.active { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--surface)); color: var(--success); }
+.mode-card > button:disabled { border-color: var(--line); color: var(--muted); cursor: wait; opacity: .72; }
 
 .topology { position: relative; min-height: 250px; margin: 8px 0 13px; overflow: hidden; }
 .topology svg { position: absolute; inset: 0; width: 100%; height: 100%; }

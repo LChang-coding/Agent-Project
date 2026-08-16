@@ -69,10 +69,13 @@ const { chromium } = require('playwright');
         return button instanceof HTMLButtonElement && !button.disabled;
       });
     }
-    const defaultDetailLoaded = page.waitForResponse((response) => response.request().method() === 'GET'
-      && /\/api\/v1\/workflows\/workflow_[^/?]+(?:\?.*)?$/.test(response.url()), { timeout: 30000 });
     await workflowMode.click();
-    await defaultDetailLoaded;
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-source-mode="workflow"]');
+      return button instanceof HTMLButtonElement
+        && button.getAttribute('aria-checked') === 'true'
+        && !button.disabled;
+    });
     const workflowSelect = page.locator('.compact-field--wide select').first();
     await page.waitForFunction((name) => {
       const mode = document.querySelector('[data-source-mode="workflow"]');
