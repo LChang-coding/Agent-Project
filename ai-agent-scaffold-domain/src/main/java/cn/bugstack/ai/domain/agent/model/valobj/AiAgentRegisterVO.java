@@ -1,6 +1,6 @@
 package cn.bugstack.ai.domain.agent.model.valobj;
 
-import com.google.adk.runner.InMemoryRunner;
+import com.google.adk.runner.Runner;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -63,7 +63,7 @@ public class AiAgentRegisterVO {
      * <p>它内部持有 MCP 客户端连接等重资源，因此整个进程共享同一个实例，
      * 多个用户的请求会并发进入同一个 Runner，会话之间靠 ADK 的 sessionId 隔离。</p>
      */
-    private InMemoryRunner runner;
+    private Runner runner;
 
     /**
      * 这个 Agent 使用的 Spring AI 聊天模型。

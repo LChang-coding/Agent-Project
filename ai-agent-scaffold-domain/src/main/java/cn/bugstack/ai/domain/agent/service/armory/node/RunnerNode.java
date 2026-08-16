@@ -12,7 +12,10 @@ import cn.bugstack.ai.types.exception.AppException;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.BaseAgent;
 import com.google.adk.plugins.BasePlugin;
-import com.google.adk.runner.InMemoryRunner;
+import com.google.adk.artifacts.InMemoryArtifactService;
+import com.google.adk.memory.InMemoryMemoryService;
+import com.google.adk.runner.Runner;
+import cn.bugstack.ai.domain.agent.service.armory.BoundedInMemorySessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -109,7 +112,7 @@ public class RunnerNode extends AbstractArmorySupport {
         String agentDesc = agent.getAgentDesc();
 
         // 第二层：Runner 配置只引用已经放入 agentGroup 的根 Agent。
-        InMemoryRunner runner = getRunner(dynamicContext, aiAgentConfigTableVO, appName);
+        Runner runner = getRunner(dynamicContext, aiAgentConfigTableVO, appName);
 
         // 第三层：把身份、Runner 和默认模型打包成运行时句柄；模型要带上，上下文压缩会复用它。
         AiAgentRegisterVO aiAgentRegisterVO = AiAgentRegisterVO.builder()
@@ -152,7 +155,7 @@ public class RunnerNode extends AbstractArmorySupport {
      * 问题会推迟到对话时才暴露——这是一个已知的薄弱点。</p>
      */
     @NotNull
-    private  InMemoryRunner getRunner(DefaultArmoryFactory.DynamicContext dynamicContext, AiAgentConfigTableVO aiAgentConfigTableVO, String appName) {
+    private Runner getRunner(DefaultArmoryFactory.DynamicContext dynamicContext, AiAgentConfigTableVO aiAgentConfigTableVO, String appName) {
         // 取出 Runner 段配置：根 Agent 名和插件名列表。
         AiAgentConfigTableVO.Module.Runner runnerConfig = aiAgentConfigTableVO.getModule().getRunner();
 
@@ -194,7 +197,8 @@ public class RunnerNode extends AbstractArmorySupport {
         appendToolExecutionGuardPlugin(plugins);
 
         // 用根 Agent、应用名和插件列表构造 Runner；它是整个对话链路真正的执行者。
-        return new InMemoryRunner(baseAgent, appName, plugins);
+        return new Runner(baseAgent, appName, new InMemoryArtifactService(),
+                new BoundedInMemorySessionService(), new InMemoryMemoryService(), plugins);
     }
 
     /**

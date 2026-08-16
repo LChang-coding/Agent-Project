@@ -36,7 +36,7 @@ import cn.bugstack.ai.types.observability.AiLog;
 import cn.bugstack.ai.types.observability.TraceContext;
 import com.google.adk.agents.RunConfig;
 import com.google.adk.events.Event;
-import com.google.adk.runner.InMemoryRunner;
+import com.google.adk.runner.Runner;
 import com.google.adk.sessions.Session;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
@@ -410,7 +410,7 @@ public class ChatService implements IChatService {
         // 第一层：取出 ADK 应用名，它决定会话数据落在哪个应用空间。
         String appName = aiAgentRegisterVO.getAppName();
         // 取出已装配好的 Runner，会话服务挂在它上面。
-        InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+        Runner runner = aiAgentRegisterVO.getRunner();
 
         // 第二层：ADK 生成的会话 ID 同时作为平台会话 ID，避免双 ID 映射。
         Session session = runner.sessionService().createSession(appName, userId).blockingGet();
@@ -886,7 +886,7 @@ public class ChatService implements IChatService {
         Content content = Content.builder().role("user").parts(parts).build();
 
         // 取出已装配的 Runner，它是真正执行对话的对象。
-        InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+        Runner runner = aiAgentRegisterVO.getRunner();
         // 取链路标识，落库和日志都要带上它。
         String traceId = TraceContext.currentOrNewTraceId();
         // 第三层：先建立业务运行并落用户消息，模型永远不先于可审计事实执行。
@@ -984,7 +984,7 @@ public class ChatService implements IChatService {
                                          AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput,
                                          String requestedRunId) {
         // 第一层：取出已装配的 Runner。
-        InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+        Runner runner = aiAgentRegisterVO.getRunner();
         // 取可信租户作为隔离维度。
         String tenantId = currentTenantId();
         // 没有会话就补建，复用已校验的运行体避免重复查注册表。
@@ -1102,7 +1102,7 @@ public class ChatService implements IChatService {
                                                   AiAgentRegisterVO aiAgentRegisterVO, ChatRunEntity run,
                                                   List<String> attachmentIds) {
         // 第一层：取出已装配的 Runner。
-        InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+        Runner runner = aiAgentRegisterVO.getRunner();
         // 取可信租户作为隔离维度。
         String tenantId = currentTenantId();
         // 没有会话就补建。
@@ -1592,7 +1592,7 @@ public class ChatService implements IChatService {
         // 第二层：取出这个节点使用的运行时 Agent；未装配会抛异常。
         AiAgentRegisterVO agent = requireWorkflowRuntimeAgent(node.getRuntimeAgentId());
         // 取出它的 Runner，真正的模型调用由它发起。
-        InMemoryRunner runner = agent.getRunner();
+        Runner runner = agent.getRunner();
         // 第三层：每个节点每次执行使用独立 ADK 会话，业务历史统一由 Context Manager 注入。
         String adkSessionId = invocationSessionId(sessionId + ":" + node.getNodeId());
         // 幂等确保这个 ADK 会话存在。
@@ -1667,7 +1667,7 @@ public class ChatService implements IChatService {
      * 释放单次模型调用的 ADK 内存会话。业务会话和长短期记忆已持久化，
      * 这个随机会话不能跨轮复用；否则 ADK 会一直持有每个 SSE Event，并发 Agent 会撑爆堆。
      */
-    private void deleteInvocationSessionSafely(InMemoryRunner runner, String appName, String userId,
+    private void deleteInvocationSessionSafely(Runner runner, String appName, String userId,
                                                String adkSessionId) {
         try {
             runner.sessionService().deleteSession(appName, userId, adkSessionId).blockingAwait();
@@ -2404,7 +2404,7 @@ public class ChatService implements IChatService {
      *
      * <p>并发创建交给 ADK 会话服务处理，这里不额外加锁。</p>
      */
-    private void ensureAdkSession(InMemoryRunner runner, String appName, String userId, String sessionId) {
+    private void ensureAdkSession(Runner runner, String appName, String userId, String sessionId) {
         // 先查这个隔离会话是否已经存在。
         Session session = runner.sessionService()
                 .getSession(appName, userId, sessionId, Optional.empty())
