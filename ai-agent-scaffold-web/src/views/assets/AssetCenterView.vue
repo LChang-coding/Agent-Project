@@ -33,20 +33,29 @@
 
       <div v-if="assetStore.assets.length > 0" class="asset-list">
         <article v-for="asset in assetStore.assets" :key="asset.assetId" class="asset-row">
-          <div class="file-mark">{{ fileExtension(asset.fileName) }}</div>
+          <div class="file-mark" aria-hidden="true">{{ fileExtension(asset.fileName) }}</div>
           <div class="asset-main">
-            <strong>{{ asset.fileName }}</strong>
-            <span>{{ asset.mimeType || '未知类型' }} · {{ formatFileSize(asset.sizeBytes) }}</span>
+            <strong :title="asset.fileName">{{ asset.fileName }}</strong>
+            <div class="asset-metadata">
+              <span>{{ formatFileType(asset.mimeType, asset.fileName) }}</span>
+              <i aria-hidden="true" />
+              <span>{{ formatFileSize(asset.sizeBytes) }}</span>
+            </div>
           </div>
           <div class="asset-source">
-            <span>来源会话</span>
-            <strong>{{ asset.sessionId ? asset.sessionId.slice(0, 12) : '未绑定' }}</strong>
+            <span class="asset-label">来源</span>
+            <span class="source-chip" :title="asset.sessionId || '未绑定会话'">
+              {{ asset.sessionId ? `会话 ${asset.sessionId.slice(0, 8)}` : '未绑定' }}
+            </span>
           </div>
           <div class="asset-status">
             <span :class="['status-pill', `status-pill--${asset.parseStatus}`]">
               {{ parseStatusLabel(asset.parseStatus) }}
             </span>
             <small>{{ formatDate(asset.createTime) }}</small>
+            <small v-if="asset.parseStatus === 'failed' && asset.parseError" class="parse-error" :title="asset.parseError">
+              {{ readableParseError(asset.parseError) }}
+            </small>
           </div>
           <div class="asset-actions">
             <button class="button button--soft" type="button" @click="download(asset)">下载</button>
@@ -180,6 +189,26 @@ function fileExtension(fileName: string) {
   return extension.slice(0, 4).toUpperCase();
 }
 
+/** 将过长 MIME 转为用户可读的文件类型。 */
+function formatFileType(mimeType: string | undefined, fileName: string) {
+  const extension = fileExtension(fileName);
+  const labels: Record<string, string> = {
+    DOCX: 'Word 文档', DOC: 'Word 文档', PDF: 'PDF 文档',
+    MD: 'Markdown', TXT: '文本文档', CSV: 'CSV 数据', JSON: 'JSON 数据',
+    PNG: 'PNG 图片', JPG: 'JPEG 图片', JPEG: 'JPEG 图片', WEBP: 'WebP 图片',
+  };
+  if (labels[extension]) return labels[extension];
+  if (mimeType?.startsWith('image/')) return '图片';
+  if (mimeType?.startsWith('text/')) return '文本文档';
+  return extension === 'FILE' ? '未知类型' : `${extension} 文件`;
+}
+
+/** 将后端解析异常压缩为列表中的可读提示，完整内容保留在 title。 */
+function readableParseError(value: string) {
+  if (value.includes("must have the 'xsi:type'")) return '文档元数据不兼容';
+  return value.length > 36 ? `${value.slice(0, 36)}…` : value;
+}
+
 /**
  * 转换解析状态；参数是状态编码；返回中文展示。
  */
@@ -259,32 +288,57 @@ function parseStatusLabel(status: string) {
 }
 
 .asset-list {
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--line);
+  gap: 8px;
 }
 
 .asset-row {
   display: grid;
-  grid-template-columns: 48px minmax(180px, 1.5fr) minmax(120px, 0.8fr) minmax(120px, 0.7fr) auto;
+  grid-template-columns: 50px minmax(220px, 1fr) minmax(132px, .34fr) minmax(156px, .4fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  padding: 12px;
+  min-height: 78px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
   background: var(--surface);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+}
+
+.asset-row:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 20px rgba(25, 36, 45, .05);
+  transform: translateY(-1px);
 }
 
 .file-mark {
+  position: relative;
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 52px;
   place-items: center;
   color: var(--accent-deep);
-  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 7px 13px 7px 7px;
   background: var(--accent-soft);
-  font-size: 10px;
+  font: 950 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .03em;
+}
+
+.file-mark::after {
+  position: absolute;
+  right: 7px;
+  bottom: 8px;
+  left: 7px;
+  height: 1px;
+  content: '';
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow: 0 -5px 0 color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.asset-main strong {
+  color: var(--ink);
+  font-size: 14px;
   font-weight: 950;
 }
 
@@ -293,17 +347,47 @@ function parseStatusLabel(status: string) {
   min-width: 0;
 }
 
-.asset-main strong,
-.asset-main span,
-.asset-source strong {
+.asset-main strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.asset-source strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+.asset-metadata {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.asset-metadata i {
+  width: 3px;
+  height: 3px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.asset-label {
+  color: var(--muted);
+  font-size: 9px !important;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.source-chip {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 7px;
+  color: var(--ink-soft) !important;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-pill {
@@ -326,9 +410,23 @@ function parseStatusLabel(status: string) {
   background: var(--danger-soft);
 }
 
+.parse-error {
+  overflow: hidden;
+  max-width: 190px;
+  color: var(--danger) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .asset-actions {
   display: flex;
   gap: 6px;
+}
+
+.asset-actions .button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 11px;
 }
 
 .asset-empty {
@@ -361,7 +459,7 @@ function parseStatusLabel(status: string) {
 
 @media (max-width: 980px) {
   .asset-row {
-    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-columns: 50px minmax(0, 1fr) auto;
   }
 
   .asset-source {
@@ -374,7 +472,7 @@ function parseStatusLabel(status: string) {
   }
 
   .asset-actions {
-    grid-column: 2 / -1;
+    grid-column: 3;
   }
 }
 
@@ -384,13 +482,29 @@ function parseStatusLabel(status: string) {
   }
 
   .asset-row {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 46px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+    padding: 12px;
   }
 
+  .asset-source,
   .asset-status,
   .asset-actions {
     grid-column: 2;
     grid-row: auto;
   }
+
+  .asset-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .asset-actions {
+    justify-content: stretch;
+  }
+
+  .asset-actions .button { flex: 1; }
 }
 </style>

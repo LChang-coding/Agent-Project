@@ -307,7 +307,7 @@
 
         <form v-if="!selectedTask" class="composer" @submit.prevent="send">
           <Transition name="insight-drawer">
-            <section v-if="insightPanelOpen" class="insight-panel">
+            <section v-if="insightPanelOpen" :class="['insight-panel', { 'insight-panel--attachments': activeInsightTab === 'assets' }]">
               <nav class="insight-tabs" aria-label="会话洞察">
                 <button
                   v-for="tab in insightTabs"
@@ -321,7 +321,7 @@
                 </button>
               </nav>
 
-              <div class="insight-body">
+              <div :class="['insight-body', { 'insight-body--attachments': activeInsightTab === 'assets' }]">
                 <div v-if="activeInsightTab === 'context'" class="context-card">
                   <div>
                     <strong>{{ contextUsageText }}</strong>
@@ -2874,6 +2874,10 @@ function formatOptionalTokens(value?: number) {
   padding: 0 14px 14px;
 }
 
+.composer:has(.insight-panel) {
+  max-height: min(68dvh, 680px);
+}
+
 .composer-surface,
 .insight-panel {
   border: 1px solid var(--line);
@@ -3039,6 +3043,12 @@ function formatOptionalTokens(value?: number) {
   padding: 12px;
 }
 
+.insight-body--attachments {
+  max-height: min(36dvh, 340px);
+  scroll-padding: 12px 0;
+  scroll-snap-type: y proximity;
+}
+
 .context-card {
   display: grid;
   gap: 8px;
@@ -3171,6 +3181,7 @@ function formatOptionalTokens(value?: number) {
   border-radius: 8px;
   background: var(--surface);
   cursor: pointer;
+  scroll-snap-align: start;
 }
 
 .attachment-asset strong,

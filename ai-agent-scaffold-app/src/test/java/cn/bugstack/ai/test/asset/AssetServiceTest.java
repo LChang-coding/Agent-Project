@@ -89,4 +89,31 @@ public class AssetServiceTest {
         Mockito.verify(storage, Mockito.never()).putObject(Mockito.any());
         Mockito.verify(extractor, Mockito.never()).extract(Mockito.anyString(), Mockito.anyString(), Mockito.any());
     }
+
+    @Test
+    public void shouldReparseReusableObjectWhenPreviousParserFailed() {
+        IAssetRepository repository = Mockito.mock(IAssetRepository.class);
+        AssetTextExtractor extractor = Mockito.mock(AssetTextExtractor.class);
+        ObjectStorageService storage = Mockito.mock(ObjectStorageService.class);
+        AssetService service = new AssetService(repository, extractor, storage, Mockito.mock(SessionDomain.class));
+        byte[] bytes = "docx bytes".getBytes(StandardCharsets.UTF_8);
+        AssetEntity reusable = AssetEntity.builder().bucket("assets").objectKey("assets/t/u/hash.docx")
+                .parseStatus("failed").parseError("old parser error").build();
+        Mockito.when(repository.queryReusableByHash(Mockito.eq("tenant_1"), Mockito.eq("user_1"), Mockito.anyString()))
+                .thenReturn(reusable);
+        Mockito.when(extractor.extract("same.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes))
+                .thenReturn(AssetParseResultEntity.builder().parseStatus("ready").extractedText("修复后正文").build());
+        Mockito.when(repository.insert(Mockito.any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AssetEntity result = service.uploadChatAttachment(AssetUploadCommandEntity.builder().tenantId("tenant_1")
+                .ownerUserId("user_1").fileName("same.docx")
+                .mimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                .bytes(bytes).build());
+
+        Assert.assertEquals("ready", result.getParseStatus());
+        Assert.assertEquals("修复后正文", result.getExtractedText());
+        Mockito.verify(storage, Mockito.never()).putObject(Mockito.any());
+        Mockito.verify(extractor).extract("same.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", bytes);
+    }
 }

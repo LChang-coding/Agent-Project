@@ -2,6 +2,7 @@ package cn.bugstack.ai.infrastructure.rag.client;
 
 import cn.bugstack.ai.domain.rag.adapter.port.RagDocumentParserPort;
 import cn.bugstack.ai.domain.rag.model.document.DocumentIr;
+import cn.bugstack.ai.infrastructure.document.DocxPackageCompatibility;
 import cn.bugstack.ai.types.exception.AppException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +21,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 
-import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -62,7 +63,8 @@ final class DocxDocumentParser {
         List<String> headingPath = new ArrayList<>();
         int[] order = {0};
         int[] sourceOffset = {0};
-        try (InputStream input = Files.newInputStream(command.contentPath());
+        try (ByteArrayInputStream input = new ByteArrayInputStream(
+                     DocxPackageCompatibility.repairCoreDateTypes(Files.readAllBytes(command.contentPath())));
              XWPFDocument document = new XWPFDocument(input)) {
             inspectPackage(document, warnings, metadata);
             for (IBodyElement element : document.getBodyElements()) {

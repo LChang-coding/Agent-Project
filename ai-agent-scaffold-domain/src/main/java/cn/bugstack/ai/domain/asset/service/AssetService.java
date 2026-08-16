@@ -122,9 +122,9 @@ public class AssetService {
      *
      * <p>各层职责：
      * 第一层：参数与大小校验，并在声明了会话时复核会话归属，把越权请求挡在最前面。
-     * 第二层：按内容哈希找同一用户是否已上传过相同内容，命中就复用位置，省掉一次上传和一次解析。
+     * 第二层：按内容哈希找同一用户是否已上传过相同内容，命中就复用对象位置；历史解析失败时重试新解析器。
      * 第三层：没命中才真正写对象存储，并采信存储端重算出的哈希。
-     * 第四层：提取正文（复用时直接沿用旧结果），然后写数据库档案。
+     * 第四层：提取正文（复用成功结果，但不缓存失败结论），然后写数据库档案。
      * 第五层：数据库写失败时补偿删除刚上传的对象，避免留下孤儿文件，随后把原始异常原样抛出。</p>
      *
      * <p>数据流：
@@ -171,8 +171,9 @@ public class AssetService {
     // 改用存储端重新算出的哈希落库，作为「文件真的写成了这个内容」的权威凭据。
             hash = stored.getSha256();
         }
- // 第四层：新内容才需要真解析；复用时直接沿用旧记录的解析结论，省掉一次可能很慢的 PDF/Word 解析。
-        AssetParseResultEntity parsed = reusable == null
+        // 第四层：成功或明确不支持的结果可复用；failed 可能来自旧解析器缺陷，必须用当前解析器重试。
+        boolean shouldParse = reusable == null || "failed".equalsIgnoreCase(reusable.getParseStatus());
+        AssetParseResultEntity parsed = shouldParse
                 ? textExtractor.extract(command.getFileName(), command.getMimeType(), command.getBytes())
                 : AssetParseResultEntity.builder().parseStatus(reusable.getParseStatus())
                 .extractedText(reusable.getExtractedText()).errorSummary(reusable.getParseError()).build();

@@ -2,6 +2,7 @@ package cn.bugstack.ai.infrastructure.asset;
 
 import cn.bugstack.ai.domain.asset.adapter.AssetTextExtractor;
 import cn.bugstack.ai.domain.asset.model.AssetParseResultEntity;
+import cn.bugstack.ai.infrastructure.document.DocxPackageCompatibility;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -73,7 +74,8 @@ public class DefaultAssetTextExtractor implements AssetTextExtractor {
 
     /** 提取 DOCX 正文段落；表格等复杂结构不在聊天附件轻解析范围内。 */
     private String extractDocx(byte[] bytes) throws Exception {
-        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes))) {
+        byte[] compatibleBytes = DocxPackageCompatibility.repairCoreDateTypes(bytes);
+        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(compatibleBytes))) {
             String text = document.getParagraphs().stream().map(XWPFParagraph::getText)
                     .collect(Collectors.joining("\n"));
             return truncate(text);

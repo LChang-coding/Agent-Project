@@ -414,6 +414,7 @@ export interface ArtifactAsset {
   sessionId?: string;
   messageId?: string;
   parseStatus: string;
+  parseError?: string;
   status: string;
   createTime?: string;
   updateTime?: string;
