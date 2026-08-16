@@ -142,6 +142,7 @@ export interface WorkflowRunViewState {
 
 export interface AgentReactTurnView {
   id: string;
+  sequence: number;
   thinking: string;
   tools: WorkflowToolCallView[];
   startedAt: string;
@@ -149,6 +150,7 @@ export interface AgentReactTurnView {
 
 export interface AgentRunActivityView {
   id: string;
+  sequence: number;
   type: 'agent' | 'tool' | 'wait' | 'approval';
   label: string;
   status: 'running' | 'completed' | 'failed' | 'waiting';

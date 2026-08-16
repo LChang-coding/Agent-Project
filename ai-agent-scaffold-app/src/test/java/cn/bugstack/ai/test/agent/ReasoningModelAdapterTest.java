@@ -9,17 +9,26 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.adk.models.LlmRequest;
 import com.google.adk.models.LlmResponse;
+import com.google.adk.tools.BaseTool;
+import com.google.adk.tools.ToolContext;
 import com.google.genai.types.Content;
+import com.google.genai.types.FunctionDeclaration;
 import com.google.genai.types.Part;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
+import io.reactivex.rxjava3.core.Single;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class ReasoningModelAdapterTest {
 
@@ -87,5 +96,36 @@ public class ReasoningModelAdapterTest {
         Assert.assertEquals("sig-x", replayFrame.signature());
         Assert.assertEquals("最终答案", replayFrame.answer());
         Assert.assertEquals("call-1", replay.getToolCalls().get(0).id());
+    }
+
+    @Test
+    public void malformedToolArgumentsShouldBecomeRetryableToolResult() {
+        ReasoningAwareMessageConverter converter = new ReasoningAwareMessageConverter(objectMapper);
+        BaseTool tool = new BaseTool("create_subagent_instances", "创建子 Agent") {
+            @Override
+            public Optional<FunctionDeclaration> declaration() {
+                return Optional.of(FunctionDeclaration.builder().name(name()).description(description())
+                        .parameters(Schema.builder().type(Type.Known.OBJECT)
+                                .properties(Map.of("tasks", Schema.builder().type(Type.Known.ARRAY)
+                                        .items(Schema.builder().type(Type.Known.STRING).build()).build()))
+                                .required(List.of("tasks")).build()).build());
+            }
+
+            @Override
+            public Single<Map<String, Object>> runAsync(Map<String, Object> args, ToolContext toolContext) {
+                return Single.just(Map.of("success", true));
+            }
+        };
+        LlmRequest request = LlmRequest.builder().model("test-model")
+                .contents(List.of(Content.builder().role("user").parts(List.of(Part.fromText("创建子任务"))).build()))
+                .tools(Map.of(tool.name(), tool)).build();
+
+        Prompt prompt = converter.toLlmPrompt(request);
+        ToolCallingChatOptions options = (ToolCallingChatOptions) prompt.getOptions();
+        ToolCallback callback = options.getToolCallbacks().get(0);
+        String result = callback.call("{\"tasks\":[\"调查\" 今天天气]}");
+
+        Assert.assertTrue(result.contains("TOOL_ARGUMENTS_INVALID"));
+        Assert.assertTrue(result.contains("重新生成后重试"));
     }
 }

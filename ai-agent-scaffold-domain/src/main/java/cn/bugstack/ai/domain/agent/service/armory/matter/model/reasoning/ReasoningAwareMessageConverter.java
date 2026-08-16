@@ -10,6 +10,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ public final class ReasoningAwareMessageConverter {
 
     public Prompt toLlmPrompt(LlmRequest request) {
         Prompt prompt = delegate.toLlmPrompt(request);
+        protectToolCallbacks(prompt);
         Deque<ReasoningEnvelope.Frame> assistantFrames = new ArrayDeque<>();
         for (Content content : request.contents()) {
             String role = content.role().orElse("");
@@ -47,6 +49,18 @@ public final class ReasoningAwareMessageConverter {
                     .properties(assistant.getMetadata()).toolCalls(assistant.getToolCalls()).media(assistant.getMedia()).build());
         }
         return new Prompt(messages, prompt.getOptions());
+    }
+
+    /** Spring AI 在调用 ADK 工具前会先把参数 JSON 转成 Map；这里把解析失败变成工具错误供模型自修复。 */
+    private void protectToolCallbacks(Prompt prompt) {
+        if (!(prompt.getOptions() instanceof ToolCallingChatOptions options)
+                || options.getToolCallbacks() == null || options.getToolCallbacks().isEmpty()) {
+            return;
+        }
+        options.setToolCallbacks(options.getToolCallbacks().stream()
+                .map(SafeToolCallback::new)
+                .map(callback -> (org.springframework.ai.tool.ToolCallback) callback)
+                .toList());
     }
 
     public LlmResponse toLlmResponse(ChatResponse response) {

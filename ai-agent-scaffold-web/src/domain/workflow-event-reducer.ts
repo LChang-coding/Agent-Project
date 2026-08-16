@@ -47,14 +47,14 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
 
   switch (event.eventType) {
     case 'AGENT_STARTED':
-      next.activities.push({ id: event.eventId, type: 'agent', label: text(payload.label) || 'Agent 开始分析', status: 'running', startedAt: event.occurredAt });
+      next.activities.push({ id: event.eventId, sequence: event.sequence, type: 'agent', label: text(payload.label) || 'Agent 开始分析', status: 'running', startedAt: event.occurredAt });
       break;
     case 'THINKING_DELTA':
       appendThinking(next, event, text(payload.delta));
       break;
     case 'PARENT_RESUME_STARTED':
       next.waitingAll = false;
-      next.activities.push({ id: event.eventId, type: 'agent', label: '主 Agent 已恢复，正在汇总', status: 'running',
+      next.activities.push({ id: event.eventId, sequence: event.sequence, type: 'agent', label: '主 Agent 已恢复，正在汇总', status: 'running',
         detail: text(payload.message), startedAt: event.occurredAt });
       break;
     case 'ANSWER_DELTA':
@@ -62,11 +62,11 @@ export function reduceWorkflowEvent(state: WorkflowRunViewState, event: Workflow
       break;
     case 'WAITING_ALL':
       next.waitingAll = true;
-      next.activities.push({ id: event.eventId, type: 'wait', label: '等待全部子 Agent', status: 'waiting',
+      next.activities.push({ id: event.eventId, sequence: event.sequence, type: 'wait', label: '等待全部子 Agent', status: 'waiting',
         detail: text(payload.message), startedAt: event.occurredAt });
       break;
     case 'APPROVAL_REQUIRED':
-      next.activities.push({ id: requiredText(payload.approvalId, 'APPROVAL_REQUIRED 缺少 approvalId'),
+      next.activities.push({ id: requiredText(payload.approvalId, 'APPROVAL_REQUIRED 缺少 approvalId'), sequence: event.sequence,
         type: 'approval', label: `等待授权·${text(payload.toolCode) || '工具调用'}`, status: 'waiting',
         detail: text(payload.message), startedAt: event.occurredAt });
       break;
@@ -247,7 +247,7 @@ function appendThinking(state: WorkflowRunViewState, event: WorkflowRunEvent, de
 function currentReactTurn(state: WorkflowRunViewState, event: WorkflowRunEvent, forceNew = false) {
   let turn = forceNew ? undefined : state.reactTurns.at(-1);
   if (!turn) {
-    turn = { id: `react-${event.eventId}`, thinking: '', tools: [], startedAt: event.occurredAt };
+    turn = { id: `react-${event.eventId}`, sequence: event.sequence, thinking: '', tools: [], startedAt: event.occurredAt };
     state.reactTurns.push(turn);
   }
   return turn;

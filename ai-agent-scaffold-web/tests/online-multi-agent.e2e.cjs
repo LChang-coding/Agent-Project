@@ -31,6 +31,7 @@ const { chromium } = require('playwright');
     }
     try { await page.waitForURL('**/dashboard', { timeout: 30000 }); }
     catch (error) { throw new Error(`注册登录未跳转 url=${page.url()} body=${(await page.locator('body').innerText()).slice(-1200)}`); }
+    await page.evaluate(() => localStorage.setItem('ai-agent-scaffold-mode-guide-seen-v1', '1'));
 
     await page.goto('http://lcodeagent.lcode.top/agents', { waitUntil: 'domcontentloaded' });
     const supervisor = page.locator('.agent-row').filter({ hasText: '主 Agent' }).first();
@@ -58,6 +59,18 @@ const { chromium } = require('playwright');
     await page.getByRole('button', { name: /批准 2 项操作/ }).click();
 
     await page.locator('.run-card').waitFor({ state: 'visible', timeout: 30000 });
+    const mainExecution = page.locator('[data-main-agent-run-id]').last();
+    await mainExecution.waitFor({ state: 'visible', timeout: 30000 });
+    await mainExecution.locator('.execution-panel').waitFor({ state: 'visible', timeout: 30000 });
+    const timelineOrder = await page.evaluate(() => {
+      const user = Array.from(document.querySelectorAll('.message--user')).at(-1);
+      const main = document.querySelector('[data-main-agent-run-id]');
+      const card = document.querySelector('.run-card');
+      return { user: user?.getBoundingClientRect().top, main: main?.getBoundingClientRect().top, card: card?.getBoundingClientRect().top };
+    });
+    if (!(timelineOrder.user < timelineOrder.main && timelineOrder.main < timelineOrder.card)) {
+      throw new Error(`主 Agent 运行过程未紧跟用户消息: ${JSON.stringify(timelineOrder)}`);
+    }
     const sessionExpand = page.locator('.session-expand').first();
     if (await sessionExpand.getAttribute('aria-expanded') === 'false') await sessionExpand.click();
     await page.waitForFunction(() => document.querySelectorAll('.session-children button').length >= 3, null, { timeout: 60000 });
@@ -79,6 +92,17 @@ const { chromium } = require('playwright');
       const button = document.querySelector('.session-item--active .session-delete');
       return button instanceof HTMLButtonElement && !button.disabled;
     }, null, { timeout: 600000 });
+    await page.locator('[data-subagent-task-id]').filter({ hasText: '通用调查 Agent' }).first().click();
+    await page.locator('.child-execution').waitFor({ state: 'visible', timeout: 30000 });
+    if (await page.locator('.child-execution .thinking-wave--active').count() !== 0) {
+      throw new Error('子 Agent 已结束后仍显示正在思考动画');
+    }
+    const reactToolCounts = await page.locator('.child-execution .react-turn').evaluateAll((turns) =>
+      turns.map((turn) => turn.querySelectorAll('.react-tool').length));
+    if (!reactToolCounts.some((count) => count > 0) || reactToolCounts.some((count) => count > 1)) {
+      throw new Error(`子 Agent 工具未按独立行动回合展示: ${JSON.stringify(reactToolCounts)}`);
+    }
+    await page.getByRole('button', { name: /返回主 Agent/ }).click();
     if (!process.env.E2E_KEEP_SESSION) {
       const activeSession = page.locator('.session-item--active');
       const activeSessionId = await activeSession.getAttribute('data-session-id');
@@ -104,7 +128,8 @@ const { chromium } = require('playwright');
     await page.getByRole('button', { name: /批量删除 \(1\)/ }).click();
     await page.waitForFunction(() => document.body.innerText.includes('已禁用'), null, { timeout: 30000 });
 
-    console.log(JSON.stringify({ ok: true, username, approval: true, childCount: restoredChildren, batchDelete: true, errors }, null, 2));
+    console.log(JSON.stringify({ ok: true, username, approval: true, childCount: restoredChildren,
+      mainExecution: true, reactToolCounts, batchDelete: true, errors }, null, 2));
   } finally {
     await browser.close();
   }

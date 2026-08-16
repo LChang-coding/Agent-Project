@@ -197,6 +197,17 @@ test('总览与会话工作台使用兼容单 Agent 和 Multi-Agent 的统一入
   assert.doesNotMatch(`${dashboardSource}\n${chatWorkspaceSource}`, /单一智能体/);
 });
 
+test('会话工作台提供可访问的双节点引擎拨杆与首次模式导览', () => {
+  const source = readFileSync(new URL('../src/views/chat/ChatWorkspaceView.vue', import.meta.url), 'utf8');
+  assert.match(source, /role="radiogroup" aria-label="运行引擎"/);
+  assert.match(source, /data-source-mode="agent"/);
+  assert.match(source, /data-source-mode="workflow"/);
+  assert.match(source, /ai-agent-scaffold-mode-guide-seen-v1/);
+  assert.match(source, /topology--supervisor/);
+  assert.match(source, /topology--dag/);
+  assert.match(source, /prefers-reduced-motion: reduce/);
+});
+
 test('Multi-Agent 线上 E2E 使用现行会话选择器并等待锁定会话解锁后删除', () => {
   assert.doesNotMatch(mobileMultiAgentE2eSource, /\.session-main/);
   assert.match(mobileMultiAgentE2eSource, /\.session-open/);

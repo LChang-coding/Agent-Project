@@ -81,13 +81,21 @@
           </div>
 
           <div class="runtime-controls">
-            <label class="compact-field">
-              <span>模式</span>
-              <select v-model="chatStore.activeSourceType" class="select select--compact" @change="onSourceChanged">
-                <option value="agent">Agent 编排</option>
-                <option value="workflow">DAG 工作流</option>
-              </select>
-            </label>
+            <div class="engine-mode">
+              <div class="engine-mode__label"><span>运行引擎</span><button type="button" @click="openModeGuide">模式说明</button></div>
+              <div :class="['engine-switch', `engine-switch--${chatStore.activeSourceType}`, { 'engine-switch--spooling': sourceSwitching }]"
+                   role="radiogroup" aria-label="运行引擎">
+                <span class="engine-shuttle" aria-hidden="true"><i /><i /></span>
+                <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'agent'"
+                        :disabled="sourceSwitching" data-source-mode="agent" @click="switchSource('agent')">
+                  <i aria-hidden="true" />Agent
+                </button>
+                <button type="button" role="radio" :aria-checked="chatStore.activeSourceType === 'workflow'"
+                        :disabled="sourceSwitching" data-source-mode="workflow" @click="switchSource('workflow')">
+                  <i aria-hidden="true" />DAG
+                </button>
+              </div>
+            </div>
             <label v-if="chatStore.activeSourceType === 'agent'" class="compact-field compact-field--wide">
               <span>运行 Agent</span>
               <select v-model="chatStore.activeAgentId" class="select select--compact" @change="onAgentChanged">
@@ -515,6 +523,55 @@
             </footer>
           </section>
         </div>
+
+        <div v-if="modeGuideOpen" class="mode-guide-backdrop" @click.self="closeModeGuide">
+          <section ref="modeGuideDialogRef" class="mode-guide" role="dialog" aria-modal="true"
+                   aria-labelledby="mode-guide-title" aria-describedby="mode-guide-description" tabindex="-1"
+                   @keydown.esc.prevent="closeModeGuide">
+            <header>
+              <div><span>RUNTIME PRIMER</span><h2 id="mode-guide-title">选择你的运行引擎</h2></div>
+              <button type="button" aria-label="关闭运行引擎说明" @click="closeModeGuide">×</button>
+            </header>
+            <p id="mode-guide-description">两种模式共享工具、RAG 与观测能力，区别在于任务由谁决定下一步。</p>
+            <div class="mode-guide__grid">
+              <article class="mode-card mode-card--supervisor">
+                <div><span>01 / SUPERVISOR</span><h3>主 Agent 编排</h3><p>主 Agent 理解目标，自主拆解、并行委派子 Agent，等待回调后统一汇总。</p></div>
+                <div class="topology topology--supervisor" aria-label="主 Agent 向三个子 Agent 委派任务的流图">
+                  <svg viewBox="0 0 340 190" aria-hidden="true">
+                    <path d="M170 50 C170 82 58 74 58 126" /><path d="M170 50 L170 126" /><path d="M170 50 C170 82 282 74 282 126" />
+                    <path class="topology-flow topology-flow--a" d="M170 50 C170 82 58 74 58 126" />
+                    <path class="topology-flow topology-flow--b" d="M170 50 L170 126" />
+                    <path class="topology-flow topology-flow--c" d="M170 50 C170 82 282 74 282 126" />
+                  </svg>
+                  <div class="topology-node topology-node--crown"><b>♛</b><span>主 Agent</span></div>
+                  <div class="topology-node topology-node--child topology-node--left"><b>01</b><span>调查</span></div>
+                  <div class="topology-node topology-node--child topology-node--center"><b>02</b><span>编码</span></div>
+                  <div class="topology-node topology-node--child topology-node--right"><b>03</b><span>审查</span></div>
+                </div>
+                <button type="button" :class="{ active: chatStore.activeSourceType === 'agent' }" @click="chooseGuideMode('agent')">
+                  {{ chatStore.activeSourceType === 'agent' ? '当前引擎' : '启用主 Agent' }}
+                </button>
+              </article>
+              <article class="mode-card mode-card--dag">
+                <div><span>02 / DETERMINISTIC</span><h3>DAG 工作流</h3><p>节点与合法路径预先发布，任务沿树杈并发推进，结果在汇聚节点稳定收口。</p></div>
+                <div class="topology topology--dag" aria-label="DAG 工作流由根节点分叉并汇聚的流图">
+                  <svg viewBox="0 0 340 190" aria-hidden="true">
+                    <path d="M170 34 L170 68 M170 68 C170 88 88 80 88 108 M170 68 C170 88 252 80 252 108 M88 136 C88 160 170 146 170 170 M252 136 C252 160 170 146 170 170" />
+                    <path class="topology-flow topology-flow--a" d="M170 34 L170 68 C170 88 88 80 88 108" />
+                    <path class="topology-flow topology-flow--b" d="M170 34 L170 68 C170 88 252 80 252 108" />
+                    <path class="topology-flow topology-flow--c" d="M88 136 C88 160 170 146 170 170 M252 136 C252 160 170 146 170 170" />
+                  </svg>
+                  <div class="dag-chip dag-chip--root">START</div><div class="dag-chip dag-chip--left">NODE A</div>
+                  <div class="dag-chip dag-chip--right">NODE B</div><div class="dag-chip dag-chip--end">MERGE</div>
+                </div>
+                <button type="button" :class="{ active: chatStore.activeSourceType === 'workflow' }" @click="chooseGuideMode('workflow')">
+                  {{ chatStore.activeSourceType === 'workflow' ? '当前引擎' : '启用 DAG' }}
+                </button>
+              </article>
+            </div>
+            <footer><span>无声音 · 路径流光仅表示数据流向</span><button class="button button--soft" type="button" @click="closeModeGuide">进入工作台</button></footer>
+          </section>
+        </div>
       </main>
     </section>
   </div>
@@ -589,6 +646,9 @@ const managingSessions = ref(false);
 const selectedSessionIds = ref(new Set<string>());
 const batchDeletingSessions = ref(false);
 const stoppingOrchestration = ref(false);
+const sourceSwitching = ref(false);
+const modeGuideOpen = ref(false);
+const modeGuideDialogRef = ref<HTMLElement | null>(null);
 const copiedMessageId = ref('');
 const messageCopyErrorId = ref('');
 const messageCopyError = ref('');
@@ -597,6 +657,7 @@ let scrollFrame: number | null = null;
 let messageCopyTimer: number | null = null;
 const MESSAGE_WINDOW_SIZE = 100;
 const MESSAGE_WINDOW_STEP = 50;
+const MODE_GUIDE_SEEN_KEY = 'ai-agent-scaffold-mode-guide-seen-v1';
 const ragModeOptions: Array<{ value: SessionRagMode; label: string }> = [
   { value: 'OFF', label: '关闭' },
   { value: 'AUTO', label: '自动' },
@@ -789,6 +850,7 @@ onMounted(async () => {
   await chatStore.loadAgents();
   await toolStore.loadCatalog();
   scrollToLatest(true);
+  if (localStorage.getItem(MODE_GUIDE_SEEN_KEY) !== '1') await openModeGuide();
 });
 
 onBeforeUnmount(() => {
@@ -1140,6 +1202,34 @@ async function onSourceChanged() {
     return;
   }
   await chatStore.selectAgent(chatStore.activeAgentId);
+}
+
+/** 双节点引擎拨杆切换；保留其他会话的服务端运行，只切换当前工作台目标。 */
+async function switchSource(sourceType: 'agent' | 'workflow') {
+  if (sourceSwitching.value || chatStore.activeSourceType === sourceType) return;
+  sourceSwitching.value = true;
+  chatStore.activeSourceType = sourceType;
+  try {
+    await onSourceChanged();
+  } finally {
+    window.setTimeout(() => { sourceSwitching.value = false; }, 260);
+  }
+}
+
+async function openModeGuide() {
+  modeGuideOpen.value = true;
+  await nextTick();
+  modeGuideDialogRef.value?.focus();
+}
+
+function closeModeGuide() {
+  modeGuideOpen.value = false;
+  localStorage.setItem(MODE_GUIDE_SEEN_KEY, '1');
+}
+
+async function chooseGuideMode(sourceType: 'agent' | 'workflow') {
+  await switchSource(sourceType);
+  closeModeGuide();
 }
 
 /**
@@ -2291,6 +2381,228 @@ function formatOptionalTokens(value?: number) {
   letter-spacing: 0.08em;
 }
 
+.engine-mode {
+  display: grid;
+  min-width: 190px;
+  gap: 3px;
+}
+
+.engine-mode__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 12px;
+}
+
+.engine-mode__label > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.engine-mode__label button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-deep);
+  font-size: 9px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.engine-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 36px;
+  padding: 3px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 28%, var(--line));
+  border-radius: 11px;
+  background:
+    linear-gradient(90deg, transparent 49.7%, color-mix(in srgb, var(--ink) 18%, transparent) 50%, transparent 50.3%),
+    color-mix(in srgb, var(--surface) 84%, var(--canvas));
+  box-shadow: inset 0 1px 4px rgb(24 31 27 / .12), 0 1px 0 rgb(255 255 255 / .72);
+  isolation: isolate;
+}
+
+.engine-switch button {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 11px;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 800 11px/1 Archivo, sans-serif;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: color 180ms ease, text-shadow 180ms ease;
+}
+
+.engine-switch button > i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px transparent;
+  transition: box-shadow 220ms ease, transform 220ms ease;
+}
+
+.engine-switch button[aria-checked='true'] {
+  color: #fffaf4;
+  text-shadow: 0 1px 1px rgb(61 25 14 / .3);
+}
+
+.engine-switch button[aria-checked='true'] > i {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgb(255 245 231 / .18), 0 0 9px rgb(255 236 208 / .85);
+}
+
+.engine-shuttle {
+  position: absolute;
+  z-index: 1;
+  inset: 3px auto 3px 3px;
+  width: calc(50% - 3px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent-deep) 82%, #25140d);
+  border-radius: 8px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 90%, #da5f35), var(--accent-deep));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-deep) 28%, transparent), inset 0 1px 0 rgb(255 255 255 / .28);
+  transform: translateX(0);
+  transition: transform 300ms cubic-bezier(.2,.9,.24,1.08), box-shadow 220ms ease;
+}
+
+.engine-shuttle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 20%, rgb(255 244 221 / .32) 42%, transparent 64%);
+  transform: translateX(-130%);
+}
+
+.engine-shuttle > i {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgb(255 248 235 / .22);
+  transform: translateY(-50%);
+}
+
+.engine-shuttle > i:first-child { left: 8px; }
+.engine-shuttle > i:last-child { right: 8px; }
+.engine-switch--workflow .engine-shuttle { transform: translateX(100%); }
+.engine-switch--spooling .engine-shuttle {
+  box-shadow: 0 2px 13px color-mix(in srgb, var(--accent-deep) 46%, transparent), inset 0 1px 0 rgb(255 255 255 / .34);
+}
+.engine-switch--spooling .engine-shuttle::after { animation: engine-sweep 430ms ease-out; }
+.engine-switch button:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: -2px; border-radius: 8px; }
+.engine-switch button:disabled { cursor: wait; }
+
+.mode-guide-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(27 29 25 / .56);
+  backdrop-filter: blur(7px);
+}
+
+.mode-guide {
+  width: min(960px, 100%);
+  max-height: min(820px, calc(100dvh - 40px));
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent-deep) 24%, var(--line));
+  border-radius: 20px;
+  outline: none;
+  background: color-mix(in srgb, var(--surface) 96%, #f2eadc);
+  box-shadow: 0 28px 80px rgb(19 22 18 / .32), inset 0 1px 0 rgb(255 255 255 / .9);
+}
+
+.mode-guide > header,
+.mode-guide > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.mode-guide > header span,
+.mode-card > div:first-child > span {
+  color: var(--accent-deep);
+  font: 850 10px/1 Archivo, sans-serif;
+  letter-spacing: .16em;
+}
+
+.mode-guide h2 { margin: 5px 0 0; font: 700 clamp(24px, 3vw, 36px)/1.06 Newsreader, serif; }
+.mode-guide > header > button { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted); font-size: 24px; cursor: pointer; }
+.mode-guide > p { max-width: 650px; margin: 12px 0 22px; color: var(--muted); line-height: 1.65; }
+.mode-guide__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+.mode-card {
+  display: grid;
+  grid-template-rows: auto minmax(190px, 1fr) auto;
+  min-width: 0;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-soft) 75%, #f6efe3);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .76);
+}
+
+.mode-card h3 { margin: 5px 0 7px; font-size: 20px; }
+.mode-card p { min-height: 52px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.mode-card > button { min-height: 38px; border: 1px solid var(--line-strong); border-radius: 9px; background: transparent; color: var(--ink); font-weight: 850; cursor: pointer; }
+.mode-card > button:hover { border-color: var(--accent-deep); color: var(--accent-deep); }
+.mode-card > button.active { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); background: color-mix(in srgb, var(--success) 9%, var(--surface)); color: var(--success); }
+
+.topology { position: relative; min-height: 190px; margin: 8px 0 13px; overflow: hidden; }
+.topology svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.topology svg path { fill: none; stroke: color-mix(in srgb, var(--ink) 24%, transparent); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.topology svg .topology-flow { stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 5 58; animation: topology-current 2.6s linear infinite; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 65%, transparent)); }
+.topology svg .topology-flow--b { animation-delay: -.75s; stroke: #b88336; }
+.topology svg .topology-flow--c { animation-delay: -1.5s; stroke: #49725d; }
+
+.topology-node,
+.dag-chip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, var(--line));
+  background: color-mix(in srgb, var(--surface) 93%, #efe3d1);
+  box-shadow: 0 6px 16px rgb(37 35 28 / .12), inset 0 1px 0 rgb(255 255 255 / .9);
+}
+
+.topology-node { width: 68px; min-height: 47px; border-radius: 12px; transform: translate(-50%, -50%); }
+.topology-node b { color: var(--accent-deep); font-size: 13px; }
+.topology-node span { color: var(--muted); font-size: 9px; font-weight: 850; }
+.topology-node--crown { left: 50%; top: 25%; width: 86px; min-height: 58px; border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: #f4dfc4; }
+.topology-node--crown b { font-size: 22px; line-height: 1; }
+.topology-node--child { top: 73%; }
+.topology-node--left { left: 17%; }.topology-node--center { left: 50%; }.topology-node--right { left: 83%; }
+
+.dag-chip { min-width: 64px; min-height: 28px; padding: 0 8px; border-radius: 7px; color: var(--muted); font: 850 9px/1 Archivo, sans-serif; letter-spacing: .08em; transform: translate(-50%, -50%); }
+.dag-chip--root { left: 50%; top: 16%; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-deep); }
+.dag-chip--left { left: 26%; top: 64%; }.dag-chip--right { left: 74%; top: 64%; }
+.dag-chip--end { left: 50%; top: 91%; border-color: color-mix(in srgb, #49725d 52%, var(--line)); color: #315845; }
+
+.mode-guide > footer { margin-top: 17px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+
+@keyframes topology-current { to { stroke-dashoffset: -126; } }
+
 .select--compact {
   min-height: 32px;
   border-radius: 8px;
@@ -2898,6 +3210,18 @@ function formatOptionalTokens(value?: number) {
   50% { opacity: 0.48; transform: scale(0.86); }
 }
 
+@keyframes engine-sweep {
+  to { transform: translateX(140%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .engine-shuttle,
+  .engine-switch button,
+  .engine-switch button > i { transition: none; }
+  .engine-switch--spooling .engine-shuttle::after { animation: none; }
+  .topology svg .topology-flow { animation: none; }
+}
+
 @media (min-width: 841px) and (max-width: 1100px) {
   .chat-page {
     height: calc(100dvh - 112px);
@@ -2938,7 +3262,8 @@ function formatOptionalTokens(value?: number) {
   }
 
   .compact-field,
-  .compact-field--wide {
+  .compact-field--wide,
+  .engine-mode {
     width: 100%;
     min-width: 0;
   }
@@ -2983,6 +3308,11 @@ function formatOptionalTokens(value?: number) {
   .rag-binding-dialog h2 { font-size: 19px; }
   .rag-binding-dialog footer { align-items: stretch; flex-direction: column; }
   .rag-binding-dialog footer > div { display: grid; grid-template-columns: 1fr 1fr; }
+  .mode-guide-backdrop { padding: 10px; }
+  .mode-guide { max-height: calc(100dvh - 20px); padding: 17px 13px; border-radius: 15px; }
+  .mode-guide__grid { grid-template-columns: 1fr; }
+  .mode-card { padding: 14px; }
+  .mode-guide > footer { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-height: 700px) and (min-width: 841px) {

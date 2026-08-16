@@ -151,6 +151,8 @@ test('Agent 思考、工具、授权和 WAIT_ALL 按原运行事件恢复', () =
   assert.equal(state.reactTurns[0].tools[0].functionCallId, 'call_1');
   assert.equal(state.reactTurns[0].tools[0].status, 'completed');
   assert.equal(state.activities.find((item) => item.id === 'approval_1').status, 'completed');
+  assert.deepEqual([...state.activities, ...state.reactTurns].sort((left, right) => left.sequence - right.sequence)
+    .map((item) => item.sequence), [1, 2, 4, 7]);
   assert.equal(state.waitingAll, false);
   assert.equal(state.status, 'completed');
 });
