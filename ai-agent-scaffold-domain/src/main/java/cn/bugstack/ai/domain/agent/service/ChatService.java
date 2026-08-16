@@ -907,14 +907,14 @@ public class ChatService implements IChatService {
         ensureAdkSession(runner, aiAgentRegisterVO.getAppName(), chatCommandEntity.getUserId(), adkSessionId);
 
         // 第五层：message 在这里作为 content 交给 ADK Runner；state 同时注入可信运行身份和上下文切面。
-        Flowable<Event> events = runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder()
+        Flowable<Event> events = stabilizeModelEventStream(runner.runAsync(chatCommandEntity.getUserId(), adkSessionId, content, RunConfig.builder()
                         .streamingMode(RunConfig.StreamingMode.SSE).build(),
                 runtimeStateDelta(tenantId, chatCommandEntity.getUserId(), actualSessionId, chatCommandEntity.getAgentId(), traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT),
                         ragQuery(activeRun, describeContent(chatCommandEntity)),
-                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
+                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode())));
 
         StringBuilder assistantContent = new StringBuilder();
         StringBuilder thinkingContent = new StringBuilder();
@@ -1021,13 +1021,13 @@ public class ChatService implements IChatService {
         // 把用户这句话包成模型输入。
         Content userMsg = Content.fromParts(Part.fromText(message));
         // 第四层：message 在此进入 ADK Agent；插件从 state 读取上下文、RAG 与工具身份。
-        Flowable<Event> events = runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder()
+        Flowable<Event> events = stabilizeModelEventStream(runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder()
                         .streamingMode(RunConfig.StreamingMode.SSE).build(),
                 runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
-                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()));
+                        activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode())));
 
         StringBuilder assistantContent = new StringBuilder();
         StringBuilder thinkingContent = new StringBuilder();
@@ -1143,12 +1143,12 @@ public class ChatService implements IChatService {
         boolean supervisor = isSupervisor(sessionAgentId);
         publishAgentEvent(activeRun, "AGENT_STARTED", Map.of("agentId", sessionAgentId, "supervisor", supervisor));
         // 第五层：这是普通会话真正调用 Agent 的位置；用户 message 作为 userMsg 输入。
-        Flowable<Event> response = runner.runAsync(userId, adkSessionId, userMsg, runConfig,
+        Flowable<Event> response = stabilizeModelEventStream(runner.runAsync(userId, adkSessionId, userMsg, runConfig,
                         runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
                                 TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                                 activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                                 ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
-                                activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode()))
+                                activeRun.getRagMode(), activeRun.getRagBindingIds(), activeRun.getRagInvocationMode())))
                 // 跨实例取消靠数据库轮询，本实例事件处理靠 requireExecutable 即时拦截。
                 .takeUntil(Flowable.interval(250, TimeUnit.MILLISECONDS)
                         .filter(tick -> runControlService.cancelled(tenantId, userId, activeRun.getRunId())))
@@ -1634,10 +1634,10 @@ public class ChatService implements IChatService {
         }
         // 第五层：prompt 在这里作为 Content 进入节点 Agent，state 提供可信工作流和运行身份。
         try {
-            runner.runAsync(userId, adkSessionId, content, RunConfig.builder()
+            stabilizeModelEventStream(runner.runAsync(userId, adkSessionId, content, RunConfig.builder()
                             .streamingMode(RunConfig.StreamingMode.SSE)
                             .build(),
-                            state)
+                            state))
                     .blockingForEach(event -> {
                         // 每片到达前复核取消，取消后立即中断本节点。
                         runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
@@ -1677,6 +1677,14 @@ public class ChatService implements IChatService {
             log.warn("ADK 单次调用会话释放失败 appName:{} userId:{} sessionId:{}",
                     appName, userId, adkSessionId, exception);
         }
+    }
+
+    /**
+     * 把供应商的高频累计快照合并为人类可感知的流速。必须保留最后一片，
+     * 否则可能丢失最终正文；工具执行在 ADK 上游完成，工具时间线由 Tool Gateway 独立持久化。
+     */
+    private Flowable<Event> stabilizeModelEventStream(Flowable<Event> events) {
+        return events.onBackpressureLatest().sample(200, TimeUnit.MILLISECONDS, true);
     }
 
     /**
