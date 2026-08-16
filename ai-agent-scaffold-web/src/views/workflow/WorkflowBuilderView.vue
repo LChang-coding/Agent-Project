@@ -55,8 +55,10 @@
             </option>
           </select>
         </label>
-        <button class="button button--soft" type="button" :disabled="!selectedTemplate" @click="loadSelectedTemplate">
-          载入当前草稿
+        <button class="button button--soft" type="button"
+                :disabled="!selectedTemplate || workflowStore.loading || workflowStore.writing"
+                @click="loadSelectedTemplate">
+          {{ workflowStore.loading ? '正在恢复草稿…' : '载入当前草稿' }}
         </button>
       </div>
       <div v-if="selectedTemplate" class="template-library__detail">
@@ -583,6 +585,7 @@ async function saveDraft() {
 
 /** 将选中模板深拷贝到本地草稿，不触发后端写入。 */
 function loadSelectedTemplate() {
+  if (workflowStore.loading || workflowStore.writing) return;
   const template = selectedTemplate.value;
   if (!template) return;
   if (hasUnsavedChanges.value && !window.confirm('当前画布有未保存改动。继续载入模板将覆盖这些本地改动，是否继续？')) {

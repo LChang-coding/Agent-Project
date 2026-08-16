@@ -10,6 +10,7 @@ const chatWorkspaceSource = readFileSync(resolve(import.meta.dirname, '../src/vi
 const subagentTaskDetailSource = readFileSync(resolve(import.meta.dirname, '../src/components/agent/SubagentTaskDetail.vue'), 'utf8');
 const orchestrationRunCardSource = readFileSync(resolve(import.meta.dirname, '../src/components/agent/OrchestrationRunCard.vue'), 'utf8');
 const dashboardSource = readFileSync(resolve(import.meta.dirname, '../src/views/DashboardView.vue'), 'utf8');
+const workflowBuilderSource = readFileSync(resolve(import.meta.dirname, '../src/views/workflow/WorkflowBuilderView.vue'), 'utf8');
 const desktopMultiAgentE2eSource = readFileSync(resolve(import.meta.dirname, './online-multi-agent.e2e.cjs'), 'utf8');
 const mobileMultiAgentE2eSource = readFileSync(resolve(import.meta.dirname, './online-multi-agent-mobile.e2e.cjs'), 'utf8');
 const packageJson = JSON.parse(readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf8'));
@@ -213,6 +214,11 @@ test('会话工作台提供可访问的双节点引擎拨杆与每次进入导�
   assert.match(source, /topology--supervisor/);
   assert.match(source, /topology--dag/);
   assert.match(source, /prefers-reduced-motion: reduce/);
+});
+
+test('工作流详情恢复期间禁止载入模板，避免智能草稿被异步覆盖', () => {
+  assert.match(workflowBuilderSource, /:disabled="!selectedTemplate \|\| workflowStore\.loading \|\| workflowStore\.writing"/);
+  assert.match(workflowBuilderSource, /function loadSelectedTemplate\(\) \{\s*if \(workflowStore\.loading \|\| workflowStore\.writing\) return;/);
 });
 
 test('Multi-Agent 线上 E2E 使用现行会话选择器并等待锁定会话解锁后删除', () => {

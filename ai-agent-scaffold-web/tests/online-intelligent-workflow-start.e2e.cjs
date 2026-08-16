@@ -43,9 +43,15 @@ const { chromium } = require('playwright');
     if (!await page.locator('.workflow-kind-tabs button').nth(1).evaluate((button) => button.classList.contains('active'))) {
       throw new Error('智能工作流模板未成功载入');
     }
+    const saved = page.waitForResponse((response) => response.request().method() === 'POST'
+      && response.url().includes('/draft'), { timeout: 30000 });
     const published = page.waitForResponse((response) => response.request().method() === 'POST'
       && response.url().includes('/publish'), { timeout: 30000 });
     await page.getByRole('button', { name: '发布运行' }).click();
+    const saveResponse = await saved;
+    const savedRequestBody = saveResponse.request().postData() || '';
+    const savedRequestKind = saveResponse.request().postDataJSON()?.graph?.workflowKind || null;
+    const savedResponseKind = (await saveResponse.json())?.data?.graph?.workflowKind || null;
     const publishResponse = await published;
     if (publishResponse.status() !== 200) throw new Error(`测试工作流发布失败: ${publishResponse.status()}`);
     const publishPayload = await publishResponse.json();
@@ -120,7 +126,7 @@ const { chromium } = require('playwright');
     }
     const elapsedMs = Date.now() - startedAt;
     if (!response.url().includes('/api/v1/intelligent-workflow-runs') || response.status() !== 200 || elapsedMs >= 10000) {
-      throw new Error(`智能工作流启动异常 url=${response.url()} status=${response.status()} elapsedMs=${elapsedMs} publishedKind=${publishedKind} detailKind=${detailKind}`);
+      throw new Error(`智能工作流启动异常 url=${response.url()} status=${response.status()} elapsedMs=${elapsedMs} savedRequestKind=${savedRequestKind} savedResponseKind=${savedResponseKind} publishedKind=${publishedKind} detailKind=${detailKind} savedRequestBody=${savedRequestBody.slice(0, 1200)}`);
     }
     await page.locator('.execution-panel').last().waitFor({ state: 'visible', timeout: 30000 });
     if (errors.length) throw new Error(`online errors: ${errors.join(', ')}`);
