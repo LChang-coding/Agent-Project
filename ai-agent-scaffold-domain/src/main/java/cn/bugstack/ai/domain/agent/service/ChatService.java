@@ -946,6 +946,9 @@ public class ChatService implements IChatService {
             }
             // 异常继续上抛，让调用方知道这次对话没有成功。
             throw e;
+        } finally {
+            deleteInvocationSessionSafely(runner, aiAgentRegisterVO.getAppName(),
+                    chatCommandEntity.getUserId(), adkSessionId);
         }
 
         // 返回收集到的全部输出文本。
@@ -1054,6 +1057,8 @@ public class ChatService implements IChatService {
             }
             // 异常上抛，让调用方感知失败。
             throw e;
+        } finally {
+            deleteInvocationSessionSafely(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
         }
 
         // 返回全部输出文本。
@@ -1184,6 +1189,8 @@ public class ChatService implements IChatService {
                 .doFinally(() -> {
                     // 被取消的运行不能留下可被后续回答引用的 RAG 证据。
                     if (runControlService.cancelled(tenantId, userId, activeRun.getRunId())) clearEvidence(activeRun);
+                    // 业务历史由 Context Manager 管理；ADK 的单次调用会话只是临时缓冲，必须立即释放。
+                    deleteInvocationSessionSafely(runner, aiAgentRegisterVO.getAppName(), userId, adkSessionId);
                 });
         if (!supervisor) return response;
         // Supervisor 首轮整轮缓冲：未委派时结束后一次下发，已委派时正文全部留作隐藏草稿。
@@ -1624,32 +1631,50 @@ public class ChatService implements IChatService {
             state.put(ToolRuntimeContextKeys.ROUTE_REPAIR_ONLY, routeRepairOnly);
         }
         // 第五层：prompt 在这里作为 Content 进入节点 Agent，state 提供可信工作流和运行身份。
-        runner.runAsync(userId, adkSessionId, content, RunConfig.builder()
-                        .streamingMode(RunConfig.StreamingMode.SSE)
-                        .build(),
-                        state)
-                .blockingForEach(event -> {
-                    // 每片到达前复核取消，取消后立即中断本节点。
-                    runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
-                    AgentEventContent.Snapshot snapshot = AgentEventContent.snapshot(event);
-                    String thinkingDelta = contentDelta(thinking.toString(), snapshot.thinking());
-                    if (!thinkingDelta.isEmpty()) {
-                        appendContent(thinking, snapshot.thinking());
-                        publishThinkingDelta(run, thinkingDelta, nodeExecutionId);
-                    }
-                    // 把供应商的累计答案快照减去已输出部分，得到本次真正新增的正文。
-                    String delta = contentDelta(output.toString(), snapshot.answer());
-                    // 只有确实有新内容才处理，空增量说明这片是重复快照。
-                    if (!delta.isEmpty()) {
-                        // 累积进节点输出。
-                        output.append(delta);
-                        // 回调发出增量，用于实时展示节点进度。
-                        outputDelta.accept(delta);
-                    }
-                });
+        try {
+            runner.runAsync(userId, adkSessionId, content, RunConfig.builder()
+                            .streamingMode(RunConfig.StreamingMode.SSE)
+                            .build(),
+                            state)
+                    .blockingForEach(event -> {
+                        // 每片到达前复核取消，取消后立即中断本节点。
+                        runControlService.requireExecutable(tenantId, userId, run.getRunId(), null);
+                        AgentEventContent.Snapshot snapshot = AgentEventContent.snapshot(event);
+                        String thinkingDelta = contentDelta(thinking.toString(), snapshot.thinking());
+                        if (!thinkingDelta.isEmpty()) {
+                            appendContent(thinking, snapshot.thinking());
+                            publishThinkingDelta(run, thinkingDelta, nodeExecutionId);
+                        }
+                        // 把供应商的累计答案快照减去已输出部分，得到本次真正新增的正文。
+                        String delta = contentDelta(output.toString(), snapshot.answer());
+                        // 只有确实有新内容才处理，空增量说明这片是重复快照。
+                        if (!delta.isEmpty()) {
+                            // 累积进节点输出。
+                            output.append(delta);
+                            // 回调发出增量，用于实时展示节点进度。
+                            outputDelta.accept(delta);
+                        }
+                    });
+        } finally {
+            deleteInvocationSessionSafely(runner, agent.getAppName(), userId, adkSessionId);
+        }
         // 第六层：返回节点输出，并从证据仓取回本次调用真实注入的证据快照。
         return new NodeExecutionResult(output.toString(), ragInvocationEvidenceStore.snapshotInvocation(
                 tenantId, userId, sessionId, run.getRunId(), evidenceInvocationId));
+    }
+
+    /**
+     * 释放单次模型调用的 ADK 内存会话。业务会话和长短期记忆已持久化，
+     * 这个随机会话不能跨轮复用；否则 ADK 会一直持有每个 SSE Event，并发 Agent 会撑爆堆。
+     */
+    private void deleteInvocationSessionSafely(InMemoryRunner runner, String appName, String userId,
+                                               String adkSessionId) {
+        try {
+            runner.sessionService().deleteSession(appName, userId, adkSessionId).blockingAwait();
+        } catch (RuntimeException exception) {
+            log.warn("ADK 单次调用会话释放失败 appName:{} userId:{} sessionId:{}",
+                    appName, userId, adkSessionId, exception);
+        }
     }
 
     /**
