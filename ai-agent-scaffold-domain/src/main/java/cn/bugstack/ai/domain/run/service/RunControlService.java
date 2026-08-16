@@ -122,6 +122,53 @@ public class RunControlService {
         return createRun(tenantId, userId, sessionId, sourceType, sourceId, requestedRunId, predecessorRunId, false);
     }
 
+    /**
+     * 为子 Agent 创建运行，并继承父运行已冻结的 RAG 范围。
+     * <p>子 Agent 仍然使用自己的会话、模板和工具权限；只有 RAG 开关、策略、
+     * 策略版本和绑定列表来自父运行。这样既避免临时子会话默认关闭 RAG，
+     * 也避免在执行中重新读取可变的会话设置。</p>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ChatRunEntity startSubagentWithInheritedRag(String tenantId, String userId,
+                                                       String childSessionId, String childAgentId,
+                                                       String parentRunId, String parentSessionId,
+                                                       String parentAgentId) {
+        ChatSessionEntity childSession = sessionDomain.lockSessionAccess(
+                tenantId, userId, childSessionId, childAgentId);
+        ChatRunEntity parent = runRepository.query(tenantId, userId, parentRunId);
+        if (parent == null || !equals(parent.getSessionId(), parentSessionId)
+                || !equals(parent.getSourceType(), "agent") || !equals(parent.getSourceId(), parentAgentId)) {
+            throw new AppException("SUBAGENT_PARENT_SCOPE_MISMATCH", "子 Agent 任务与父运行范围不匹配");
+        }
+        long revision = childSession.getContextRevision() == null ? 0L : childSession.getContextRevision();
+        ChatRunEntity childRun = ChatRunEntity.builder()
+                .runId(normalizeRequestedRunId(null))
+                .turnId("turn_" + UUID.randomUUID())
+                .tenantId(childSession.getTenantId())
+                .userId(childSession.getUserId())
+                .sessionId(childSession.getSessionId())
+                .sourceType("agent")
+                .sourceId(childAgentId)
+                .ragEnabled(Boolean.TRUE.equals(parent.getRagEnabled()))
+                .ragMode(parent.getRagMode())
+                .ragInvocationMode(parent.getRagInvocationMode())
+                .ragPolicyRevision(parent.getRagPolicyRevision())
+                .ragBindingIds(parent.getRagBindingIds() == null
+                        ? List.of() : List.copyOf(parent.getRagBindingIds()))
+                .traceId(TraceContext.ensureTraceId())
+                .status(RunStatus.RUNNING)
+                .version(0)
+                .baseContextRevision(revision)
+                .currentContextRevision(revision)
+                .startedAt(LocalDateTime.now())
+                .build();
+        runRepository.insert(childRun);
+        AiLog.info(AiLog.chat().runStarted(childRun.getTenantId(), childRun.getUserId(), childRun.getSessionId(),
+                childRun.getRunId(), childRun.getSourceType(), childRun.getSourceId(), childRun.getRagEnabled()));
+        invalidateSnapshotAfterCommit(childRun.getTenantId(), childRun.getUserId(), childRun.getRunId());
+        return childRun;
+    }
+
     /** 内部恢复和普通用户发送共用建 Run 逻辑，但内部恢复必须绕过 WAIT_ALL 输入闸门。 */
     private ChatRunEntity createRun(String tenantId, String userId, String sessionId, String sourceType,
                                     String sourceId, String requestedRunId, String predecessorRunId,

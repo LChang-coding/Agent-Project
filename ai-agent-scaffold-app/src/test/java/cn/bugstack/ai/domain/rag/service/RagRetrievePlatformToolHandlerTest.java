@@ -65,6 +65,23 @@ public class RagRetrievePlatformToolHandlerTest {
     }
 
     @Test
+    public void shouldUseAdkInvocationIdWhenOrdinaryAgentHasNoExplicitEvidenceInvocationId() {
+        RagRetrievalService retrieval = Mockito.mock(RagRetrievalService.class);
+        when(retrieval.retrieve(any())).thenReturn(RagRetrievalPresentationServiceTest.result("safe"));
+        RagInvocationEvidenceStore evidenceStore = new RagInvocationEvidenceStore();
+        RagRetrievePlatformToolHandler handler = handler(retrieval, evidenceStore,
+                new RagToolInvocationBudgetStore(3, 8000));
+        ToolInvokeContextEntity ordinaryAgentContext = context("run-ordinary", null);
+
+        PlatformToolResult result = handler.handle(tool(), Map.of("query", "纸鸢"), ordinaryAgentContext);
+
+        Assert.assertTrue(result.success());
+        Assert.assertEquals("chunk-1", evidenceStore.snapshotInvocation(
+                "tenant-1", "user-1", "session-1", "run-ordinary", "model-invoke-1")
+                .get(0).citations().get(0).chunkId());
+    }
+
+    @Test
     public void shouldRejectUnknownModelArgumentsAndSchemaTokenBounds() {
         RagRetrievalService retrieval = Mockito.mock(RagRetrievalService.class);
         RagRetrievePlatformToolHandler handler = handler(retrieval, new RagInvocationEvidenceStore(),

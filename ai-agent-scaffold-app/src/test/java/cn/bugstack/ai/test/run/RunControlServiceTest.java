@@ -17,7 +17,9 @@ import cn.bugstack.ai.domain.rag.service.SessionRagSettingService;
 import cn.bugstack.ai.domain.session.model.entity.ChatMessageEntity;
 import cn.bugstack.ai.domain.session.model.entity.ChatSessionEntity;
 import cn.bugstack.ai.domain.session.service.SessionDomain;
+import cn.bugstack.ai.types.exception.AppException;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Arrays;
@@ -34,12 +36,71 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
-import cn.bugstack.ai.types.exception.AppException;
 
 /**
  * 运行取消领域测试。
  */
 public class RunControlServiceTest {
+
+    @Test
+    public void shouldCreateChildRunWithFrozenParentRagSnapshot() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        ChatSessionEntity childSession = ChatSessionEntity.builder().tenantId("tenant-1").userId("user-1")
+                .sessionId("child-session-1").agentId("child-1").contextRevision(6L).build();
+        ChatRunEntity parentRun = ChatRunEntity.builder().runId("parent-run-1")
+                .tenantId("tenant-1").userId("user-1").sessionId("parent-session-1")
+                .sourceType("agent").sourceId("parent-1").status(RunStatus.RUNNING)
+                .ragEnabled(true).ragMode("MANUAL").ragInvocationMode("AGENT_TOOL")
+                .ragPolicyRevision(9L).ragBindingIds(List.of("binding-1", "binding-2")).build();
+        when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "child-session-1", "child-1"))
+                .thenReturn(childSession);
+        when(runRepository.query("tenant-1", "user-1", "parent-run-1")).thenReturn(parentRun);
+        when(runRepository.insert(any())).thenReturn(1);
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+
+        ChatRunEntity childRun = service.startSubagentWithInheritedRag("tenant-1", "user-1",
+                "child-session-1", "child-1", "parent-run-1", "parent-session-1", "parent-1");
+
+        assertEquals("child-session-1", childRun.getSessionId());
+        assertEquals("child-1", childRun.getSourceId());
+        assertEquals(Boolean.TRUE, childRun.getRagEnabled());
+        assertEquals("MANUAL", childRun.getRagMode());
+        assertEquals("AGENT_TOOL", childRun.getRagInvocationMode());
+        assertEquals(Long.valueOf(9L), childRun.getRagPolicyRevision());
+        assertEquals(List.of("binding-1", "binding-2"), childRun.getRagBindingIds());
+        assertEquals(Long.valueOf(6L), childRun.getCurrentContextRevision());
+        ArgumentCaptor<ChatRunEntity> inserted = ArgumentCaptor.forClass(ChatRunEntity.class);
+        verify(runRepository).insert(inserted.capture());
+        assertEquals("child-1", inserted.getValue().getSourceId());
+    }
+
+    @Test
+    public void shouldRejectChildRagInheritanceWhenParentScopeDoesNotMatch() {
+        IChatRunRepository runRepository = mock(IChatRunRepository.class);
+        SessionDomain sessionDomain = mock(SessionDomain.class);
+        when(sessionDomain.lockSessionAccess("tenant-1", "user-1", "child-session-1", "child-1"))
+                .thenReturn(ChatSessionEntity.builder().tenantId("tenant-1").userId("user-1")
+                        .sessionId("child-session-1").agentId("child-1").contextRevision(0L).build());
+        when(runRepository.query("tenant-1", "user-1", "parent-run-1"))
+                .thenReturn(ChatRunEntity.builder().runId("parent-run-1").tenantId("tenant-1")
+                        .userId("user-1").sessionId("different-session").sourceType("agent")
+                        .sourceId("parent-1").status(RunStatus.RUNNING).build());
+        RunControlService service = new RunControlService(runRepository, sessionDomain,
+                mock(ActiveRunRegistry.class), mock(ContextInvalidationService.class), mock(ModelUsageService.class),
+                mock(AssetService.class));
+
+        try {
+            service.startSubagentWithInheritedRag("tenant-1", "user-1", "child-session-1", "child-1",
+                    "parent-run-1", "parent-session-1", "parent-1");
+            fail("父运行范围不一致时不得继承RAG绑定");
+        } catch (AppException exception) {
+            assertEquals("SUBAGENT_PARENT_SCOPE_MISMATCH", exception.getCode());
+        }
+        verify(runRepository, never()).insert(any());
+    }
 
     @Test
     public void shouldRecheckWaitAllAfterSessionLockBeforeStartingUserRun() {

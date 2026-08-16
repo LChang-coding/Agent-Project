@@ -58,7 +58,8 @@ public class SubagentKafkaChainTest {
         Mockito.when(chatService.createSubagentSession("child-1", "user-1")).thenReturn("child-session-1");
         Mockito.when(repository.bindChildSession(Mockito.eq("tenant-1"), Mockito.eq("task-1"),
                 Mockito.anyString(), Mockito.eq(7L), Mockito.eq("child-session-1"))).thenReturn(1);
-        Mockito.when(chatService.handleInternalMessage("child-1", "user-1", "child-session-1", "research it"))
+        Mockito.when(chatService.handleSubagentMessage("child-1", "user-1", "child-session-1", "research it",
+                        "parent-run-1", "session-1", "parent-1"))
                 .thenReturn(List.of("partial", "final answer"));
         Mockito.when(repository.complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L))).thenReturn(1);
         Mockito.doThrow(new IllegalStateException("redis down")).when(cache)
@@ -87,7 +88,8 @@ public class SubagentKafkaChainTest {
         task.setChildSessionId("child-session-1");
         Mockito.when(repository.claim(Mockito.eq("tenant-1"), Mockito.eq("task-1"), Mockito.anyString(),
                 Mockito.any(LocalDateTime.class), Mockito.eq(Duration.ofSeconds(60)))).thenReturn(task);
-        Mockito.when(chatService.handleInternalMessage("child-1", "user-1", "child-session-1", "research it"))
+        Mockito.when(chatService.handleSubagentMessage("child-1", "user-1", "child-session-1", "research it",
+                        "parent-run-1", "session-1", "parent-1"))
                 .thenReturn(List.of(longResult));
         Mockito.when(repository.complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L))).thenReturn(1);
 
@@ -118,6 +120,8 @@ public class SubagentKafkaChainTest {
         Mockito.verify(repository).complete(Mockito.same(task), Mockito.anyString(), Mockito.eq(7L));
         Mockito.verify(chatService, Mockito.never()).handleInternalMessage(Mockito.anyString(), Mockito.anyString(),
                 Mockito.anyString(), Mockito.anyString());
+        Mockito.verify(chatService, Mockito.never()).handleSubagentMessage(Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString());
         Assert.assertNull(TenantContextHolder.getTenantId());
     }
 

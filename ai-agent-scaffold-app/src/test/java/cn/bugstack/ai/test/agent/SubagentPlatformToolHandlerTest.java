@@ -1,5 +1,6 @@
 package cn.bugstack.ai.test.agent;
 
+import cn.bugstack.ai.domain.agent.model.entity.AgentCatalogEntryEntity;
 import cn.bugstack.ai.domain.agent.model.entity.SubagentTaskEntity;
 import cn.bugstack.ai.domain.agent.model.valobj.SubagentTaskStatus;
 import cn.bugstack.ai.domain.agent.service.AgentCatalogService;
@@ -22,6 +23,29 @@ import java.util.List;
 import java.util.Map;
 
 public class SubagentPlatformToolHandlerTest {
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void shouldRelaxCatalogFiltersWhenAuthorizedTemplatesWouldOtherwiseBeHidden() {
+        AgentCatalogService catalog = Mockito.mock(AgentCatalogService.class);
+        AgentCatalogEntryEntity researchAgent = AgentCatalogEntryEntity.builder()
+                .agentId("100002").agentName("通用调查 Agent").category("RESEARCH")
+                .description("调查与知识库研究").capabilities(List.of("research")).build();
+        Mockito.when(catalog.search("tenant-1", List.of("child-1"), "RAG", null))
+                .thenReturn(List.of());
+        Mockito.when(catalog.search("tenant-1", List.of("child-1"), null, null))
+                .thenReturn(List.of(researchAgent));
+        PlatformToolRegistry registry = new PlatformToolRegistry();
+        new SubagentPlatformToolHandler(registry, catalog, Mockito.mock(SubagentOrchestrationService.class));
+
+        PlatformToolResult result = registry.dispatch(tool("search_agent_catalog"), Map.of("query", "RAG"), context());
+
+        Assert.assertTrue(result.success());
+        Assert.assertEquals(Boolean.TRUE, result.modelResult().get("relaxedMatch"));
+        List<AgentCatalogEntryEntity> agents = (List<AgentCatalogEntryEntity>) result.modelResult().get("agents");
+        Assert.assertEquals("100002", agents.get(0).agentId());
+        Mockito.verify(catalog).search("tenant-1", List.of("child-1"), null, null);
+    }
 
     @SuppressWarnings("unchecked")
     @Test

@@ -65,9 +65,24 @@ public class SubagentPlatformToolHandler implements PlatformToolHandler {
 
     private PlatformToolResult search(Map<String, Object> input, Trusted trusted) {
         requireKeys(input, Set.of("query", "category"), false);
+        String query = text(input, "query", false);
+        String category = text(input, "category", false);
         List<AgentCatalogEntryEntity> entries = catalogService.search(trusted.tenantId,
-                trusted.allowedSubAgentIds, text(input, "query", false), text(input, "category", false));
-        return success(Map.of("agents", entries), Map.of("count", entries.size()));
+                trusted.allowedSubAgentIds, query, category);
+        boolean relaxedMatch = entries.isEmpty() && ((query != null && !query.isBlank())
+                || (category != null && !category.isBlank()));
+        // 模型使用了目录中没有的术语时（例如“RAG”），不应该把已授权的
+        // 通用调查 Agent 全部隐藏。回退只放宽文本匹配，仍严格保留 allowedSubAgentIds 边界。
+        if (relaxedMatch) {
+            entries = catalogService.search(trusted.tenantId, trusted.allowedSubAgentIds, null, null);
+        }
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("agents", entries);
+        model.put("relaxedMatch", relaxedMatch);
+        Map<String, Object> audit = new LinkedHashMap<>();
+        audit.put("count", entries.size());
+        audit.put("relaxedMatch", relaxedMatch);
+        return success(Map.copyOf(model), Map.copyOf(audit));
     }
 
     private PlatformToolResult delegate(Map<String, Object> input, ToolInvokeContextEntity context, Trusted trusted) {

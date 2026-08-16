@@ -94,6 +94,13 @@ public interface IChatService {
                                        String requestedRunId);
 
     /**
+     * 执行由父 Agent 委派的子任务。子 Agent 使用自己的模板与工具权限，
+     * 但 RAG 范围继承父运行创建时已经冻结的策略和绑定。
+     */
+    List<String> handleSubagentMessage(String agentId, String userId, String sessionId, String message,
+                                       String parentRunId, String parentSessionId, String parentAgentId);
+
+    /**
      * 同步执行一次完整工作流，只返回收敛后的最终文本。
      *
      * <p>内部走的是流式实现再取第一个（也是唯一一个）元素，因此行为与流式接口完全一致，

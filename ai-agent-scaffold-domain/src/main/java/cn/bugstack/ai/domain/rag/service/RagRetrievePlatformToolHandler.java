@@ -204,12 +204,18 @@ public class RagRetrievePlatformToolHandler implements PlatformToolHandler {
     /** 从服务端工具上下文提取并冻结 RAG 检索所需的可信运行信息。 */
     private TrustedContext trusted(ToolInvokeContextEntity context) {
         if (context == null) throw new IllegalArgumentException("可信工具上下文不能为空");
+        // DAG 会显式传入证据调用编号；普通 Agent 没有该扩展字段时，
+        // ADK invocationId 仍是服务端产生且在本次模型调用内稳定的可信身份。
+        String evidenceInvocationId = context.getRagEvidenceInvocationId();
+        if (evidenceInvocationId == null || evidenceInvocationId.isBlank()) {
+            evidenceInvocationId = context.getInvocationId();
+        }
         return new TrustedContext(requireText(context.getTenantId(), "租户ID"),
                 requireText(context.getUserId(), "用户ID"), requireText(context.getSessionId(), "会话ID"),
                 requireText(context.getRunId(), "运行ID"), parseTargetType(context.getRagTargetType()),
                 requireText(context.getRagTargetId(), "RAG目标ID"), requireText(context.getTraceId(), "Trace ID"),
                 context.getRagBindingIds() == null ? List.of() : List.copyOf(context.getRagBindingIds()),
-                requireText(context.getRagEvidenceInvocationId(), "RAG证据调用ID"));
+                requireText(evidenceInvocationId, "RAG证据调用ID"));
     }
 
     /** 将服务端冻结的目标类型解析为受限枚举。 */

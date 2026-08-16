@@ -494,6 +494,14 @@ public class ChatService implements IChatService {
         return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true, requestedRunId);
     }
 
+    @Override
+    public List<String> handleSubagentMessage(String agentId, String userId, String sessionId, String message,
+                                              String parentRunId, String parentSessionId, String parentAgentId) {
+        AiAgentRegisterVO aiAgentRegisterVO = requirePublicAgent(agentId);
+        return doHandleMessage(agentId, userId, sessionId, message, aiAgentRegisterVO, true, null,
+                new SubagentParentScope(parentRunId, parentSessionId, parentAgentId));
+    }
+
     /**
      * 同步执行一次完整工作流，只返回收敛后的最终文本。
      *
@@ -983,6 +991,13 @@ public class ChatService implements IChatService {
     private List<String> doHandleMessage(String sessionAgentId, String userId, String sessionId, String message,
                                          AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput,
                                          String requestedRunId) {
+        return doHandleMessage(sessionAgentId, userId, sessionId, message, aiAgentRegisterVO,
+                platformInput, requestedRunId, null);
+    }
+
+    private List<String> doHandleMessage(String sessionAgentId, String userId, String sessionId, String message,
+                                         AiAgentRegisterVO aiAgentRegisterVO, boolean platformInput,
+                                         String requestedRunId, SubagentParentScope parentScope) {
         // 第一层：取出已装配的 Runner。
         Runner runner = aiAgentRegisterVO.getRunner();
         // 取可信租户作为隔离维度。
@@ -994,10 +1009,18 @@ public class ChatService implements IChatService {
         // 取链路标识，贯穿落库与日志。
         String traceId = TraceContext.currentOrNewTraceId();
         // 第二层：运行和用户消息先落库，保证失败、取消和重试均有稳定锚点。
-        ChatRunEntity run = platformInput && requestedRunId != null
-                ? runControlService.startOrReuseInternal(tenantId, userId, actualSessionId,
-                "agent", sessionAgentId, requestedRunId)
-                : runControlService.start(tenantId, userId, actualSessionId, "agent", sessionAgentId, null, null);
+        ChatRunEntity run;
+        if (parentScope != null) {
+            run = runControlService.startSubagentWithInheritedRag(tenantId, userId, actualSessionId,
+                    sessionAgentId, parentScope.parentRunId(), parentScope.parentSessionId(),
+                    parentScope.parentAgentId());
+        } else if (platformInput && requestedRunId != null) {
+            run = runControlService.startOrReuseInternal(tenantId, userId, actualSessionId,
+                    "agent", sessionAgentId, requestedRunId);
+        } else {
+            run = runControlService.start(tenantId, userId, actualSessionId,
+                    "agent", sessionAgentId, null, null);
+        }
         if (platformInput && run.getStatus().terminal()) {
             return sessionDomain.queryRunMessages(tenantId, userId, actualSessionId, run.getRunId()).stream()
                     .filter(value -> SessionDomain.ROLE_ASSISTANT.equals(value.getRole()))
@@ -1027,7 +1050,8 @@ public class ChatService implements IChatService {
                 ? RunConfig.StreamingMode.NONE : RunConfig.StreamingMode.SSE;
         Flowable<Event> events = stabilizeModelEventStream(runner.runAsync(userId, adkSessionId, userMsg, RunConfig.builder()
                         .streamingMode(streamingMode).build(),
-                runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId, traceId,
+                runtimeStateDelta(tenantId, userId, actualSessionId, sessionAgentId,
+                        parentScope == null ? sessionAgentId : parentScope.parentAgentId(), traceId,
                         TenantContextHolder.getRoleCode(), historyCutoff(userMessage), null,
                         activeRun.getRunId(), activeRun.getCurrentContextRevision(),
                         ragTargetType(activeRun, RagBindingTargetType.AGENT), ragQuery(activeRun, message),
@@ -1067,6 +1091,10 @@ public class ChatService implements IChatService {
 
         // 返回全部输出文本。
         return deferred ? List.of() : List.of(assistantContent.toString());
+    }
+
+    /** 只由 Kafka 子任务 Worker 构造的父运行作用域，不接受模型或前端参数。 */
+    private record SubagentParentScope(String parentRunId, String parentSessionId, String parentAgentId) {
     }
 
     /**
@@ -2139,12 +2167,25 @@ public class ChatService implements IChatService {
      * <p>空值一律不写入：插件靠"键是否存在"判断能力是否启用，写一个空值会让插件误以为
      * "有身份但值是空的"，从而做出错误判断。</p>
      */
-    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId, String workflowId, String traceId,
+    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId,
+                                                  String workflowId, String traceId,
                                                   String roleCode, Integer visibleThroughSequence, String upstreamOutput,
                                                   String runId, Long contextRevision,
                                                   RagBindingTargetType ragTargetType, String ragQuery,
-                                                   String ragMode, List<String> ragBindingIds,
-                                                   String ragInvocationMode) {
+                                                  String ragMode, List<String> ragBindingIds,
+                                                  String ragInvocationMode) {
+        return runtimeStateDelta(tenantId, userId, sessionId, workflowId, workflowId, traceId, roleCode,
+                visibleThroughSequence, upstreamOutput, runId, contextRevision, ragTargetType, ragQuery,
+                ragMode, ragBindingIds, ragInvocationMode);
+    }
+
+    private Map<String, Object> runtimeStateDelta(String tenantId, String userId, String sessionId,
+                                                  String workflowId, String ragTargetId, String traceId,
+                                                  String roleCode, Integer visibleThroughSequence, String upstreamOutput,
+                                                  String runId, Long contextRevision,
+                                                  RagBindingTargetType ragTargetType, String ragQuery,
+                                                  String ragMode, List<String> ragBindingIds,
+                                                  String ragInvocationMode) {
         // 状态表交给 ADK 后由插件和工具读取。
         Map<String, Object> state = new HashMap<>();
         // 第一层：同时写 ADK 链路键和项目工具键，兼容日志插件与工具网关。
@@ -2189,7 +2230,7 @@ public class ChatService implements IChatService {
             // 目标类型决定按 Agent 还是按工作流去找知识库绑定。
             state.put(ToolRuntimeContextKeys.RAG_TARGET_TYPE, ragTargetType.name());
             // 目标编号，工作流场景下就是工作流编号。
-            putStateIfPresent(state, ToolRuntimeContextKeys.RAG_TARGET_ID, workflowId);
+            putStateIfPresent(state, ToolRuntimeContextKeys.RAG_TARGET_ID, ragTargetId);
             // 检索模式，决定是必需检索还是尽力检索。
             putStateIfPresent(state, ToolRuntimeContextKeys.RAG_MODE, ragMode);
             // 绑定的知识库列表；用不可变副本，避免插件改动影响运行快照。
