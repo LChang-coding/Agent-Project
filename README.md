@@ -2,7 +2,23 @@
 
 ## 1. 总体架构
 
-![LCodeWorkflowAgent 总体架构](docs/readme-assets/lcode-workflow-agent-architecture.png)
+LCodeWorkflowAgent 采用模块化单体承载业务与 Agent 运行时，并通过统一工具网关、可恢复任务账本和事件链路连接 MCP、Skill、RAG 及多 Agent 编排能力。
+
+<p align="center">
+  <a href="docs/readme-assets/architecture/lcode-workflow-agent-architecture-overview.pdf">
+    <img src="docs/readme-assets/architecture/lcode-workflow-agent-architecture-overview.webp" width="960" alt="LCodeWorkflowAgent 总体架构图">
+  </a>
+</p>
+
+<p align="center"><sub>README 加载压缩预览图；点击图片可查看完整矢量 PDF。</sub></p>
+
+架构图覆盖以下核心领域：
+
+- **权限与能力治理**：租户、用户和管理员权限边界，以及 MCP、Skill、知识库的发布、授权与审批。
+- **Agent 与工作流运行时**：单 Agent、DAG、受控智能路由和 Supervisor 多 Agent 委派/回调。
+- **工具与 RAG**：动态工具感知、Tool Gateway、文档解析、父子切块、混合检索、重排及引用证据链。
+- **上下文与可靠执行**：短期记忆、长期摘要、幂等账本、租约心跳、指数退避、CAS 状态推进及故障恢复。
+- **数据与基础设施**：MySQL、Redis、Kafka、Qdrant、MinIO、Nacos、Docling、TEI、Grafana/Loki 和 XXL-JOB。
 
 ## 2. 核心链路
 
